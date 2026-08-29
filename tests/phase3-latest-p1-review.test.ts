@@ -1700,6 +1700,48 @@ describe("latest independent Phase-3 P1 review reproducers", () => {
     expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
   }, 120_000);
 
+  test("RED: terminal absent target keeps absent IDs and snapshots through replay", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-terminal-absent-representation-red-"));
+    const crashed = runHarness("crash-after-candidate", root, {
+      CATERING_PHASE3_FAKE_PRE_NETWORK_CRASH: "1",
+    });
+    expect(crashed.result.status).not.toBe(0);
+    const rollback = runExistingRollback(root, crashed.sandbox);
+    expect(rollback.result.status).toBe(0);
+    const journal = fieldsAt(path.join(root, "phase3.network-adoption.journal"));
+    expect(journal.get("catering_ingress_id")).toBe("absent");
+    expect(journal.get("catering_private_id")).toBe("absent");
+    expect(journal.get("catering_ingress_members_b64")).toBe("absent");
+    expect(journal.get("catering_private_members_b64")).toBe("absent");
+    const repeated = runExistingResume(root, crashed.sandbox);
+    const output = `${repeated.result.stdout}${repeated.result.stderr}`;
+    expect(repeated.result.status).toBe(0);
+    expect(output).toContain("PILOT: ROLLED BACK");
+  }, 120_000);
+
+  test("RED: terminal present target rejects noncanonical equivalent snapshots", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-terminal-canonical-red-"));
+    const run = runHarness("normal", root);
+    expect(run.result.status).toBe(0);
+    const rollback = runExistingRollback(root, run.sandbox);
+    expect(rollback.result.status).toBe(0);
+    const journalPath = path.join(root, "phase3.network-adoption.journal");
+    const journal = fieldsAt(journalPath);
+    const snapshot = journal.get("catering_ingress_members_b64");
+    expect(snapshot).toMatch(/^[A-Za-z0-9+/=]+$/);
+    const nonCanonical = Buffer.from(JSON.stringify(JSON.parse(Buffer.from(snapshot!, "base64").toString("utf8")), null, 2)).toString("base64");
+    rewriteFields(journalPath, {
+      catering_ingress_members_b64: nonCanonical,
+      catering_ingress_aliases_b64: nonCanonical,
+      journal_sha256: "absent",
+    });
+    rewriteFields(journalPath, { journal_sha256: canonicalSelfHash(journalPath, "journal_sha256") });
+    const repeated = runExistingResume(root, run.sandbox);
+    const output = `${repeated.result.stdout}${repeated.result.stderr}`;
+    expect(repeated.result.status).not.toBe(0);
+    expect(output).toContain("PILOT: NO-GO");
+  }, 120_000);
+
   test("RED: rollback:candidate keeps recovery authority when terminal journal write fails", () => {
     const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-terminal-journal-failure-red-"));
     const crashed = runHarness("crash-after-active", root);

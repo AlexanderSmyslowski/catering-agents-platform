@@ -477,6 +477,37 @@ validate_adoption_journal() {
       continue
     fi
     [[ "${id}" =~ ^[0-9a-f]{64}$ ]] || fail
+    members_b64="$(field "${adoption_journal}" "${network}_members_b64")"
+    aliases_b64="$(field "${adoption_journal}" "${network}_aliases_b64")"
+    python3 - "${members_b64}" "${aliases_b64}" <<'PYTHON' || fail
+import base64
+import json
+import sys
+
+def decode_snapshot(encoded):
+    try:
+        raw = base64.b64decode(encoded, validate=True).decode('utf-8')
+        value = json.loads(raw)
+    except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise SystemExit('network member snapshot is not valid base64 JSON') from error
+    if not isinstance(value, dict):
+        raise SystemExit('network member snapshot is not an object')
+    for key, item in value.items():
+        if not isinstance(key, str) or not isinstance(item, dict) or set(item) != {'Name', 'Aliases'}:
+            raise SystemExit('network member snapshot shape is not canonical')
+        if not isinstance(item['Name'], str) or not item['Name'].startswith('/') or not item['Name'][1:]:
+            raise SystemExit('network member snapshot name is not canonical')
+        aliases = item['Aliases']
+        if not isinstance(aliases, list) or any(not isinstance(alias, str) for alias in aliases) or aliases != sorted(aliases):
+            raise SystemExit('network member snapshot aliases are not canonical')
+    canonical = json.dumps(value, sort_keys=True, separators=(',', ':'))
+    if raw != canonical:
+        raise SystemExit('network member snapshot serialization is not canonical')
+    return canonical
+
+if decode_snapshot(sys.argv[1]) != decode_snapshot(sys.argv[2]):
+    raise SystemExit('network member and alias snapshots differ')
+PYTHON
     if [[ "${allow_absent_networks}" == true ]] && ! network_present_by_name "${network}"; then
       continue
     fi
@@ -792,8 +823,14 @@ terminal_resume_noop() {
   validate_kv_file "${adoption_journal}" journal; validate_kv_file "${restore_evidence_record}" restore; validate_kv_file "${restore_proof_archive}" archive
   terminal_manifest_sha256="$(field "${adoption_journal}" transaction_manifest_sha256)"; [[ "${terminal_manifest_sha256}" =~ ^[0-9a-f]{64}$ ]] || fail
   require_field "${adoption_journal}" schema "phase3.1.network-adoption"; require_field "${adoption_journal}" owner "${owner}"; require_field "${adoption_journal}" transaction_id "${run_id}"; require_field "${adoption_journal}" transaction_manifest_path "${baseline_manifest}"
-  require_field "${adoption_journal}" adoption_order "catering_ingress,catering_private"; require_field "${adoption_journal}" adoption_count 2; require_field "${adoption_journal}" next_network complete; require_field "${adoption_journal}" adoption_phase memberships_verified
-  require_field "${adoption_journal}" catering_ingress_members_b64 e30=; require_field "${adoption_journal}" catering_private_members_b64 e30=; require_field "${adoption_journal}" catering_ingress_aliases_b64 e30=; require_field "${adoption_journal}" catering_private_aliases_b64 e30=
+  if [[ "$(field "${adoption_journal}" adoption_count)" == 2 ]]; then
+    require_field "${adoption_journal}" adoption_order "catering_ingress,catering_private"
+    require_field "${adoption_journal}" next_network complete; require_field "${adoption_journal}" adoption_phase memberships_verified
+  else
+    require_field "${adoption_journal}" adoption_order ""
+    require_field "${adoption_journal}" adoption_count 0; require_field "${adoption_journal}" next_network catering_ingress; require_field "${adoption_journal}" adoption_phase prepared
+  fi
+  manifest_sha256="${terminal_manifest_sha256}"; validate_adoption_journal true false true
   [[ "$(canonical_adoption_journal_sha256 "${adoption_journal}")" == "$(field "${adoption_journal}" journal_sha256)" ]] || fail; membership_wal_validate
   require_field "${restore_evidence_record}" schema "phase3.1.restore-evidence"; require_field "${restore_evidence_record}" owner "${owner}"; require_field "${restore_evidence_record}" transaction_id "${run_id}"; require_field "${restore_evidence_record}" baseline_manifest_sha256 "${terminal_manifest_sha256}"
   require_field "${restore_evidence_record}" platform_source_readback absent; require_field "${restore_evidence_record}" edge_source_readback absent; require_field "${restore_evidence_record}" catering_ingress_target absent; require_field "${restore_evidence_record}" catering_private_target absent
@@ -801,7 +838,7 @@ terminal_resume_noop() {
   require_field "${restore_proof_archive}" schema "phase3.1.rollback-restore-proof"; require_field "${restore_proof_archive}" transaction_id "${run_id}"; require_field "${restore_proof_archive}" transaction_manifest_path "${baseline_manifest}"; require_field "${restore_proof_archive}" transaction_manifest_sha256 "${terminal_manifest_sha256}"; require_field "${restore_proof_archive}" restore_evidence_path "${restore_evidence_record}"; require_field "${restore_proof_archive}" restore_evidence_sha256 "$(sha256sum "${restore_evidence_record}" | awk '{print $1}')"
   archive_hash="$(canonical_archive_sha256 "${restore_proof_archive}")"; [[ "${archive_hash}" =~ ^[0-9a-f]{64}$ ]] || fail; require_field "${restore_proof_archive}" archive_sha256 "${archive_hash}"
   [[ ! -e "${platform_source}" && ! -e "${edge_source}" ]] || fail
-  for terminal_network in catering_ingress catering_private; do terminal_id="$(field "${adoption_journal}" "${terminal_network}_id")"; [[ "${terminal_id}" =~ ^[0-9a-f]{64}$ ]] || fail; if network_present_by_name "${terminal_network}"; then fail; fi; if network_id_present_anywhere "${terminal_id}"; then fail; fi; done
+  for terminal_network in catering_ingress catering_private; do terminal_id="$(field "${adoption_journal}" "${terminal_network}_id")"; if [[ "${terminal_id}" == absent ]]; then network_present_by_name "${terminal_network}" && fail; else [[ "${terminal_id}" =~ ^[0-9a-f]{64}$ ]] || fail; if network_present_by_name "${terminal_network}"; then fail; fi; if network_id_present_anywhere "${terminal_id}"; then fail; fi; fi; done
   release_control_locks terminal; printf '%s\n' 'PILOT: ROLLED BACK'; return 0
 }
 if [[ ! -e "${activation_marker}" && ! -L "${activation_marker}" ]]; then marker_state=absent; else
@@ -1609,7 +1646,7 @@ validate_rolling_back_prefix() {
 finalize_rolling_back_resume() {
   validate_rolling_back_evidence
   retain_recovery_locks=true
-  membership_wal_write idle none none none none "$(membership_field "${adoption_journal}" membership_wal_sequence)" absent absent absent "e30=" "e30="
+  membership_wal_write idle none none none none "$(membership_field "${adoption_journal}" membership_wal_sequence)" absent absent absent "$(membership_field "${adoption_journal}" catering_ingress_members_b64)" "$(membership_field "${adoption_journal}" catering_private_members_b64)"
   validate_adoption_journal true true
   membership_wal_validate
   validate_restore_evidence
