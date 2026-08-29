@@ -221,7 +221,8 @@ membership_reconcile_compatibility_baseline() {
   done
 }
 membership_rollback_preflight() {
-  local network allow_absent_networks=true; [[ "${command_name}" == rollback && "${marker_state}" == candidate ]] && allow_absent_networks=false
+  local network allow_absent_networks=false
+  [[ "${command_name:-}:${marker_state:-}" == resume:rolling_back ]] && allow_absent_networks=true
   if declare -F validate_manifest >/dev/null 2>&1; then validate_manifest; fi
   if declare -F validate_absent_only_transaction >/dev/null 2>&1; then validate_absent_only_transaction; fi
   if declare -F validate_marker_file >/dev/null 2>&1; then validate_marker_file "${activation_marker}"; fi
@@ -470,6 +471,7 @@ validate_adoption_journal() {
     id="$(field "${adoption_journal}" "${network}_id")"
     if [[ "${id}" == absent ]]; then
       [[ "$(field "${adoption_journal}" "${network}_members_b64")" == absent && "$(field "${adoption_journal}" "${network}_aliases_b64")" == absent ]] || fail
+      network_present_by_name "${network}" && fail
       continue
     fi
     [[ "${id}" =~ ^[0-9a-f]{64}$ ]] || fail
