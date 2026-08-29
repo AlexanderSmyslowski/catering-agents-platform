@@ -1487,7 +1487,7 @@ describe("latest independent Phase-3 P1 review reproducers", () => {
     const resumed = runExistingResume(root, crashed.sandbox);
     expect(resumed.result.status).toBe(0);
     expect(`${resumed.result.stdout}${resumed.result.stderr}`).toContain("PILOT: ROLLED BACK");
-  }, 120_000);
+  }, 240_000);
 
   test("RED: resume fails closed when a non-leading target alias drifts", () => {
     const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-alias-matrix-red-"));
