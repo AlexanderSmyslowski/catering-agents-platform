@@ -270,6 +270,36 @@ function installCrashAfterFirstNetworkDisconnect(root: string) {
   return { shimBin, flagPath };
 }
 
+function installCrashAfterIngressDisconnect(root: string) {
+  const shimBin = path.join(root, "ingress-disconnect-crash-docker-shim");
+  const flagPath = path.join(root, "ingress-disconnect-crash-docker-shim.once");
+  mkdirSync(shimBin, { recursive: true });
+  writeFileSync(
+    path.join(shimBin, "docker"),
+    [
+      "#!/usr/bin/env bash",
+      "set -euo pipefail",
+      `real=${shellQuote(fakeDockerPath)}`,
+      `flag=${shellQuote(flagPath)}`,
+      'if [[ "${1:-}" == network && "${2:-}" == disconnect && "${3:-}" == catering_ingress && ! -e "$flag" ]]; then',
+      '  set +e',
+      '  python3 "$real" "$@"',
+      '  status=$?',
+      '  set -e',
+      '  if [[ "$status" == 0 ]]; then',
+      '    : >"$flag"',
+      '    kill -KILL "$PPID"',
+      '  fi',
+      '  exit "$status"',
+      "fi",
+      'exec python3 "$real" "$@"',
+      "",
+    ].join("\n"),
+    { mode: 0o700 },
+  );
+  return { shimBin, flagPath };
+}
+
 function installCrashAfterCompatibilityConnect(root: string, reconnectCount: number) {
   const shimBin = path.join(root, `compatibility-crash-docker-shim-${reconnectCount}`);
   const flagPath = path.join(shimBin, "crashed");
@@ -2761,6 +2791,49 @@ describe("latest independent Phase-3 P1 review reproducers", () => {
     expect(resumeLog).toMatch(/network rm catering_ingress/);
     expect(existsSync(path.join(root, "phase3.activation"))).toBe(false);
     expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
+  }, 120_000);
+
+  test("RED: preserves the private snapshot through ingress rollback", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-private-snapshot-red-"));
+    const crashed = runHarness("crash-after-active", root);
+    expect(crashed.result.status).not.toBe(0);
+    const markerPath = path.join(root, "phase3.activation");
+    const journalPath = path.join(root, "phase3.network-adoption.journal");
+    const statePath = path.join(root, "fake-docker-state.json");
+    const logPath = path.join(root, "fake-docker.log");
+    const privateSnapshot = fieldsAt(journalPath).get("catering_private_members_b64");
+    expect(privateSnapshot).toMatch(/^[A-Za-z0-9+/=]+$/);
+    const beforeRollbackLog = textAt(logPath);
+    const disconnectCrash = installCrashAfterIngressDisconnect(root);
+
+    const rollback = runExistingRollback(root, crashed.sandbox, disconnectCrash.shimBin);
+    expect(rollback.result.status).not.toBe(0);
+    expect(existsSync(disconnectCrash.flagPath)).toBe(true);
+    expect(fieldsAt(markerPath).get("state")).toBe("rolling_back");
+    const rollbackLog = textAt(logPath).slice(beforeRollbackLog.length);
+    const rollbackLines = rollbackLog.split("\n").filter(Boolean);
+    const privateDisconnects = rollbackLines.filter((line) => line.startsWith("docker network disconnect catering_private "));
+    const ingressDisconnectIndex = rollbackLines.findIndex((line) => line === "docker network disconnect catering_ingress platform-infra-web-1");
+    expect(privateDisconnects).toHaveLength(6);
+    expect(ingressDisconnectIndex).toBeGreaterThan(rollbackLines.lastIndexOf(privateDisconnects.at(-1)!));
+    expect(ingressDisconnectIndex).toBeGreaterThanOrEqual(0);
+    const afterCrashJournal = fieldsAt(journalPath);
+    expect(afterCrashJournal.get("membership_wal_phase")).toBe("pending");
+    expect(afterCrashJournal.get("membership_wal_network")).toBe("catering_ingress");
+    expect(afterCrashJournal.get("catering_private_members_b64")).toBe(privateSnapshot);
+    const afterCrashState = JSON.parse(textAt(statePath)) as {
+      networks: Record<string, { containers: Record<string, unknown> }>;
+    };
+    expect(afterCrashState.networks.catering_private.containers).toEqual({});
+    expect(Object.keys(afterCrashState.networks.catering_ingress.containers)).toHaveLength(1);
+
+    const resumed = runExistingResume(root, crashed.sandbox);
+    const terminal = `${resumed.result.stdout}${resumed.result.stderr}`;
+    expect(resumed.result.status).toBe(0);
+    expect(terminal).toContain("PILOT: ROLLED BACK");
+    expect(existsSync(markerPath)).toBe(false);
     expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(false);
     expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
   }, 120_000);

@@ -173,7 +173,7 @@ membership_wal_finish() {
   expected="$(printf '%s' "$(membership_field "${adoption_journal}" membership_wal_after_b64)" | base64 -d)" || fail
   python3 -c 'import json,sys; canonical=lambda value:{str(key):{"Name":str(item.get("Name","")).lstrip("/"),"Aliases":sorted(str(alias) for alias in item.get("Aliases",[]))} for key,item in json.loads(value).items()}; sys.exit("membership readback differs from WAL after-state") if canonical(sys.argv[1])!=canonical(sys.argv[2]) else None' "${expected}" "${actual}" || fail
   ingress="$(membership_field "${adoption_journal}" catering_ingress_members_b64)"; private="$(membership_field "${adoption_journal}" catering_private_members_b64)"
-  if [[ "${context}" == forward || "${actual}" == "{}" ]]; then
+  if [[ "${context}" == forward ]]; then
     if [[ "${network}" == catering_ingress ]]; then ingress="$(printf '%s' "${actual}" | base64 | tr -d '\n')"; else private="$(printf '%s' "${actual}" | base64 | tr -d '\n')"; fi
   fi
   membership_wal_write idle none none none none "${sequence}" absent absent absent "${ingress}" "${private}"
