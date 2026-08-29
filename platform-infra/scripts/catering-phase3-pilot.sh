@@ -221,7 +221,8 @@ membership_reconcile_compatibility_baseline() {
   done
 }
 membership_rollback_preflight() {
-  local network allow_absent_networks=false
+  local pre_wal="${1:-false}" network allow_absent_networks=false
+  [[ "${pre_wal}" == true || "${pre_wal}" == false ]] || fail
   [[ "${command_name:-}:${marker_state:-}" == resume:rolling_back ]] && allow_absent_networks=true
   if declare -F validate_manifest >/dev/null 2>&1; then validate_manifest; fi
   if declare -F validate_absent_only_transaction >/dev/null 2>&1; then validate_absent_only_transaction; fi
@@ -229,7 +230,7 @@ membership_rollback_preflight() {
   if declare -F assert_marker_readback >/dev/null 2>&1; then assert_marker_readback; fi
   if [[ -n "${run_id:-}" ]]; then [[ "${held_platform:-absent}" == acquired || "${held_platform:-absent}" == reentered ]] || fail; [[ "${held_edge:-absent}" == acquired || "${held_edge:-absent}" == reentered ]] || fail; else [[ "${platform_lock_held:-false}" == true && "${edge_lock_held:-false}" == true ]] || fail; fi
   if declare -F validate_foreign_evidence >/dev/null 2>&1; then validate_foreign_evidence; elif declare -F assert_foreign_invariants >/dev/null 2>&1; then assert_foreign_invariants; fi
-  if [[ -e "${adoption_journal}" ]]; then if declare -F validate_adoption_journal >/dev/null 2>&1; then validate_adoption_journal "${allow_absent_networks}" true; fi; membership_wal_validate; fi
+  if [[ -e "${adoption_journal}" ]]; then if declare -F validate_adoption_journal >/dev/null 2>&1; then validate_adoption_journal "${allow_absent_networks}" true "${pre_wal}"; fi; membership_wal_validate; fi
   for network in catering_ingress catering_private; do if docker network inspect "${network}" >/dev/null 2>&1; then if [[ -n "${run_id:-}" ]]; then validate_network_provenance "${network}" "${network#catering_}"; else validate_network_provenance "${network}" "${network#catering_}" "" "" true; fi; membership_alias_matrix "${network}"; fi; done
   membership_reconcile_compatibility_baseline 0
 }
@@ -444,9 +445,10 @@ canonical_adoption_journal_sha256() {
   unlink "${canonical}"
 }
 validate_adoption_journal() {
-  local allow_absent_networks="${1:-false}" allow_run_created_partial="${2:-false}" network id actual members expected_members aliases expected_aliases order count next phase created_by_run relax_members transaction_label expected_network_labels manifest_transaction_label
+  local allow_absent_networks="${1:-false}" allow_run_created_partial="${2:-false}" defer_live_membership="${3:-false}" network id actual members expected_members aliases expected_aliases order count next phase created_by_run relax_members transaction_label expected_network_labels manifest_transaction_label
   [[ "${allow_absent_networks}" == true || "${allow_absent_networks}" == false ]] || fail
   [[ "${allow_run_created_partial}" == true || "${allow_run_created_partial}" == false ]] || fail
+  [[ "${defer_live_membership}" == true || "${defer_live_membership}" == false ]] || fail
   validate_kv_file "${adoption_journal}" journal
   require_field "${adoption_journal}" schema "phase3.1.network-adoption"
   require_field "${adoption_journal}" owner "${owner}"
@@ -499,6 +501,7 @@ validate_adoption_journal() {
     expected_aliases="$(printf '%s' "$(field "${adoption_journal}" "${network}_aliases_b64")" | base64 -d)" || fail
     relax_members=false
     [[ "${allow_run_created_partial}" == true && "${created_by_run}" == true ]] && relax_members=partial
+    [[ "${defer_live_membership}" == true ]] && relax_members=defer
     python3 - "${expected_members}" "${expected_aliases}" "${members}" "${relax_members}" "${network}" <<'PYTHON' || fail
 import json
 import sys
@@ -555,7 +558,7 @@ if sys.argv[4] == 'partial':
             break
     else:
         raise SystemExit('network membership is not a rollback prefix')
-elif sys.argv[4] != 'true' and canonical(expected_members) != canonical(actual):
+elif sys.argv[4] not in ('true', 'defer') and canonical(expected_members) != canonical(actual):
     raise SystemExit('network member or alias set mismatch')
 PYTHON
   done
@@ -1474,10 +1477,11 @@ validate_final_isolation() {
 }
 
 validate_resume_evidence() {
-  local state="$1" ingress_id_value private_id_value marker_stage adoption_value adoption_proof_value smoke_value
+  local state="$1" pre_wal="${2:-false}" ingress_id_value private_id_value marker_stage adoption_value adoption_proof_value smoke_value
+  [[ "${pre_wal}" == true || "${pre_wal}" == false ]] || fail
   validate_manifest
   [[ -e "${adoption_journal}" ]] || fail
-  validate_adoption_journal
+  validate_adoption_journal false false "${pre_wal}"
   validate_marker_file "${activation_marker}"
   require_field "${activation_marker}" state "${state}"
   require_field "${activation_marker}" owner "${owner}"
@@ -1509,10 +1513,12 @@ validate_resume_evidence() {
     [[ "$(network_id catering_private)" == "${private_id_value}" ]] || fail
     validate_network_provenance catering_ingress ingress "$(field "${baseline_manifest}" catering_ingress_created_by_run_authorized)"
     validate_network_provenance catering_private private "$(field "${baseline_manifest}" catering_private_created_by_run_authorized)"
-    validate_target_members catering_ingress "platform-infra-web-1,shared-edge-edge-1"
-    validate_target_members catering_private "platform-infra-web-1,platform-infra-postgres-1,platform-infra-intake-1,platform-infra-offer-1,platform-infra-production-1,platform-infra-exports-1"
-    membership_alias_matrix catering_ingress; membership_alias_matrix catering_private
-    [[ "${state}" != active ]] || validate_final_isolation
+    if [[ "${pre_wal}" != true ]]; then
+      validate_target_members catering_ingress "platform-infra-web-1,shared-edge-edge-1"
+      validate_target_members catering_private "platform-infra-web-1,platform-infra-postgres-1,platform-infra-intake-1,platform-infra-offer-1,platform-infra-production-1,platform-infra-exports-1"
+      membership_alias_matrix catering_ingress; membership_alias_matrix catering_private
+      [[ "${state}" != active ]] || validate_final_isolation
+    fi
   elif [[ "${state}" == candidate ]]; then
     [[ "$(field "${adoption_journal}" adoption_count)" == 1 ||
       "$(field "${adoption_journal}" adoption_count)" == 2 ]] || fail
@@ -1878,8 +1884,9 @@ dispatch_recovery_transition() {
   case "${command_name}:${recovery_class}" in
     resume:terminal:resume) terminal_resume_noop; return 0 ;;
     resume:candidate:resume)
-      validate_resume_evidence candidate
+      validate_resume_evidence candidate true
       membership_wal_recover
+      validate_resume_evidence candidate
       if [[ "$(field "${activation_marker}" catering_ingress_id)" != "$(field "${adoption_journal}" catering_ingress_id)" || "$(field "${activation_marker}" catering_private_id)" != "$(field "${adoption_journal}" catering_private_id)" ]]; then
         adopt_candidate_networks
       fi
@@ -1890,27 +1897,29 @@ dispatch_recovery_transition() {
       write_control_marker active 1 "${adoption_proof}"
       ;;
     resume:active:resume)
-      validate_resume_evidence active
+      validate_resume_evidence active true
       membership_wal_recover
+      validate_resume_evidence active
       validate_resume_host_smokes
       validate_resume_egress
       write_control_marker active 1 "$(field "${activation_marker}" adoption_proof)"
       ;;
     resume:rolling_back:resume)
-      membership_rollback_preflight
+      membership_rollback_preflight true
       membership_wal_recover
       resume_rolling_back_control
       return 0
       ;;
     rollback:candidate:rollback)
-      membership_rollback_preflight
+      membership_rollback_preflight true
       membership_wal_recover
       continue_rollback_control 1
       return 0
       ;;
     rollback:active:rollback)
-      validate_resume_evidence active
+      validate_resume_evidence active true
       membership_wal_recover
+      validate_resume_evidence active
       continue_rollback_control 1
       return 0
       ;;
