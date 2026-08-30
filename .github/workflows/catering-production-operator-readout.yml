@@ -111,11 +111,10 @@ jobs:
             while true; do
               [[ -L "$candidate" ]] && return 1
               if [[ -e "$candidate" ]]; then
-                [[ -d "$candidate" && -r "$candidate" && -x "$candidate" ]]
-                return
+                [[ -d "$candidate" && -r "$candidate" && -x "$candidate" ]] || return 1
               fi
               parent="$(dirname -- "$candidate")"
-              [[ "$parent" != "$candidate" ]] || return 1
+              [[ "$parent" != "$candidate" ]] || return 0
               candidate="$parent"
             done
           }
