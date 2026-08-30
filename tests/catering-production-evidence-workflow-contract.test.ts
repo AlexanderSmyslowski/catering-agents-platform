@@ -116,7 +116,15 @@ function syntheticRemoteEvidence(options: EvidenceFixtureOptions = {}): string {
   return records.map(([type, key, value]) => encodedRecord(type, key, value)).join("\n");
 }
 
-function runHelperWithSyntheticRemote(remoteEvidence: string): ReturnType<typeof spawnSync> {
+type FakeSshOptions = {
+  exitCode?: number;
+  stderr?: string;
+};
+
+function runHelperWithSshFixture(
+  remoteEvidence: string,
+  options: FakeSshOptions = {},
+): ReturnType<typeof spawnSync> {
   const fixtureRoot = mkdtempSync(path.join(tmpdir(), "catering-production-evidence-"));
   const sshPath = path.join(fixtureRoot, "ssh");
   const fakeSsh = [
@@ -125,6 +133,8 @@ function runHelperWithSyntheticRemote(remoteEvidence: string): ReturnType<typeof
     "cat <<'REMOTE_FIXTURE'",
     remoteEvidence,
     "REMOTE_FIXTURE",
+    ...(options.stderr ? [`printf '%s\\n' ${JSON.stringify(options.stderr)} >&2`] : []),
+    `exit ${options.exitCode ?? 0}`,
     "",
   ].join("\n");
   writeFileSync(sshPath, fakeSsh, { mode: 0o755 });
@@ -143,6 +153,10 @@ function runHelperWithSyntheticRemote(remoteEvidence: string): ReturnType<typeof
   } finally {
     spawnSync("/usr/bin/trash", [fixtureRoot], { stdio: "ignore" });
   }
+}
+
+function runHelperWithSyntheticRemote(remoteEvidence: string): ReturnType<typeof spawnSync> {
+  return runHelperWithSshFixture(remoteEvidence);
 }
 
 function runRemoteBackupSuccessFragment(): ReturnType<typeof spawnSync> {
@@ -332,6 +346,101 @@ describe("Catering production evidence workflow contract", () => {
     expect(remoteScript).toContain("PROBE_ERROR");
     expect(remoteScript).not.toMatch(/\b(?:docker|systemctl|findmnt|mount|ss|stat|realpath|readlink|find|sha256sum|hostname|date)\b[^\n]*\|\|\s*true/);
     expect(helper).toContain("EVIDENCE_STATUS\\tUNKNOWN");
+  });
+
+  test("transport failure emits a redacted failure class and remains fail closed", () => {
+    const run = runHelperWithSshFixture("", {
+      exitCode: 255,
+      stderr: "ssh: PRIVATE_KEY=attacker-secret host=production.example denied",
+    });
+
+    expect(run.status).not.toBe(0);
+    expect(String(run.stdout).trim().split("\n")).toEqual([
+      "EVIDENCE_ERROR\tREMOTE_TRANSPORT_FAILED",
+      "EVIDENCE_STATUS\tUNKNOWN",
+    ]);
+    expect(run.stdout).not.toContain("attacker-secret");
+    expect(run.stdout).not.toContain("production.example");
+    expect(run.stderr).not.toContain("attacker-secret");
+    expect(run.stderr).not.toContain("production.example");
+  });
+
+  test("successful transport with empty output is classified without evidence", () => {
+    const run = runHelperWithSshFixture("", { exitCode: 0 });
+
+    expect(run.status).not.toBe(0);
+    expect(String(run.stdout).trim().split("\n")).toEqual([
+      "EVIDENCE_ERROR\tREMOTE_OUTPUT_EMPTY",
+      "EVIDENCE_STATUS\tUNKNOWN",
+    ]);
+  });
+
+  test("one canonical remote probe error becomes an area-bound failure class", () => {
+    const probeError = encodedRecord("PROBE_ERROR", "data_root", "command_failed");
+    const run = runHelperWithSshFixture(probeError, { exitCode: 1 });
+
+    expect(run.status).not.toBe(0);
+    expect(String(run.stdout).trim().split("\n")).toEqual([
+      "EVIDENCE_ERROR\tREMOTE_PROBE_FAILED:data_root",
+      "EVIDENCE_STATUS\tUNKNOWN",
+    ]);
+  });
+
+  test("valid remote prefix followed by terminal probe error remains area-bound and redacted", () => {
+    const remoteEvidence = [
+      encodedRecord("FACT", "postgres_seen", "true"),
+      encodedRecord("PROBE_STATUS", "containers", "success"),
+      encodedRecord("PROBE_ERROR", "data_root", "command_failed"),
+    ].join("\n");
+    const run = runHelperWithSshFixture(remoteEvidence, { exitCode: 1 });
+
+    expect(run.status).not.toBe(0);
+    expect(String(run.stdout).trim().split("\n")).toEqual([
+      "EVIDENCE_ERROR\tREMOTE_PROBE_FAILED:data_root",
+      "EVIDENCE_STATUS\tUNKNOWN",
+    ]);
+    expect(run.stdout).not.toContain("postgres_seen");
+    expect(run.stdout).not.toContain("command_failed");
+    expect(run.stderr).toBe("");
+  });
+
+  test("malformed, unknown, or multiple probe errors are invalid protocol", () => {
+    const invalidCases = [
+      { remoteEvidence: "not-a-record", exitCode: 0 },
+      { remoteEvidence: encodedRecord("PROBE_ERROR", "unknown", "command_failed"), exitCode: 0 },
+      {
+        remoteEvidence: [
+          encodedRecord("CONTAINER", "safe", "redacted-value"),
+          "not-a-record",
+        ].join("\n"),
+        exitCode: 0,
+      },
+      {
+        remoteEvidence: [
+          encodedRecord("PROBE_ERROR", "data_root", "command_failed"),
+          encodedRecord("PROBE_ERROR", "backup_channel", "command_failed"),
+        ].join("\n"),
+        exitCode: 1,
+      },
+      {
+        remoteEvidence: [
+          encodedRecord("PROBE_ERROR", "data_root", "command_failed"),
+          encodedRecord("FACT", "postgres_seen", "true"),
+        ].join("\n"),
+        exitCode: 1,
+      },
+    ];
+
+    for (const { remoteEvidence, exitCode } of invalidCases) {
+      const run = runHelperWithSshFixture(remoteEvidence, { exitCode });
+
+      expect(run.status).not.toBe(0);
+      expect(String(run.stdout).trim().split("\n")).toEqual([
+        "EVIDENCE_ERROR\tREMOTE_OUTPUT_INVALID",
+        "EVIDENCE_STATUS\tUNKNOWN",
+      ]);
+      expect(run.stdout).not.toContain(remoteEvidence);
+    }
   });
 
   test("evidence and pilot share the existing serialization group", () => {
