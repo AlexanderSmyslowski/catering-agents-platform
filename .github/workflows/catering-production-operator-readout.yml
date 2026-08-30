@@ -1,0 +1,371 @@
+name: Catering production operator readout
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: catering-phase3-isolation-pilot
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash --noprofile --norc -euo pipefail {0}
+
+jobs:
+  readout:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout exact dispatch commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Guard main and exact checkout
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_REF_NAME" = main
+          test "$GITHUB_REF_TYPE" = branch
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test -n "$GITHUB_SHA"
+          checked_out_sha="$(git rev-parse HEAD)"
+          test "$checked_out_sha" = "$GITHUB_SHA"
+          printf 'READOUT_GUARD main=true checkout_sha=%s\n' "${GITHUB_SHA:0:12}"
+
+      - name: Read-only production operator readout
+        env:
+          HETZNER_SSH_PRIVATE_KEY: ${{ secrets.HETZNER_SSH_PRIVATE_KEY }}
+          HETZNER_SSH_KNOWN_HOSTS: ${{ secrets.HETZNER_SSH_KNOWN_HOSTS }}
+          HETZNER_DEPLOY_HOST: ${{ secrets.HETZNER_DEPLOY_HOST }}
+          HETZNER_DEPLOY_USER: ${{ secrets.HETZNER_DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$HETZNER_SSH_PRIVATE_KEY"
+          test -n "$HETZNER_SSH_KNOWN_HOSTS"
+          test -n "$HETZNER_DEPLOY_HOST"
+          test -n "$HETZNER_DEPLOY_USER"
+
+          runner_dir="$(mktemp -d "$RUNNER_TEMP/catering-production-operator-readout.XXXXXX")"
+          ssh_key="$runner_dir/id_ed25519"
+          known_hosts="$runner_dir/known_hosts"
+          ssh_stderr="$runner_dir/ssh.stderr"
+          cleanup() {
+            rm -f -- "$ssh_key" "$known_hosts" "$ssh_stderr"
+            rmdir -- "$runner_dir" 2>/dev/null || true
+          }
+          trap cleanup EXIT INT TERM HUP
+
+          printf '%s\n' "$HETZNER_SSH_PRIVATE_KEY" >"$ssh_key"
+          printf '%s\n' "$HETZNER_SSH_KNOWN_HOSTS" >"$known_hosts"
+          chmod 600 "$ssh_key" "$known_hosts"
+
+          set +e
+          ssh \
+            -i "$ssh_key" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$known_hosts" \
+            -o ConnectTimeout=10 \
+            -p 22 \
+            -- "$HETZNER_DEPLOY_USER@$HETZNER_DEPLOY_HOST" \
+            bash -s -- "$GITHUB_SHA" 2>"$ssh_stderr" <<'REMOTE_READOUT'
+          set -u -o pipefail
+
+          expected_sha="${1-unknown}"
+
+          safe_scalar() {
+            local value="${1-unknown}"
+            value="${value//$'\t'/ }"
+            value="${value//$'\r'/ }"
+            value="${value//$'\n'/ }"
+            value="${value//$'\033'/ }"
+            printf '%s' "${value:0:180}"
+          }
+
+          short_id() {
+            local value
+            value="$(safe_scalar "${1-unknown}")"
+            printf '%s' "${value:0:12}"
+          }
+
+          safe_path() {
+            local value="${1-}"
+            [[ "$value" == /* && "$value" != *$'\t'* && "$value" != *$'\n'* && "$value" != *$'\r'* ]] || return 1
+            [[ "$value" != *".."* && "$value" =~ ^/[A-Za-z0-9._/-]+$ ]]
+          }
+
+          readout_path() {
+            local label="$1" path="$2" metadata
+            if [[ -L "$path" ]]; then
+              printf 'READOUT path=%s status=symlink\n' "$(safe_scalar "$label")"
+              return 0
+            fi
+            if [[ ! -e "$path" ]]; then
+              printf 'READOUT path=%s status=absent\n' "$(safe_scalar "$label")"
+              return 0
+            fi
+            if ! metadata="$(stat -c '%F:%u:%a:%s:%Y' -- "$path" 2>/dev/null)"; then
+              printf 'READOUT path=%s status=unavailable\n' "$(safe_scalar "$label")"
+              return 0
+            fi
+            printf 'READOUT path=%s status=present metadata=%s\n' \
+              "$(safe_scalar "$label")" "$(safe_scalar "$metadata")"
+          }
+
+          network_readout() {
+            local network="$1" names name_found=false metadata name id driver scope internal ipv6
+            if ! names="$(docker network ls --format '{{.Name}}' 2>/dev/null)"; then
+              printf 'READOUT network=%s status=unavailable\n' "$(safe_scalar "$network")"
+              return 0
+            fi
+            while IFS= read -r name; do
+              [[ "$name" == "$network" ]] && name_found=true
+            done <<<"$names"
+            if [[ "$name_found" != true ]]; then
+              printf 'READOUT network=%s status=absent\n' "$(safe_scalar "$network")"
+              return 0
+            fi
+            if ! metadata="$(docker network inspect --format '{{printf "%s\t%s\t%s\t%s\t%s\t%s" .Name .Id .Driver .Scope .Internal .EnableIPv6}}' "$network" 2>/dev/null)"; then
+              printf 'READOUT network=%s status=unavailable\n' "$(safe_scalar "$network")"
+              return 0
+            fi
+            IFS=$'\t' read -r name id driver scope internal ipv6 <<<"$metadata"
+            printf 'READOUT network=%s status=present id=%s driver=%s scope=%s internal=%s ipv6=%s\n' \
+              "$(safe_scalar "$name")" "$(short_id "$id")" "$(safe_scalar "$driver")" \
+              "$(safe_scalar "$scope")" "$(safe_scalar "$internal")" "$(safe_scalar "$ipv6")"
+          }
+
+          container_readout() {
+          local project="$1" rows name id _state _status _image inspect_line inspect_id inspect_state running started restart image_id compose_project compose_service health
+            local network_lines network_name network_id aliases mount_lines mount_type volume_name source destination writable
+            if ! rows="$(docker ps -a --filter "label=com.docker.compose.project=$project" --format '{{.Names}}\t{{.ID}}\t{{.State}}\t{{.Status}}\t{{.Image}}' 2>/dev/null)"; then
+              printf 'READOUT containers_project=%s status=unavailable\n' "$(safe_scalar "$project")"
+              return 0
+            fi
+            if [[ -z "$rows" ]]; then
+              printf 'READOUT containers_project=%s status=none\n' "$(safe_scalar "$project")"
+              return 0
+            fi
+          while IFS=$'\t' read -r name id _state _status _image; do
+              [[ -n "$name" ]] || continue
+              if ! inspect_line="$(docker inspect --format '{{printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t" .Id .State.Status .State.Running .State.StartedAt .RestartCount .Image (index .Config.Labels "com.docker.compose.project") (index .Config.Labels "com.docker.compose.service")}}{{if .State.Health}}{{.State.Health.Status}}{{else}}absent{{end}}' "$name" 2>/dev/null)"; then
+                printf 'READOUT container=%s project=%s status=unavailable\n' "$(safe_scalar "$name")" "$(safe_scalar "$project")"
+                continue
+              fi
+              IFS=$'\t' read -r inspect_id inspect_state running started restart image_id compose_project compose_service health <<<"$inspect_line"
+              printf 'READOUT container=%s id=%s state=%s running=%s health=%s started_at=%s restart_count=%s image_id=%s compose=%s/%s\n' \
+                "$(safe_scalar "$name")" "$(short_id "$inspect_id")" "$(safe_scalar "$inspect_state")" \
+                "$(safe_scalar "$running")" "$(safe_scalar "$health")" "$(safe_scalar "$started")" \
+                "$(safe_scalar "$restart")" "$(short_id "$image_id")" "$(safe_scalar "$compose_project")" "$(safe_scalar "$compose_service")"
+
+              if network_lines="$(docker inspect --format '{{range $network_name, $network := .NetworkSettings.Networks}}{{printf "%s\t%s\t" $network_name $network.NetworkID}}{{range $network.Aliases}}{{printf "%s," .}}{{end}}{{println}}{{end}}' "$name" 2>/dev/null)"; then
+                while IFS=$'\t' read -r network_name network_id aliases; do
+                  [[ -n "$network_name" ]] || continue
+                  printf 'READOUT container_network container=%s network=%s id=%s aliases=%s\n' \
+                    "$(safe_scalar "$name")" "$(safe_scalar "$network_name")" "$(short_id "$network_id")" "$(safe_scalar "${aliases%,}")"
+                done <<<"$network_lines"
+              else
+                printf 'READOUT container_network container=%s status=unavailable\n' "$(safe_scalar "$name")"
+              fi
+
+              if mount_lines="$(docker inspect --format '{{range .Mounts}}{{printf "%s\t%s\t%s\t%s\t%s" .Type .Name .Source .Destination .RW}}{{println}}{{end}}' "$name" 2>/dev/null)"; then
+                while IFS=$'\t' read -r mount_type volume_name source destination writable; do
+                  [[ -n "$mount_type" ]] || continue
+                  printf 'READOUT container_mount container=%s type=%s name=%s source=%s destination=%s writable=%s\n' \
+                    "$(safe_scalar "$name")" "$(safe_scalar "$mount_type")" "$(safe_scalar "$volume_name")" \
+                    "$(safe_scalar "$source")" "$(safe_scalar "$destination")" "$(safe_scalar "$writable")"
+                done <<<"$mount_lines"
+              else
+                printf 'READOUT container_mount container=%s status=unavailable\n' "$(safe_scalar "$name")"
+              fi
+            done <<<"$rows"
+          }
+
+          volume_readout() {
+            local project="$1" volumes volume metadata name driver mountpoint filesystem
+            if ! volumes="$(docker volume ls --filter "label=com.docker.compose.project=$project" --format '{{.Name}}' 2>/dev/null)"; then
+              printf 'READOUT volumes_project=%s status=unavailable\n' "$(safe_scalar "$project")"
+              return 0
+            fi
+            if [[ -z "$volumes" ]]; then
+              printf 'READOUT volumes_project=%s status=none\n' "$(safe_scalar "$project")"
+              return 0
+            fi
+            while IFS= read -r volume; do
+              [[ -n "$volume" ]] || continue
+              if ! metadata="$(docker volume inspect --format '{{printf "%s\t%s\t%s" .Name .Driver .Mountpoint}}' "$volume" 2>/dev/null)"; then
+                printf 'READOUT volume=%s status=unavailable\n' "$(safe_scalar "$volume")"
+                continue
+              fi
+              IFS=$'\t' read -r name driver mountpoint <<<"$metadata"
+              printf 'READOUT volume=%s name=%s driver=%s mountpoint=%s\n' \
+                "$(safe_scalar "$volume")" "$(safe_scalar "$name")" "$(safe_scalar "$driver")" "$(safe_scalar "$mountpoint")"
+              if safe_path "$mountpoint" && filesystem="$(findmnt -T "$mountpoint" -o SOURCE,FSTYPE,OPTIONS -n 2>/dev/null)"; then
+                printf 'READOUT volume_mount volume=%s filesystem=%s\n' "$(safe_scalar "$volume")" "$(safe_scalar "$filesystem")"
+              else
+                printf 'READOUT volume_mount volume=%s status=unavailable\n' "$(safe_scalar "$volume")"
+              fi
+            done <<<"$volumes"
+          }
+
+          data_root_readout() {
+            local rows container env_lines env_line value canonical found=false count=0
+            if ! rows="$(docker ps -a --filter 'label=com.docker.compose.project=platform-infra' --format '{{.Names}}' 2>/dev/null)"; then
+              printf 'READOUT data_root status=unavailable\n'
+              return 0
+            fi
+            while IFS= read -r container; do
+              [[ -n "$container" ]] || continue
+              if ! env_lines="$(docker inspect --format '{{range .Config.Env}}{{if contains . "CATERING_DATA_ROOT="}}{{println .}}{{end}}{{end}}' "$container" 2>/dev/null)"; then
+                printf 'READOUT data_root container=%s status=unavailable\n' "$(safe_scalar "$container")"
+                continue
+              fi
+              while IFS= read -r env_line; do
+                [[ -n "$env_line" ]] || continue
+                found=true
+                count=$((count + 1))
+                value="${env_line#CATERING_DATA_ROOT=}"
+                if [[ "$env_line" != CATERING_DATA_ROOT=* ]] || ! safe_path "$value"; then
+                  printf 'READOUT data_root container=%s status=invalid\n' "$(safe_scalar "$container")"
+                  continue
+                fi
+                if ! canonical="$(realpath -e -- "$value" 2>/dev/null)" || ! safe_path "$canonical"; then
+                  printf 'READOUT data_root container=%s status=unavailable\n' "$(safe_scalar "$container")"
+                  continue
+                fi
+                printf 'READOUT data_root container=%s status=present path=%s\n' \
+                  "$(safe_scalar "$container")" "$(safe_scalar "$canonical")"
+              done <<<"$env_lines"
+            done <<<"$rows"
+            if [[ "$found" != true ]]; then
+              printf 'READOUT data_root status=absent\n'
+            elif (( count > 1 )); then
+              printf 'READOUT data_root status=multiple count=%s\n' "$count"
+            fi
+          }
+
+          tool_readout() {
+            local tool
+            for tool in restic borg rclone; do
+              if command -v "$tool" >/dev/null 2>&1; then
+                printf 'READOUT backup_tool=%s status=present\n' "$(safe_scalar "$tool")"
+              else
+                printf 'READOUT backup_tool=%s status=absent\n' "$(safe_scalar "$tool")"
+              fi
+            done
+          }
+
+          systemd_readout() {
+            local timers units line token unit show_line key value
+            if ! timers="$(systemctl list-timers --all --no-legend --no-pager 2>/dev/null)"; then
+              printf 'READOUT systemd_timers status=unavailable\n'
+            else
+              while IFS= read -r line; do
+                for token in $line; do
+                  case "$token" in
+                    *backup*.timer|*restic*.timer|*borg*.timer|*rclone*.timer|*catering*.timer)
+                      printf 'READOUT timer unit=%s\n' "$(safe_scalar "$token")"
+                      break
+                      ;;
+                  esac
+                done
+              done <<<"$timers"
+            fi
+            if ! units="$(systemctl list-unit-files --type=service --no-legend --no-pager 2>/dev/null)"; then
+              printf 'READOUT systemd_units status=unavailable\n'
+            else
+              while IFS= read -r line; do
+                unit="${line%% *}"
+                case "$unit" in
+                  *backup*.service|*restic*.service|*borg*.service|*rclone*.service|*catering*.service)
+                    printf 'READOUT service unit=%s\n' "$(safe_scalar "$unit")"
+                    if show_line="$(systemctl show --no-pager --property=Id,LoadState,ActiveState,SubState,ExecMainStatus "$unit" 2>/dev/null)"; then
+                      while IFS='=' read -r key value; do
+                        case "$key" in
+                          Id|LoadState|ActiveState|SubState|ExecMainStatus)
+                            printf 'READOUT service_state unit=%s field=%s value=%s\n' \
+                              "$(safe_scalar "$unit")" "$(safe_scalar "$key")" "$(safe_scalar "$value")"
+                            ;;
+                        esac
+                      done <<<"$show_line"
+                    else
+                      printf 'READOUT service_state unit=%s status=unavailable\n' "$(safe_scalar "$unit")"
+                    fi
+                    ;;
+                esac
+              done <<<"$units"
+            fi
+          }
+
+          backup_file_readout() {
+          local label="$1" path="$2" metadata file_type owner mode _size _mtime key value
+            if [[ -L "$path" || ! -e "$path" ]]; then
+              printf 'READOUT backup_file=%s status=absent\n' "$(safe_scalar "$label")"
+              return 0
+            fi
+            if ! metadata="$(stat -c '%F:%u:%a:%s:%Y' -- "$path" 2>/dev/null)"; then
+              printf 'READOUT backup_file=%s status=unavailable\n' "$(safe_scalar "$label")"
+              return 0
+            fi
+          IFS=: read -r file_type owner mode _size _mtime <<<"$metadata"
+            printf 'READOUT backup_file=%s metadata=%s\n' "$(safe_scalar "$label")" "$(safe_scalar "$metadata")"
+            if [[ "$file_type" != 'regular file' || "$owner" != 0 || ! "$mode" =~ ^[0-7]{3,4}$ || "${mode: -1}" =~ [2367] || "${mode: -2:1}" =~ [2367] ]]; then
+              printf 'READOUT backup_file=%s status=unsafe\n' "$(safe_scalar "$label")"
+              return 0
+            fi
+            printf 'READOUT backup_file=%s status=regular_root_owned\n' "$(safe_scalar "$label")"
+            while IFS='=' read -r key value; do
+              case "$key" in
+                status|project|scope|created_at|repository_status|verified_at)
+                  printf 'READOUT backup_file=%s field=%s value=%s\n' \
+                    "$(safe_scalar "$label")" "$(safe_scalar "$key")" "$(safe_scalar "$value")"
+                  ;;
+              esac
+            done <"$path"
+          }
+
+          printf 'READOUT dispatch_sha=%s\n' "$(short_id "$expected_sha")"
+          readout_path phase3_root /opt/catering-phase3
+          readout_path phase3_activation /opt/catering-phase3/phase3.activation
+          readout_path phase3_baseline_manifest /opt/catering-phase3/phase3.transaction-baseline.manifest
+          readout_path phase3_restore_proof_archive /opt/catering-phase3/phase3.rollback-restore-proof.archive
+          readout_path phase3_completion_receipt /opt/catering-phase3/phase3.rollback-completion.receipt
+          readout_path phase3_restore_evidence /opt/catering-phase3/phase3.restore-evidence.record
+          readout_path phase3_adoption_journal /opt/catering-phase3/phase3.network-adoption.journal
+          readout_path platform_deploy_lock /opt/catering-agents-platform.deploy-lock
+          readout_path shared_edge_deploy_lock /opt/shared-edge.deploy-lock
+
+          for network in catering_ingress catering_private platform-infra_default zeiterfassung_default commcats-eventos_default deploy_default; do
+            network_readout "$network"
+          done
+
+          for project in platform-infra shared-edge zeiterfassung eventos commcats-eventos iranmonitor deploy; do
+            container_readout "$project"
+          done
+
+          for project in platform-infra shared-edge; do
+            volume_readout "$project"
+          done
+          data_root_readout
+          tool_readout
+          systemd_readout
+          backup_file_readout catering_backup_evidence /var/lib/catering-backup/catering-backup-evidence
+          backup_file_readout catering_backup_repository_status /var/lib/catering-backup/catering-backup-repository-status
+          printf 'READOUT collection=complete\n'
+          REMOTE_READOUT
+          remote_rc=$?
+          set -e
+          if (( remote_rc != 0 )); then
+            printf 'READOUT transport=status=failed exit=%s\n' "$remote_rc"
+            exit "$remote_rc"
+          fi
