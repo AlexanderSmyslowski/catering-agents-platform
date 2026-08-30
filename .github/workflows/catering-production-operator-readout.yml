@@ -104,22 +104,36 @@ jobs:
             [[ "$value" != *".."* && "$value" =~ ^/[A-Za-z0-9._/-]+$ ]]
           }
 
+          path_absence_is_authoritative() {
+            local target="$1" candidate parent
+            [[ ! -e "$target" && ! -L "$target" ]] || return 1
+            candidate="$(dirname -- "$target")"
+            while true; do
+              [[ -L "$candidate" ]] && return 1
+              if [[ -e "$candidate" ]]; then
+                [[ -d "$candidate" && -r "$candidate" && -x "$candidate" ]]
+                return
+              fi
+              parent="$(dirname -- "$candidate")"
+              [[ "$parent" != "$candidate" ]] || return 1
+              candidate="$parent"
+            done
+          }
+
           readout_path() {
             local label="$1" path="$2" metadata
-            if [[ -L "$path" ]]; then
-              printf 'READOUT path=%s status=symlink\n' "$(safe_scalar "$label")"
-              return 0
-            fi
-            if [[ ! -e "$path" ]]; then
+            if metadata="$(stat -c '%F:%u:%a:%s:%Y' -- "$path" 2>/dev/null)"; then
+              if [[ -L "$path" ]]; then
+                printf 'READOUT path=%s status=symlink\n' "$(safe_scalar "$label")"
+                return 0
+              fi
+              printf 'READOUT path=%s status=present metadata=%s\n' \
+                "$(safe_scalar "$label")" "$(safe_scalar "$metadata")"
+            elif path_absence_is_authoritative "$path"; then
               printf 'READOUT path=%s status=absent\n' "$(safe_scalar "$label")"
-              return 0
-            fi
-            if ! metadata="$(stat -c '%F:%u:%a:%s:%Y' -- "$path" 2>/dev/null)"; then
+            else
               printf 'READOUT path=%s status=unavailable\n' "$(safe_scalar "$label")"
-              return 0
             fi
-            printf 'READOUT path=%s status=present metadata=%s\n' \
-              "$(safe_scalar "$label")" "$(safe_scalar "$metadata")"
           }
 
           network_readout() {
@@ -408,18 +422,26 @@ jobs:
 
           backup_file_readout() {
           local label="$1" path="$2" metadata file_type owner mode _size _mtime key value
-            if [[ -L "$path" || ! -e "$path" ]]; then
+            if metadata="$(stat -c '%F:%u:%a:%s:%Y' -- "$path" 2>/dev/null)"; then
+              if [[ -L "$path" ]]; then
+                printf 'READOUT backup_file=%s status=unavailable\n' "$(safe_scalar "$label")"
+                return 0
+              fi
+            elif path_absence_is_authoritative "$path"; then
               printf 'READOUT backup_file=%s status=absent\n' "$(safe_scalar "$label")"
               return 0
-            fi
-            if ! metadata="$(stat -c '%F:%u:%a:%s:%Y' -- "$path" 2>/dev/null)"; then
+            else
               printf 'READOUT backup_file=%s status=unavailable\n' "$(safe_scalar "$label")"
               return 0
             fi
-          IFS=: read -r file_type owner mode _size _mtime <<<"$metadata"
+            IFS=: read -r file_type owner mode _size _mtime <<<"$metadata"
             printf 'READOUT backup_file=%s metadata=%s\n' "$(safe_scalar "$label")" "$(safe_scalar "$metadata")"
             if [[ "$file_type" != 'regular file' || "$owner" != 0 || ! "$mode" =~ ^[0-7]{3,4}$ || "${mode: -1}" =~ [2367] || "${mode: -2:1}" =~ [2367] ]]; then
               printf 'READOUT backup_file=%s status=unsafe\n' "$(safe_scalar "$label")"
+              return 0
+            fi
+            if [[ -L "$path" || ! -r "$path" ]]; then
+              printf 'READOUT backup_file=%s status=unavailable\n' "$(safe_scalar "$label")"
               return 0
             fi
             printf 'READOUT backup_file=%s status=regular_root_owned\n' "$(safe_scalar "$label")"
