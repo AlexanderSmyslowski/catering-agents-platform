@@ -1,6 +1,7 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
 import { describe, expect, test } from "vitest";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
@@ -32,6 +33,142 @@ function runFixture(functionSource: string, environment: Record<string, string>)
   return spawnSync("bash", ["-c", `set -euo pipefail\n${functionSource}\nclassify_backup_evidence`], {
     encoding: "utf8",
     env: { ...process.env, ...environment },
+  });
+}
+
+type EvidenceFixtureOptions = {
+  dataRootStatus?: "matched" | "absent";
+  includeBackupEvidenceProbe?: boolean;
+};
+
+function encodedRecord(recordType: string, recordKey: string, value: string): string {
+  return `${recordType}\t${recordKey}\t${Buffer.from(value, "utf8").toString("base64")}`;
+}
+
+function syntheticRemoteEvidence(options: EvidenceFixtureOptions = {}): string {
+  const dataRootStatus = options.dataRootStatus ?? "matched";
+  const includeBackupEvidenceProbe = options.includeBackupEvidenceProbe ?? true;
+  const commandFacts = [
+    "command_docker",
+    "command_systemctl",
+    "command_findmnt",
+    "command_mount",
+    "command_ss",
+    "command_stat",
+    "command_realpath",
+    "command_readlink",
+    "command_find",
+    "command_sha256sum",
+    "command_hostname",
+    "command_date",
+    "command_base64",
+    "command_tr",
+    "command_restic",
+  ].map((key) => ["FACT", key, "available"] as const);
+  const facts = [
+    ...commandFacts,
+    ["FACT", "postgres_seen", "true"],
+    ["FACT", "persistence_container_count", "1"],
+    ["FACT", "platform_expected_volume_count", "3"],
+    ["FACT", "data_root_status", dataRootStatus],
+    ["FACT", "edge_volume_count", "1"],
+    ["FACT", "backup_timer_active", "true"],
+    ["FACT", "backup_success", "true"],
+    ["FACT", "backup_scope_ok", "true"],
+    ["FACT", "backup_host_bound", "true"],
+    ["FACT", "backup_host_binding", "true"],
+    ["FACT", "backup_artifact_bound", "true"],
+    ["FACT", "backup_repository_bound", "true"],
+    ["FACT", "backup_timestamp", "2026-08-30T00:00:00Z"],
+    ["FACT", "backup_age_seconds", "3600"],
+    ["FACT", "secret_source", "github-production-environment"],
+    ["FACT", "data_root_source", "docker-targeted-variable"],
+  ] as const;
+  const probes = [
+    ["containers", "success"],
+    ["platform_volumes", "success"],
+    ["edge_volumes", "success"],
+    ["network_list", "success"],
+    ["timers", "success"],
+    ["services", "success"],
+    ["backup_artifact", "success"],
+    ["backup_repository", "success"],
+    ["backup_clock", "success"],
+    ["host_identity", "success"],
+    ["command_restic", "success"],
+  ];
+  const networkNames = [
+    "platform-infra_default",
+    "zeiterfassung_default",
+    "catering_ingress",
+    "catering_private",
+    "deploy_default",
+    "commcats-eventos_default",
+  ];
+  const records = [
+    ...facts,
+    ...probes.map(([key, value]) => ["PROBE_STATUS", key, value] as const),
+    ...networkNames.map((name) => ["PROBE_STATUS", `network:${name}`, "absent"] as const),
+  ];
+  if (includeBackupEvidenceProbe) {
+    records.push(["PROBE_STATUS", "backup_evidence", "success"]);
+  }
+  return records.map(([type, key, value]) => encodedRecord(type, key, value)).join("\n");
+}
+
+function runHelperWithSyntheticRemote(remoteEvidence: string): ReturnType<typeof spawnSync> {
+  const fixtureRoot = mkdtempSync(path.join(tmpdir(), "catering-production-evidence-"));
+  const sshPath = path.join(fixtureRoot, "ssh");
+  const fakeSsh = [
+    "#!/usr/bin/env bash",
+    "set -euo pipefail",
+    "cat <<'REMOTE_FIXTURE'",
+    remoteEvidence,
+    "REMOTE_FIXTURE",
+    "",
+  ].join("\n");
+  writeFileSync(sshPath, fakeSsh, { mode: 0o755 });
+  try {
+    return spawnSync(process.env.CATERING_EVIDENCE_TEST_BASH ?? "bash", [helperPath], {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${fixtureRoot}:${process.env.PATH ?? ""}`,
+        CATERING_EVIDENCE_SSH_KEY: "fixture-key",
+        CATERING_EVIDENCE_SSH_KNOWN_HOSTS: "fixture-known-hosts",
+        HETZNER_DEPLOY_HOST: "fixture.invalid",
+        HETZNER_DEPLOY_USER: "fixture-user",
+      },
+    });
+  } finally {
+    spawnSync("/usr/bin/trash", [fixtureRoot], { stdio: "ignore" });
+  }
+}
+
+function runRemoteBackupSuccessFragment(): ReturnType<typeof spawnSync> {
+  const helper = source(helperRelativePath);
+  const remoteScript = helper.split("<<'REMOTE_EVIDENCE'\n")[1]?.split("\nREMOTE_EVIDENCE")[0] ?? "";
+  const blockStart = remoteScript.indexOf('if [[ "$backup_repository_bound" == true ]]; then');
+  const blockEnd = remoteScript.indexOf("\n    fi\n  fi\nelse", blockStart);
+  expect(blockStart).toBeGreaterThanOrEqual(0);
+  expect(blockEnd).toBeGreaterThan(blockStart);
+  const block = remoteScript.slice(blockStart, blockEnd + "\n    fi".length);
+  return spawnSync("bash", ["-c", `set -euo pipefail
+backup_repository_bound=true
+backup_timestamp=2026-08-30T00:00:00Z
+backup_success=false
+backup_scope_ok=false
+backup_host_bound=false
+backup_artifact_bound=false
+backup_repository_bound=true
+backup_snapshot=fixture-snapshot
+backup_checksum=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+emit() { printf '%s\\t%s\\t%s\\n' "$1" "$2" "$3"; }
+probe_error() { return 1; }
+date() { printf '1000'; }
+${block}`], {
+    encoding: "utf8",
+    env: process.env,
   });
 }
 
@@ -308,6 +445,25 @@ describe("Catering production evidence workflow contract", () => {
     expect(memberConflict.status).toBe(1);
     const stateConflict = run(`${encodedScript}\nregister_record UNIT_STATE catering-backup.service ActiveState=inactive`);
     expect(stateConflict.status).toBe(1);
+  });
+
+  test("RED: fully validated backup evidence reaches the success probe", () => {
+    const fragment = runRemoteBackupSuccessFragment();
+    const successWasEmitted = fragment.status === 0 && fragment.stdout.includes("PROBE_STATUS\tbackup_evidence\tsuccess");
+    const run = runHelperWithSyntheticRemote(syntheticRemoteEvidence({ includeBackupEvidenceProbe: successWasEmitted }));
+    expect(fragment.status).toBe(0);
+    expect(run.status).toBe(0);
+    expect(run.stdout).toContain("EVIDENCE_STATUS\tSAFE_REDACTED");
+    expect(run.stdout).not.toContain("EVIDENCE_STATUS\tUNKNOWN");
+  });
+
+  test("RED: absent CATERING_DATA_ROOT is an area-level non-evidence result", () => {
+    const run = runHelperWithSyntheticRemote(
+      syntheticRemoteEvidence({ dataRootStatus: "absent" }),
+    );
+    expect(run.status).toBe(0);
+    expect(run.stdout).toContain("CLASSIFICATION\tdata_root\tNICHT BELEGT");
+    expect(run.stdout).not.toContain("EVIDENCE_STATUS\tUNKNOWN");
   });
 
   test("RED: local parser integrates register_record for legitimate set records", () => {

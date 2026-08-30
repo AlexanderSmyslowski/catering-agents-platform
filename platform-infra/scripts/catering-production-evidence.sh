@@ -256,6 +256,8 @@ while IFS= read -r container_name; do
       [[ "$mount_destination" == "$data_root_value" ]] && data_root_status=matched
     done <<< "$mounts"
     [[ "$data_root_status" == matched ]] && emit DATA_ROOT "$container_name" "$data_root_value"
+  elif [[ "$data_root_count" == 0 ]]; then
+    data_root_status=absent
   else
     data_root_status=ambiguous
   fi
@@ -524,6 +526,7 @@ if bind_readonly_source "$BACKUP_EVIDENCE_PATH" 0 600; then
       emit PROBE_STATUS backup_repository absent
     fi
     if [[ "$backup_repository_bound" == true ]]; then
+      emit PROBE_STATUS backup_evidence success
       if ! now_epoch="$(date -u +%s 2>/dev/null)"; then
         probe_error backup_clock command_failed
       fi
@@ -627,9 +630,12 @@ while IFS=$'\t' read -r record_type record_key record_value extra || [[ -n "$rec
         platform_expected_volume_count)
           case "$decoded_value" in 3|4|5|6|7|8|9) ;; *) PERSISTENCE_STATUS="NICHT BELEGT"; ambiguous=true ;; esac ;;
         data_root_status)
-          [[ "$decoded_value" == matched || "$decoded_value" == ambiguous || "$decoded_value" == unmatched ]] || ambiguous=true
-          [[ "$decoded_value" == matched ]] && DATA_ROOT_STATUS="BELEGT"
-          [[ "$decoded_value" == ambiguous || "$decoded_value" == unmatched ]] && ambiguous=true ;;
+          case "$decoded_value" in
+            matched) DATA_ROOT_STATUS="BELEGT" ;;
+            absent) DATA_ROOT_STATUS="NICHT BELEGT" ;;
+            ambiguous|unmatched) ambiguous=true ;;
+            *) ambiguous=true ;;
+          esac ;;
         edge_volume_count)
           [[ "$decoded_value" =~ ^[0-9]+$ ]] || ambiguous=true
           [[ "$decoded_value" =~ ^[1-9][0-9]*$ ]] && CADDY_STATUS="BELEGT" ;;
