@@ -115,7 +115,64 @@ emit_classifications() {
   printf 'CLASSIFICATION\tconfig_secrets\t%s\n' "$SECRETS_STATUS"
 }
 
+classify_remote_failure() {
+  local remote_status="${1-}" remote_output="${2-}"
+  local record_type record_key encoded extra parsed decoded
+  if [[ "$remote_status" == 255 ]]; then
+    printf '%s' REMOTE_TRANSPORT_FAILED
+    return 0
+  fi
+  if [[ -z "$remote_output" ]]; then
+    if [[ "$remote_status" == 0 ]]; then
+      printf '%s' REMOTE_OUTPUT_EMPTY
+    else
+      printf '%s' REMOTE_TRANSPORT_FAILED
+    fi
+    return 0
+  fi
+  if [[ "$remote_output" == *$'\n'* ]]; then
+    printf '%s' REMOTE_OUTPUT_INVALID
+    return 0
+  fi
+  IFS=$'\t' read -r record_type record_key encoded extra <<< "$remote_output"
+  if [[ "$record_type" != PROBE_ERROR || -z "$record_key" || -z "$encoded" || -n "$extra" ]]; then
+    printf '%s' REMOTE_OUTPUT_INVALID
+    return 0
+  fi
+  if ! [[ "$record_key" =~ ^(persistence|data_root|backup_channel|caddy_shared_edge|config_secrets)$ ]]; then
+    printf '%s' REMOTE_OUTPUT_INVALID
+    return 0
+  fi
+  if ! parsed="$(parse_remote_record "$record_type" "$encoded")"; then
+    printf '%s' REMOTE_OUTPUT_INVALID
+    return 0
+  fi
+  decoded="${parsed#*$'\t'}"
+  [[ -n "$decoded" ]] || {
+    printf '%s' REMOTE_OUTPUT_INVALID
+    return 0
+  }
+  if [[ "$remote_status" == 0 ]]; then
+    printf '%s' REMOTE_OUTPUT_INVALID
+  else
+    printf 'REMOTE_PROBE_FAILED:%s' "$record_key"
+  fi
+}
+
+emit_failure_class() {
+  local failure_class="${1-REMOTE_OUTPUT_INVALID}"
+  case "$failure_class" in
+    REMOTE_TRANSPORT_FAILED|REMOTE_OUTPUT_EMPTY|REMOTE_OUTPUT_INVALID) ;;
+    REMOTE_PROBE_FAILED:*)
+      [[ "${failure_class#REMOTE_PROBE_FAILED:}" =~ ^(persistence|data_root|backup_channel|caddy_shared_edge|config_secrets)$ ]] || failure_class=REMOTE_OUTPUT_INVALID
+      ;;
+    *) failure_class=REMOTE_OUTPUT_INVALID ;;
+  esac
+  printf 'EVIDENCE_ERROR\t%s\n' "$failure_class"
+}
+
 fail_closed() {
+  emit_failure_class "${1-REMOTE_OUTPUT_INVALID}"
   printf 'EVIDENCE_STATUS\tUNKNOWN\n'
   return 1
 }
@@ -141,8 +198,26 @@ emit() {
   printf '%s\t%s\t%s\n' "$record_type" "$record_key" "$encoded"
 }
 probe_error() {
-  emit PROBE_ERROR "$1" "$2"
+  local probe_key
+  probe_key="$(canonical_probe_key "${1-}")" || exit 1
+  emit PROBE_ERROR "$probe_key" "${2-}"
   exit 1
+}
+canonical_probe_key() {
+  case "${1-}" in
+    persistence|data_root|backup_channel|caddy_shared_edge|config_secrets)
+      printf '%s' "$1" ;;
+    data-root:*)
+      printf '%s' data_root ;;
+    edge_volumes|edge-volume:*)
+      printf '%s' caddy_shared_edge ;;
+    timers|services|service-state:*|host_identity|backup_clock|backup_evidence|backup_artifact|backup_repository|command_sha256sum|command_hostname|command_date|command_restic)
+      printf '%s' backup_channel ;;
+    command_docker|command_systemctl|command_findmnt|command_mount|command_ss|command_stat|command_realpath|command_readlink|command_find|command_base64|command_tr|containers|platform_volumes|inspect:*|service:*|mounts:*|volume:*|network_list|network:*|members:*)
+      printf '%s' persistence ;;
+    *)
+      return 1 ;;
+  esac
 }
 safe_token() { [[ "$1" =~ ^[A-Za-z0-9_.:-]+$ ]]; }
 safe_path() { [[ "$1" =~ ^[A-Za-z0-9_./:@+-]+$ ]]; }
@@ -569,8 +644,13 @@ emit FACT data_root_source docker-targeted-variable
 REMOTE_EVIDENCE
 }
 
-remote_output="$(remote_evidence 2>/dev/null)" || fail_closed
-[[ -n "$remote_output" ]] || fail_closed
+remote_status=0
+remote_output="$(remote_evidence 2>/dev/null)" || remote_status=$?
+if [[ "$remote_status" != 0 ]]; then
+  remote_failure="$(classify_remote_failure "$remote_status" "$remote_output")"
+  fail_closed "$remote_failure"
+fi
+[[ -n "$remote_output" ]] || fail_closed REMOTE_OUTPUT_EMPTY
 
 PERSISTENCE_STATUS="NICHT BELEGT"
 DATA_ROOT_STATUS="NICHT BELEGT"
@@ -583,6 +663,7 @@ BACKUP_ARTIFACT_BOUND=false
 BACKUP_REPOSITORY_BOUND=false
 ambiguous=false
 declare -A seen_records=() seen_facts=() seen_probes=()
+safe_records=()
 # The record-registration arrays are consumed by the parser defined in the
 # remote heredoc; keep ShellCheck from treating their local initialization as
 # dead code.
@@ -683,7 +764,7 @@ while IFS=$'\t' read -r record_type record_key record_value extra || [[ -n "$rec
       ambiguous=true
       ;;
     CONTAINER|MOUNT|VOLUME|NETWORK|MEMBER|UNIT|UNIT_STATE|DATA_ROOT|SAFE_ID|CHECKSUM|UTC|UTC_AS_OF)
-      printf '%s\t%s\t%s\n' "$record_type" "$record_key" "$decoded_value"
+      safe_records+=("$record_type"$'\t'"$record_key"$'\t'"$decoded_value")
       ;;
     *) ambiguous=true ;;
   esac
@@ -700,12 +781,9 @@ for network_name in platform-infra_default zeiterfassung_default catering_ingres
 done
 
 export BACKUP_EVIDENCE_SUCCESS BACKUP_SCOPE_OK BACKUP_HOST_BOUND BACKUP_ARTIFACT_BOUND BACKUP_REPOSITORY_BOUND
-if [[ "$ambiguous" == true ]]; then DATA_ROOT_STATUS="BETREIBERENTSCHEIDUNG NÖTIG"; fi
+if [[ "$ambiguous" == true ]]; then fail_closed REMOTE_OUTPUT_INVALID; fi
+for safe_record in "${safe_records[@]}"; do printf '%s\n' "$safe_record"; done
 if ! utc_as_of="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)"; then fail_closed; fi
 printf 'UTC_AS_OF\t%s\n' "$utc_as_of"
 emit_classifications
 printf 'EVIDENCE_STATUS\tSAFE_REDACTED\n'
-if [[ "$ambiguous" == true ]]; then
-  printf 'EVIDENCE_STATUS\tUNKNOWN\n'
-  exit 1
-fi
