@@ -355,7 +355,7 @@ describe("Catering production evidence workflow contract", () => {
     });
 
     expect(run.status).not.toBe(0);
-    expect(run.stdout.trim().split("\n")).toEqual([
+    expect(String(run.stdout).trim().split("\n")).toEqual([
       "EVIDENCE_ERROR\tREMOTE_TRANSPORT_FAILED",
       "EVIDENCE_STATUS\tUNKNOWN",
     ]);
@@ -369,7 +369,7 @@ describe("Catering production evidence workflow contract", () => {
     const run = runHelperWithSshFixture("", { exitCode: 0 });
 
     expect(run.status).not.toBe(0);
-    expect(run.stdout.trim().split("\n")).toEqual([
+    expect(String(run.stdout).trim().split("\n")).toEqual([
       "EVIDENCE_ERROR\tREMOTE_OUTPUT_EMPTY",
       "EVIDENCE_STATUS\tUNKNOWN",
     ]);
@@ -380,7 +380,7 @@ describe("Catering production evidence workflow contract", () => {
     const run = runHelperWithSshFixture(probeError, { exitCode: 1 });
 
     expect(run.status).not.toBe(0);
-    expect(run.stdout.trim().split("\n")).toEqual([
+    expect(String(run.stdout).trim().split("\n")).toEqual([
       "EVIDENCE_ERROR\tREMOTE_PROBE_FAILED:data_root",
       "EVIDENCE_STATUS\tUNKNOWN",
     ]);
@@ -410,7 +410,7 @@ describe("Catering production evidence workflow contract", () => {
       const run = runHelperWithSshFixture(remoteEvidence, { exitCode });
 
       expect(run.status).not.toBe(0);
-      expect(run.stdout.trim().split("\n")).toEqual([
+      expect(String(run.stdout).trim().split("\n")).toEqual([
         "EVIDENCE_ERROR\tREMOTE_OUTPUT_INVALID",
         "EVIDENCE_STATUS\tUNKNOWN",
       ]);
