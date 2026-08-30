@@ -386,6 +386,24 @@ describe("Catering production evidence workflow contract", () => {
     ]);
   });
 
+  test("valid remote prefix followed by terminal probe error remains area-bound and redacted", () => {
+    const remoteEvidence = [
+      encodedRecord("FACT", "postgres_seen", "true"),
+      encodedRecord("PROBE_STATUS", "containers", "success"),
+      encodedRecord("PROBE_ERROR", "data_root", "command_failed"),
+    ].join("\n");
+    const run = runHelperWithSshFixture(remoteEvidence, { exitCode: 1 });
+
+    expect(run.status).not.toBe(0);
+    expect(String(run.stdout).trim().split("\n")).toEqual([
+      "EVIDENCE_ERROR\tREMOTE_PROBE_FAILED:data_root",
+      "EVIDENCE_STATUS\tUNKNOWN",
+    ]);
+    expect(run.stdout).not.toContain("postgres_seen");
+    expect(run.stdout).not.toContain("command_failed");
+    expect(run.stderr).toBe("");
+  });
+
   test("malformed, unknown, or multiple probe errors are invalid protocol", () => {
     const invalidCases = [
       { remoteEvidence: "not-a-record", exitCode: 0 },
@@ -401,6 +419,13 @@ describe("Catering production evidence workflow contract", () => {
         remoteEvidence: [
           encodedRecord("PROBE_ERROR", "data_root", "command_failed"),
           encodedRecord("PROBE_ERROR", "backup_channel", "command_failed"),
+        ].join("\n"),
+        exitCode: 1,
+      },
+      {
+        remoteEvidence: [
+          encodedRecord("PROBE_ERROR", "data_root", "command_failed"),
+          encodedRecord("FACT", "postgres_seen", "true"),
         ].join("\n"),
         exitCode: 1,
       },

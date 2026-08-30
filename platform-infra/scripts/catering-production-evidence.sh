@@ -646,11 +646,10 @@ REMOTE_EVIDENCE
 
 remote_status=0
 remote_output="$(remote_evidence 2>/dev/null)" || remote_status=$?
-if [[ "$remote_status" != 0 ]]; then
+if [[ "$remote_status" == 255 || -z "$remote_output" ]]; then
   remote_failure="$(classify_remote_failure "$remote_status" "$remote_output")"
   fail_closed "$remote_failure"
 fi
-[[ -n "$remote_output" ]] || fail_closed REMOTE_OUTPUT_EMPTY
 
 PERSISTENCE_STATUS="NICHT BELEGT"
 DATA_ROOT_STATUS="NICHT BELEGT"
@@ -662,6 +661,8 @@ BACKUP_HOST_BOUND=false
 BACKUP_ARTIFACT_BOUND=false
 BACKUP_REPOSITORY_BOUND=false
 ambiguous=false
+probe_error_seen=false
+probe_error_key=""
 declare -A seen_records=() seen_facts=() seen_probes=()
 safe_records=()
 # The record-registration arrays are consumed by the parser defined in the
@@ -673,6 +674,10 @@ seen_set_identities=()
 seen_set_values=()
 
 while IFS=$'\t' read -r record_type record_key record_value extra || [[ -n "$record_type$record_key$record_value$extra" ]]; do
+  if [[ "${probe_error_seen:-false}" == true ]]; then
+    ambiguous=true
+    continue
+  fi
   if [[ -z "$record_type" || -z "$record_key" || -z "$record_value" || -n "$extra" || ! "$record_key" =~ ^[A-Za-z0-9_.:-]+$ ]]; then
     ambiguous=true
     continue
@@ -761,14 +766,31 @@ while IFS=$'\t' read -r record_type record_key record_value extra || [[ -n "$rec
       esac
       ;;
     PROBE_ERROR)
-      ambiguous=true
+      if [[ "${remote_status:-0}" == 0 || -n "${probe_error_key:-}" || ! "$record_key" =~ ^(persistence|data_root|backup_channel|caddy_shared_edge|config_secrets)$ ]]; then
+        ambiguous=true
+        continue
+      fi
+      [[ -n "$decoded_value" ]] || {
+        ambiguous=true
+        continue
+      }
+      probe_error_key="$record_key"
+      probe_error_seen=true
       ;;
     CONTAINER|MOUNT|VOLUME|NETWORK|MEMBER|UNIT|UNIT_STATE|DATA_ROOT|SAFE_ID|CHECKSUM|UTC|UTC_AS_OF)
+      if ! declare -p safe_records >/dev/null 2>&1; then safe_records=(); fi
       safe_records+=("$record_type"$'\t'"$record_key"$'\t'"$decoded_value")
       ;;
     *) ambiguous=true ;;
   esac
 done <<< "$remote_output"
+
+if [[ "$remote_status" != 0 ]]; then
+  if [[ -n "$probe_error_key" && "$ambiguous" == false ]]; then
+    fail_closed "REMOTE_PROBE_FAILED:$probe_error_key"
+  fi
+  fail_closed REMOTE_OUTPUT_INVALID
+fi
 
 for required_fact in command_docker command_systemctl command_findmnt command_mount command_ss command_stat command_realpath command_readlink command_find command_sha256sum command_hostname command_date command_base64 command_tr postgres_seen persistence_container_count platform_expected_volume_count data_root_status edge_volume_count backup_timer_active backup_success backup_scope_ok backup_host_bound backup_host_binding backup_artifact_bound backup_repository_bound backup_timestamp secret_source data_root_source; do
   [[ "${seen_facts[$required_fact]:-false}" == true ]] || ambiguous=true
