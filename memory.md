@@ -1,7 +1,7 @@
 # memory.md
 
-version: 5.373
-date: 2026-08-25
+version: 5.374
+date: 2026-08-31
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
 
@@ -1835,3 +1835,7 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 - Der freigegebene Phase-3-P1-Rollback-Fix akzeptiert die zwei historisch erzeugbaren `phase3.1`-Candidate-Präfixe nur als explizites `--rollback`: vorbereitete Adoption mit beiden Netz-IDs `absent` und durable Ingress-Adoption mit exakter transaktionsgelabelter Live-Ingress sowie absent Private-Netz. Beide Pfade validieren weiter Owner/Run, Manifestpfad/-hash, Journal-Selbsthash, Source-/Baselinebindung, Netzwerkprovenienz und die feste Ingress-vor-Private-Reihenfolge; beim Ingress-Präfix wird die Journal-ID vor jeder Entfernung atomar in `rolling_back` übernommen.
 - Ein `phase3.1`-Candidate bleibt für `--resume` und jede Forward-Freigabe `NO-GO`; `phase3.2`-Baseline-/Recovery-Verträge und die bestehenden negativen Owner-/Run-/Hash-/ID-/Reihenfolge-/Mitgliedschafts-/Replacement-/Rename-Gates bleiben unverändert.
 - Der Stand ist nur lokal und synthetisch über fokussierte Vitest-/Shell-/Diff-Verträge geprüft. Es gab keine echte Netzwerk-, Docker-, Server-, Deployment-, Commit-, Push- oder PR-Aktion; reine Vitest-`onTaskUpdate`-Worker-Timeouts wurden als P2 und nicht als Suite-GO behandelt.
+
+### 5.374 - 2026-08-31
+
+- `.github/workflows/catering-production-operator-readout.yml` definiert einen ausschließlich manuellen, fail-closed und read-only Production Operator Readout über den bestehenden geschützten GitHub-`production`-SSH-Kanal. Er erhebt redigierte Betreiber-Evidenz vor Phase 3 und besitzt ausdrücklich keine Backup-, Restore-, Deployment- oder Pilotautorität.
