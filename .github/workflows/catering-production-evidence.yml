@@ -1,0 +1,53 @@
+name: Catering production read-only evidence
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: catering-phase3-isolation-pilot
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout exact dispatch commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Collect redacted production evidence
+        env:
+          HETZNER_SSH_PRIVATE_KEY: ${{ secrets.HETZNER_SSH_PRIVATE_KEY }}
+          HETZNER_SSH_KNOWN_HOSTS: ${{ secrets.HETZNER_SSH_KNOWN_HOSTS }}
+          HETZNER_DEPLOY_HOST: ${{ secrets.HETZNER_DEPLOY_HOST }}
+          HETZNER_DEPLOY_USER: ${{ secrets.HETZNER_DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          umask 077
+          evidence_dir="$(mktemp -d "$RUNNER_TEMP/catering-production-evidence.XXXXXX")"
+          ssh_key="$evidence_dir/id_ed25519"
+          known_hosts="$evidence_dir/known_hosts"
+          cleanup() {
+            rm -f "$ssh_key" "$known_hosts"
+            rmdir "$evidence_dir" 2>/dev/null || true
+          }
+          trap cleanup EXIT INT TERM HUP
+          printf '%s\n' "$HETZNER_SSH_PRIVATE_KEY" >"$ssh_key"
+          printf '%s\n' "$HETZNER_SSH_KNOWN_HOSTS" >"$known_hosts"
+          export CATERING_EVIDENCE_SSH_KEY="$ssh_key"
+          export CATERING_EVIDENCE_SSH_KNOWN_HOSTS="$known_hosts"
+          export EVIDENCE_CONTEXT=github-production
+          # Fixed SSH contract enforced by the helper:
+          # -i identity -o IdentitiesOnly=yes -o BatchMode=yes
+          # -o StrictHostKeyChecking=yes -o UserKnownHostsFile=known_hosts
+          # -o ConnectTimeout=10 -p 22
+          bash platform-infra/scripts/catering-production-evidence.sh

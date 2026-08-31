@@ -39,8 +39,97 @@ function digest(value: string) {
   return createHash("sha256").update(value).digest("hex");
 }
 
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
 function digestFile(filePath: string) {
   return digest(readFileSync(filePath, "utf8"));
+}
+
+function rewriteFields(filePath: string, updates: Record<string, string>, removals: string[] = []) {
+  const remove = new Set(removals);
+  const lines = textAt(filePath).split("\n").filter(Boolean);
+  const seen = new Set<string>();
+  const rewritten = lines.flatMap((line) => {
+    const separator = line.indexOf("=");
+    if (separator < 0) return [line];
+    const key = line.slice(0, separator);
+    if (remove.has(key)) return [];
+    if (Object.hasOwn(updates, key)) {
+      seen.add(key);
+      return [`${key}=${updates[key]}`];
+    }
+    return [line];
+  });
+  for (const [key, value] of Object.entries(updates)) {
+    if (!seen.has(key)) rewritten.push(`${key}=${value}`);
+  }
+  writeFileSync(filePath, `${rewritten.join("\n")}\n`);
+}
+
+function canonicalSelfHash(filePath: string, fieldName: string) {
+  return digest(textAt(filePath).replace(new RegExp(`^${fieldName}=.*$`, "m"), `${fieldName}=absent`));
+}
+
+function rebindManifestReferences(root: string) {
+  const manifest = path.join(root, "phase3.transaction-baseline.manifest");
+  const marker = path.join(root, "phase3.activation");
+  const journal = path.join(root, "phase3.network-adoption.journal");
+  const manifestHash = digestFile(manifest);
+  rewriteFields(marker, { transaction_manifest_sha256: manifestHash, marker_sha256: "absent" });
+  rewriteFields(marker, { marker_sha256: canonicalSelfHash(marker, "marker_sha256") });
+  if (existsSync(journal)) {
+    rewriteFields(journal, { transaction_manifest_sha256: manifestHash, journal_sha256: "absent" });
+    rewriteFields(journal, { journal_sha256: canonicalSelfHash(journal, "journal_sha256") });
+  }
+  return { manifestHash, markerHash: canonicalSelfHash(marker, "marker_sha256") };
+}
+
+function convertManifestToLegacy(root: string) {
+  const manifest = path.join(root, "phase3.transaction-baseline.manifest");
+  rewriteFields(
+    manifest,
+    { schema: "phase3.1.transaction-baseline" },
+    ["baseline_smoke_evidence", "baseline_smoke_sha256"],
+  );
+  const bindings = rebindManifestReferences(root);
+  const restoreEvidence = path.join(root, "phase3.restore-evidence.record");
+  let restoreEvidenceHash = "";
+  if (existsSync(restoreEvidence)) {
+    rewriteFields(restoreEvidence, { baseline_manifest_sha256: bindings.manifestHash });
+    restoreEvidenceHash = digestFile(restoreEvidence);
+  }
+  const archive = path.join(root, "phase3.rollback-restore-proof.archive");
+  if (existsSync(archive)) {
+    rewriteFields(archive, {
+      transaction_manifest_sha256: bindings.manifestHash,
+      marker_sha256: bindings.markerHash,
+      ...(restoreEvidenceHash ? { restore_evidence_sha256: restoreEvidenceHash } : {}),
+      archive_sha256: "absent",
+    });
+    rewriteFields(archive, { archive_sha256: canonicalSelfHash(archive, "archive_sha256") });
+  }
+  const receipt = path.join(root, "phase3.rollback-completion.receipt");
+  if (existsSync(receipt)) {
+    const archiveHash = existsSync(archive) ? fieldsAt(archive).get("archive_sha256") ?? "" : "";
+    rewriteFields(receipt, {
+      transaction_manifest_sha256: bindings.manifestHash,
+      marker_sha256: bindings.markerHash,
+      ...(restoreEvidenceHash ? { restore_evidence_sha256: restoreEvidenceHash } : {}),
+      restore_proof_archive_sha256: archiveHash,
+      archive_sha256: archiveHash,
+      receipt_sha256: "absent",
+    });
+    rewriteFields(receipt, { receipt_sha256: canonicalSelfHash(receipt, "receipt_sha256") });
+  }
 }
 
 function canonicalArchiveDigest(filePath: string) {
@@ -85,15 +174,22 @@ function commandSandbox(root: string) {
   return { bin, log };
 }
 
-function runHarness(scenario: string, root = mkdtempSync(path.join(tmpdir(), "catering-phase3-latest-p1-"))) {
+function runHarness(
+  scenario: string,
+  root = mkdtempSync(path.join(tmpdir(), "catering-phase3-latest-p1-")),
+  extraEnv: Record<string, string> = {},
+) {
   const sandbox = commandSandbox(root);
   const result = spawnSync("/bin/bash", [helperPath, "--harness"], {
     cwd: repoRoot,
     encoding: "utf8",
     env: {
       ...process.env,
+      ...extraEnv,
       PATH: `${sandbox.bin}:${process.env.PATH ?? ""}`,
       CATERING_PHASE3_TEST_MODE: "1",
+      CATERING_PHASE3_ENVIRONMENT: "production",
+      CATERING_PHASE3_EXECUTE: "1",
       CATERING_PHASE3_FAKE_HOST_ROOT: root,
       CATERING_PHASE3_HARNESS_SCENARIO: scenario,
       CATERING_PHASE3_SANDBOX_LOG: sandbox.log,
@@ -102,14 +198,21 @@ function runHarness(scenario: string, root = mkdtempSync(path.join(tmpdir(), "ca
   return { root, sandbox, result };
 }
 
-function runExistingResume(root: string, sandbox: ReturnType<typeof commandSandbox>) {
-  const result = spawnSync("/bin/bash", [helperPath, "--resume"], {
+function runExistingControl(
+  root: string,
+  sandbox: ReturnType<typeof commandSandbox>,
+  command: "resume" | "rollback",
+  prependPath = "",
+) {
+  const result = spawnSync("/bin/bash", [helperPath, `--${command}`], {
     cwd: repoRoot,
     encoding: "utf8",
     env: {
       ...process.env,
-      PATH: `${path.join(root, "bin")}:${sandbox.bin}:${process.env.PATH ?? ""}`,
+      PATH: `${prependPath ? `${prependPath}:` : ""}${path.join(root, "bin")}:${sandbox.bin}:${process.env.PATH ?? ""}`,
       CATERING_PHASE3_TEST_MODE: "1",
+      CATERING_PHASE3_ENVIRONMENT: "production",
+      CATERING_PHASE3_EXECUTE: "1",
       CATERING_PHASE3_FAKE_HOST_ROOT: root,
       CATERING_PHASE3_SANDBOX_LOG: sandbox.log,
       CATERING_PHASE3_TRANSACTION_ID: "phase3-harness",
@@ -127,6 +230,656 @@ function runExistingResume(root: string, sandbox: ReturnType<typeof commandSandb
     },
   });
   return { root, sandbox, result };
+}
+
+function runExistingResume(root: string, sandbox: ReturnType<typeof commandSandbox>, prependPath = "") {
+  return runExistingControl(root, sandbox, "resume", prependPath);
+}
+
+function runExistingRollback(root: string, sandbox: ReturnType<typeof commandSandbox>, prependPath = "") {
+  return runExistingControl(root, sandbox, "rollback", prependPath);
+}
+
+function installCrashAfterFirstNetworkDisconnect(root: string) {
+  const shimBin = path.join(root, "disconnect-crash-docker-shim");
+  const flagPath = path.join(root, "disconnect-crash-docker-shim.once");
+  mkdirSync(shimBin, { recursive: true });
+  writeFileSync(
+    path.join(shimBin, "docker"),
+    [
+      "#!/usr/bin/env bash",
+      "set -euo pipefail",
+      `real=${shellQuote(fakeDockerPath)}`,
+      `flag=${shellQuote(flagPath)}`,
+      'if [[ "${1:-}" == network && "${2:-}" == disconnect && ! -e "$flag" ]]; then',
+      '  set +e',
+      '  python3 "$real" "$@"',
+      '  status=$?',
+      '  set -e',
+      '  if [[ "$status" == 0 ]]; then',
+      '    : >"$flag"',
+      '    kill -KILL "$PPID"',
+      '  fi',
+      '  exit "$status"',
+      "fi",
+      'exec python3 "$real" "$@"',
+      "",
+    ].join("\n"),
+    { mode: 0o700 },
+  );
+  return { shimBin, flagPath };
+}
+
+function installCrashAfterIngressDisconnect(root: string) {
+  const shimBin = path.join(root, "ingress-disconnect-crash-docker-shim");
+  const flagPath = path.join(root, "ingress-disconnect-crash-docker-shim.once");
+  mkdirSync(shimBin, { recursive: true });
+  writeFileSync(
+    path.join(shimBin, "docker"),
+    [
+      "#!/usr/bin/env bash",
+      "set -euo pipefail",
+      `real=${shellQuote(fakeDockerPath)}`,
+      `flag=${shellQuote(flagPath)}`,
+      'if [[ "${1:-}" == network && "${2:-}" == disconnect && "${3:-}" == catering_ingress && ! -e "$flag" ]]; then',
+      '  set +e',
+      '  python3 "$real" "$@"',
+      '  status=$?',
+      '  set -e',
+      '  if [[ "$status" == 0 ]]; then',
+      '    : >"$flag"',
+      '    kill -KILL "$PPID"',
+      '  fi',
+      '  exit "$status"',
+      "fi",
+      'exec python3 "$real" "$@"',
+      "",
+    ].join("\n"),
+    { mode: 0o700 },
+  );
+  return { shimBin, flagPath };
+}
+
+function installCrashAfterCompatibilityConnect(root: string, reconnectCount: number) {
+  const shimBin = path.join(root, `compatibility-crash-docker-shim-${reconnectCount}`);
+  const flagPath = path.join(shimBin, "crashed");
+  const countPath = path.join(shimBin, "connect-count");
+  mkdirSync(shimBin, { recursive: true });
+  writeFileSync(
+    path.join(shimBin, "docker"),
+    [
+      "#!/usr/bin/env bash",
+      "set -euo pipefail",
+      `real=${shellQuote(fakeDockerPath)}`,
+      `flag=${shellQuote(flagPath)}`,
+      `count_file=${shellQuote(countPath)}`,
+      `limit=${reconnectCount}`,
+      'if [[ "${1:-}" == network && "${2:-}" == connect ]] && [[ " $* " == *" platform-infra_default "* || " $* " == *" zeiterfassung_default "* ]]; then',
+      '  if [[ -e "$flag" ]]; then exec python3 "$real" "$@"; fi',
+      '  count=0',
+      '  [[ -e "$count_file" ]] && count="$(cat "$count_file")"',
+      '  if (( count < limit )); then',
+      '    set +e',
+      '    python3 "$real" "$@"',
+      '    status=$?',
+      '    set -e',
+      '    [[ "$status" == 0 ]] || exit "$status"',
+      '    count=$((count + 1))',
+      '    printf "%s\\n" "$count" >"$count_file"',
+      '  fi',
+      '  if (( count >= limit )); then',
+      '    : >"$flag"',
+      '    exit 137',
+      '  fi',
+      '  exit 0',
+      'fi',
+      'exec python3 "$real" "$@"',
+      "",
+    ].join("\n"),
+    { mode: 0o700 },
+  );
+  return { shimBin, flagPath, countPath };
+}
+
+function installMembershipJournalWriteFailure(root: string) {
+  const shimBin = path.join(root, "membership-journal-write-failure-shim");
+  const failureFlag = path.join(shimBin, "triggered");
+  const countFile = path.join(shimBin, "journal-write-count");
+  mkdirSync(shimBin, { recursive: true });
+  writeFileSync(
+    path.join(shimBin, "sudo"),
+    [
+      "#!/usr/bin/env bash",
+      "set -euo pipefail",
+      `real=${shellQuote(path.join(root, "bin/sudo"))}`,
+      `flag=${shellQuote(failureFlag)}`,
+      `count_file=${shellQuote(countFile)}`,
+      'if [[ "${1:-}" == install && "${!#}" == *"/phase3.network-adoption.journal.pending."* ]]; then',
+      '  count=0; [[ -e "$count_file" ]] && count="$(cat "$count_file")"',
+      '  count=$((count + 1)); printf "%s\n" "$count" >"$count_file"',
+      '  if [[ "$count" == 17 ]]; then : >"$flag"; exit 97; fi',
+      "fi",
+      'exec "$real" "$@"',
+      "",
+    ].join("\n"),
+    { mode: 0o700 },
+  );
+  return { shimBin, failureFlag, countFile };
+}
+
+function restoreCompatibilityBaselineExcept(root: string, missing: string) {
+  const expected = [
+    ["platform-infra_default", "postgres", "platform-infra-postgres-1"],
+    ["platform-infra_default", "intake", "platform-infra-intake-1"],
+    ["platform-infra_default", "offer", "platform-infra-offer-1"],
+    ["platform-infra_default", "production", "platform-infra-production-1"],
+    ["platform-infra_default", "exports", "platform-infra-exports-1"],
+    ["platform-infra_default", "web", "platform-infra-web-1"],
+    ["zeiterfassung_default", "web", "platform-infra-web-1"],
+  ] as const;
+  for (const [network, alias, container] of expected) {
+    if (container === missing) continue;
+    const result = fakeDocker(root, ["network", "connect", "--alias", alias, network, container]);
+    expect(result.status).toBe(0);
+  }
+}
+
+type PartialRollbackState = {
+  networks: Record<string, { containers: Record<string, { Name: string; Aliases: string[] }> }>;
+};
+
+function prepareNormalMixedS2State(root: string, preExistingNetwork: "catering_ingress" | "catering_private") {
+  initializeFakeState(root);
+  const statePath = path.join(root, "fake-docker-state.json");
+  const state = JSON.parse(textAt(statePath)) as {
+    networks: Record<string, {
+      driver: string;
+      enable_ipv6: boolean;
+      id: string;
+      internal: boolean;
+      ipam_config: unknown[];
+      ipam_driver: string;
+      labels: Record<string, string>;
+      options: Record<string, string>;
+      scope: string;
+      containers: Record<string, unknown>;
+    }>;
+  };
+  const kind = preExistingNetwork.replace(/^catering_/, "");
+  state.networks[preExistingNetwork] = {
+    driver: "bridge",
+    enable_ipv6: false,
+    id: digest(`network:${preExistingNetwork}`),
+    internal: false,
+    ipam_config: [],
+    ipam_driver: "default",
+    labels: {
+      "com.catering.owner": "catering-agents-platform",
+      "com.catering.phase": "phase3.1",
+      "com.catering.kind": kind,
+    },
+    options: {},
+    scope: "local",
+    containers: {},
+  };
+  writeFileSync(statePath, JSON.stringify(state, null, 2));
+}
+
+function prepareNormalAllPreExistingS2State(root: string) {
+  initializeFakeState(root);
+  const statePath = path.join(root, "fake-docker-state.json");
+  const state = JSON.parse(textAt(statePath)) as {
+    networks: Record<string, {
+      driver: string;
+      enable_ipv6: boolean;
+      id: string;
+      internal: boolean;
+      ipam_config: unknown[];
+      ipam_driver: string;
+      labels: Record<string, string>;
+      options: Record<string, string>;
+      scope: string;
+      containers: Record<string, unknown>;
+    }>;
+    containers: Record<string, {
+      config: Record<string, unknown>;
+    }>;
+  };
+  for (const network of ["catering_ingress", "catering_private"] as const) {
+    const kind = network.replace(/^catering_/, "");
+    state.networks[network] = {
+      driver: "bridge",
+      enable_ipv6: false,
+      id: digest(`network:${network}`),
+      internal: false,
+      ipam_config: [],
+      ipam_driver: "default",
+      labels: {
+        "com.catering.owner": "catering-agents-platform",
+        "com.catering.phase": "phase3.1",
+        "com.catering.kind": kind,
+      },
+      options: {},
+      scope: "local",
+      containers: {},
+    };
+  }
+  state.containers["platform-infra-production-1"].config = {
+    env: { CATERING_ENABLE_WEB_RECIPE_SEARCH: "1" },
+  };
+  writeFileSync(statePath, JSON.stringify(state, null, 2));
+}
+
+function prepareNormalAllPreExistingS2NullIpamState(root: string) {
+  prepareNormalAllPreExistingS2State(root);
+  const statePath = path.join(root, "fake-docker-state.json");
+  const state = JSON.parse(textAt(statePath)) as {
+    networks: Record<string, { ipam_config: unknown }>;
+  };
+  for (const network of ["catering_ingress", "catering_private"]) {
+    state.networks[network].ipam_config = null;
+  }
+  writeFileSync(statePath, JSON.stringify(state, null, 2));
+}
+
+function setFakeNetworkIpamConfig(root: string, value: unknown) {
+  const statePath = path.join(root, "fake-docker-state.json");
+  const state = JSON.parse(textAt(statePath)) as {
+    networks: Record<string, { ipam_config: unknown }>;
+  };
+  for (const network of ["catering_ingress", "catering_private"]) {
+    state.networks[network].ipam_config = value;
+  }
+  writeFileSync(statePath, JSON.stringify(state, null, 2));
+}
+
+function runNormalMixedS2(preExistingNetwork: "catering_ingress" | "catering_private") {
+  const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-normal-mixed-s2-red-"));
+  prepareNormalMixedS2State(root, preExistingNetwork);
+  const beforeState = textAt(path.join(root, "fake-docker-state.json"));
+  const run = runHarness("normal", root);
+  return { root, run, beforeState };
+}
+
+function installPreExistingNetworkLabelShim(root: string) {
+  const shimBin = path.join(root, "pre-existing-docker-shim");
+  mkdirSync(shimBin, { recursive: true });
+  const dockerPath = path.join(shimBin, "docker");
+  writeFileSync(
+    dockerPath,
+    [
+      "#!/usr/bin/env bash",
+      "set -euo pipefail",
+      `if [[ "$*" == *'{{index .Labels "com.catering.transaction"}}'* ]]; then`,
+      `  value="$(python3 ${shellQuote(fakeDockerPath)} "$@")"`,
+      '  [[ "$value" == "<no value>" ]] && exit 0',
+      '  printf "%s\\n" "$value"',
+      "  exit 0",
+      "fi",
+      `exec python3 ${shellQuote(fakeDockerPath)} "$@"`,
+      "",
+    ].join("\n"),
+    { mode: 0o700 },
+  );
+  return shimBin;
+}
+
+function encodeFakeDockerJson(value: unknown) {
+  return Buffer.from(`${JSON.stringify(value)}\n`).toString("base64");
+}
+
+function preparePreExistingExactS2Crash(root: string) {
+  const statePath = path.join(root, "fake-docker-state.json");
+  const markerPath = path.join(root, "phase3.activation");
+  const manifestPath = path.join(root, "phase3.transaction-baseline.manifest");
+  const journalPath = path.join(root, "phase3.network-adoption.journal");
+  const state = JSON.parse(textAt(statePath)) as {
+    fault: string;
+    fault_triggered: boolean;
+    networks: Record<string, {
+      driver: string;
+      enable_ipv6: boolean;
+      id: string;
+      internal: boolean;
+      ipam_config: unknown[];
+      ipam_driver: string;
+      labels: Record<string, string>;
+      options: Record<string, string>;
+      scope: string;
+      containers: Record<string, unknown>;
+    }>;
+  };
+  const ingress = state.networks.catering_ingress;
+  expect(ingress).toBeDefined();
+  const privateId = digest("network:catering_private");
+  delete ingress.labels["com.catering.transaction"];
+  ingress.containers = {};
+  state.networks.catering_private = {
+    driver: "bridge",
+    enable_ipv6: false,
+    id: privateId,
+    internal: false,
+    ipam_config: [],
+    ipam_driver: "default",
+    labels: {
+      "com.catering.owner": "catering-agents-platform",
+      "com.catering.phase": "phase3.1",
+      "com.catering.kind": "private",
+    },
+    options: {},
+    scope: "local",
+    containers: {},
+  };
+  state.fault = "";
+  state.fault_triggered = false;
+  writeFileSync(statePath, JSON.stringify(state, null, 2));
+
+  rewriteFields(manifestPath, {
+    catering_ingress_baseline: "pre-existing-exact",
+    catering_private_baseline: "pre-existing-exact",
+    catering_ingress_baseline_id: ingress.id,
+    catering_private_baseline_id: privateId,
+    catering_ingress_created_by_run_authorized: "false",
+    catering_private_created_by_run_authorized: "false",
+    catering_ingress_network_labels: "owner=catering-agents-platform;phase=phase3.1;kind=ingress",
+    catering_private_network_labels: "owner=catering-agents-platform;phase=phase3.1;kind=private",
+    catering_ingress_baseline_members: encodeFakeDockerJson(ingress.containers),
+    catering_ingress_baseline_aliases: encodeFakeDockerJson(ingress.containers),
+    catering_private_baseline_members: encodeFakeDockerJson({}),
+    catering_private_baseline_aliases: encodeFakeDockerJson({}),
+  });
+  const manifestHash = digestFile(manifestPath);
+  const quarantine = path.join(root, "pre-existing-crash-evidence");
+  mkdirSync(quarantine, { recursive: true });
+  const movedJournal = spawnSync("mv", [journalPath, path.join(quarantine, "phase3.network-adoption.journal")], {
+    encoding: "utf8",
+  });
+  expect(movedJournal.status).toBe(0);
+  rewriteFields(markerPath, {
+    transaction_manifest_sha256: manifestHash,
+    baseline_network_status: "catering_ingress=pre-existing-exact;catering_private=pre-existing-exact",
+    catering_ingress_id: "absent",
+    catering_private_id: "absent",
+    stage: "S2",
+    adoption_count: "0",
+    adoption_proof: "not_adopted",
+    marker_sha256: "absent",
+  });
+  rewriteFields(markerPath, { marker_sha256: canonicalSelfHash(markerPath, "marker_sha256") });
+  const dockerShimBin = installPreExistingNetworkLabelShim(root);
+  return { ingressId: ingress.id, privateId, beforeState: textAt(statePath), dockerShimBin };
+}
+
+function prepareMixedPreExistingS2Crash(root: string) {
+  const statePath = path.join(root, "fake-docker-state.json");
+  const markerPath = path.join(root, "phase3.activation");
+  const manifestPath = path.join(root, "phase3.transaction-baseline.manifest");
+  const journalPath = path.join(root, "phase3.network-adoption.journal");
+  const state = JSON.parse(textAt(statePath)) as {
+    fault: string;
+    fault_triggered: boolean;
+    networks: Record<string, {
+      driver: string;
+      enable_ipv6: boolean;
+      id: string;
+      internal: boolean;
+      ipam_config: unknown[];
+      ipam_driver: string;
+      labels: Record<string, string>;
+      options: Record<string, string>;
+      scope: string;
+      containers: Record<string, unknown>;
+    }>;
+  };
+  const ingress = state.networks.catering_ingress;
+  expect(ingress).toBeDefined();
+  delete ingress.labels["com.catering.transaction"];
+  ingress.containers = {};
+  delete state.networks.catering_private;
+  state.fault = "";
+  state.fault_triggered = false;
+  writeFileSync(statePath, JSON.stringify(state, null, 2));
+
+  rewriteFields(manifestPath, {
+    catering_ingress_baseline: "pre-existing-exact",
+    catering_private_baseline: "absent",
+    catering_ingress_baseline_id: ingress.id,
+    catering_private_baseline_id: "absent",
+    catering_ingress_created_by_run_authorized: "false",
+    catering_private_created_by_run_authorized: "true",
+    catering_ingress_network_labels: "owner=catering-agents-platform;phase=phase3.1;kind=ingress",
+    catering_ingress_baseline_members: encodeFakeDockerJson(ingress.containers),
+    catering_ingress_baseline_aliases: encodeFakeDockerJson(ingress.containers),
+    catering_private_network_labels: "owner=catering-agents-platform;phase=phase3.1;kind=private;transaction=phase3-harness",
+    catering_private_baseline_members: "absent",
+    catering_private_baseline_aliases: "absent",
+  });
+  const quarantine = path.join(root, "mixed-pre-existing-crash-evidence");
+  mkdirSync(quarantine, { recursive: true });
+  const movedJournal = spawnSync("mv", [journalPath, path.join(quarantine, "phase3.network-adoption.journal")], {
+    encoding: "utf8",
+  });
+  expect(movedJournal.status).toBe(0);
+  const manifestHash = digestFile(manifestPath);
+  rewriteFields(markerPath, {
+    transaction_manifest_sha256: manifestHash,
+    baseline_network_status: "catering_ingress=pre-existing-exact;catering_private=absent",
+    catering_ingress_id: "absent",
+    catering_private_id: "absent",
+    stage: "S2",
+    adoption_count: "0",
+    adoption_proof: "not_adopted",
+    marker_sha256: "absent",
+  });
+  rewriteFields(markerPath, { marker_sha256: canonicalSelfHash(markerPath, "marker_sha256") });
+  return { ingressId: ingress.id, beforeState: textAt(statePath), dockerShimBin: installPreExistingNetworkLabelShim(root) };
+}
+
+function prepareInverseMixedPreExistingS2Crash(root: string) {
+  const statePath = path.join(root, "fake-docker-state.json");
+  const markerPath = path.join(root, "phase3.activation");
+  const manifestPath = path.join(root, "phase3.transaction-baseline.manifest");
+  const journalPath = path.join(root, "phase3.network-adoption.journal");
+  const state = JSON.parse(textAt(statePath)) as {
+    fault: string;
+    fault_triggered: boolean;
+    networks: Record<string, {
+      driver: string;
+      enable_ipv6: boolean;
+      id: string;
+      internal: boolean;
+      ipam_config: unknown[];
+      ipam_driver: string;
+      labels: Record<string, string>;
+      options: Record<string, string>;
+      scope: string;
+      containers: Record<string, unknown>;
+    }>;
+  };
+  const privateId = digest("network:catering_private");
+  delete state.networks.catering_ingress;
+  state.networks.catering_private = {
+    driver: "bridge",
+    enable_ipv6: false,
+    id: privateId,
+    internal: false,
+    ipam_config: [],
+    ipam_driver: "default",
+    labels: {
+      "com.catering.owner": "catering-agents-platform",
+      "com.catering.phase": "phase3.1",
+      "com.catering.kind": "private",
+    },
+    options: {},
+    scope: "local",
+    containers: {},
+  };
+  state.fault = "";
+  state.fault_triggered = false;
+  writeFileSync(statePath, JSON.stringify(state, null, 2));
+
+  rewriteFields(manifestPath, {
+    catering_ingress_baseline: "absent",
+    catering_private_baseline: "pre-existing-exact",
+    catering_ingress_baseline_id: "absent",
+    catering_private_baseline_id: privateId,
+    catering_ingress_created_by_run_authorized: "true",
+    catering_private_created_by_run_authorized: "false",
+    catering_ingress_network_labels: "owner=catering-agents-platform;phase=phase3.1;kind=ingress;transaction=phase3-harness",
+    catering_ingress_baseline_members: "absent",
+    catering_ingress_baseline_aliases: "absent",
+    catering_private_network_labels: "owner=catering-agents-platform;phase=phase3.1;kind=private",
+    catering_private_baseline_members: encodeFakeDockerJson(state.networks.catering_private.containers),
+    catering_private_baseline_aliases: encodeFakeDockerJson(state.networks.catering_private.containers),
+  });
+  const quarantine = path.join(root, "inverse-mixed-pre-existing-crash-evidence");
+  mkdirSync(quarantine, { recursive: true });
+  const movedJournal = spawnSync("mv", [journalPath, path.join(quarantine, "phase3.network-adoption.journal")], {
+    encoding: "utf8",
+  });
+  expect(movedJournal.status).toBe(0);
+  const manifestHash = digestFile(manifestPath);
+  rewriteFields(markerPath, {
+    transaction_manifest_sha256: manifestHash,
+    baseline_network_status: "catering_ingress=absent;catering_private=pre-existing-exact",
+    catering_ingress_id: "absent",
+    catering_private_id: "absent",
+    stage: "S2",
+    adoption_count: "0",
+    adoption_proof: "not_adopted",
+    marker_sha256: "absent",
+  });
+  rewriteFields(markerPath, { marker_sha256: canonicalSelfHash(markerPath, "marker_sha256") });
+  return { privateId, beforeState: textAt(statePath), dockerShimBin: installPreExistingNetworkLabelShim(root) };
+}
+
+function preparePreExistingRollbackProgress(root: string, preserveRunLabel = false) {
+  const statePath = path.join(root, "fake-docker-state.json");
+  const markerPath = path.join(root, "phase3.activation");
+  const manifestPath = path.join(root, "phase3.transaction-baseline.manifest");
+  const state = JSON.parse(textAt(statePath)) as {
+    fault: string;
+    fault_triggered: boolean;
+    networks: Record<string, {
+      id: string;
+      labels: Record<string, string>;
+      containers: Record<string, unknown>;
+    }>;
+    containers: Record<string, { networks: Record<string, unknown> }>;
+  };
+  for (const network of ["catering_ingress", "catering_private"]) {
+    expect(state.networks[network]).toBeDefined();
+    if (!preserveRunLabel) delete state.networks[network].labels["com.catering.transaction"];
+    state.networks[network].containers = {};
+  }
+  for (const container of Object.values(state.containers)) {
+    delete container.networks.catering_ingress;
+    delete container.networks.catering_private;
+  }
+  state.fault = "";
+  state.fault_triggered = false;
+  writeFileSync(statePath, JSON.stringify(state, null, 2));
+
+  const ingressId = state.networks.catering_ingress.id;
+  const privateId = state.networks.catering_private.id;
+  rewriteFields(manifestPath, {
+    catering_ingress_baseline: "pre-existing-exact",
+    catering_private_baseline: "pre-existing-exact",
+    catering_ingress_baseline_id: ingressId,
+    catering_private_baseline_id: privateId,
+    catering_ingress_created_by_run_authorized: "false",
+    catering_private_created_by_run_authorized: "false",
+    catering_ingress_network_labels: `owner=catering-agents-platform;phase=phase3.1;kind=ingress${preserveRunLabel ? ";transaction=phase3-harness" : ""}`,
+    catering_private_network_labels: `owner=catering-agents-platform;phase=phase3.1;kind=private${preserveRunLabel ? ";transaction=phase3-harness" : ""}`,
+    catering_ingress_baseline_members: encodeFakeDockerJson(state.networks.catering_ingress.containers),
+    catering_ingress_baseline_aliases: encodeFakeDockerJson(state.networks.catering_ingress.containers),
+    catering_private_baseline_members: encodeFakeDockerJson(state.networks.catering_private.containers),
+    catering_private_baseline_aliases: encodeFakeDockerJson(state.networks.catering_private.containers),
+  });
+  rebindManifestReferences(root);
+  rewriteFields(markerPath, {
+    state: "rolling_back",
+    baseline_network_status: "catering_ingress=pre-existing-exact;catering_private=pre-existing-exact",
+    catering_ingress_id: ingressId,
+    catering_private_id: privateId,
+    stage: "RB",
+    adoption_count: "0",
+    adoption_proof: "not_adopted",
+    marker_sha256: "absent",
+  });
+  rewriteFields(markerPath, { marker_sha256: canonicalSelfHash(markerPath, "marker_sha256") });
+  return { beforeState: textAt(statePath), dockerShimBin: installPreExistingNetworkLabelShim(root) };
+}
+
+function prepareInverseMixedActiveRollback(root: string) {
+  const statePath = path.join(root, "fake-docker-state.json");
+  const markerPath = path.join(root, "phase3.activation");
+  const manifestPath = path.join(root, "phase3.transaction-baseline.manifest");
+  const state = JSON.parse(textAt(statePath)) as {
+    networks: Record<string, {
+      id: string;
+      labels: Record<string, string>;
+      containers: Record<string, unknown>;
+    }>;
+    containers: Record<string, { networks: Record<string, unknown> }>;
+    fault: string;
+    fault_triggered: boolean;
+  };
+  const ingress = state.networks.catering_ingress;
+  const privateNetwork = state.networks.catering_private;
+  expect(ingress).toBeDefined();
+  expect(privateNetwork).toBeDefined();
+  const ingressId = ingress.id;
+  const privateId = privateNetwork.id;
+  delete state.networks.catering_ingress;
+  privateNetwork.labels = {
+    "com.catering.owner": "catering-agents-platform",
+    "com.catering.phase": "phase3.1",
+    "com.catering.kind": "private",
+  };
+  privateNetwork.containers = {};
+  for (const container of Object.values(state.containers)) {
+    delete container.networks.catering_ingress;
+    delete container.networks.catering_private;
+  }
+  state.fault = "";
+  state.fault_triggered = false;
+  writeFileSync(statePath, JSON.stringify(state, null, 2));
+
+  rewriteFields(manifestPath, {
+    catering_ingress_baseline: "absent",
+    catering_private_baseline: "pre-existing-exact",
+    catering_ingress_baseline_id: "absent",
+    catering_private_baseline_id: privateId,
+    catering_ingress_created_by_run_authorized: "true",
+    catering_private_created_by_run_authorized: "false",
+    catering_ingress_network_labels: "owner=catering-agents-platform;phase=phase3.1;kind=ingress;transaction=phase3-harness",
+    catering_ingress_baseline_members: "absent",
+    catering_ingress_baseline_aliases: "absent",
+    catering_private_network_labels: "owner=catering-agents-platform;phase=phase3.1;kind=private",
+    catering_private_baseline_members: encodeFakeDockerJson({}),
+    catering_private_baseline_aliases: encodeFakeDockerJson({}),
+  });
+  rebindManifestReferences(root);
+  rewriteFields(markerPath, {
+    state: "rolling_back",
+    stage: "RB",
+    baseline_network_status: "catering_ingress=absent;catering_private=pre-existing-exact",
+    catering_ingress_id: ingressId,
+    catering_private_id: privateId,
+    adoption_count: "0",
+    adoption_proof: "not_adopted",
+    marker_sha256: "absent",
+  });
+  rewriteFields(markerPath, { marker_sha256: canonicalSelfHash(markerPath, "marker_sha256") });
+  return { beforeState: textAt(statePath), dockerShimBin: installPreExistingNetworkLabelShim(root) };
+}
+
+function removeFakeNetwork(root: string, network: string, containers: string[]) {
+  for (const container of containers) {
+    expect(fakeDocker(root, ["network", "disconnect", network, container]).status).toBe(0);
+  }
+  expect(fakeDocker(root, ["network", "rm", network]).status).toBe(0);
 }
 
 function remotePilotBody() {
@@ -298,6 +1051,9 @@ function runPostRestoreSmokeFailureReproducer() {
     "connect_if_missing() { :; }",
     "disconnect_if_attached() { :; }",
     "assert_compatibility_baseline() { :; }",
+    "membership_rollback_preflight() { :; }",
+    "membership_reconcile_compatibility_baseline() { :; }",
+    "membership_mutation() { :; }",
     "write_restore_evidence_normal() { printf 'evidence\\n' >> \"$event_log\"; printf 'evidence\\n' > \"$restore_evidence_record\"; }",
     "run_all_host_semantic_smokes() { printf 'post-restore-smoke\\n' >> \"$event_log\"; return 1; }",
     "run_rollback_host_semantic_smokes() { run_all_host_semantic_smokes; }",
@@ -326,6 +1082,15 @@ function remoteControlBody() {
   const markerIndex = source.indexOf(marker);
   const bodyStart = markerIndex + marker.length;
   const bodyEnd = source.indexOf("\nREMOTE_CONTROL", bodyStart);
+  return markerIndex >= 0 && bodyEnd > bodyStart ? source.slice(bodyStart, bodyEnd) : "";
+}
+
+function remoteMembershipPrimitive() {
+  const source = readFileSync(helperPath, "utf8");
+  const marker = "<<'REMOTE_MEMBERSHIP_PRIMITIVE'";
+  const markerIndex = source.indexOf(marker);
+  const bodyStart = markerIndex >= 0 ? source.indexOf("\n", markerIndex) + 1 : -1;
+  const bodyEnd = source.indexOf("\nREMOTE_MEMBERSHIP_PRIMITIVE", bodyStart);
   return markerIndex >= 0 && bodyEnd > bodyStart ? source.slice(bodyStart, bodyEnd) : "";
 }
 
@@ -370,15 +1135,22 @@ function runExplicitRollbackReproducer(smokeFails = false) {
   writeFileSync(baselineManifest, "baseline\n");
 
   const body = remoteControlBody();
+  const membershipPrimitive = remoteMembershipPrimitive();
   const releaseStart = body.indexOf("release_control_locks() {");
   const releaseEnd = body.indexOf("\ntrap release_control_locks EXIT", releaseStart);
-  const rollbackStart = body.indexOf('elif [[ "${command_name}" == rollback ]]; then');
-  const rollbackEnd = body.indexOf("\nelse\n  fail", rollbackStart);
+  const rollbackControlStart = body.indexOf("continue_rollback_control() {");
+  const dispatcherStart = body.indexOf("dispatch_recovery_transition() {");
+  const dispatcherEnd = body.indexOf("\ndispatch_recovery_transition", dispatcherStart);
+  const rollbackControlEnd = body.indexOf("\ndispatch_recovery_transition() {", rollbackControlStart);
   expect(releaseStart).toBeGreaterThanOrEqual(0);
   expect(releaseEnd).toBeGreaterThan(releaseStart);
-  expect(rollbackStart).toBeGreaterThanOrEqual(0);
-  expect(rollbackEnd).toBeGreaterThan(rollbackStart);
-  const rollbackBody = body.slice(rollbackStart).slice(body.slice(rollbackStart).indexOf("\n") + 1, rollbackEnd - rollbackStart);
+  expect(rollbackControlStart).toBeGreaterThanOrEqual(0);
+  expect(rollbackControlEnd).toBeGreaterThan(rollbackControlStart);
+  expect(dispatcherStart).toBeGreaterThanOrEqual(0);
+  expect(dispatcherEnd).toBeGreaterThan(dispatcherStart);
+  expect(membershipPrimitive).not.toBe("");
+  const rollbackControl = body.slice(rollbackControlStart, rollbackControlEnd);
+  const dispatcher = body.slice(dispatcherStart, dispatcherEnd);
   const prefix = [
     "set -euo pipefail",
     `event_log=${shellQuote(eventLog)}`,
@@ -392,11 +1164,13 @@ function runExplicitRollbackReproducer(smokeFails = false) {
     `edge_source=${shellQuote(path.join(root, "edge-compose.phase3.yml"))}`,
     `pilot_root=${shellQuote(root)}`,
     "command_name=rollback",
+    "recovery_class=active:rollback",
     "run_id=phase3-explicit-rollback",
     "owner=catering-agents-platform",
     "schema=phase3.1",
     `platform_lock=${shellQuote(platformLock)}`,
     `edge_lock=${shellQuote(edgeLock)}`,
+    "marker_state=active",
     "lock_token=catering-agents-platform:phase3-explicit-rollback",
     "manifest_sha256=manifesthash",
     "expected_platform_source_sha256=platformhash",
@@ -407,19 +1181,25 @@ function runExplicitRollbackReproducer(smokeFails = false) {
     "sudo() { \"$@\"; }",
     "docker() {",
     "  if [[ \"$1\" == inspect ]]; then printf '{}'; return 0; fi",
-    "  if [[ \"$1\" == network && \"$2\" == inspect ]]; then return 0; fi",
+    "  if [[ \"$1\" == network && \"$2\" == inspect ]]; then printf '{}'; return 0; fi",
     "  return 0",
     "}",
     "field() {",
     "  case \"$2\" in",
     "    platform_source_prior|edge_source_prior|prior_marker_state) printf 'absent' ;;",
-    "    catering_private_created_by_run_authorized|catering_ingress_created_by_run_authorized) printf 'false' ;;",
+    "    catering_private_created_by_run_authorized|catering_ingress_created_by_run_authorized) printf 'true' ;;",
     "    *) printf 'absent' ;;",
     "  esac",
     "}",
     "fail() { printf '%s\\n' 'PILOT: NO-GO' >&2; return 1; }",
+    membershipPrimitive,
+    "membership_reconcile_compatibility_baseline() { :; }",
+    "validate_resume_evidence() { :; }",
+    "membership_wal_recover() { :; }",
+    "retain_recovery_locks=false",
     "validate_compatibility_baseline_control() { :; }",
     "validate_network_provenance() { :; }",
+    "network_present_by_name() { return 1; }",
     "validate_receipt() { :; }",
     "canonical_marker_sha256() { printf 'markerhash'; }",
     "canonical_archive_sha256() { printf 'archivehash'; }",
@@ -429,12 +1209,15 @@ function runExplicitRollbackReproducer(smokeFails = false) {
     "}",
     "run_rollback_host_semantic_smokes() { run_all_host_semantic_smokes; }",
     "write_restore_evidence_control() { printf '%s\\n' evidence >> \"$event_log\"; printf '%s\\n' evidence > \"$restore_evidence_record\"; }",
+    "write_restore_archive_control() { printf '%s\\n' archive >> \"$event_log\"; printf '%s\\n' archive > \"$restore_proof_archive\"; }",
+    "write_completion_receipt_control() { printf '%s\\n' receipt >> \"$event_log\"; printf '%s\\n' receipt > \"$completion_receipt\"; }",
     "finalize_rolling_back_resume() { printf '%s\\n' finalize >> \"$event_log\"; unlink \"$activation_marker\"; unlink \"$baseline_manifest\"; unlink \"$completion_receipt\" 2>/dev/null || true; }",
     "phase3_lock_release() { printf 'release=%s\\n' \"$1\" >> \"$event_log\"; rmdir \"$1\"; }",
     body.slice(releaseStart, releaseEnd),
-    `run_explicit_rollback() {\n${rollbackBody}\n}`,
+    rollbackControl,
+    dispatcher,
     "trap release_control_locks EXIT",
-    "run_explicit_rollback",
+    "dispatch_recovery_transition",
   ].join("\n");
   return {
     root,
@@ -613,6 +1396,376 @@ function runRollbackReleaseCleanup(failLock: "edge" | "platform" | "none" = "non
 }
 
 describe("latest independent Phase-3 P1 review reproducers", () => {
+  const absentOnlyMatrix = [
+    ["happy absent/absent", "normal", "GO"],
+    ["precondition ingress-present", "normal", "NO-GO"],
+    ["precondition private-present", "normal", "NO-GO"],
+    ["precondition both-present", "normal", "NO-GO"],
+    ["prepared/no-network cleanup", "candidate-rollback", "ROLLED BACK"],
+    ["crash after run-created ingress", "crash-after-ingress", "resume"],
+    ["crash after run-created private", "crash-after-private", "resume"],
+    ["membership WAL prefix", "crash-after-active", "rollback"],
+    ["partial disconnect rollback", "crash-after-rollback", "resume"],
+    ["active rollback", "active", "rollback"],
+    ["provenance drift", "drift", "NO-GO"],
+  ] as const;
+
+  test("RED matrix declares one finite absent-only recovery table", () => {
+    expect(absentOnlyMatrix.map(([name]) => name)).toEqual([
+      "happy absent/absent",
+      "precondition ingress-present",
+      "precondition private-present",
+      "precondition both-present",
+      "prepared/no-network cleanup",
+      "crash after run-created ingress",
+      "crash after run-created private",
+      "membership WAL prefix",
+      "partial disconnect rollback",
+      "active rollback",
+      "provenance drift",
+    ]);
+    expect(new Set(absentOnlyMatrix.map(([name]) => name)).size).toBe(absentOnlyMatrix.length);
+  });
+
+  test.each([
+    ["ingress-present", (root: string) => prepareNormalMixedS2State(root, "catering_ingress")],
+    ["private-present", (root: string) => prepareNormalMixedS2State(root, "catering_private")],
+    ["both-present", (root: string) => prepareNormalAllPreExistingS2State(root)],
+  ] as const)("RED: absent-only precondition rejects %s before durable mutation", (_name, prepare) => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-absent-only-precondition-red-"));
+    prepare(root);
+    const statePath = path.join(root, "fake-docker-state.json");
+    const beforeState = textAt(statePath);
+    const run = runHarness("normal", root);
+    const output = `${run.result.stdout}${run.result.stderr}`;
+    const log = textAt(path.join(root, "fake-docker.log"));
+
+    expect(run.result.status).not.toBe(0);
+    expect(output).toContain("PILOT: NO-GO");
+    expect(log).not.toMatch(/network (?:create|connect|disconnect|rm) catering_(?:private|ingress)/);
+    expect(JSON.parse(textAt(statePath))).toEqual(JSON.parse(beforeState));
+    expect(existsSync(path.join(root, "phase3.activation"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.network-adoption.journal"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
+  }, 120_000);
+
+  test("GREEN: absent-only baseline completes the normal run with terminal locks free", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-absent-only-happy-green-"));
+    const run = runHarness("normal", root);
+    const output = `${run.result.stdout}${run.result.stderr}`;
+    const state = JSON.parse(textAt(path.join(root, "fake-docker-state.json"))) as {
+      networks: Record<string, { id: string; labels: Record<string, string> }>;
+    };
+
+    expect(run.result.status).toBe(0);
+    expect(output).toContain("PILOT: GO");
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("active");
+    expect(state.networks.catering_ingress.labels["com.catering.transaction"]).toBe("phase3-harness");
+    expect(state.networks.catering_private.labels["com.catering.transaction"]).toBe("phase3-harness");
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
+  }, 120_000);
+
+  test("RED: a membership crash leaves an authenticated WAL prefix for exact recovery", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-membership-wal-red-"));
+    const crashed = runHarness("crash-after-active", root);
+    expect(crashed.result.status).not.toBe(0);
+
+    const disconnectCrash = installCrashAfterFirstNetworkDisconnect(root);
+    const rollback = runExistingRollback(root, crashed.sandbox, disconnectCrash.shimBin);
+    expect(rollback.result.status).not.toBe(0);
+    const journal = fieldsAt(path.join(root, "phase3.network-adoption.journal"));
+    expect(journal.get("membership_wal_phase")).toBe("pending");
+    expect(journal.get("membership_wal_action")).toBe("disconnect");
+    expect(journal.get("membership_wal_network")).toBe("catering_private");
+    expect(journal.get("membership_wal_container")).toBe("platform-infra-postgres-1");
+    expect(journal.get("membership_wal_before_b64")).toMatch(/^[A-Za-z0-9+/=]+$/);
+    expect(journal.get("membership_wal_after_b64")).toMatch(/^[A-Za-z0-9+/=]+$/);
+
+    const resumed = runExistingResume(root, crashed.sandbox);
+    expect(resumed.result.status).toBe(0);
+    expect(`${resumed.result.stdout}${resumed.result.stderr}`).toContain("PILOT: ROLLED BACK");
+  }, 240_000);
+
+  test("RED: resume fails closed when a non-leading target alias drifts", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-alias-matrix-red-"));
+    const run = runHarness("normal", root);
+    expect(run.result.status).toBe(0);
+
+    const statePath = path.join(root, "fake-docker-state.json");
+    const state = JSON.parse(textAt(statePath)) as any;
+    const web = state.containers["platform-infra-web-1"];
+    web.networks.catering_ingress.aliases = ["wrong-web-alias"];
+    state.networks.catering_ingress.containers[web.id].Aliases = ["wrong-web-alias"];
+    writeFileSync(statePath, JSON.stringify(state));
+    const journalPath = path.join(root, "phase3.network-adoption.journal");
+    const driftedIngress = encodeFakeDockerJson(state.networks.catering_ingress.containers);
+    rewriteFields(journalPath, {
+      catering_ingress_members_b64: driftedIngress,
+      catering_ingress_aliases_b64: driftedIngress,
+      journal_sha256: "absent",
+    });
+    rewriteFields(journalPath, { journal_sha256: canonicalSelfHash(journalPath, "journal_sha256") });
+
+    const resumed = runExistingResume(root, run.sandbox);
+    const output = `${resumed.result.stdout}${resumed.result.stderr}`;
+    expect(resumed.result.status).not.toBe(0);
+    expect(output).toContain("PILOT: NO-GO");
+    expect(output).not.toContain("PILOT: GO\n");
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("active");
+  }, 120_000);
+
+  test("RED: active rollback rejects compatibility drift before its first mutation", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-rollback-preflight-red-"));
+    const run = runHarness("normal", root);
+    expect(run.result.status).toBe(0);
+
+    const statePath = path.join(root, "fake-docker-state.json");
+    const state = JSON.parse(textAt(statePath)) as any;
+    const foreign = state.containers["commcats-eventos-app"];
+    expect(foreign.networks["platform-infra_default"]).toBeDefined();
+    expect(state.networks["platform-infra_default"].containers[foreign.id]).toBeDefined();
+    delete foreign.networks["platform-infra_default"];
+    delete state.networks["platform-infra_default"].containers[foreign.id];
+    writeFileSync(statePath, JSON.stringify(state));
+    const beforeState = textAt(statePath);
+    const beforeLog = textAt(path.join(root, "fake-docker.log"));
+
+    const rolledBack = runExistingRollback(root, run.sandbox);
+    const output = `${rolledBack.result.stdout}${rolledBack.result.stderr}`;
+    const addedLog = textAt(path.join(root, "fake-docker.log")).slice(beforeLog.length);
+    expect(rolledBack.result.status).not.toBe(0);
+    expect(output).toContain("PILOT: NO-GO");
+    expect(addedLog).not.toMatch(/network (?:create|connect|disconnect|rm)/);
+    expect(JSON.parse(textAt(statePath))).toEqual(JSON.parse(beforeState));
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("active");
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
+  }, 120_000);
+
+  test("RED: pending membership WAL is not replayed before foreign-invariant preflight", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-wal-preflight-order-red-"));
+    const run = runHarness("normal", root);
+    expect(run.result.status).toBe(0);
+
+    const statePath = path.join(root, "fake-docker-state.json");
+    const markerPath = path.join(root, "phase3.activation");
+    const journalPath = path.join(root, "phase3.network-adoption.journal");
+    const logPath = path.join(root, "fake-docker.log");
+    const activeState = textAt(statePath);
+    const crashShim = installCrashAfterFirstNetworkDisconnect(root);
+    const crashed = runExistingRollback(root, run.sandbox, crashShim.shimBin);
+    expect(crashed.result.status).not.toBe(0);
+    expect(fieldsAt(markerPath).get("state")).toBe("rolling_back");
+    expect(fieldsAt(journalPath).get("membership_wal_phase")).toBe("pending");
+    expect(fieldsAt(journalPath).get("membership_wal_action")).toBe("disconnect");
+
+    writeFileSync(statePath, activeState);
+    const state = JSON.parse(textAt(statePath)) as any;
+    const foreign = state.containers["commcats-eventos-app"];
+    expect(foreign.networks["platform-infra_default"]).toBeDefined();
+    expect(state.networks["platform-infra_default"].containers[foreign.id]).toBeDefined();
+    delete foreign.networks["platform-infra_default"];
+    delete state.networks["platform-infra_default"].containers[foreign.id];
+    writeFileSync(statePath, JSON.stringify(state));
+    const beforeResumeState = textAt(statePath);
+    const beforeResumeLog = textAt(logPath);
+
+    const resumed = runExistingResume(root, run.sandbox);
+    const output = `${resumed.result.stdout}${resumed.result.stderr}`;
+    const addedLog = textAt(logPath).slice(beforeResumeLog.length);
+    expect(resumed.result.status).not.toBe(0);
+    expect(output).toContain("PILOT: NO-GO");
+    expect(addedLog).not.toMatch(/network (?:connect|disconnect)/);
+    expect(textAt(statePath)).toBe(beforeResumeState);
+    expect(fieldsAt(markerPath).get("state")).toBe("rolling_back");
+    expect(fieldsAt(journalPath).get("membership_wal_phase")).toBe("pending");
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
+  }, 120_000);
+
+  test.each([0, 1, 3])("RED: monotonic rollback resumes after %s compatibility reconnects", (reconnectCount) => {
+    const root = mkdtempSync(path.join(tmpdir(), `catering-phase3-monotonic-crash-${reconnectCount}-red-`));
+    const crashed = runHarness("crash-after-active", root);
+    expect(crashed.result.status).not.toBe(0);
+    const crashShim = installCrashAfterCompatibilityConnect(root, reconnectCount);
+    const rollback = runExistingRollback(root, crashed.sandbox, crashShim.shimBin);
+    expect(rollback.result.status).not.toBe(0);
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("rolling_back");
+    const resumed = runExistingResume(root, crashed.sandbox);
+    const output = `${resumed.result.stdout}${resumed.result.stderr}`;
+    expect(resumed.result.status).toBe(0);
+    expect(output).toContain("PILOT: ROLLED BACK");
+    expect(existsSync(path.join(root, "phase3.activation"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
+  }, 180_000);
+
+  test("RED: a complete compatibility baseline makes rolling_back resume a terminal no-op", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-monotonic-complete-red-"));
+    const crashed = runHarness("crash-after-active", root);
+    expect(crashed.result.status).not.toBe(0);
+    const crashShim = installCrashAfterCompatibilityConnect(root, 7);
+    const rollback = runExistingRollback(root, crashed.sandbox, crashShim.shimBin);
+    expect(rollback.result.status).not.toBe(0);
+    const resumed = runExistingResume(root, crashed.sandbox);
+    const output = `${resumed.result.stdout}${resumed.result.stderr}`;
+    expect(resumed.result.status).toBe(0);
+    expect(output).toContain("PILOT: ROLLED BACK");
+    expect(existsSync(path.join(root, "phase3.activation"))).toBe(false);
+  }, 120_000);
+
+  test("RED: exactly one missing compatibility connection is the only forward delta", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-monotonic-single-delta-red-"));
+    const run = runHarness("normal", root);
+    expect(run.result.status).toBe(0);
+    restoreCompatibilityBaselineExcept(root, "platform-infra-postgres-1");
+    const markerPath = path.join(root, "phase3.activation");
+    rewriteFields(markerPath, { state: "rolling_back", stage: "RB", marker_sha256: "absent" });
+    rewriteFields(markerPath, { marker_sha256: canonicalSelfHash(markerPath, "marker_sha256") });
+    const logPath = path.join(root, "fake-docker.log");
+    const beforeLog = textAt(logPath);
+    const rollback = runExistingResume(root, run.sandbox);
+    const output = `${rollback.result.stdout}${rollback.result.stderr}`;
+    const addedLog = textAt(logPath).slice(beforeLog.length);
+    expect(rollback.result.status).toBe(0);
+    expect(output).toContain("PILOT: ROLLED BACK");
+    expect((addedLog.match(/^docker network connect .*platform-infra_default platform-infra-postgres-1$/gm) ?? []).length).toBe(1);
+    expect(addedLog).not.toMatch(/network connect .*platform-infra_default (?:platform-infra-(?:intake|offer|production|exports|web)-1)/);
+  }, 120_000);
+
+  test("RED: compatibility member or alias provenance drift fails before rollback mutation", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-monotonic-provenance-red-"));
+    const run = runHarness("normal", root);
+    expect(run.result.status).toBe(0);
+    const statePath = path.join(root, "fake-docker-state.json");
+    const state = JSON.parse(textAt(statePath)) as any;
+    const foreign = state.containers["commcats-eventos-app"];
+    state.networks["platform-infra_default"].containers[foreign.id] = {
+      Name: "/commcats-eventos-app",
+      Aliases: ["unexpected"],
+    };
+    foreign.networks["platform-infra_default"] = { aliases: ["unexpected"] };
+    writeFileSync(statePath, JSON.stringify(state));
+    const beforeState = textAt(statePath);
+    const beforeLog = textAt(path.join(root, "fake-docker.log"));
+    const rollback = runExistingRollback(root, run.sandbox);
+    const output = `${rollback.result.stdout}${rollback.result.stderr}`;
+    const addedLog = textAt(path.join(root, "fake-docker.log")).slice(beforeLog.length);
+    expect(rollback.result.status).not.toBe(0);
+    expect(output).toContain("PILOT: NO-GO");
+    expect(addedLog).not.toMatch(/network (?:connect|disconnect|rm)/);
+    expect(textAt(statePath)).toBe(beforeState);
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("active");
+  }, 120_000);
+
+  test("RED: target network cleanup follows full compatibility readback and frees locks", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-monotonic-cleanup-gate-red-"));
+    const run = runHarness("normal", root);
+    expect(run.result.status).toBe(0);
+    const logPath = path.join(root, "fake-docker.log");
+    const beforeLog = textAt(logPath);
+    const rollback = runExistingRollback(root, run.sandbox);
+    const output = `${rollback.result.stdout}${rollback.result.stderr}`;
+    const addedLog = textAt(logPath).slice(beforeLog.length);
+    expect(rollback.result.status).toBe(0);
+    expect(output).toContain("PILOT: ROLLED BACK");
+    const firstRm = addedLog.search(/^docker network rm catering_/m);
+    expect(firstRm).toBeGreaterThan(0);
+    const beforeCleanup = addedLog.slice(0, firstRm);
+    const lastCompatibilityInspect = Math.max(
+      beforeCleanup.lastIndexOf("docker network inspect --format {{json .Containers}} platform-infra_default"),
+      beforeCleanup.lastIndexOf("docker network inspect --format {{json .Containers}} zeiterfassung_default"),
+    );
+    expect(lastCompatibilityInspect).toBeGreaterThanOrEqual(0);
+    expect(firstRm).toBeGreaterThan(lastCompatibilityInspect);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
+  }, 120_000);
+
+  test("RED: repeated resume on the terminal absent target state is idempotent", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-monotonic-repeat-red-"));
+    const run = runHarness("normal", root);
+    expect(run.result.status).toBe(0);
+    const rollback = runExistingRollback(root, run.sandbox);
+    expect(rollback.result.status).toBe(0);
+    const repeated = runExistingResume(root, run.sandbox);
+    const output = `${repeated.result.stdout}${repeated.result.stderr}`;
+    expect(repeated.result.status).toBe(0);
+    expect(output).toContain("PILOT: ROLLED BACK");
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
+  }, 120_000);
+
+  test("RED: terminal absent target keeps absent IDs and snapshots through replay", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-terminal-absent-representation-red-"));
+    const crashed = runHarness("crash-after-candidate", root, {
+      CATERING_PHASE3_FAKE_PRE_NETWORK_CRASH: "1",
+    });
+    expect(crashed.result.status).not.toBe(0);
+    const rollback = runExistingRollback(root, crashed.sandbox);
+    expect(rollback.result.status).toBe(0);
+    const journal = fieldsAt(path.join(root, "phase3.network-adoption.journal"));
+    expect(journal.get("catering_ingress_id")).toBe("absent");
+    expect(journal.get("catering_private_id")).toBe("absent");
+    expect(journal.get("catering_ingress_members_b64")).toBe("absent");
+    expect(journal.get("catering_private_members_b64")).toBe("absent");
+    const repeated = runExistingResume(root, crashed.sandbox);
+    const output = `${repeated.result.stdout}${repeated.result.stderr}`;
+    expect(repeated.result.status).toBe(0);
+    expect(output).toContain("PILOT: ROLLED BACK");
+  }, 120_000);
+
+  test("RED: terminal present target rejects noncanonical equivalent snapshots", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-terminal-canonical-red-"));
+    const run = runHarness("normal", root);
+    expect(run.result.status).toBe(0);
+    const rollback = runExistingRollback(root, run.sandbox);
+    expect(rollback.result.status).toBe(0);
+    const journalPath = path.join(root, "phase3.network-adoption.journal");
+    const journal = fieldsAt(journalPath);
+    const snapshot = journal.get("catering_ingress_members_b64");
+    expect(snapshot).toMatch(/^[A-Za-z0-9+/=]+$/);
+    const nonCanonical = Buffer.from(JSON.stringify(JSON.parse(Buffer.from(snapshot!, "base64").toString("utf8")), null, 2)).toString("base64");
+    rewriteFields(journalPath, {
+      catering_ingress_members_b64: nonCanonical,
+      catering_ingress_aliases_b64: nonCanonical,
+      journal_sha256: "absent",
+    });
+    rewriteFields(journalPath, { journal_sha256: canonicalSelfHash(journalPath, "journal_sha256") });
+    const repeated = runExistingResume(root, run.sandbox);
+    const output = `${repeated.result.stdout}${repeated.result.stderr}`;
+    expect(repeated.result.status).not.toBe(0);
+    expect(output).toContain("PILOT: NO-GO");
+  }, 120_000);
+
+  test("RED: rollback:candidate keeps recovery authority when terminal journal write fails", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-terminal-journal-failure-red-"));
+    const crashed = runHarness("crash-after-active", root);
+    expect(crashed.result.status).not.toBe(0);
+    const markerPath = path.join(root, "phase3.activation");
+    rewriteFields(markerPath, { state: "candidate", marker_sha256: "absent" });
+    rewriteFields(markerPath, { marker_sha256: canonicalSelfHash(markerPath, "marker_sha256") });
+    expect(fieldsAt(markerPath).get("state")).toBe("candidate");
+    const failure = installMembershipJournalWriteFailure(root);
+    const rollback = runExistingRollback(root, crashed.sandbox, failure.shimBin);
+    const output = `${rollback.result.stdout}${rollback.result.stderr}`;
+
+    expect(existsSync(failure.failureFlag)).toBe(true);
+    expect(textAt(failure.countFile).trim()).toBe("17");
+    expect(rollback.result.status).not.toBe(0);
+    expect(output).not.toContain("PILOT: ROLLED BACK");
+    expect(fieldsAt(markerPath).get("state")).toBe("rolling_back");
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(true);
+    expect(existsSync(path.join(root, "phase3.rollback-completion.receipt"))).toBe(true);
+    expect(existsSync(path.join(root, "phase3.restore-evidence.record"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
+  }, 120_000);
+
   test("harness self-integrity survives two runs with the same backend root", () => {
     const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-harness-integrity-"));
     const beforeBytes = readFileSync(fakeDockerPath).length;
@@ -623,6 +1776,151 @@ describe("latest independent Phase-3 P1 review reproducers", () => {
 
     expect(readFileSync(fakeDockerPath).length).toBe(beforeBytes);
     expect(digestFile(fakeDockerPath)).toBe(beforeSha256);
+  }, 120_000);
+
+  test.each([
+    ["ingress=pre-existing-exact/private=absent", "catering_ingress" as const],
+    ["ingress=absent/private=pre-existing-exact", "catering_private" as const],
+  ])("RED: normal path rejects %s before any durable mutation", (_name, preExistingNetwork) => {
+    const { root, run, beforeState } = runNormalMixedS2(preExistingNetwork);
+    const output = `${run.result.stdout}${run.result.stderr}`;
+    expect(run.result.status).not.toBe(0);
+    expect(output).toContain("PILOT: NO-GO");
+    const log = textAt(path.join(root, "fake-docker.log"));
+    expect(log).not.toMatch(/network (?:create|connect|disconnect|rm) catering_(?:private|ingress)/);
+    expect(JSON.parse(textAt(path.join(root, "fake-docker-state.json")))).toEqual(JSON.parse(beforeState));
+    expect(existsSync(path.join(root, "phase3.activation"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.network-adoption.journal"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
+  }, 120_000);
+
+  test("RED: normal generated manifest labels recover pre-existing S2 networks", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-preexisting-generated-labels-red-"));
+    const crashed = runHarness("crash-after-ingress", root);
+    expect(crashed.result.status).not.toBe(0);
+    const prepared = preparePreExistingExactS2Crash(root);
+    const manifestPath = path.join(root, "phase3.transaction-baseline.manifest");
+    expect(fieldsAt(manifestPath).get("network_labels")).toBe(
+      "owner=catering-agents-platform;phase=phase3.1;transaction=phase3-harness",
+    );
+    const logPath = path.join(root, "fake-docker.log");
+    const beforeState = textAt(path.join(root, "fake-docker-state.json"));
+    const beforeLog = textAt(logPath);
+
+    const rolledBack = runExistingRollback(root, crashed.sandbox, prepared.dockerShimBin);
+    const terminal = `${rolledBack.result.stdout}${rolledBack.result.stderr}`;
+    const addedLog = textAt(logPath).slice(beforeLog.length);
+    expect(rolledBack.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: NO-GO");
+    expect(JSON.parse(textAt(path.join(root, "fake-docker-state.json")))).toEqual(JSON.parse(beforeState));
+    expect(addedLog).not.toMatch(/network (?:create|connect|disconnect|rm) catering_(?:private|ingress)/);
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("candidate");
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
+  }, 120_000);
+
+  test("RED: mixed pre-existing and absent S2 baselines rollback without target mutation", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-mixed-s2-rollback-red-"));
+    const crashed = runHarness("crash-after-ingress", root);
+    expect(crashed.result.status).not.toBe(0);
+    const prepared = prepareMixedPreExistingS2Crash(root);
+    const logPath = path.join(root, "fake-docker.log");
+    const beforeLog = textAt(logPath);
+
+    const rolledBack = runExistingRollback(root, crashed.sandbox, prepared.dockerShimBin);
+    const terminal = `${rolledBack.result.stdout}${rolledBack.result.stderr}`;
+    const addedLog = textAt(logPath).slice(beforeLog.length);
+    expect(rolledBack.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: NO-GO");
+    expect(JSON.parse(textAt(path.join(root, "fake-docker-state.json")))).toEqual(JSON.parse(prepared.beforeState));
+    expect(addedLog).not.toMatch(/network (?:create|connect|disconnect|rm) catering_(?:private|ingress)/);
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("candidate");
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
+  }, 120_000);
+
+  test("RED: inverse mixed pre-existing and absent S2 baselines rollback without target mutation", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-inverse-mixed-s2-rollback-red-"));
+    const crashed = runHarness("crash-after-ingress", root);
+    expect(crashed.result.status).not.toBe(0);
+    const prepared = prepareInverseMixedPreExistingS2Crash(root);
+    const logPath = path.join(root, "fake-docker.log");
+    const beforeLog = textAt(logPath);
+
+    const rolledBack = runExistingRollback(root, crashed.sandbox, prepared.dockerShimBin);
+    const terminal = `${rolledBack.result.stdout}${rolledBack.result.stderr}`;
+    const addedLog = textAt(logPath).slice(beforeLog.length);
+    expect(rolledBack.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: NO-GO");
+    expect(JSON.parse(textAt(path.join(root, "fake-docker-state.json")))).toEqual(JSON.parse(prepared.beforeState));
+    expect(addedLog).not.toMatch(/network (?:create|connect|disconnect|rm) catering_(?:private|ingress)/);
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("candidate");
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
+  }, 120_000);
+
+  test("RED: rolling_back validates preserved networks against immutable baseline after membership rollback", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-preserved-rollback-progress-red-"));
+    const crashed = runHarness("crash-after-active", root);
+    expect(crashed.result.status).not.toBe(0);
+    const prepared = preparePreExistingRollbackProgress(root);
+    const logPath = path.join(root, "fake-docker.log");
+    const beforeLog = textAt(logPath);
+
+    const resumed = runExistingResume(root, crashed.sandbox, prepared.dockerShimBin);
+    const terminal = `${resumed.result.stdout}${resumed.result.stderr}`;
+    const addedLog = textAt(logPath).slice(beforeLog.length);
+    expect(resumed.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: NO-GO");
+    const finalState = JSON.parse(textAt(path.join(root, "fake-docker-state.json"))) as {
+      networks: Record<string, unknown>;
+    };
+    const preparedState = JSON.parse(prepared.beforeState) as { networks: Record<string, unknown> };
+    expect(finalState.networks.catering_ingress).toEqual(preparedState.networks.catering_ingress);
+    expect(finalState.networks.catering_private).toEqual(preparedState.networks.catering_private);
+    expect(addedLog).not.toMatch(/network (?:create|connect|disconnect|rm) catering_(?:private|ingress)/);
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("rolling_back");
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
+  }, 120_000);
+
+  test("RED: pre-existing manifest-bound transaction labels remain recovery-bound", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-preexisting-transaction-label-red-"));
+    const crashed = runHarness("crash-after-active", root);
+    expect(crashed.result.status).not.toBe(0);
+    const prepared = preparePreExistingRollbackProgress(root, true);
+    const manifest = fieldsAt(path.join(root, "phase3.transaction-baseline.manifest"));
+    expect(manifest.get("catering_ingress_network_labels")).toBe(
+      "owner=catering-agents-platform;phase=phase3.1;kind=ingress;transaction=phase3-harness",
+    );
+    expect(manifest.get("catering_private_network_labels")).toBe(
+      "owner=catering-agents-platform;phase=phase3.1;kind=private;transaction=phase3-harness",
+    );
+    const logPath = path.join(root, "fake-docker.log");
+    const beforeLog = textAt(logPath);
+
+    const resumed = runExistingResume(root, crashed.sandbox, prepared.dockerShimBin);
+    const terminal = `${resumed.result.stdout}${resumed.result.stderr}`;
+    const addedLog = textAt(logPath).slice(beforeLog.length);
+    expect(resumed.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: NO-GO");
+    const finalState = JSON.parse(textAt(path.join(root, "fake-docker-state.json"))) as {
+      networks: Record<string, unknown>;
+    };
+    const preparedState = JSON.parse(prepared.beforeState) as { networks: Record<string, unknown> };
+    expect(finalState.networks.catering_ingress).toEqual(preparedState.networks.catering_ingress);
+    expect(finalState.networks.catering_private).toEqual(preparedState.networks.catering_private);
+    expect(addedLog).not.toMatch(/network (?:create|connect|disconnect|rm) catering_(?:private|ingress)/);
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("rolling_back");
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
   }, 120_000);
 
   test("RED: fake Docker models shortened network ls IDs and the helper requests canonical full IDs", () => {
@@ -709,6 +2007,256 @@ describe("latest independent Phase-3 P1 review reproducers", () => {
     expect(existsSync(rollback.completionReceipt)).toBe(false);
   });
 
+  test("RED: pre-existing-exact S2 crash terminalizes explicit rollback without network mutation", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-preexisting-s2-rollback-red-"));
+    const crashed = runHarness("crash-after-ingress", root);
+    expect(crashed.result.status).not.toBe(0);
+    const prepared = preparePreExistingExactS2Crash(root);
+    const logPath = path.join(root, "fake-docker.log");
+    const beforeLog = textAt(logPath);
+
+    const rolledBack = runExistingRollback(root, crashed.sandbox, prepared.dockerShimBin);
+    const terminal = `${rolledBack.result.stdout}${rolledBack.result.stderr}`;
+    const addedLog = textAt(logPath).slice(beforeLog.length);
+    expect(rolledBack.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: NO-GO");
+    expect(JSON.parse(textAt(path.join(root, "fake-docker-state.json")))).toEqual(JSON.parse(prepared.beforeState));
+    expect(addedLog).not.toMatch(/network (?:create|connect|disconnect|rm) catering_(?:private|ingress)/);
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("candidate");
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
+  }, 120_000);
+
+  test("RED: pre-existing-exact S2 crash resumes adoption without recreating networks", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-preexisting-s2-resume-red-"));
+    const crashed = runHarness("crash-after-ingress", root);
+    expect(crashed.result.status).not.toBe(0);
+    const prepared = preparePreExistingExactS2Crash(root);
+    const logPath = path.join(root, "fake-docker.log");
+    const beforeLog = textAt(logPath);
+
+    const resumed = runExistingResume(root, crashed.sandbox, prepared.dockerShimBin);
+    const terminal = `${resumed.result.stdout}${resumed.result.stderr}`;
+    const addedLog = textAt(logPath).slice(beforeLog.length);
+    expect(resumed.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: NO-GO");
+    const state = JSON.parse(textAt(path.join(root, "fake-docker-state.json"))) as {
+      networks: Record<string, { id: string; labels: Record<string, string> }>;
+    };
+    expect(state.networks.catering_ingress.id).toBe(prepared.ingressId);
+    expect(state.networks.catering_private.id).toBe(prepared.privateId);
+    expect(state.networks.catering_ingress.labels).toEqual({
+      "com.catering.owner": "catering-agents-platform",
+      "com.catering.phase": "phase3.1",
+      "com.catering.kind": "ingress",
+    });
+    expect(state.networks.catering_private.labels).toEqual({
+      "com.catering.owner": "catering-agents-platform",
+      "com.catering.phase": "phase3.1",
+      "com.catering.kind": "private",
+    });
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("candidate");
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(true);
+    expect(addedLog).not.toMatch(/network create catering_(?:private|ingress)/);
+    expect(addedLog).not.toMatch(/network rm catering_(?:private|ingress)/);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
+  }, 120_000);
+
+  test("RED: phase3.2 pre-existing S2 rolling_back prefix resumes after a crash", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-preexisting-s2-rolling-back-red-"));
+    const crashed = runHarness("crash-after-ingress", root);
+    expect(crashed.result.status).not.toBe(0);
+    const prepared = preparePreExistingExactS2Crash(root);
+    const statePath = path.join(root, "fake-docker-state.json");
+    const markerPath = path.join(root, "phase3.activation");
+    const logPath = path.join(root, "fake-docker.log");
+    const state = JSON.parse(textAt(statePath)) as { fault: string; fault_triggered: boolean };
+    state.fault = "crash-after-rollback";
+    state.fault_triggered = false;
+    writeFileSync(statePath, JSON.stringify(state));
+
+    const rollback = runExistingRollback(root, crashed.sandbox, prepared.dockerShimBin);
+    expect(rollback.result.status).not.toBe(0);
+    expect(fieldsAt(markerPath).get("state")).toBe("candidate");
+    expect(fieldsAt(markerPath).get("stage")).toBe("S2");
+    expect(fieldsAt(markerPath).get("catering_ingress_id")).toBe("absent");
+    expect(fieldsAt(markerPath).get("catering_private_id")).toBe("absent");
+    expect(existsSync(path.join(root, "phase3.restore-evidence.record"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.rollback-restore-proof.archive"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.rollback-completion.receipt"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
+
+    const beforeResumeLog = textAt(logPath);
+    const resumed = runExistingResume(root, rollback.sandbox, prepared.dockerShimBin);
+    const terminal = `${resumed.result.stdout}${resumed.result.stderr}`;
+    const addedLog = textAt(logPath).slice(beforeResumeLog.length);
+    expect(resumed.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: NO-GO");
+    expect(terminal).not.toContain("PILOT: ROLLED BACK");
+    expect(addedLog).not.toMatch(/network (?:create|connect|disconnect|rm) catering_(?:private|ingress)/);
+    expect(existsSync(markerPath)).toBe(true);
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
+  }, 120_000);
+
+  test("RED: phase3.2 inverse mixed rolling_back prefix resumes after ingress removal", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-inverse-mixed-rolling-back-red-"));
+    const crashed = runHarness("crash-after-active", root);
+    expect(crashed.result.status).not.toBe(0);
+    const prepared = prepareInverseMixedActiveRollback(root);
+    const markerPath = path.join(root, "phase3.activation");
+    const logPath = path.join(root, "fake-docker.log");
+    const beforeLog = textAt(logPath);
+
+    const resumed = runExistingResume(root, crashed.sandbox, prepared.dockerShimBin);
+    const terminal = `${resumed.result.stdout}${resumed.result.stderr}`;
+    const addedLog = textAt(logPath).slice(beforeLog.length);
+    expect(resumed.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: NO-GO");
+    expect(terminal).not.toContain("PILOT: ROLLED BACK");
+    expect(addedLog).not.toMatch(/network (?:create|connect) catering_(?:private|ingress)/);
+    expect(addedLog).not.toMatch(/network disconnect catering_ingress/);
+    expect(addedLog).not.toMatch(/network rm catering_ingress/);
+    expect(existsSync(markerPath)).toBe(true);
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
+  }, 120_000);
+
+  test.each([
+    ["manifest network order drift", (root: string) => {
+      const manifestPath = path.join(root, "phase3.transaction-baseline.manifest");
+      rewriteFields(manifestPath, { network_create_order: "catering_private,catering_ingress" });
+      rebindManifestReferences(root);
+    }],
+    ["manifest network label drift", (root: string) => {
+      const manifestPath = path.join(root, "phase3.transaction-baseline.manifest");
+      rewriteFields(manifestPath, { network_labels: "owner=foreign-owner;phase=phase3.1" });
+      rebindManifestReferences(root);
+    }],
+    ["manifest baseline ID drift", (root: string) => {
+      const manifestPath = path.join(root, "phase3.transaction-baseline.manifest");
+      rewriteFields(manifestPath, { catering_ingress_baseline_id: "f".repeat(64) });
+      rebindManifestReferences(root);
+    }],
+    ["manifest baseline status drift", (root: string) => {
+      const manifestPath = path.join(root, "phase3.transaction-baseline.manifest");
+      rewriteFields(manifestPath, { catering_ingress_baseline: "absent" });
+      rebindManifestReferences(root);
+    }],
+    ["live network ID drift", (root: string) => {
+      const statePath = path.join(root, "fake-docker-state.json");
+      const state = JSON.parse(textAt(statePath)) as {
+        networks: Record<string, { id: string }>;
+      };
+      state.networks.catering_ingress.id = "e".repeat(64);
+      writeFileSync(statePath, JSON.stringify(state));
+    }],
+    ["foreign owner label", (root: string) => {
+      const statePath = path.join(root, "fake-docker-state.json");
+      const state = JSON.parse(textAt(statePath)) as {
+        networks: Record<string, { labels: Record<string, string> }>;
+      };
+      state.networks.catering_ingress.labels["com.catering.owner"] = "foreign-owner";
+      writeFileSync(statePath, JSON.stringify(state));
+    }],
+    ["foreign transaction label", (root: string) => {
+      const statePath = path.join(root, "fake-docker-state.json");
+      const state = JSON.parse(textAt(statePath)) as {
+        networks: Record<string, { labels: Record<string, string> }>;
+      };
+      state.networks.catering_ingress.labels["com.catering.transaction"] = "phase3-foreign-run";
+      writeFileSync(statePath, JSON.stringify(state));
+    }],
+    ["network engine parameter drift", (root: string) => {
+      const statePath = path.join(root, "fake-docker-state.json");
+      const state = JSON.parse(textAt(statePath)) as {
+        networks: Record<string, { driver: string }>;
+      };
+      state.networks.catering_ingress.driver = "host";
+      writeFileSync(statePath, JSON.stringify(state));
+    }],
+    ["network member or alias drift", (root: string) => {
+      const statePath = path.join(root, "fake-docker-state.json");
+      const state = JSON.parse(textAt(statePath)) as {
+        networks: Record<string, { containers: Record<string, unknown> }>;
+      };
+      state.networks.catering_ingress.containers.foreign = {
+        Name: "/foreign",
+        Aliases: ["foreign"],
+      };
+      writeFileSync(statePath, JSON.stringify(state));
+    }],
+    ["missing pre-existing network", (root: string) => {
+      const statePath = path.join(root, "fake-docker-state.json");
+      const state = JSON.parse(textAt(statePath)) as { networks: Record<string, unknown> };
+      delete state.networks.catering_private;
+      writeFileSync(statePath, JSON.stringify(state));
+    }],
+  ])("pre-existing-exact S2 rejects %s before any network mutation", (_name, mutate) => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-preexisting-s2-negative-"));
+    const crashed = runHarness("crash-after-ingress", root);
+    expect(crashed.result.status).not.toBe(0);
+    const prepared = preparePreExistingExactS2Crash(root);
+    mutate(root);
+    const statePath = path.join(root, "fake-docker-state.json");
+    const markerPath = path.join(root, "phase3.activation");
+    const logPath = path.join(root, "fake-docker.log");
+    const beforeState = textAt(statePath);
+    const beforeLog = textAt(logPath);
+
+    const rolledBack = runExistingRollback(root, crashed.sandbox, prepared.dockerShimBin);
+    const terminal = `${rolledBack.result.stdout}${rolledBack.result.stderr}`;
+    const addedLog = textAt(logPath).slice(beforeLog.length);
+    expect(rolledBack.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: NO-GO");
+    expect(terminal).not.toContain("PILOT: ROLLED BACK");
+    expect(addedLog).not.toMatch(/network (?:create|connect|disconnect|rm) catering_(?:private|ingress)/);
+    expect(fieldsAt(markerPath).get("state")).toBe("candidate");
+    expect(textAt(statePath)).toBe(beforeState);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
+  }, 120_000);
+
+  test.each([
+    ["manifest driver drift", { network_driver: "catering_ingress:host;catering_private:bridge" }],
+    ["manifest scope drift", { network_scope: "catering_ingress:global;catering_private:local" }],
+    ["manifest internal drift", { network_internal: "catering_ingress:true;catering_private:false" }],
+    ["manifest IPAM driver drift", { network_ipam: "catering_ingress:host;catering_private:default" }],
+    ["manifest EnableIPv6 drift", { network_enable_ipv6: "catering_ingress:true;catering_private:false" }],
+    ["manifest IPAM options drift", { network_ipam_options: 'catering_ingress:{"com.example.drift":"1"};catering_private:{}' }],
+    ["manifest IPAM config drift", { network_ipam_config: 'catering_ingress:[{"Subnet":"10.0.0.0/24"}];catering_private:[]' }],
+    ["manifest member provenance drift", { network_members: "catering_ingress:foreign;catering_private:platform-infra-web-1" }],
+    ["manifest alias provenance drift", { network_aliases: "catering_ingress:foreign=foreign" }],
+  ])("GREEN: pre-existing-exact S2 rejects %s after manifest rebinding", (_name, fields) => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-preexisting-s2-manifest-red-"));
+    const crashed = runHarness("crash-after-ingress", root);
+    expect(crashed.result.status).not.toBe(0);
+    const prepared = preparePreExistingExactS2Crash(root);
+    rewriteFields(path.join(root, "phase3.transaction-baseline.manifest"), fields);
+    rebindManifestReferences(root);
+
+    const statePath = path.join(root, "fake-docker-state.json");
+    const markerPath = path.join(root, "phase3.activation");
+    const logPath = path.join(root, "fake-docker.log");
+    const beforeState = textAt(statePath);
+    const beforeLog = textAt(logPath);
+    const rolledBack = runExistingRollback(root, crashed.sandbox, prepared.dockerShimBin);
+    const terminal = `${rolledBack.result.stdout}${rolledBack.result.stderr}`;
+    const addedLog = textAt(logPath).slice(beforeLog.length);
+    expect(rolledBack.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: NO-GO");
+    expect(addedLog).not.toMatch(/network (?:create|connect|disconnect|rm) catering_(?:private|ingress)/);
+    expect(fieldsAt(markerPath).get("state")).toBe("candidate");
+    expect(textAt(statePath)).toBe(beforeState);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
+  }, 120_000);
+
   test("RED: resume replays bound provider egress and every host smoke after cutover", () => {
     const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-resume-host-gates-red-"));
     const crashed = runHarness("crash-after-active", root);
@@ -738,6 +2286,766 @@ describe("latest independent Phase-3 P1 review reproducers", () => {
     const resumed = runExistingResume(root, crashed.sandbox);
     expect(resumed.result.status).not.toBe(0);
     expect(`${resumed.result.stdout}${resumed.result.stderr}`).not.toContain("PILOT: GO\n");
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("active");
+  }, 120_000);
+
+  test.each(["crash-after-candidate", "crash-after-active"])("RED: legacy %s manifest is rejected before rollback", (scenario) => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-legacy-rollback-red-"));
+    const crashed = runHarness(scenario, root);
+    expect(crashed.result.status).not.toBe(0);
+    convertManifestToLegacy(root);
+
+    const rolledBack = runExistingRollback(root, crashed.sandbox);
+    const terminal = `${rolledBack.result.stdout}${rolledBack.result.stderr}`;
+    expect(rolledBack.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: NO-GO");
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe(scenario === "crash-after-active" ? "active" : "candidate");
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(true);
+  }, 120_000);
+
+  test("RED: legacy rolling_back manifest is rejected before rollback finalization", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-legacy-rolling-back-red-"));
+    const crashed = runHarness("crash-after-receipt", root);
+    expect(crashed.result.status).not.toBe(0);
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("rolling_back");
+    convertManifestToLegacy(root);
+
+    const resumed = runExistingResume(root, crashed.sandbox);
+    const terminal = `${resumed.result.stdout}${resumed.result.stderr}`;
+    expect(resumed.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: NO-GO");
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("rolling_back");
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(true);
+    expect(existsSync(path.join(root, "phase3.rollback-completion.receipt"))).toBe(true);
+  }, 120_000);
+
+  test("RED: legacy rolling_back crash before evidence remains fail-closed", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-legacy-rolling-back-pre-evidence-red-"));
+    const crashed = runHarness("crash-after-rollback", root);
+    expect(crashed.result.status).not.toBe(0);
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("rolling_back");
+    expect(existsSync(path.join(root, "phase3.rollback-restore-proof.archive"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.rollback-completion.receipt"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.restore-evidence.record"))).toBe(false);
+    convertManifestToLegacy(root);
+
+    const beforeLog = textAt(path.join(root, "fake-docker.log"));
+    const resumed = runExistingResume(root, crashed.sandbox);
+    const terminal = `${resumed.result.stdout}${resumed.result.stderr}`;
+    const addedLog = textAt(path.join(root, "fake-docker.log")).slice(beforeLog.length);
+    expect(resumed.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: NO-GO");
+    expect(terminal).not.toContain("PILOT: ROLLED BACK");
+    expect(addedLog).not.toMatch(/network (?:create|connect|disconnect|rm)/);
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("rolling_back");
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(true);
+    expect(existsSync(path.join(root, "phase3.rollback-restore-proof.archive"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.restore-evidence.record"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.rollback-completion.receipt"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
+  }, 120_000);
+
+  test("RED: legacy rolling_back resumes after private network removal", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-legacy-rolling-back-private-remove-red-"));
+    const crashed = runHarness("crash-after-rollback", root);
+    expect(crashed.result.status).not.toBe(0);
+    const markerPath = path.join(root, "phase3.activation");
+    const statePath = path.join(root, "fake-docker-state.json");
+    expect(fieldsAt(markerPath).get("state")).toBe("rolling_back");
+    const beforeNetworkRemoval = textAt(path.join(root, "fake-docker.log"));
+    removeFakeNetwork(root, "catering_private", [
+      "platform-infra-postgres-1",
+      "platform-infra-intake-1",
+      "platform-infra-offer-1",
+      "platform-infra-production-1",
+      "platform-infra-exports-1",
+      "platform-infra-web-1",
+    ]);
+    const removalLog = textAt(path.join(root, "fake-docker.log")).slice(beforeNetworkRemoval.length);
+    expect(removalLog).toContain("docker network rm catering_private");
+    expect(removalLog).not.toContain("docker network rm catering_ingress");
+    const state = JSON.parse(textAt(statePath)) as { networks: Record<string, unknown> };
+    expect(state.networks.catering_private).toBeUndefined();
+    expect(state.networks.catering_ingress).toBeDefined();
+    convertManifestToLegacy(root);
+
+    const resumed = runExistingResume(root, crashed.sandbox);
+    const terminal = `${resumed.result.stdout}${resumed.result.stderr}`;
+    expect(resumed.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: NO-GO");
+    expect(terminal).not.toContain("PILOT: ROLLED BACK");
+    expect(existsSync(markerPath)).toBe(true);
+    expect(fieldsAt(markerPath).get("state")).toBe("rolling_back");
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
+  }, 120_000);
+
+  test("legacy rolling_back rejects ingress absence while private remains", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-legacy-rolling-back-out-of-order-red-"));
+    const crashed = runHarness("crash-after-rollback", root);
+    expect(crashed.result.status).not.toBe(0);
+    removeFakeNetwork(root, "catering_ingress", ["platform-infra-web-1", "shared-edge-edge-1"]);
+    convertManifestToLegacy(root);
+
+    const beforeLog = textAt(path.join(root, "fake-docker.log"));
+    const resumed = runExistingResume(root, crashed.sandbox);
+    const terminal = `${resumed.result.stdout}${resumed.result.stderr}`;
+    const addedLog = textAt(path.join(root, "fake-docker.log")).slice(beforeLog.length);
+    expect(resumed.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: NO-GO");
+    expect(terminal).not.toContain("PILOT: GO\n");
+    expect(addedLog).not.toMatch(/network (?:create|connect|disconnect|rm) catering_(?:private|ingress)/);
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("rolling_back");
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
+  }, 120_000);
+
+  test("legacy rolling_back rejects a foreign same-name network replacement", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-legacy-rolling-back-foreign-network-red-"));
+    const crashed = runHarness("crash-after-rollback", root);
+    expect(crashed.result.status).not.toBe(0);
+    const statePath = path.join(root, "fake-docker-state.json");
+    const state = JSON.parse(textAt(statePath)) as {
+      networks: Record<string, { id: string; labels: Record<string, string> }>;
+    };
+    state.networks.catering_private.id = "f".repeat(64);
+    state.networks.catering_private.labels = {
+      "com.catering.owner": "foreign-owner",
+      "com.catering.phase": "phase3.1",
+      "com.catering.kind": "private",
+      "com.catering.transaction": "foreign-run",
+    };
+    writeFileSync(statePath, JSON.stringify(state));
+    convertManifestToLegacy(root);
+
+    const beforeLog = textAt(path.join(root, "fake-docker.log"));
+    const resumed = runExistingResume(root, crashed.sandbox);
+    const terminal = `${resumed.result.stdout}${resumed.result.stderr}`;
+    const addedLog = textAt(path.join(root, "fake-docker.log")).slice(beforeLog.length);
+    expect(resumed.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: NO-GO");
+    expect(terminal).not.toContain("PILOT: GO\n");
+    expect(addedLog).not.toMatch(/network (?:create|connect|disconnect|rm) catering_(?:private|ingress)/);
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("rolling_back");
+  }, 120_000);
+
+  test("legacy rolling_back rejects an expected network ID under another name", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-legacy-rolling-back-network-id-name-red-"));
+    const crashed = runHarness("crash-after-rollback", root);
+    expect(crashed.result.status).not.toBe(0);
+    const statePath = path.join(root, "fake-docker-state.json");
+    const state = JSON.parse(textAt(statePath)) as { networks: Record<string, unknown> };
+    const privateNetwork = state.networks.catering_private;
+    delete state.networks.catering_private;
+    state.networks["renamed-private"] = privateNetwork;
+    writeFileSync(statePath, JSON.stringify(state));
+    convertManifestToLegacy(root);
+
+    const beforeLog = textAt(path.join(root, "fake-docker.log"));
+    const resumed = runExistingResume(root, crashed.sandbox);
+    const terminal = `${resumed.result.stdout}${resumed.result.stderr}`;
+    const addedLog = textAt(path.join(root, "fake-docker.log")).slice(beforeLog.length);
+    expect(resumed.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: NO-GO");
+    expect(terminal).not.toContain("PILOT: GO\n");
+    expect(addedLog).not.toMatch(/network (?:create|connect|disconnect|rm) catering_(?:private|ingress)/);
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("rolling_back");
+  }, 120_000);
+
+  test("legacy rolling_back rejects a valid marker ID drift from the adoption journal", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-legacy-rolling-back-id-drift-red-"));
+    const crashed = runHarness("crash-after-rollback", root);
+    expect(crashed.result.status).not.toBe(0);
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("rolling_back");
+    removeFakeNetwork(root, "catering_private", [
+      "platform-infra-postgres-1",
+      "platform-infra-intake-1",
+      "platform-infra-offer-1",
+      "platform-infra-production-1",
+      "platform-infra-exports-1",
+      "platform-infra-web-1",
+    ]);
+    convertManifestToLegacy(root);
+    const journalPath = path.join(root, "phase3.network-adoption.journal");
+    const journalBefore = textAt(journalPath);
+    const markerPath = path.join(root, "phase3.activation");
+    rewriteFields(markerPath, { catering_private_id: "a".repeat(64) });
+    rewriteFields(markerPath, { marker_sha256: "absent" });
+    rewriteFields(markerPath, { marker_sha256: canonicalSelfHash(markerPath, "marker_sha256") });
+
+    const beforeLog = textAt(path.join(root, "fake-docker.log"));
+    const resumed = runExistingResume(root, crashed.sandbox);
+    const terminal = `${resumed.result.stdout}${resumed.result.stderr}`;
+    const addedLog = textAt(path.join(root, "fake-docker.log")).slice(beforeLog.length);
+    expect(resumed.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: NO-GO");
+    expect(terminal).not.toContain("PILOT: GO\n");
+    expect(addedLog).not.toMatch(/network (?:create|connect|disconnect|rm) catering_(?:private|ingress)/);
+    expect(fieldsAt(markerPath).get("state")).toBe("rolling_back");
+    expect(textAt(journalPath)).toBe(journalBefore);
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(true);
+    expect(existsSync(path.join(root, "phase3.restore-evidence.record"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.rollback-restore-proof.archive"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.rollback-completion.receipt"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
+  }, 120_000);
+
+  test.each([
+    ["crash-after-evidence", "evidence-only"],
+    ["crash-after-archive", "evidence-and-archive"],
+  ])("RED: legacy rolling_back %s proof prefix resumes idempotently", (scenario, prefix) => {
+    const root = mkdtempSync(path.join(tmpdir(), `catering-phase3-legacy-rolling-back-${prefix}-red-`));
+    const crashed = runHarness(scenario, root);
+    expect(crashed.result.status).not.toBe(0);
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("rolling_back");
+    convertManifestToLegacy(root);
+
+    const evidence = path.join(root, "phase3.restore-evidence.record");
+    const archive = path.join(root, "phase3.rollback-restore-proof.archive");
+    const receipt = path.join(root, "phase3.rollback-completion.receipt");
+    expect(existsSync(evidence)).toBe(true);
+    expect(existsSync(archive)).toBe(prefix === "evidence-and-archive");
+    expect(existsSync(receipt)).toBe(false);
+
+    const beforeLog = textAt(path.join(root, "fake-docker.log"));
+    const resumed = runExistingResume(root, crashed.sandbox);
+    const terminal = `${resumed.result.stdout}${resumed.result.stderr}`;
+    const addedLog = textAt(path.join(root, "fake-docker.log")).slice(beforeLog.length);
+    expect(resumed.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: NO-GO");
+    expect(terminal).not.toContain("PILOT: ROLLED BACK");
+    expect(addedLog).not.toMatch(/network (?:create|connect|disconnect|rm)/);
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("rolling_back");
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(true);
+    expect(existsSync(receipt)).toBe(false);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
+  }, 120_000);
+
+  test("RED: legacy rolling_back inconsistent partial evidence remains fail-closed", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-legacy-rolling-back-partial-evidence-red-"));
+    const crashed = runHarness("crash-after-receipt", root);
+    expect(crashed.result.status).not.toBe(0);
+    convertManifestToLegacy(root);
+    writeFileSync(path.join(root, "phase3.rollback-completion.receipt"), "schema=broken\n");
+
+    const resumed = runExistingResume(root, crashed.sandbox);
+    const terminal = `${resumed.result.stdout}${resumed.result.stderr}`;
+    expect(resumed.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: NO-GO");
+    expect(terminal).not.toContain("PILOT: GO\n");
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("rolling_back");
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
+  }, 120_000);
+
+  test("RED: legacy rolling_back rejects an explicit rollback command", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-legacy-rolling-back-command-red-"));
+    const crashed = runHarness("crash-after-receipt", root);
+    expect(crashed.result.status).not.toBe(0);
+    convertManifestToLegacy(root);
+    const beforeLog = textAt(path.join(root, "fake-docker.log"));
+
+    const rolledBack = runExistingRollback(root, crashed.sandbox);
+    const terminal = `${rolledBack.result.stdout}${rolledBack.result.stderr}`;
+    const addedLog = textAt(path.join(root, "fake-docker.log")).slice(beforeLog.length);
+    expect(rolledBack.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: NO-GO");
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("rolling_back");
+    expect(addedLog).not.toMatch(/network (?:create|connect|disconnect)/);
+  }, 120_000);
+
+  test("RED: legacy candidate cannot forward-resume or claim GO", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-legacy-forward-resume-red-"));
+    const crashed = runHarness("crash-after-candidate", root);
+    expect(crashed.result.status).not.toBe(0);
+    convertManifestToLegacy(root);
+    const beforeLog = textAt(path.join(root, "fake-docker.log"));
+
+    const resumed = runExistingResume(root, crashed.sandbox);
+    const terminal = `${resumed.result.stdout}${resumed.result.stderr}`;
+    const addedLog = textAt(path.join(root, "fake-docker.log")).slice(beforeLog.length);
+    expect(resumed.result.status).not.toBe(0);
+    expect(terminal).not.toContain("PILOT: GO\n");
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("candidate");
+    expect(addedLog).not.toMatch(/network (?:create|connect|disconnect)/);
+  }, 120_000);
+
+  test("RED: legacy candidate with prepared adoption intent explicitly rolls back before either network exists", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-legacy-candidate-prepared-intent-red-"));
+    const crashed = runHarness("crash-after-candidate", root, {
+      CATERING_PHASE3_FAKE_PRE_NETWORK_CRASH: "1",
+    });
+    expect(crashed.result.status).not.toBe(0);
+    const markerPath = path.join(root, "phase3.activation");
+    const manifestPath = path.join(root, "phase3.transaction-baseline.manifest");
+    const journalPath = path.join(root, "phase3.network-adoption.journal");
+    expect(fieldsAt(markerPath).get("state")).toBe("candidate");
+    expect(fieldsAt(markerPath).get("catering_ingress_id")).toBe("absent");
+    expect(fieldsAt(markerPath).get("catering_private_id")).toBe("absent");
+    expect(fieldsAt(journalPath).get("adoption_phase")).toBe("prepared");
+    expect(fieldsAt(journalPath).get("adoption_count")).toBe("0");
+    expect(fieldsAt(journalPath).get("catering_ingress_id")).toBe("absent");
+    expect(fieldsAt(journalPath).get("catering_private_id")).toBe("absent");
+    expect(JSON.parse(textAt(path.join(root, "fake-docker-state.json"))).networks.catering_ingress).toBeUndefined();
+    expect(JSON.parse(textAt(path.join(root, "fake-docker-state.json"))).networks.catering_private).toBeUndefined();
+    convertManifestToLegacy(root);
+
+    const resumed = runExistingResume(root, crashed.sandbox);
+    expect(resumed.result.status).not.toBe(0);
+    expect(`${resumed.result.stdout}${resumed.result.stderr}`).not.toContain("PILOT: GO");
+    expect(fieldsAt(markerPath).get("state")).toBe("candidate");
+
+    const rolledBack = runExistingRollback(root, crashed.sandbox);
+    const terminal = `${rolledBack.result.stdout}${rolledBack.result.stderr}`;
+    expect(rolledBack.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: NO-GO");
+    expect(terminal).not.toContain("PILOT: GO");
+    expect(fieldsAt(markerPath).get("state")).toBe("candidate");
+    expect(existsSync(manifestPath)).toBe(true);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
+  }, 120_000);
+
+  test("RED: legacy candidate with durable ingress adoption explicitly rolls back the exact live ingress", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-legacy-candidate-ingress-adopted-red-"));
+    const crashed = runHarness("crash-after-ingress", root);
+    expect(crashed.result.status).not.toBe(0);
+    const markerPath = path.join(root, "phase3.activation");
+    const manifestPath = path.join(root, "phase3.transaction-baseline.manifest");
+    const journalPath = path.join(root, "phase3.network-adoption.journal");
+    const statePath = path.join(root, "fake-docker-state.json");
+    const state = JSON.parse(textAt(statePath)) as {
+      networks: Record<string, { id: string; labels: Record<string, string>; containers: Record<string, unknown> }>;
+    };
+    const ingress = state.networks.catering_ingress;
+    expect(fieldsAt(markerPath).get("state")).toBe("candidate");
+    expect(fieldsAt(markerPath).get("catering_ingress_id")).toBe("absent");
+    expect(fieldsAt(markerPath).get("catering_private_id")).toBe("absent");
+    expect(fieldsAt(journalPath).get("adoption_order")).toBe("catering_ingress");
+    expect(fieldsAt(journalPath).get("adoption_count")).toBe("1");
+    expect(fieldsAt(journalPath).get("adoption_phase")).toBe("created");
+    expect(fieldsAt(journalPath).get("catering_ingress_id")).toBe(ingress.id);
+    expect(fieldsAt(journalPath).get("catering_private_id")).toBe("absent");
+    expect(ingress.labels["com.catering.owner"]).toBe("catering-agents-platform");
+    expect(ingress.labels["com.catering.phase"]).toBe("phase3.1");
+    expect(ingress.labels["com.catering.kind"]).toBe("ingress");
+    expect(ingress.labels["com.catering.transaction"]).toBe("phase3-harness");
+    expect(Object.keys(ingress.containers)).toHaveLength(0);
+    expect(state.networks.catering_private).toBeUndefined();
+    convertManifestToLegacy(root);
+
+    const resumed = runExistingResume(root, crashed.sandbox);
+    expect(resumed.result.status).not.toBe(0);
+    expect(`${resumed.result.stdout}${resumed.result.stderr}`).not.toContain("PILOT: GO");
+    expect(fieldsAt(markerPath).get("state")).toBe("candidate");
+
+    const ingressId = fieldsAt(journalPath).get("catering_ingress_id");
+    expect(ingressId).toMatch(/^[0-9a-f]{64}$/);
+    expect(fieldsAt(journalPath).get("transaction_manifest_path")).toBe(manifestPath);
+    expect(fieldsAt(journalPath).get("transaction_manifest_sha256")).toBe(digestFile(manifestPath));
+    const faultState = JSON.parse(textAt(statePath)) as { fault: string; fault_triggered: boolean };
+    faultState.fault = "crash-after-rollback";
+    faultState.fault_triggered = false;
+    writeFileSync(statePath, JSON.stringify(faultState));
+
+    const beforeRollbackState = textAt(statePath);
+    const beforeRollbackLog = textAt(path.join(root, "fake-docker.log"));
+    const rejectedRollback = runExistingRollback(root, crashed.sandbox);
+    const rejectedOutput = `${rejectedRollback.result.stdout}${rejectedRollback.result.stderr}`;
+    const rejectedAddedLog = textAt(path.join(root, "fake-docker.log")).slice(beforeRollbackLog.length);
+    expect(rejectedRollback.result.status).not.toBe(0);
+    expect(rejectedOutput).toContain("PILOT: NO-GO");
+    expect(rejectedAddedLog).not.toMatch(/network (?:create|connect|disconnect|rm)/);
+    expect(textAt(statePath)).toBe(beforeRollbackState);
+    expect(fieldsAt(markerPath).get("state")).toBe("candidate");
+    expect(existsSync(manifestPath)).toBe(true);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
+  }, 120_000);
+
+  test.each([
+    ["foreign owner", (root: string) => {
+      const statePath = path.join(root, "fake-docker-state.json");
+      const state = JSON.parse(textAt(statePath)) as {
+        networks: Record<string, { labels: Record<string, string> }>;
+      };
+      state.networks.catering_ingress.labels["com.catering.owner"] = "foreign-owner";
+      writeFileSync(statePath, JSON.stringify(state));
+    }],
+    ["foreign run", (root: string) => {
+      const statePath = path.join(root, "fake-docker-state.json");
+      const state = JSON.parse(textAt(statePath)) as {
+        networks: Record<string, { labels: Record<string, string> }>;
+      };
+      state.networks.catering_ingress.labels["com.catering.transaction"] = "phase3-foreign-run";
+      writeFileSync(statePath, JSON.stringify(state));
+    }],
+    ["divergent manifest path", (root: string) => {
+      const journalPath = path.join(root, "phase3.network-adoption.journal");
+      rewriteFields(journalPath, {
+        transaction_manifest_path: path.join(root, "foreign-baseline.manifest"),
+        journal_sha256: "absent",
+      });
+      rewriteFields(journalPath, { journal_sha256: canonicalSelfHash(journalPath, "journal_sha256") });
+    }],
+    ["divergent manifest hash", (root: string) => {
+      const markerPath = path.join(root, "phase3.activation");
+      rewriteFields(markerPath, {
+        transaction_manifest_sha256: "0".repeat(64),
+        marker_sha256: "absent",
+      });
+      rewriteFields(markerPath, { marker_sha256: canonicalSelfHash(markerPath, "marker_sha256") });
+    }],
+    ["incomplete network provenance", (root: string) => {
+      const statePath = path.join(root, "fake-docker-state.json");
+      const state = JSON.parse(textAt(statePath)) as {
+        networks: Record<string, { labels: Record<string, string> }>;
+      };
+      delete state.networks.catering_ingress.labels["com.catering.kind"];
+      writeFileSync(statePath, JSON.stringify(state));
+    }],
+  ])("phase3.1 candidate rejects %s before any network mutation", (_name, mutate) => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-legacy-candidate-negative-red-"));
+    const crashed = runHarness("crash-after-ingress", root);
+    expect(crashed.result.status).not.toBe(0);
+    convertManifestToLegacy(root);
+    mutate(root);
+
+    const markerPath = path.join(root, "phase3.activation");
+    const statePath = path.join(root, "fake-docker-state.json");
+    const logPath = path.join(root, "fake-docker.log");
+    const beforeRollbackLog = textAt(logPath);
+    const beforeState = textAt(statePath);
+    const rolledBack = runExistingRollback(root, crashed.sandbox);
+    const terminal = `${rolledBack.result.stdout}${rolledBack.result.stderr}`;
+    const addedLog = textAt(logPath).slice(beforeRollbackLog.length);
+    expect(rolledBack.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: NO-GO");
+    expect(terminal).not.toContain("PILOT: ROLLED BACK");
+    expect(addedLog).not.toMatch(/network (?:create|connect|disconnect|rm) catering_(?:private|ingress)/);
+    expect(fieldsAt(markerPath).get("state")).toBe("candidate");
+    expect(textAt(statePath)).toBe(beforeState);
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(true);
+    expect(existsSync(path.join(root, "phase3.network-adoption.journal"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
+  }, 120_000);
+
+  test("RED: phase3.2 candidate before network creation explicitly rolls back absent targets", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-candidate-pre-network-rollback-red-"));
+    const crashed = runHarness("crash-after-candidate", root, {
+      CATERING_PHASE3_FAKE_PRE_NETWORK_CRASH: "1",
+    });
+    const markerPath = path.join(root, "phase3.activation");
+    const manifestPath = path.join(root, "phase3.transaction-baseline.manifest");
+    const journalPath = path.join(root, "phase3.network-adoption.journal");
+    const logPath = path.join(root, "fake-docker.log");
+    expect(crashed.result.status).not.toBe(0);
+    expect(fieldsAt(markerPath).get("state")).toBe("candidate");
+    expect(fieldsAt(markerPath).get("catering_ingress_id")).toBe("absent");
+    expect(fieldsAt(markerPath).get("catering_private_id")).toBe("absent");
+    expect(fieldsAt(journalPath).get("catering_ingress_id")).toBe("absent");
+    expect(fieldsAt(journalPath).get("catering_private_id")).toBe("absent");
+    expect(JSON.parse(textAt(path.join(root, "fake-docker-state.json"))).networks.catering_ingress).toBeUndefined();
+    expect(JSON.parse(textAt(path.join(root, "fake-docker-state.json"))).networks.catering_private).toBeUndefined();
+    expect(textAt(logPath)).not.toMatch(/network create catering_(?:private|ingress)/);
+    expect(existsSync(manifestPath)).toBe(true);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
+
+    const beforeRollbackLog = textAt(logPath);
+    const rolledBack = runExistingRollback(root, crashed.sandbox);
+    const terminal = `${rolledBack.result.stdout}${rolledBack.result.stderr}`;
+    const addedLog = textAt(logPath).slice(beforeRollbackLog.length);
+    expect(rolledBack.result.status).toBe(0);
+    expect(terminal).toContain("PILOT: ROLLED BACK");
+    expect(terminal).not.toContain("PILOT: GO\n");
+    expect(addedLog).not.toMatch(/network create catering_(?:private|ingress)/);
+    expect(addedLog).not.toMatch(/network rm catering_(?:private|ingress)/);
+    expect(addedLog).not.toMatch(/network disconnect catering_(?:private|ingress)/);
+    expect(existsSync(markerPath)).toBe(false);
+    expect(existsSync(manifestPath)).toBe(false);
+    expect(existsSync(path.join(root, "phase3.restore-evidence.record"))).toBe(true);
+    expect(existsSync(path.join(root, "phase3.rollback-restore-proof.archive"))).toBe(true);
+    expect(existsSync(path.join(root, "phase3.rollback-completion.receipt"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
+  }, 120_000);
+
+  test("RED: phase3.2 rolling_back crash before proof resumes the same rollback idempotently", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-rolling-back-pre-proof-red-"));
+    const crashed = runHarness("crash-after-candidate", root, {
+      CATERING_PHASE3_FAKE_PRE_NETWORK_CRASH: "1",
+    });
+    expect(crashed.result.status).not.toBe(0);
+    const markerPath = path.join(root, "phase3.activation");
+    const statePath = path.join(root, "fake-docker-state.json");
+    const logPath = path.join(root, "fake-docker.log");
+    const state = JSON.parse(textAt(statePath)) as { fault: string; fault_triggered: boolean };
+    state.fault = "crash-after-rollback";
+    state.fault_triggered = false;
+    writeFileSync(statePath, JSON.stringify(state));
+
+    const rollback = runExistingRollback(root, crashed.sandbox);
+    expect(rollback.result.status).not.toBe(0);
+    expect(fieldsAt(markerPath).get("state")).toBe("rolling_back");
+    expect(existsSync(path.join(root, "phase3.restore-evidence.record"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.rollback-restore-proof.archive"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.rollback-completion.receipt"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
+
+    const beforeResumeLog = textAt(logPath);
+    const resumed = runExistingResume(root, crashed.sandbox);
+    const terminal = `${resumed.result.stdout}${resumed.result.stderr}`;
+    const addedLog = textAt(logPath).slice(beforeResumeLog.length);
+    expect(resumed.result.status).toBe(0);
+    expect(terminal).toContain("PILOT: ROLLED BACK");
+    expect(terminal).not.toContain("PILOT: GO\n");
+    expect(addedLog).not.toMatch(/network create catering_(?:private|ingress)/);
+    expect(addedLog).not.toMatch(/network (?:disconnect|rm) catering_(?:private|ingress)/);
+    expect(existsSync(markerPath)).toBe(false);
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.restore-evidence.record"))).toBe(true);
+    expect(existsSync(path.join(root, "phase3.rollback-restore-proof.archive"))).toBe(true);
+    expect(existsSync(path.join(root, "phase3.rollback-completion.receipt"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
+  }, 120_000);
+
+  test("RED: resume after a partial run-created network disconnect completes the same rollback", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-partial-disconnect-red-"));
+    const crashed = runHarness("crash-after-active", root);
+    expect(crashed.result.status).not.toBe(0);
+    const markerPath = path.join(root, "phase3.activation");
+    const statePath = path.join(root, "fake-docker-state.json");
+    const logPath = path.join(root, "fake-docker.log");
+    const beforeState = JSON.parse(textAt(statePath)) as {
+      networks: Record<string, { id: string; containers: Record<string, { Name: string }> }>;
+    };
+    const privateBefore = Object.values(beforeState.networks.catering_private.containers)
+      .map((member) => member.Name.replace(/^\//, ""))
+      .sort();
+    const ingressBefore = Object.values(beforeState.networks.catering_ingress.containers)
+      .map((member) => member.Name.replace(/^\//, ""))
+      .sort();
+    expect(privateBefore).toEqual([
+      "platform-infra-exports-1",
+      "platform-infra-intake-1",
+      "platform-infra-offer-1",
+      "platform-infra-postgres-1",
+      "platform-infra-production-1",
+      "platform-infra-web-1",
+    ]);
+    expect(ingressBefore).toEqual(["platform-infra-web-1", "shared-edge-edge-1"]);
+
+    const disconnectCrash = installCrashAfterFirstNetworkDisconnect(root);
+    const rollback = runExistingRollback(root, crashed.sandbox, disconnectCrash.shimBin);
+    expect(rollback.result.status).not.toBe(0);
+    expect(fieldsAt(markerPath).get("state")).toBe("rolling_back");
+    const afterCrash = JSON.parse(textAt(statePath)) as {
+      networks: Record<string, { containers: Record<string, { Name: string }> }>;
+    };
+    const privateAfter = Object.values(afterCrash.networks.catering_private.containers)
+      .map((member) => member.Name.replace(/^\//, ""))
+      .sort();
+    const ingressAfter = Object.values(afterCrash.networks.catering_ingress.containers)
+      .map((member) => member.Name.replace(/^\//, ""))
+      .sort();
+    expect(privateAfter).toEqual([
+      "platform-infra-exports-1",
+      "platform-infra-intake-1",
+      "platform-infra-offer-1",
+      "platform-infra-production-1",
+      "platform-infra-web-1",
+    ]);
+    expect(ingressAfter).toEqual(ingressBefore);
+    expect(existsSync(path.join(root, "phase3.restore-evidence.record"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.rollback-restore-proof.archive"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.rollback-completion.receipt"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
+
+    const beforeResumeLog = textAt(logPath);
+    const resumed = runExistingResume(root, crashed.sandbox);
+    const terminal = `${resumed.result.stdout}${resumed.result.stderr}`;
+    const resumeLog = textAt(logPath).slice(beforeResumeLog.length);
+    expect(resumed.result.status).toBe(0);
+    expect(terminal).toContain("PILOT: ROLLED BACK");
+    expect(terminal).not.toContain("PILOT: GO\n");
+    expect(resumeLog).toMatch(/network disconnect catering_private/);
+    expect(resumeLog).toMatch(/network disconnect catering_ingress/);
+    expect(resumeLog).toMatch(/network rm catering_private/);
+    expect(resumeLog).toMatch(/network rm catering_ingress/);
+    expect(existsSync(path.join(root, "phase3.activation"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
+  }, 120_000);
+
+  test("RED: preserves the private snapshot through ingress rollback", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-private-snapshot-red-"));
+    const crashed = runHarness("crash-after-active", root);
+    expect(crashed.result.status).not.toBe(0);
+    const markerPath = path.join(root, "phase3.activation");
+    const journalPath = path.join(root, "phase3.network-adoption.journal");
+    const statePath = path.join(root, "fake-docker-state.json");
+    const logPath = path.join(root, "fake-docker.log");
+    const privateSnapshot = fieldsAt(journalPath).get("catering_private_members_b64");
+    expect(privateSnapshot).toMatch(/^[A-Za-z0-9+/=]+$/);
+    const beforeRollbackLog = textAt(logPath);
+    const disconnectCrash = installCrashAfterIngressDisconnect(root);
+
+    const rollback = runExistingRollback(root, crashed.sandbox, disconnectCrash.shimBin);
+    expect(rollback.result.status).not.toBe(0);
+    expect(existsSync(disconnectCrash.flagPath)).toBe(true);
+    expect(fieldsAt(markerPath).get("state")).toBe("rolling_back");
+    const rollbackLog = textAt(logPath).slice(beforeRollbackLog.length);
+    const rollbackLines = rollbackLog.split("\n").filter(Boolean);
+    const privateDisconnects = rollbackLines.filter((line) => line.startsWith("docker network disconnect catering_private "));
+    const ingressDisconnectIndex = rollbackLines.findIndex((line) => line === "docker network disconnect catering_ingress platform-infra-web-1");
+    expect(privateDisconnects).toHaveLength(6);
+    expect(ingressDisconnectIndex).toBeGreaterThan(rollbackLines.lastIndexOf(privateDisconnects.at(-1)!));
+    expect(ingressDisconnectIndex).toBeGreaterThanOrEqual(0);
+    const afterCrashJournal = fieldsAt(journalPath);
+    expect(afterCrashJournal.get("membership_wal_phase")).toBe("pending");
+    expect(afterCrashJournal.get("membership_wal_network")).toBe("catering_ingress");
+    expect(afterCrashJournal.get("catering_private_members_b64")).toBe(privateSnapshot);
+    const afterCrashState = JSON.parse(textAt(statePath)) as {
+      networks: Record<string, { containers: Record<string, unknown> }>;
+    };
+    expect(afterCrashState.networks.catering_private.containers).toEqual({});
+    expect(Object.keys(afterCrashState.networks.catering_ingress.containers)).toHaveLength(1);
+
+    const resumed = runExistingResume(root, crashed.sandbox);
+    const terminal = `${resumed.result.stdout}${resumed.result.stderr}`;
+    expect(resumed.result.status).toBe(0);
+    expect(terminal).toContain("PILOT: ROLLED BACK");
+    expect(existsSync(markerPath)).toBe(false);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
+  }, 120_000);
+
+  test.each([
+    ["out-of-order subset", (state: PartialRollbackState, before: PartialRollbackState) => {
+      const current = state.networks.catering_private.containers;
+      const original = before.networks.catering_private.containers;
+      const postgresEntry = Object.entries(original).find(([, member]) => member.Name === "/platform-infra-postgres-1");
+      const intakeId = Object.keys(current).find((id) => current[id].Name === "/platform-infra-intake-1");
+      expect(postgresEntry).toBeDefined();
+      expect(intakeId).toBeDefined();
+      current[postgresEntry![0]] = postgresEntry![1];
+      delete current[intakeId!];
+    }],
+    ["foreign member", (state: PartialRollbackState, _before?: PartialRollbackState) => {
+      state.networks.catering_private.containers["foreign-container-id"] = { Name: "/foreign", Aliases: ["foreign"] };
+    }],
+    ["alias drift", (state: PartialRollbackState, _before?: PartialRollbackState) => {
+      const web = Object.values(state.networks.catering_private.containers).find((member) => member.Name === "/platform-infra-web-1");
+      expect(web).toBeDefined();
+      web!.Aliases = ["foreign"];
+    }],
+  ])("partial run-created rollback rejects %s", (_name, mutate) => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-partial-disconnect-negative-"));
+    const crashed = runHarness("crash-after-active", root);
+    expect(crashed.result.status).not.toBe(0);
+    const statePath = path.join(root, "fake-docker-state.json");
+    const beforeState = JSON.parse(textAt(statePath)) as PartialRollbackState;
+    const disconnectCrash = installCrashAfterFirstNetworkDisconnect(root);
+    const rollback = runExistingRollback(root, crashed.sandbox, disconnectCrash.shimBin);
+    expect(rollback.result.status).not.toBe(0);
+    const state = JSON.parse(textAt(statePath)) as PartialRollbackState;
+    mutate(state, beforeState);
+    writeFileSync(statePath, JSON.stringify(state));
+    const logPath = path.join(root, "fake-docker.log");
+    const beforeResumeLog = textAt(logPath);
+    const resumed = runExistingResume(root, crashed.sandbox);
+    const terminal = `${resumed.result.stdout}${resumed.result.stderr}`;
+    const resumeLog = textAt(logPath).slice(beforeResumeLog.length);
+    expect(resumed.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: NO-GO");
+    expect(terminal).not.toContain("PILOT: ROLLED BACK");
+    expect(resumeLog).not.toMatch(/network (?:disconnect|rm) catering_(?:private|ingress)/);
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("rolling_back");
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
+  }, 120_000);
+
+  test.each(["marker", "journal"])("phase3.2 initial rollback rejects an absent target claimed by the %s", (claimSource) => {
+    const root = mkdtempSync(path.join(tmpdir(), `catering-phase3-absent-target-${claimSource}-red-`));
+    const crashed = runHarness("crash-after-candidate", root, {
+      CATERING_PHASE3_FAKE_PRE_NETWORK_CRASH: "1",
+    });
+    expect(crashed.result.status).not.toBe(0);
+    const markerPath = path.join(root, "phase3.activation");
+    const journalPath = path.join(root, "phase3.network-adoption.journal");
+    const logPath = path.join(root, "fake-docker.log");
+    const claimedId = "a".repeat(64);
+    if (claimSource === "marker") {
+      rewriteFields(markerPath, { catering_private_id: claimedId, marker_sha256: "absent" });
+      rewriteFields(markerPath, { marker_sha256: canonicalSelfHash(markerPath, "marker_sha256") });
+    } else {
+      rewriteFields(journalPath, {
+        adoption_order: "catering_ingress",
+        adoption_count: "1",
+        next_network: "catering_private",
+        adoption_phase: "created",
+        catering_ingress_id: claimedId,
+        catering_ingress_members_b64: "e30=",
+        catering_ingress_aliases_b64: "e30=",
+        journal_sha256: "absent",
+      });
+      rewriteFields(journalPath, { journal_sha256: canonicalSelfHash(journalPath, "journal_sha256") });
+    }
+    const beforeRollbackLog = textAt(logPath);
+    const beforeRollbackMarker = textAt(markerPath);
+    const rolledBack = runExistingRollback(root, crashed.sandbox);
+    const terminal = `${rolledBack.result.stdout}${rolledBack.result.stderr}`;
+    const addedLog = textAt(logPath).slice(beforeRollbackLog.length);
+    expect(rolledBack.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: NO-GO");
+    expect(terminal).not.toContain("PILOT: ROLLED BACK");
+    expect(addedLog).not.toMatch(/network create catering_(?:private|ingress)/);
+    expect(addedLog).not.toMatch(/network (?:disconnect|rm) catering_(?:private|ingress)/);
+    expect(fieldsAt(markerPath).get("state")).toBe("candidate");
+    expect(textAt(markerPath)).toBe(beforeRollbackMarker);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
+  }, 120_000);
+
+  test.each(["baseline_smoke_evidence", "baseline_smoke_sha256"])("RED: new manifest missing %s fails closed", (missingField) => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-new-manifest-required-red-"));
+    const crashed = runHarness("crash-after-active", root);
+    expect(crashed.result.status).not.toBe(0);
+    rewriteFields(path.join(root, "phase3.transaction-baseline.manifest"), {}, [missingField]);
+    rebindManifestReferences(root);
+
+    const resumed = runExistingResume(root, crashed.sandbox);
+    const terminal = `${resumed.result.stdout}${resumed.result.stderr}`;
+    expect(resumed.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: NO-GO");
+    expect(terminal).not.toContain("PILOT: GO\n");
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("active");
+  }, 120_000);
+
+  test("RED: new manifest smoke evidence/hash mismatch fails closed", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-new-manifest-hash-red-"));
+    const crashed = runHarness("crash-after-active", root);
+    expect(crashed.result.status).not.toBe(0);
+    rewriteFields(path.join(root, "phase3.transaction-baseline.manifest"), {
+      baseline_smoke_sha256: "0".repeat(64),
+    });
+    rebindManifestReferences(root);
+
+    const resumed = runExistingResume(root, crashed.sandbox);
+    const terminal = `${resumed.result.stdout}${resumed.result.stderr}`;
+    expect(resumed.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: NO-GO");
+    expect(terminal).not.toContain("PILOT: GO\n");
     expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("active");
   }, 120_000);
 
@@ -783,6 +3091,57 @@ describe("latest independent Phase-3 P1 review reproducers", () => {
     expect(egressIndex).toBeGreaterThan(detachIndex);
   }, 120_000);
 
+  test.each(["semantic-smoke-fail", "semantic-smoke-incomplete"])("RED: %s baseline prevents every Phase-3 target mutation", (scenario) => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-baseline-smoke-red-"));
+    const run = runHarness(scenario, root);
+    const dockerLog = textAt(path.join(root, "fake-docker.log")).split("\n").filter(Boolean);
+    const firstSmoke = dockerLog.findIndex((line) => line.includes("exec shared-edge-edge-1 wget"));
+    const firstTargetMutation = dockerLog.findIndex((line) =>
+      line.includes("network create") || line.includes("network connect") || line.includes("network disconnect")
+    );
+    const terminal = `${run.result.stdout}${run.result.stderr}`;
+    expect(run.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: NO-GO");
+    expect(firstSmoke).toBeGreaterThanOrEqual(0);
+    expect(firstTargetMutation).toBe(-1);
+    expect(existsSync(path.join(root, "platform-compose.phase3.yml"))).toBe(false);
+    expect(existsSync(path.join(root, "edge-compose.phase3.yml"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.activation"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.network-adoption.journal"))).toBe(false);
+    expect(existsSync(path.join(root, "locks", "catering-agents-platform.deploy-lock"))).toBe(false);
+    expect(existsSync(path.join(root, "locks", "shared-edge.deploy-lock"))).toBe(false);
+  }, 120_000);
+
+  test("RED: accepting but non-responding baseline endpoint is bounded before mutation", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-baseline-timeout-red-"));
+    const startedAt = Date.now();
+    const run = runHarness("baseline-smoke-timeout", root);
+    const elapsedMs = Date.now() - startedAt;
+    const dockerLog = textAt(path.join(root, "fake-docker.log")).split("\n").filter(Boolean);
+    const firstSmoke = dockerLog.findIndex((line) => line.includes("exec shared-edge-edge-1 wget"));
+    const firstTargetMutation = dockerLog.findIndex((line) =>
+      line.includes("network create") || line.includes("network connect") || line.includes("network disconnect")
+    );
+    const terminal = `${run.result.stdout}${run.result.stderr}`;
+    expect(run.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: NO-GO");
+    expect(firstSmoke).toBeGreaterThanOrEqual(0);
+    expect(dockerLog[firstSmoke]).toContain("--timeout=2");
+    expect(elapsedMs).toBeLessThan(2_000);
+    expect(firstTargetMutation).toBe(-1);
+    expect(existsSync(path.join(root, "platform-compose.phase3.yml"))).toBe(false);
+    expect(existsSync(path.join(root, "edge-compose.phase3.yml"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.activation"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.network-adoption.journal"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.rollback-restore-proof.archive"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.rollback-completion.receipt"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.restore-evidence.record"))).toBe(false);
+    expect(existsSync(path.join(root, "locks", "catering-agents-platform.deploy-lock"))).toBe(false);
+    expect(existsSync(path.join(root, "locks", "shared-edge.deploy-lock"))).toBe(false);
+  }, 120_000);
+
   test("RED: successful lock release is edge-first and edge failure keeps platform protected", () => {
     const success = runSuccessReleaseBlock();
     expect(success.status).toBe(0);
@@ -815,10 +3174,408 @@ describe("latest independent Phase-3 P1 review reproducers", () => {
     expect(journal.get("catering_ingress_id")).toMatch(/^[0-9a-f]{64}$/);
     expect(journal.get("catering_private_id")).toBe("absent");
 
+    const beforeResumeLog = textAt(path.join(root, "fake-docker.log"));
     const resumed = runHarness("resume-after-ingress", root);
     expect(resumed.result.status).toBe(0);
     expect(`${resumed.result.stdout}${resumed.result.stderr}`).toContain("PILOT: GO");
     expect(fieldsAt(markerPath).get("state")).toBe("active");
+    const addedLog = textAt(path.join(root, "fake-docker.log")).slice(beforeResumeLog.length);
+    expect(addedLog).not.toMatch(/network create .*catering_ingress$/m);
+    expect(addedLog.match(/^docker network create .* catering_private$/gm) ?? []).toHaveLength(1);
+  }, 120_000);
+
+  test("RED: durable ingress journal before marker update strands explicit rollback", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-ingress-rollback-red-"));
+    const crashed = runHarness("crash-after-ingress", root);
+    const markerPath = path.join(root, "phase3.activation");
+    const manifestPath = path.join(root, "phase3.transaction-baseline.manifest");
+    const journalPath = path.join(root, "phase3.network-adoption.journal");
+    const statePath = path.join(root, "fake-docker-state.json");
+    const logPath = path.join(root, "fake-docker.log");
+    expect(crashed.result.status).not.toBe(0);
+
+    const marker = fieldsAt(markerPath);
+    const manifest = fieldsAt(manifestPath);
+    const journal = fieldsAt(journalPath);
+    expect(marker.get("state")).toBe("candidate");
+    expect(marker.get("stage")).toBe("S2");
+    expect(marker.get("catering_ingress_id")).toBe("absent");
+    expect(marker.get("catering_private_id")).toBe("absent");
+    expect(journal.get("owner")).toBe("catering-agents-platform");
+    expect(journal.get("transaction_id")).toBe("phase3-harness");
+    expect(journal.get("transaction_manifest_path")).toBe(manifestPath);
+    expect(journal.get("transaction_manifest_sha256")).toBe(digestFile(manifestPath));
+    expect(journal.get("adoption_order")).toBe("catering_ingress");
+    expect(journal.get("adoption_count")).toBe("1");
+    expect(journal.get("next_network")).toBe("catering_private");
+    expect(journal.get("adoption_phase")).toBe("created");
+    expect(journal.get("catering_ingress_id")).toMatch(/^[0-9a-f]{64}$/);
+    expect(journal.get("catering_private_id")).toBe("absent");
+    expect(journal.get("catering_ingress_owner")).toBe("catering-agents-platform");
+    expect(journal.get("catering_ingress_phase")).toBe("phase3.1");
+    expect(journal.get("catering_ingress_transaction")).toBe("phase3-harness");
+
+    const state = JSON.parse(textAt(statePath)) as {
+      networks: Record<string, { id: string }>;
+    };
+    expect(state.networks.catering_ingress?.id).toBe(journal.get("catering_ingress_id"));
+    expect(state.networks.catering_private).toBeUndefined();
+    const createLines = textAt(logPath).split("\n").filter((line) => line.includes("network create"));
+    expect(createLines.filter((line) => line.endsWith(" catering_ingress")).length).toBe(1);
+    expect(createLines.filter((line) => line.endsWith(" catering_private")).length).toBe(0);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
+
+    const beforeRollbackLog = textAt(logPath);
+    const rolledBack = runExistingRollback(root, crashed.sandbox);
+    const terminal = `${rolledBack.result.stdout}${rolledBack.result.stderr}`;
+    const addedLog = textAt(logPath).slice(beforeRollbackLog.length);
+    expect(rolledBack.result.status).toBe(0);
+    expect(terminal).toContain("PILOT: ROLLED BACK");
+    expect(terminal).not.toContain("PILOT: GO\n");
+    expect(addedLog).not.toMatch(/network create/);
+    expect(addedLog.match(/^docker network rm catering_ingress$/gm) ?? []).toHaveLength(1);
+    expect(addedLog).not.toMatch(/network rm catering_private/);
+    expect(fieldsAt(markerPath).get("state")).toBeUndefined();
+    expect(JSON.parse(textAt(statePath)).networks.catering_ingress).toBeUndefined();
+    expect(existsSync(path.join(root, "phase3.restore-evidence.record"))).toBe(true);
+    expect(existsSync(path.join(root, "phase3.rollback-restore-proof.archive"))).toBe(true);
+    expect(existsSync(path.join(root, "phase3.rollback-completion.receipt"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
+  }, 120_000);
+
+  test("RED: all-pre-existing S2 adoption is rejected before any durable mutation", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-all-preexisting-precondition-red-"));
+    prepareNormalAllPreExistingS2State(root);
+    const statePath = path.join(root, "fake-docker-state.json");
+    const logPath = path.join(root, "fake-docker.log");
+    const beforeState = JSON.parse(textAt(statePath));
+    const beforeLog = textAt(logPath);
+    const run = runHarness("normal", root);
+    const output = `${run.result.stdout}${run.result.stderr}`;
+    const addedLog = textAt(logPath).slice(beforeLog.length);
+    expect(run.result.status).not.toBe(0);
+    expect(output).toContain("PILOT: NO-GO");
+    const afterState = JSON.parse(textAt(statePath));
+    afterState.fault = "";
+    afterState.fault_triggered = false;
+    expect(afterState).toEqual(beforeState);
+    expect(addedLog).not.toMatch(/network (?:create|connect|disconnect|rm) catering_(?:private|ingress)/);
+    expect(existsSync(path.join(root, "phase3.activation"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.network-adoption.journal"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
+  }, 120_000);
+
+  test("RED: all-pre-existing S2 resume is rejected before IPAM inspection", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-all-preexisting-ipam-null-resume-red-"));
+    prepareNormalAllPreExistingS2NullIpamState(root);
+    const statePath = path.join(root, "fake-docker-state.json");
+    const logPath = path.join(root, "fake-docker.log");
+    const beforeState = JSON.parse(textAt(statePath));
+    const beforeLog = textAt(logPath);
+    const run = runHarness("normal", root);
+    const output = `${run.result.stdout}${run.result.stderr}`;
+    const addedLog = textAt(logPath).slice(beforeLog.length);
+    expect(run.result.status).not.toBe(0);
+    expect(output).toContain("PILOT: NO-GO");
+    expect(JSON.parse(textAt(statePath))).toEqual(beforeState);
+    expect(addedLog).not.toMatch(/network (?:create|connect|disconnect|rm) catering_(?:private|ingress)/);
+    expect(existsSync(path.join(root, "phase3.activation"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.network-adoption.journal"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
+  }, 120_000);
+
+  test("RED: all-pre-existing S2 rollback is rejected before IPAM inspection", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-all-preexisting-ipam-null-rollback-red-"));
+    prepareNormalAllPreExistingS2NullIpamState(root);
+    const statePath = path.join(root, "fake-docker-state.json");
+    const logPath = path.join(root, "fake-docker.log");
+    const beforeState = JSON.parse(textAt(statePath));
+    const beforeLog = textAt(logPath);
+    const run = runHarness("normal", root);
+    const output = `${run.result.stdout}${run.result.stderr}`;
+    const addedLog = textAt(logPath).slice(beforeLog.length);
+    expect(run.result.status).not.toBe(0);
+    expect(output).toContain("PILOT: NO-GO");
+    expect(JSON.parse(textAt(statePath))).toEqual(beforeState);
+    expect(addedLog).not.toMatch(/network (?:create|connect|disconnect|rm) catering_(?:private|ingress)/);
+    expect(existsSync(path.join(root, "phase3.activation"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.network-adoption.journal"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
+  }, 120_000);
+
+  test.each(["resume", "rollback"] as const)("RED: absent-only precondition rejects nonempty live IPAM before %s", (command) => {
+    const root = mkdtempSync(path.join(tmpdir(), `catering-phase3-ipam-nonempty-${command}-negative-`));
+    prepareNormalAllPreExistingS2NullIpamState(root);
+    setFakeNetworkIpamConfig(root, [{ Subnet: "10.0.0.0/24" }]);
+    const statePath = path.join(root, "fake-docker-state.json");
+    const logPath = path.join(root, "fake-docker.log");
+    const beforeState = JSON.parse(textAt(statePath));
+    const beforeLog = textAt(logPath);
+    const run = runHarness("normal", root);
+    const output = `${run.result.stdout}${run.result.stderr}`;
+    const addedLog = textAt(logPath).slice(beforeLog.length);
+    expect(run.result.status).not.toBe(0);
+    expect(output).toContain("PILOT: NO-GO");
+    expect(addedLog).not.toMatch(/network (?:create|connect|disconnect|rm) catering_(?:private|ingress)/);
+    expect(JSON.parse(textAt(statePath))).toEqual(beforeState);
+    expect(existsSync(path.join(root, "phase3.activation"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.network-adoption.journal"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
+  }, 120_000);
+
+  test("RED: absent-only precondition rejects an invalid live IPAM type", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-ipam-invalid-type-negative-"));
+    prepareNormalAllPreExistingS2NullIpamState(root);
+    setFakeNetworkIpamConfig(root, { Subnet: "10.0.0.0/24" });
+    const statePath = path.join(root, "fake-docker-state.json");
+    const logPath = path.join(root, "fake-docker.log");
+    const beforeState = JSON.parse(textAt(statePath));
+    const beforeLog = textAt(logPath);
+    const run = runHarness("normal", root);
+    const output = `${run.result.stdout}${run.result.stderr}`;
+    const addedLog = textAt(logPath).slice(beforeLog.length);
+    expect(run.result.status).not.toBe(0);
+    expect(output).toContain("PILOT: NO-GO");
+    expect(addedLog).not.toMatch(/network (?:create|connect|disconnect|rm) catering_(?:private|ingress)/);
+    expect(JSON.parse(textAt(statePath))).toEqual(beforeState);
+    expect(existsSync(path.join(root, "phase3.activation"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.network-adoption.journal"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
+  }, 120_000);
+
+  test("RED: run-created active resume rejects an IPAM manifest drift", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-ipam-manifest-mismatch-negative-"));
+    const crashed = runHarness("crash-after-active", root);
+    expect(crashed.result.status).not.toBe(0);
+    const statePath = path.join(root, "fake-docker-state.json");
+    const manifestPath = path.join(root, "phase3.transaction-baseline.manifest");
+    rewriteFields(manifestPath, {
+      network_ipam_config: 'catering_ingress:[{"Subnet":"10.0.0.0/24"}];catering_private:[]',
+    });
+    rebindManifestReferences(root);
+    const beforeState = JSON.parse(textAt(statePath));
+    const beforeLog = textAt(path.join(root, "fake-docker.log"));
+    const resumed = runExistingResume(root, crashed.sandbox);
+    const output = `${resumed.result.stdout}${resumed.result.stderr}`;
+    const addedLog = textAt(path.join(root, "fake-docker.log")).slice(beforeLog.length);
+    expect(resumed.result.status).not.toBe(0);
+    expect(output).toContain("PILOT: NO-GO");
+    expect(addedLog).not.toMatch(/network (?:create|connect|disconnect|rm) catering_(?:private|ingress)/);
+    expect(JSON.parse(textAt(statePath))).toEqual(beforeState);
+    expect(fieldsAt(path.join(root, "phase3.activation")).get("state")).toBe("active");
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(true);
+    expect(existsSync(path.join(root, "phase3.network-adoption.journal"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
+  }, 120_000);
+
+  test("RED: mixed pre-existing adoption is rejected before durable mutation", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-mixed-adoption-precondition-red-"));
+    prepareNormalMixedS2State(root, "catering_ingress");
+    const statePath = path.join(root, "fake-docker-state.json");
+    const logPath = path.join(root, "fake-docker.log");
+    const beforeState = JSON.parse(textAt(statePath));
+    const beforeLog = textAt(logPath);
+    const run = runHarness("normal", root);
+    const output = `${run.result.stdout}${run.result.stderr}`;
+    const addedLog = textAt(logPath).slice(beforeLog.length);
+    expect(run.result.status).not.toBe(0);
+    expect(output).toContain("PILOT: NO-GO");
+    expect(JSON.parse(textAt(statePath))).toEqual(beforeState);
+    expect(addedLog).not.toMatch(/network (?:create|connect|disconnect|rm) catering_(?:private|ingress)/);
+    expect(existsSync(path.join(root, "phase3.activation"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.network-adoption.journal"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
+  }, 120_000);
+
+  test("RED: inverse mixed adoption is rejected before durable mutation", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-inverse-mixed-adoption-precondition-red-"));
+    prepareNormalMixedS2State(root, "catering_private");
+    const statePath = path.join(root, "fake-docker-state.json");
+    const logPath = path.join(root, "fake-docker.log");
+    const beforeState = JSON.parse(textAt(statePath));
+    const beforeLog = textAt(logPath);
+    const run = runHarness("normal", root);
+    const output = `${run.result.stdout}${run.result.stderr}`;
+    const addedLog = textAt(logPath).slice(beforeLog.length);
+    expect(run.result.status).not.toBe(0);
+    expect(output).toContain("PILOT: NO-GO");
+    expect(JSON.parse(textAt(statePath))).toEqual(beforeState);
+    expect(addedLog).not.toMatch(/network (?:create|connect|disconnect|rm) catering_(?:private|ingress)/);
+    expect(existsSync(path.join(root, "phase3.activation"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(false);
+    expect(existsSync(path.join(root, "phase3.network-adoption.journal"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
+  }, 120_000);
+
+  test("RED: mixed adoption is rejected before durable mutation", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-mixed-adoption-member-drift-red-"));
+    prepareNormalMixedS2State(root, "catering_ingress");
+    const statePath = path.join(root, "fake-docker-state.json");
+    const markerPath = path.join(root, "phase3.activation");
+    const manifestPath = path.join(root, "phase3.transaction-baseline.manifest");
+    const journalPath = path.join(root, "phase3.network-adoption.journal");
+    const logPath = path.join(root, "fake-docker.log");
+    const beforeState = JSON.parse(textAt(statePath));
+    const beforeLog = textAt(logPath);
+    const run = runHarness("crash-after-ingress", root);
+    const terminal = `${run.result.stdout}${run.result.stderr}`;
+    const addedLog = textAt(logPath).slice(beforeLog.length);
+    const afterState = JSON.parse(textAt(statePath));
+    expect(run.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: NO-GO");
+    expect(afterState.networks).toEqual(beforeState.networks);
+    expect(afterState.containers).toEqual(beforeState.containers);
+    expect(addedLog).not.toMatch(/network (?:create|connect|disconnect|rm) catering_(?:private|ingress)/);
+    expect(existsSync(markerPath)).toBe(false);
+    expect(existsSync(manifestPath)).toBe(false);
+    expect(existsSync(journalPath)).toBe(false);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
+  }, 120_000);
+
+  test("phase3.2 rolling_back after ingress journal crash resumes the same rollback", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-ingress-rolling-back-red-"));
+    const crashed = runHarness("crash-after-ingress", root);
+    expect(crashed.result.status).not.toBe(0);
+    const statePath = path.join(root, "fake-docker-state.json");
+    const markerPath = path.join(root, "phase3.activation");
+    const logPath = path.join(root, "fake-docker.log");
+    const state = JSON.parse(textAt(statePath)) as { fault: string; fault_triggered: boolean };
+    state.fault = "crash-after-rollback";
+    state.fault_triggered = false;
+    writeFileSync(statePath, JSON.stringify(state));
+
+    const rollback = runExistingRollback(root, crashed.sandbox);
+    expect(rollback.result.status).not.toBe(0);
+    expect(fieldsAt(markerPath).get("state")).toBe("rolling_back");
+    expect(fieldsAt(markerPath).get("catering_ingress_id")).toMatch(/^[0-9a-f]{64}$/);
+    expect(fieldsAt(markerPath).get("catering_private_id")).toBe("absent");
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
+
+    const beforeExplicitRetryLog = textAt(logPath);
+    const explicitRetry = runExistingRollback(root, crashed.sandbox);
+    const explicitRetryTerminal = `${explicitRetry.result.stdout}${explicitRetry.result.stderr}`;
+    const explicitRetryLog = textAt(logPath).slice(beforeExplicitRetryLog.length);
+    expect(explicitRetry.result.status).not.toBe(0);
+    expect(explicitRetryTerminal).toContain("PILOT: NO-GO");
+    expect(explicitRetryLog).not.toMatch(/network (?:create|connect|disconnect|rm) catering_(?:private|ingress)/);
+    expect(fieldsAt(markerPath).get("state")).toBe("rolling_back");
+
+    const beforeResumeLog = textAt(logPath);
+    const resumed = runExistingResume(root, crashed.sandbox);
+    const terminal = `${resumed.result.stdout}${resumed.result.stderr}`;
+    const addedLog = textAt(logPath).slice(beforeResumeLog.length);
+    expect(resumed.result.status).toBe(0);
+    expect(terminal).toContain("PILOT: ROLLED BACK");
+    expect(terminal).not.toContain("PILOT: GO\n");
+    expect(addedLog).not.toMatch(/network create/);
+    expect(addedLog.match(/^docker network rm catering_ingress$/gm) ?? []).toHaveLength(1);
+    expect(addedLog).not.toMatch(/network rm catering_private/);
+    expect(existsSync(markerPath)).toBe(false);
+    expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(false);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
+  }, 120_000);
+
+  test.each([
+    ["foreign owner", (root: string) => {
+      const journalPath = path.join(root, "phase3.network-adoption.journal");
+      rewriteFields(journalPath, { owner: "foreign-owner", journal_sha256: "absent" });
+      rewriteFields(journalPath, { journal_sha256: canonicalSelfHash(journalPath, "journal_sha256") });
+    }],
+    ["foreign run", (root: string) => {
+      const journalPath = path.join(root, "phase3.network-adoption.journal");
+      rewriteFields(journalPath, { transaction_id: "phase3-foreign-run", journal_sha256: "absent" });
+      rewriteFields(journalPath, { journal_sha256: canonicalSelfHash(journalPath, "journal_sha256") });
+    }],
+    ["manifest hash drift", (root: string) => {
+      const journalPath = path.join(root, "phase3.network-adoption.journal");
+      rewriteFields(journalPath, { transaction_manifest_sha256: "0".repeat(64), journal_sha256: "absent" });
+      rewriteFields(journalPath, { journal_sha256: canonicalSelfHash(journalPath, "journal_sha256") });
+    }],
+    ["network ID drift", (root: string) => {
+      const journalPath = path.join(root, "phase3.network-adoption.journal");
+      rewriteFields(journalPath, { catering_ingress_id: "b".repeat(64), journal_sha256: "absent" });
+      rewriteFields(journalPath, { journal_sha256: canonicalSelfHash(journalPath, "journal_sha256") });
+    }],
+    ["marker ID contradiction", (root: string) => {
+      const markerPath = path.join(root, "phase3.activation");
+      rewriteFields(markerPath, { catering_ingress_id: "a".repeat(64), marker_sha256: "absent" });
+      rewriteFields(markerPath, { marker_sha256: canonicalSelfHash(markerPath, "marker_sha256") });
+    }],
+    ["out-of-order journal", (root: string) => {
+      const journalPath = path.join(root, "phase3.network-adoption.journal");
+      rewriteFields(journalPath, {
+        adoption_order: "catering_private",
+        next_network: "complete",
+        journal_sha256: "absent",
+      });
+      rewriteFields(journalPath, { journal_sha256: canonicalSelfHash(journalPath, "journal_sha256") });
+    }],
+    ["membership provenance drift", (root: string) => {
+      const journalPath = path.join(root, "phase3.network-adoption.journal");
+      rewriteFields(journalPath, {
+        catering_ingress_members_b64: "eyJmb3JlaWduIjp7Ik5hbWUiOiIvZm9yZWlnbiIsIkFsaWFzZXMiOlsiZm9yZWlnbiJdfX0=",
+        journal_sha256: "absent",
+      });
+      rewriteFields(journalPath, { journal_sha256: canonicalSelfHash(journalPath, "journal_sha256") });
+    }],
+    ["same-name replacement", (root: string) => {
+      const statePath = path.join(root, "fake-docker-state.json");
+      const state = JSON.parse(textAt(statePath)) as {
+        networks: Record<string, { id: string; labels: Record<string, string> }>;
+      };
+      state.networks.catering_ingress.id = "f".repeat(64);
+      state.networks.catering_ingress.labels = {
+        "com.catering.owner": "foreign-owner",
+        "com.catering.phase": "phase3.1",
+        "com.catering.kind": "ingress",
+        "com.catering.transaction": "foreign-run",
+      };
+      writeFileSync(statePath, JSON.stringify(state));
+    }],
+    ["renamed network", (root: string) => {
+      const statePath = path.join(root, "fake-docker-state.json");
+      const state = JSON.parse(textAt(statePath)) as { networks: Record<string, unknown> };
+      state.networks["renamed-ingress"] = state.networks.catering_ingress;
+      delete state.networks.catering_ingress;
+      writeFileSync(statePath, JSON.stringify(state));
+    }],
+  ])("phase3.2 explicit rollback rejects %s ingress-prefix evidence", (_name, mutate) => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-ingress-rollback-negative-red-"));
+    const crashed = runHarness("crash-after-ingress", root);
+    expect(crashed.result.status).not.toBe(0);
+    mutate(root);
+    const markerPath = path.join(root, "phase3.activation");
+    const logPath = path.join(root, "fake-docker.log");
+    const beforeRollbackLog = textAt(logPath);
+    const rolledBack = runExistingRollback(root, crashed.sandbox);
+    const terminal = `${rolledBack.result.stdout}${rolledBack.result.stderr}`;
+    const addedLog = textAt(logPath).slice(beforeRollbackLog.length);
+    expect(rolledBack.result.status).not.toBe(0);
+    expect(terminal).toContain("PILOT: NO-GO");
+    expect(terminal).not.toContain("PILOT: ROLLED BACK");
+    expect(addedLog).not.toMatch(/network (?:create|connect|disconnect|rm) catering_(?:private|ingress)/);
+    expect(fieldsAt(markerPath).get("state")).toMatch(/^(candidate|rolling_back)$/);
+    expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(true);
+    expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(true);
   }, 120_000);
 
   test("RED: crash after private create durably records both networks exactly once and remains idempotent", () => {
