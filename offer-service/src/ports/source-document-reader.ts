@@ -1,4 +1,9 @@
-import type { BusinessContext, ByoLlmDataClass, EventRequest } from "@catering/shared-core";
+import type {
+  AcceptedEventSpec,
+  BusinessContext,
+  ByoLlmDataClass,
+  EventRequest
+} from "@catering/shared-core";
 
 /** Server-authored metadata for an already registered source document. */
 export interface StoredSourceDocument {
@@ -23,4 +28,10 @@ export interface SourceDocumentMetadataReader {
     context: BusinessContext,
     requestId: string
   ): Promise<EventRequest | undefined>;
+
+  /** Reads the server-owned AcceptedEventSpec that carries production decisions. */
+  getSpec?(
+    context: BusinessContext,
+    specId: string
+  ): Promise<AcceptedEventSpec | undefined>;
 }

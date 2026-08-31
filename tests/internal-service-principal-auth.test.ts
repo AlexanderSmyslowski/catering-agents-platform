@@ -36,6 +36,7 @@ interface InternalTriple {
 const triples: readonly InternalTriple[] = [
   { target: "intake", service: "Offer-Service", method: "GET", path: "/v1/intake/internal/requests/missing-request" },
   { target: "intake", service: "Offer-Service", method: "GET", path: "/v1/intake/internal/source-documents/missing-document" },
+  { target: "intake", service: "Offer-Service", method: "GET", path: "/v1/intake/internal/specs/missing-spec" },
   { target: "intake", service: "Production-Service", method: "GET", path: "/v1/intake/internal/requests/missing-request" },
   { target: "intake", service: "Production-Service", method: "GET", path: "/v1/intake/internal/specs/missing-spec" },
   { target: "intake", service: "Production-Service", method: "GET", path: "/v1/intake/internal/source-documents/missing-document" },
@@ -67,7 +68,7 @@ function neighboringMethod(method: InternalTriple["method"]): Method {
 }
 
 describe("narrow internal service principals", () => {
-  it("accepts exactly the nine approved method/path/service triples", async () => {
+  it("accepts exactly the ten approved method/path/service triples", async () => {
     const rootDir = dataRoot();
     const intake = buildIntakeApp({ rootDir, env });
     const offer = buildOfferApp({ rootDir, env });

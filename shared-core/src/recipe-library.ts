@@ -3,8 +3,10 @@ import path from "node:path";
 import {
   createBusinessScopedPersistentCollection,
   type BusinessScopedPersistentCollection,
-  type CollectionStorageOptions
+  type CollectionStorageOptions,
+  type Queryable
 } from "./persistence.js";
+import { withBusinessTargetCriticalSection } from "./target-critical-section.js";
 import type { BusinessContext } from "./business-context.js";
 import { isTrustedProductionRecipe } from "./recipe-research-calculation-boundary.js";
 import { ingredientGroupHints, unitNormalization } from "./taxonomies/defaults.js";
@@ -678,8 +680,10 @@ export function isRecipeEligibleForOperationalPlanning(recipe: Recipe): boolean 
 
 export class RecipeLibrary {
   private readonly recipes: BusinessScopedPersistentCollection<Recipe>;
+  private readonly storageOptions: CollectionStorageOptions;
 
   constructor(options?: CollectionStorageOptions) {
+    this.storageOptions = options ?? {};
     this.recipes = createBusinessScopedPersistentCollection<Recipe>({
       collectionName: "production/recipes",
       getId: (recipe) => recipe.recipeId,
@@ -688,6 +692,65 @@ export class RecipeLibrary {
       databaseUrl: options?.databaseUrl,
       pgPool: options?.pgPool
     });
+  }
+
+  private async withRecipeMutationCriticalSection<T>(
+    context: BusinessContext,
+    recipeId: string,
+    operation: (recipes: BusinessScopedPersistentCollection<Recipe>) => Promise<T>
+  ): Promise<T> {
+    return withBusinessTargetCriticalSection({
+      storage: this.storageOptions,
+      context,
+      target: { kind: "production_recipe", artifactId: recipeId, revision: 0 },
+      collectionNamespace: "production/case-events",
+      queueFullMessage: "Die Rezept-Warteschlange benötigt eine betriebliche Bereinigung.",
+      queueExhaustedMessage: "Die Rezept-Warteschlange ist ausgeschöpft.",
+      timeoutMessage: "Das Rezept konnte nicht rechtzeitig gesperrt werden.",
+      legacyTimeoutMessage: "Das alte Rezept konnte nicht rechtzeitig gesperrt werden.",
+      postgresPoolMessage: "PostgreSQL-Rezepte benötigen einen Pool mit exklusivem Client-Checkout.",
+      operation: async (transactionalQueryable?: Queryable) => {
+        const recipes = transactionalQueryable
+          ? createBusinessScopedPersistentCollection<Recipe>({
+            collectionName: "production/recipes",
+            getId: (item) => item.recipeId,
+            validate: validateRecipe,
+            rootDir: this.storageOptions.rootDir,
+            pgPool: transactionalQueryable
+          })
+          : this.recipes;
+        return operation(recipes);
+      }
+    });
+  }
+
+  /**
+   * Build the collection view for a caller that already owns the canonical
+   * recipe target lock (Apply). No lock is acquired here; PostgreSQL callers
+   * receive the surrounding transaction's queryable collection.
+   */
+  createLockedMutationScope(transactionalQueryable?: Queryable): {
+    get: (context: BusinessContext, recipeId: string) => Promise<Recipe | undefined>;
+    set: (context: BusinessContext, recipe: Recipe) => Promise<void>;
+    insert: (context: BusinessContext, recipe: Recipe) => Promise<"created" | "exists">;
+    deleteIfExact: (context: BusinessContext, recipe: Recipe) => Promise<"deleted" | "conflict" | "missing">;
+  } {
+    const recipes = transactionalQueryable
+      ? createBusinessScopedPersistentCollection<Recipe>({
+        collectionName: "production/recipes",
+        getId: (item) => item.recipeId,
+        validate: validateRecipe,
+        rootDir: this.storageOptions.rootDir,
+        databaseUrl: this.storageOptions.databaseUrl,
+        pgPool: transactionalQueryable
+      })
+      : this.recipes;
+    return {
+      get: (context, recipeId) => recipes.get(context, recipeId),
+      set: (context, recipe) => recipes.set(context, recipe),
+      insert: (context, recipe) => recipes.insert(context, recipe),
+      deleteIfExact: (context, recipe) => recipes.deleteIfExact(context, recipe.recipeId, recipe)
+    };
   }
 
   async findCandidates(
@@ -792,10 +855,28 @@ export class RecipeLibrary {
 
   async save(context: BusinessContext, recipe: Recipe): Promise<void> {
     assertRecipeBusinessContext(context);
-    await this.recipes.set(context, recipe);
+    await this.withRecipeMutationCriticalSection(context, recipe.recipeId, (recipes) =>
+      recipes.set(context, recipe)
+    );
   }
 
   async insert(context: BusinessContext, recipe: Recipe): Promise<"created" | "exists"> {
+    assertRecipeBusinessContext(context);
+    return this.withRecipeMutationCriticalSection(context, recipe.recipeId, (recipes) =>
+      recipes.insert(context, recipe)
+    );
+  }
+
+  /**
+   * Apply already owns the canonical recipe target lock. These methods deliberately
+   * bypass re-locking while retaining the same collection validation/transaction.
+   */
+  async saveWhileLocked(context: BusinessContext, recipe: Recipe): Promise<void> {
+    assertRecipeBusinessContext(context);
+    await this.recipes.set(context, recipe);
+  }
+
+  async insertWhileLocked(context: BusinessContext, recipe: Recipe): Promise<"created" | "exists"> {
     assertRecipeBusinessContext(context);
     return this.recipes.insert(context, recipe);
   }
@@ -803,6 +884,24 @@ export class RecipeLibrary {
   async get(context: BusinessContext, recipeId: string): Promise<Recipe | undefined> {
     assertRecipeBusinessContext(context);
     return this.recipes.get(context, recipeId);
+  }
+
+  async deleteIfExact(
+    context: BusinessContext,
+    recipe: Recipe
+  ): Promise<"deleted" | "conflict" | "missing"> {
+    assertRecipeBusinessContext(context);
+    return this.withRecipeMutationCriticalSection(context, recipe.recipeId, (recipes) =>
+      recipes.deleteIfExact(context, recipe.recipeId, recipe)
+    );
+  }
+
+  async deleteIfExactWhileLocked(
+    context: BusinessContext,
+    recipe: Recipe
+  ): Promise<"deleted" | "conflict" | "missing"> {
+    assertRecipeBusinessContext(context);
+    return this.recipes.deleteIfExact(context, recipe.recipeId, recipe);
   }
 
   async reviewRecipe(
@@ -814,44 +913,46 @@ export class RecipeLibrary {
     }
   ): Promise<Recipe> {
     assertRecipeBusinessContext(context);
-    const recipe = await this.get(context, recipeId);
-    if (!recipe) {
-      throw new Error(`Rezept ${recipeId} wurde nicht gefunden.`);
-    }
+    return this.withRecipeMutationCriticalSection(context, recipeId, async (recipes) => {
+      const recipe = await recipes.get(context, recipeId);
+      if (!recipe) {
+        throw new Error(`Rezept ${recipeId} wurde nicht gefunden.`);
+      }
 
-    const source = { ...recipe.source };
-    if (input.decision === "approve") {
-      source.approvalState = "approved_internal";
-      source.tier =
-        source.tier === "internal_verified" ? "internal_verified" : "internal_approved";
-      source.qualityScore = Math.max(source.qualityScore, 0.85);
-      source.fitScore = Math.max(source.fitScore, 0.85);
-      source.extractionCompleteness = Math.max(source.extractionCompleteness, 0.9);
-    } else if (input.decision === "verify") {
-      source.approvalState = "approved_internal";
-      source.tier = "internal_verified";
-      source.qualityScore = Math.max(source.qualityScore, 0.95);
-      source.fitScore = Math.max(source.fitScore, 0.9);
-      source.extractionCompleteness = Math.max(source.extractionCompleteness, 0.95);
-    } else {
-      source.approvalState = "rejected";
-    }
+      const source = { ...recipe.source };
+      if (input.decision === "approve") {
+        source.approvalState = "approved_internal";
+        source.tier =
+          source.tier === "internal_verified" ? "internal_verified" : "internal_approved";
+        source.qualityScore = Math.max(source.qualityScore, 0.85);
+        source.fitScore = Math.max(source.fitScore, 0.85);
+        source.extractionCompleteness = Math.max(source.extractionCompleteness, 0.9);
+      } else if (input.decision === "verify") {
+        source.approvalState = "approved_internal";
+        source.tier = "internal_verified";
+        source.qualityScore = Math.max(source.qualityScore, 0.95);
+        source.fitScore = Math.max(source.fitScore, 0.9);
+        source.extractionCompleteness = Math.max(source.extractionCompleteness, 0.95);
+      } else {
+        source.approvalState = "rejected";
+      }
 
-    source.licenseNote = [
-      recipe.source.licenseNote,
-      `Review-Entscheidung: ${input.decision}.`,
-      input.note?.trim()
-    ]
-      .filter(Boolean)
-      .join(" ");
+      source.licenseNote = [
+        recipe.source.licenseNote,
+        `Review-Entscheidung: ${input.decision}.`,
+        input.note?.trim()
+      ]
+        .filter(Boolean)
+        .join(" ");
 
-    const reviewed = validateRecipe({
-      ...recipe,
-      source
+      const reviewed = validateRecipe({
+        ...recipe,
+        source
+      });
+
+      await recipes.set(context, reviewed);
+      return reviewed;
     });
-
-    await this.save(context, reviewed);
-    return reviewed;
   }
 
   async list(context: BusinessContext): Promise<Recipe[]> {
@@ -862,7 +963,9 @@ export class RecipeLibrary {
   async seed(context: BusinessContext, recipes: readonly Recipe[]): Promise<void> {
     assertRecipeBusinessContext(context);
     for (const recipe of recipes) {
-      await this.recipes.insert(context, recipe);
+      await this.withRecipeMutationCriticalSection(context, recipe.recipeId, (lockedRecipes) =>
+        lockedRecipes.insert(context, recipe)
+      );
     }
   }
 }

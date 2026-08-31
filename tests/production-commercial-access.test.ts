@@ -1,10 +1,13 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync } from "node:fs";
+import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { buildIntakeApp } from "../intake-service/src/app.js";
+import { IntakeStore } from "../intake-service/src/store.js";
 import { buildOfferApp } from "../offer-service/src/app.js";
 import { OfferStore } from "../offer-service/src/store.js";
+import { HttpSourceDocumentMetadataReader } from "../offer-service/src/gateways/http-source-document-metadata-reader.js";
 import { buildProductionApp } from "../production-service/src/app.js";
 import { InMemoryRecipeRepository } from "../production-service/src/repositories/in-memory-recipe-repository.js";
 import { ProductionStore } from "../production-service/src/repositories/production-store.js";
@@ -14,9 +17,11 @@ import { internalRecipes } from "../shared-core/src/fixtures/sample-data.js";
 import { trustedActorFromHeaders, type TrustedActor } from "../shared-core/src/access-control.js";
 import type { BusinessContext } from "../shared-core/src/business-context.js";
 import type { CaseSourceRef } from "../shared-core/src/case-contracts.js";
-import type { OfferDraft, PricingSummary, ProductionDraft } from "../shared-core/src/types.js";
+import type { AcceptedEventSpec, OfferDraft, PricingSummary, ProductionDraft } from "../shared-core/src/types.js";
 import { InMemoryIntakeRecordsPort } from "./support/in-memory-intake-records-port.js";
 import { AuditLogStore } from "../shared-core/src/audit-log.js";
+import { llmReadinessContractVersion } from "../shared-core/src/llm-readiness.js";
+import type { LlmReadinessProviderAdapter } from "../shared-core/src/llm-readiness-provider-adapter.js";
 
 const TRUSTED_SECRET = "gate-b-production-commercial-secret";
 
@@ -30,6 +35,19 @@ const offerHeaders = headersFor("Angebots-Mitarbeiter");
 const productionHeaders = headersFor("Produktions-Mitarbeiter");
 const adminHeaders = headersFor("Administrator");
 const serviceHeaders = headersFor("Production-Service");
+const intakeHeaders = headersFor("Intake-Mitarbeiter");
+const revisionProviderDescriptor = {
+  providerKind: "custom_byo_provider" as const,
+  dataLeavesInstallation: true,
+  providerModel: "production-revision-projection-test",
+  capability: "structured_output" as const,
+  actualRegion: "local",
+  maximumEstimatedCostEur: 0,
+  retentionPolicy: "none",
+  trainingUse: "contractually_excluded" as const,
+  endpoint: "https://provider.example.test/revision",
+  metadataVerified: true
+};
 
 type InjectableApp = {
   inject: (request: {
@@ -100,6 +118,30 @@ function createDataRoot(): string {
   return mkdtempSync(path.join(tmpdir(), "catering-gate-b-production-commercial-"));
 }
 
+function writeRevisionProcessingApproval(dataRoot: string): string {
+  const approvalPath = path.join(dataRoot, "revision-processing-approval.json");
+  writeFileSync(approvalPath, JSON.stringify({
+    approvalId: "approval-production-revision-projection-test",
+    businessId: "local",
+    providerKind: revisionProviderDescriptor.providerKind,
+    allowedDataClasses: ["synthetic_demo", "anonymized", "pseudonymized", "private_business", "personal_confidential"],
+    allowedPurposes: ["production_draft_revision"],
+    allowedModels: [revisionProviderDescriptor.providerModel],
+    allowedCapabilities: [revisionProviderDescriptor.capability],
+    allowedRegions: [revisionProviderDescriptor.actualRegion],
+    allowedEndpoints: [revisionProviderDescriptor.endpoint],
+    maxCostEurPerCall: revisionProviderDescriptor.maximumEstimatedCostEur,
+    retentionPolicy: revisionProviderDescriptor.retentionPolicy,
+    trainingUse: revisionProviderDescriptor.trainingUse,
+    legalBasisReference: "test-production-revision-projection",
+    approvedBy: "test-operator",
+    approvedAt: "2026-01-01T00:00:00.000Z",
+    expiresAt: "2027-01-01T00:00:00.000Z"
+  }), { mode: 0o600 });
+  chmodSync(approvalPath, 0o600);
+  return approvalPath;
+}
+
 function expectStatus(response: { statusCode: number; body: string }, expected: number): void {
   expect(response.statusCode, response.body).toBe(expected);
 }
@@ -156,15 +198,65 @@ function expectProductionCommercialsAbsent(value: unknown): void {
   expect(JSON.stringify(value)).not.toContain("COMMERCIAL_SENTINEL");
 }
 
-async function createCanonicalProduction() {
+async function createCanonicalProduction(options: {
+  skipPrepare?: boolean;
+  llmAdapter?: LlmReadinessProviderAdapter;
+} = {}) {
   const rootDir = createDataRoot();
+  const intakeStore = new IntakeStore({ rootDir });
+  const intakeApp = buildIntakeApp({
+    rootDir,
+    store: intakeStore,
+    trustedActorSecret: TRUSTED_SECRET,
+    env: { CATERING_DEV_AUTH: "1" }
+  });
   const offerStore = new CommercialSentinelOfferStore({ rootDir });
   const offerApp = buildOfferApp({
     rootDir,
     store: offerStore,
+    sourceDocumentReader: new HttpSourceDocumentMetadataReader({
+      intakeServiceUrl: "http://intake-service.test",
+      trustedServiceSecret: TRUSTED_SECRET,
+      fetch: offerServiceFetch(intakeApp)
+    }),
     trustedActorSecret: TRUSTED_SECRET,
     env: { CATERING_DEV_AUTH: "1" }
   });
+  const intakeResponse = await intakeApp.inject({
+    method: "POST",
+    url: "/v1/intake/specs/manual",
+    headers: intakeHeaders,
+    payload: {
+      customerName: "Pseudonymisierte Organisation",
+      eventType: "Business Lunch",
+      eventDate: "2026-09-18",
+      attendeeCount: 35,
+      serviceForm: "Buffet",
+      menuItems: ["Caesar Salad Buffet"],
+      notes: "Kanonische Commercial-Fixture.",
+      requestId: "production-commercial-canonical-request"
+    }
+  });
+  expectStatus(intakeResponse, 201);
+  const intakePayload = intakeResponse.json<{
+    eventRequest: Record<string, unknown>;
+    acceptedEventSpec: { specId: string; menuPlan: Array<{ componentId: string }> };
+  }>();
+  const updatedIntake = await intakeApp.inject({
+    method: "PATCH",
+    url: `/v1/intake/specs/${intakePayload.acceptedEventSpec.specId}`,
+    headers: intakeHeaders,
+    payload: {
+      componentUpdates: intakePayload.acceptedEventSpec.menuPlan.map((component) => ({
+        componentId: component.componentId,
+        menuCategory: "classic",
+        productionMode: "scratch",
+        recipeOverrideId: "recipe-caesar-salad",
+        notes: "Explizite kanonische Rezeptentscheidung der Fixture."
+      }))
+    }
+  });
+  expectStatus(updatedIntake, 200);
   const createdCase = await offerApp.inject({
     method: "POST",
     url: "/v1/offers/cases",
@@ -181,11 +273,12 @@ async function createCanonicalProduction() {
 
   const createdDraft = await offerApp.inject({
     method: "POST",
-    url: "/v1/offers/from-text",
+    url: "/v1/offers/drafts",
     headers: offerHeaders,
     payload: {
       caseId: offerCaseId,
-      text: "Business Lunch am 2026-09-18 fuer 35 Personen mit Caesar Salad Buffet."
+      ...intakePayload.eventRequest,
+      acceptedEventSpecId: intakePayload.acceptedEventSpec.specId
     }
   });
   expectStatus(createdDraft, 201);
@@ -226,19 +319,31 @@ async function createCanonicalProduction() {
 
   const repository = new InMemoryRecipeRepository({ rootDir });
   await repository.seed({ businessId: "local" }, internalRecipes);
+  const intakeRecords = new InMemoryIntakeRecordsPort();
+  await intakeRecords.insertSpec({ businessId: "local" }, handoff!.eventSpecSnapshot);
   const store = new ProductionStore({ rootDir });
+  const revisionApprovalPath = options.llmAdapter
+    ? writeRevisionProcessingApproval(rootDir)
+    : undefined;
   const productionApp = buildProductionApp({
     dataRoot: rootDir,
     repository,
     store,
-    intakeRecords: new InMemoryIntakeRecordsPort(),
+    llmAdapter: options.llmAdapter,
+    ...(options.llmAdapter ? { llmProviderDescriptor: revisionProviderDescriptor } : {}),
+    intakeRecords,
     handoffReader: new HttpProductionHandoffReader({
       offerServiceUrl: "http://offer-service.test",
       trustedServiceSecret: TRUSTED_SECRET,
       fetch: offerServiceFetch(offerApp)
     }),
     trustedActorSecret: TRUSTED_SECRET,
-    env: { CATERING_ENABLE_WEB_RECIPE_SEARCH: "0", CATERING_DEV_AUTH: "1" }
+    env: {
+      CATERING_ENABLE_WEB_RECIPE_SEARCH: "0",
+      CATERING_DEV_AUTH: "1",
+      ...(options.llmAdapter ? { CATERING_SYNTHETIC_LLM_SLICE: "1" } : {}),
+      ...(revisionApprovalPath ? { CATERING_LLM_PROCESSING_APPROVAL_FILE: revisionApprovalPath } : {})
+    }
   });
 
   const productionCase = await productionApp.inject({
@@ -258,24 +363,74 @@ async function createCanonicalProduction() {
   });
   expectStatus(productionDraft, 201);
   expectProductionCommercialsAbsent(productionDraft.json());
-  const sourceDraft = productionDraft.json<{ draft: { draftId: string } }>().draft;
-
-  const prepared = await productionApp.inject({
+  const sourceDraft = productionDraft.json<{ draft: ProductionDraft }>().draft;
+  const eventSpec = sourceDraft.draftArtifacts.eventSpec;
+  const component = eventSpec?.menuPlan[0];
+  expect(eventSpec?.specId).toBeTruthy();
+  expect(component?.componentId).toBeTruthy();
+  const evidence = await productionApp.inject({
     method: "POST",
-    url: `/v1/production/drafts/${sourceDraft.draftId}/prepare`,
+    url: `/v1/production/cases/${caseId}/planning-evidence`,
     headers: productionHeaders,
-    payload: {}
+    payload: {
+      draftId: sourceDraft.draftId,
+      draftRevision: sourceDraft.revision,
+      componentId: component!.componentId,
+      recipeId: "recipe-caesar-salad",
+      quantityDecision: {
+        decisionId: "production-commercial-canonical-quantity",
+        eventSpecId: eventSpec!.specId,
+        componentId: component!.componentId,
+        guestCount: eventSpec!.attendees.expected,
+        serviceFormat: eventSpec!.servicePlan.serviceForm,
+        dishRole: "other",
+        basis: "servings_per_person",
+        perUnitAmount: 1,
+        perUnitUnit: "servings",
+        targetAmount: eventSpec!.attendees.expected,
+        targetUnit: "servings",
+        rationale: "Explizite kanonische Mengenentscheidung der Fixture.",
+        evidence: { kind: "operator_instruction", reference: "production-commercial-canonical" },
+        reviewStatus: "approved"
+      },
+      recipeEventUseReview: {
+        eventSpecId: eventSpec!.specId,
+        recipeId: "recipe-caesar-salad",
+        reviewedBy: "Produktions-Mitarbeiter",
+        reviewedAt: "2026-08-30T12:00:00.000Z",
+        decision: "accepted_for_event",
+        confirmations: {
+          quantitiesAndYield: true,
+          methodAndEquipment: true,
+          allergensAndDiet: true,
+          holdingAndRegeneration: true
+        }
+      }
+    }
   });
-  expectStatus(prepared, 201);
-  const preparedDraft = prepared.json<{
-    draft: {
-      draftId: string;
-      reviewCards: Array<{ cardId: string; kind: ProductionDraft["reviewCards"][number]["kind"] }>;
-    };
-  }>().draft;
+  expectStatus(evidence, 201);
+
+  const preparedDraft = options.skipPrepare
+    ? sourceDraft
+    : await (async () => {
+      const prepared = await productionApp.inject({
+        method: "POST",
+        url: `/v1/production/drafts/${sourceDraft.draftId}/prepare`,
+        headers: productionHeaders,
+        payload: {}
+      });
+      expectStatus(prepared, 201);
+      return prepared.json<{
+        draft: {
+          draftId: string;
+          reviewCards: Array<{ cardId: string; kind: ProductionDraft["reviewCards"][number]["kind"] }>;
+        };
+      }>().draft;
+    })();
 
   return {
     rootDir,
+    intakeApp,
     offerApp,
     productionApp,
     store,
@@ -331,7 +486,7 @@ describe("Gate B Slice 2 production commercial confidentiality", () => {
         expect(authorizedHandoff.pricingSnapshot.notes).toContain("COMMERCIAL_SENTINEL");
       }
     } finally {
-      await Promise.all([fixture.offerApp.close(), fixture.productionApp.close()]);
+      await Promise.all([fixture.intakeApp.close(), fixture.offerApp.close(), fixture.productionApp.close()]);
     }
   });
 
@@ -413,7 +568,229 @@ describe("Gate B Slice 2 production commercial confidentiality", () => {
         }
       });
     } finally {
-      await Promise.all([fixture.offerApp.close(), fixture.productionApp.close()]);
+      await Promise.all([fixture.intakeApp.close(), fixture.offerApp.close(), fixture.productionApp.close()]);
+    }
+  });
+
+  it("redacts a raced prepared-draft recovery response without changing persisted commercial data", async () => {
+    const fixture = await createCanonicalProduction({ skipPrepare: true });
+    roots.push(fixture.rootDir);
+    const originalPlanningScope = fixture.store.withPlanningEvidenceCriticalSection.bind(fixture.store);
+    let forcePrepareRace = true;
+    let raceHookCalls = 0;
+    const commercialReviewSentinel = "RACED_COMMERCIAL_REVIEW_SENTINEL Verkaufspreis 9.876,54 EUR.";
+    vi.spyOn(fixture.store, "withPlanningEvidenceCriticalSection").mockImplementation(
+      async (context, scopedCaseId, scopedDraftId, scopedRevision, operation) => originalPlanningScope(
+        context,
+        scopedCaseId,
+        scopedDraftId,
+        scopedRevision,
+        async (scope) => {
+          if (!forcePrepareRace || scopedDraftId !== fixture.sourceDraft.draftId) {
+            return operation(scope);
+          }
+          const originalCommit = scope.commitPreparedDraft;
+          const wrappedScope = {
+            ...scope,
+            commitPreparedDraft: async (...args: Parameters<typeof originalCommit>) => {
+              const committed = await originalCommit(...args);
+              if (committed) {
+                raceHookCalls += 1;
+                const prepared = args[1];
+                const persisted = await fixture.store.getProductionDraft(fixture.adminActor, prepared.draftId);
+                if (!persisted) throw new Error("Race-Fixture konnte den vorbereiteten Entwurf nicht lesen.");
+                await fixture.store.saveProductionDraft(fixture.adminActor, {
+                  ...persisted,
+                  reviewCards: persisted.reviewCards.map((card, index) => index === 0
+                    ? {
+                        ...card,
+                        decision: "change_requested" as const,
+                        operatorComment: commercialReviewSentinel,
+                        operatorCommentVisibility: "commercial" as const,
+                        decidedBy: "Administrator",
+                        decidedAt: "2026-08-30T12:00:00.000Z"
+                      }
+                    : card)
+                });
+              }
+              forcePrepareRace = false;
+              return committed ? false : committed;
+            }
+          };
+          return operation(wrappedScope);
+        }
+      ) as any
+    );
+
+    try {
+      const raced = await fixture.productionApp.inject({
+        method: "POST",
+        url: `/v1/production/drafts/${fixture.sourceDraft.draftId}/prepare`,
+        headers: productionHeaders,
+        payload: {}
+      });
+      expectStatus(raced, 201);
+      const racedDraft = raced.json<{ draft: ProductionDraft }>().draft;
+      // The recovery branch must use the same actor projection as every other
+      // prepare response; returning the persisted draft would leak pricing.
+      expectProductionCommercialsAbsent(raced.json());
+      expect(raceHookCalls).toBe(1);
+
+      const persisted = await fixture.store.getProductionDraft(fixture.adminActor, racedDraft.draftId);
+      expect(persisted).toBeDefined();
+      expect(persisted?.draftArtifacts.eventSpec?.budgetContext?.pricingSummary).toMatchObject({
+        subtotal: { amount: 9876.54 },
+        notes: expect.arrayContaining(["COMMERCIAL_SENTINEL"])
+      });
+      expect(persisted?.reviewCards[0]).toMatchObject({
+        operatorComment: commercialReviewSentinel,
+        operatorCommentVisibility: "commercial"
+      });
+      const retry = await fixture.productionApp.inject({
+        method: "POST",
+        url: `/v1/production/drafts/${fixture.sourceDraft.draftId}/prepare`,
+        headers: productionHeaders,
+        payload: {}
+      });
+      expectStatus(retry, 201);
+      expectProductionCommercialsAbsent(retry.json());
+      expect(retry.body).not.toContain(commercialReviewSentinel);
+      expect((await fixture.store.listProductionDrafts(fixture.adminActor, fixture.caseId))).toHaveLength(2);
+      expect((await fixture.store.listEvents(fixture.adminActor, fixture.caseId))
+        .filter((event) => event.kind === "revision_created")).toHaveLength(1);
+      const adminRead = await fixture.productionApp.inject({
+        method: "GET",
+        url: `/v1/production/drafts?caseId=${fixture.caseId}`,
+        headers: adminHeaders
+      });
+      expectStatus(adminRead, 200);
+      expect(adminRead.body).toContain(commercialReviewSentinel);
+    } finally {
+      vi.restoreAllMocks();
+      await Promise.all([fixture.intakeApp.close(), fixture.offerApp.close(), fixture.productionApp.close()]);
+    }
+  });
+
+  it("builds a non-commercial revision prompt from the projected draft", async () => {
+    const requests: string[] = [];
+    const adapter: LlmReadinessProviderAdapter = {
+      adapterId: "production-revision-projection-test-adapter",
+      adapterMode: "synthetic_live",
+      run: async (request) => {
+        requests.push(request.promptContext ?? "");
+        return {
+          ok: true,
+          errors: [],
+          adapterId: "production-revision-projection-test-adapter",
+          adapterMode: "synthetic_live",
+          providerId: "fixture",
+          providerRequestId: "production-revision-projection-test-request",
+          promptSchemaId: request.promptSchemaId,
+          outputCandidate: {
+            contractVersion: llmReadinessContractVersion,
+            outputId: "production-revision-projection-test-output",
+            kind: "production_draft_extraction" as const,
+            sourceRefs: request.input.sourceRefs,
+            humanApprovalRequired: true as const,
+            writesProductObject: false as const,
+            text: JSON.stringify({
+              eventType: "Business Lunch",
+              serviceForm: "Buffet",
+              eventDate: "2026-09-18",
+              attendeeCount: 35,
+              components: [{
+                label: "Caesar Salad Buffet kompakt",
+                category: "classic",
+                categoryEvidence: "Caesar Salad Buffet",
+                note: null
+              }],
+              openQuestions: []
+            })
+          }
+        };
+      }
+    };
+    const fixture = await createCanonicalProduction({ skipPrepare: true, llmAdapter: adapter });
+    roots.push(fixture.rootDir);
+    try {
+      const persisted = await fixture.store.getProductionDraft(fixture.adminActor, fixture.sourceDraft.draftId);
+      expect(persisted?.draftArtifacts.eventSpec).toBeDefined();
+      await fixture.store.saveProductionDraft(fixture.adminActor, {
+        ...persisted!,
+        draftArtifacts: {
+          ...persisted!.draftArtifacts,
+          eventSpec: {
+            ...persisted!.draftArtifacts.eventSpec!,
+            servicePlan: {
+              ...persisted!.draftArtifacts.eventSpec!.servicePlan,
+              modules: persisted!.draftArtifacts.eventSpec!.servicePlan.modules.length > 0
+                ? persisted!.draftArtifacts.eventSpec!.servicePlan.modules.map((module) => ({
+                    ...module,
+                    pricing: { amount: 9876.54, currency: "EUR" as const }
+                  }))
+                : [{
+                    moduleId: "service-module-commercial-sentinel",
+                    label: "Buffetservice",
+                    category: "service",
+                    quantity: 1,
+                    pricing: { amount: 9876.54, currency: "EUR" as const }
+                  }]
+            }
+          }
+        }
+      });
+      const persistedWithPricing = await fixture.store.getProductionDraft(fixture.adminActor, fixture.sourceDraft.draftId);
+      expect(persistedWithPricing?.draftArtifacts.eventSpec?.servicePlan.modules[0]?.pricing?.amount)
+        .toBe(9876.54);
+      const card = fixture.sourceDraft.reviewCards.find((candidate) => candidate.kind === "event_data");
+      expect(card).toBeDefined();
+      const reviewed = await fixture.productionApp.inject({
+        method: "PATCH",
+        url: `/v1/production/drafts/${fixture.sourceDraft.draftId}/review-cards/${card!.cardId}`,
+        headers: productionHeaders,
+        payload: {
+          decision: "change_requested",
+          operatorComment: "Bitte die Ausgabezeit vor dem Buffet bestätigen."
+        }
+      });
+      expectStatus(reviewed, 200);
+
+      const revised = await fixture.productionApp.inject({
+        method: "POST",
+        url: `/v1/production/drafts/${fixture.sourceDraft.draftId}/revise`,
+        headers: productionHeaders,
+        payload: {}
+      });
+
+      expectStatus(revised, 201);
+      expect(requests).toHaveLength(1);
+      expect(requests[0]).not.toContain("9876.54");
+      expect(requests[0]).not.toContain("COMMERCIAL_SENTINEL");
+      expect(requests[0]).not.toContain("pricingSummary");
+      expectProductionCommercialsAbsent(revised.json());
+      const productionRead = await fixture.productionApp.inject({
+        method: "GET",
+        url: `/v1/production/drafts?caseId=${fixture.caseId}`,
+        headers: productionHeaders
+      });
+      expectStatus(productionRead, 200);
+      expectProductionCommercialsAbsent(productionRead.json());
+
+      const persistedSource = await fixture.store.getProductionDraft(fixture.adminActor, fixture.sourceDraft.draftId);
+      expect(persistedSource?.draftArtifacts.eventSpec?.budgetContext?.pricingSummary).toMatchObject({
+        subtotal: { amount: 9876.54 },
+        notes: expect.arrayContaining(["COMMERCIAL_SENTINEL"])
+      });
+      const adminRead = await fixture.productionApp.inject({
+        method: "GET",
+        url: `/v1/production/drafts?caseId=${fixture.caseId}`,
+        headers: adminHeaders
+      });
+      expectStatus(adminRead, 200);
+      expect(adminRead.body).toContain("9876.54");
+      expect(adminRead.body).toContain("COMMERCIAL_SENTINEL");
+    } finally {
+      await Promise.all([fixture.intakeApp.close(), fixture.offerApp.close(), fixture.productionApp.close()]);
     }
   });
 
@@ -508,7 +885,47 @@ describe("Gate B Slice 2 production commercial confidentiality", () => {
       expectStatus(adminRead, 200);
       expect(adminRead.body).toContain(sentinel);
     } finally {
-      await Promise.all([fixture.offerApp.close(), fixture.productionApp.close()]);
+      await Promise.all([fixture.intakeApp.close(), fixture.offerApp.close(), fixture.productionApp.close()]);
+    }
+  });
+
+  it("preserves commercial visibility when production changes only the decision and repeats the same comment", async () => {
+    const fixture = await createCanonicalProduction();
+    roots.push(fixture.rootDir);
+    try {
+      const card = fixture.preparedDraft.reviewCards[0]!;
+      const sentinel = "COMMERCIAL_ROLE_SWITCH_SENTINEL Verkaufspreis 9.876,54 EUR.";
+      const adminReview = await fixture.productionApp.inject({
+        method: "PATCH",
+        url: `/v1/production/drafts/${fixture.preparedDraft.draftId}/review-cards/${card.cardId}`,
+        headers: adminHeaders,
+        payload: { decision: "change_requested", operatorComment: sentinel }
+      });
+      expectStatus(adminReview, 200);
+      expect(adminReview.json<{ reviewCard: Record<string, unknown> }>().reviewCard)
+        .toMatchObject({ operatorComment: sentinel, operatorCommentVisibility: "commercial" });
+
+      const productionReview = await fixture.productionApp.inject({
+        method: "PATCH",
+        url: `/v1/production/drafts/${fixture.preparedDraft.draftId}/review-cards/${card.cardId}`,
+        headers: productionHeaders,
+        payload: { decision: "unclear", operatorComment: sentinel }
+      });
+      expectStatus(productionReview, 200);
+      expectProductionCommercialsAbsent(productionReview.json());
+      expect(await fixture.store.getProductionDraft(fixture.adminActor, fixture.preparedDraft.draftId))
+        .toMatchObject({
+          reviewCards: expect.arrayContaining([
+            expect.objectContaining({
+              cardId: card.cardId,
+              decision: "unclear",
+              operatorComment: sentinel,
+              operatorCommentVisibility: "commercial"
+            })
+          ])
+        });
+    } finally {
+      await Promise.all([fixture.intakeApp.close(), fixture.offerApp.close(), fixture.productionApp.close()]);
     }
   });
 
@@ -596,7 +1013,7 @@ describe("Gate B Slice 2 production commercial confidentiality", () => {
       expect(persisted?.reviewCards.find((card) => card.cardId === historicalCard!.cardId))
         .not.toHaveProperty("operatorCommentVisibility");
     } finally {
-      await Promise.all([fixture.offerApp.close(), fixture.productionApp.close()]);
+      await Promise.all([fixture.intakeApp.close(), fixture.offerApp.close(), fixture.productionApp.close()]);
     }
   });
 
@@ -671,7 +1088,7 @@ describe("Gate B Slice 2 production commercial confidentiality", () => {
       await expect(auditLog.listRecentFor(fixture.adminActor, 200))
         .resolves.toEqual(auditsBefore);
     } finally {
-      await Promise.all([guardedApp.close(), fixture.offerApp.close(), fixture.productionApp.close()]);
+      await Promise.all([guardedApp.close(), fixture.intakeApp.close(), fixture.offerApp.close(), fixture.productionApp.close()]);
     }
   });
 });

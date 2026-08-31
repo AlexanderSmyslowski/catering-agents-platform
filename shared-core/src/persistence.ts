@@ -60,6 +60,17 @@ export interface PersistentCollection<T> {
 }
 
 /**
+ * An insert result can carry a post-publication exception without losing the
+ * ownership decision made by the atomic writer.  Callers may therefore
+ * compensate the exact record instead of inferring ownership from a later
+ * read-back.
+ */
+export interface PersistentInsertResult {
+  status: "created" | "exists";
+  error?: unknown;
+}
+
+/**
  * Migration code can inspect pre-business-scope records, but cannot reopen
  * the retired global write path once scoped storage is active.
  */
@@ -804,6 +815,7 @@ export interface BusinessScopedPersistentCollection<T> {
   get(context: BusinessContext, id: string): Promise<T | undefined>;
   set(context: BusinessContext, item: T): Promise<void>;
   insert(context: BusinessContext, item: T): Promise<"created" | "exists">;
+  insertWithResult(context: BusinessContext, item: T): Promise<PersistentInsertResult>;
   compareAndSet(
     context: BusinessContext,
     id: string,
@@ -816,6 +828,11 @@ export interface BusinessScopedPersistentCollection<T> {
     expected: T,
     item: T
   ): Promise<"updated" | "conflict" | "missing">;
+  deleteIfExact(
+    context: BusinessContext,
+    id: string,
+    expected: T
+  ): Promise<"deleted" | "conflict" | "missing">;
 }
 
 function assertScopedPayload<T>(context: BusinessContext, item: T): T {
@@ -1040,14 +1057,18 @@ function atomicWrite(
   }
 }
 
-function atomicInsert(
+interface AtomicInsertResult extends PersistentInsertResult {}
+
+function atomicInsertWithResult(
   filePath: string,
   payload: string,
   beforePublish?: () => void,
   afterPublish?: () => void,
   fileMode?: number
-): "created" | "exists" {
+): AtomicInsertResult {
   const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  let published = false;
+  let outcome: AtomicInsertResult | undefined;
   try {
     const fd = openNewFileForWrite(temporaryPath, fileMode);
     try {
@@ -1060,15 +1081,44 @@ function atomicInsert(
     try {
       linkSync(temporaryPath, filePath);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "EEXIST") return "exists";
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+        outcome = { status: "exists" };
+        return outcome;
+      }
       throw error;
     }
-    cleanupTemporaryFile(temporaryPath);
-    afterPublish?.();
-    return "created";
+    published = true;
+    outcome = { status: "created" };
+    try {
+      cleanupTemporaryFile(temporaryPath);
+      afterPublish?.();
+    } catch (error) {
+      // The hard link is already authoritative.  Preserve the exact
+      // ownership result while returning the post-publication failure to the
+      // caller for deterministic compensation.
+      outcome.error = error;
+    }
+    return outcome;
   } finally {
-    cleanupTemporaryFile(temporaryPath);
+    try {
+      cleanupTemporaryFile(temporaryPath);
+    } catch (error) {
+      if (!published || !outcome) throw error;
+      outcome.error ??= error;
+    }
   }
+}
+
+function atomicInsert(
+  filePath: string,
+  payload: string,
+  beforePublish?: () => void,
+  afterPublish?: () => void,
+  fileMode?: number
+): "created" | "exists" {
+  const outcome = atomicInsertWithResult(filePath, payload, beforePublish, afterPublish, fileMode);
+  if (outcome.error) throw outcome.error;
+  return outcome.status;
 }
 
 function versionOf(value: unknown): number | undefined {
@@ -1135,11 +1185,17 @@ class FileBackedBusinessScopedCollection<T> implements BusinessScopedPersistentC
   }
 
   async insert(context: BusinessContext, item: T): Promise<"created" | "exists"> {
+    const result = await this.insertWithResult(context, item);
+    if (result.error) throw result.error;
+    return result.status;
+  }
+
+  async insertWithResult(context: BusinessContext, item: T): Promise<PersistentInsertResult> {
     const normalized = this.normalizeForContext(context, item);
     assertIncomingVersion(normalized, this.options.getVersion);
     const filePath = this.filePathFor(context, this.options.getId(normalized));
     ensureCollectionDirectory(path.dirname(filePath), this.options.fileDirectoryMode);
-    return atomicInsert(
+    return atomicInsertWithResult(
       filePath,
       JSON.stringify(normalized, null, 2),
       () => this.options.fileFaultInjector?.("before_record_publish"),
@@ -1210,6 +1266,30 @@ class FileBackedBusinessScopedCollection<T> implements BusinessScopedPersistentC
     }
   }
 
+  async deleteIfExact(
+    context: BusinessContext,
+    id: string,
+    expected: T
+  ): Promise<"deleted" | "conflict" | "missing"> {
+    const normalizedExpected = this.normalizeForContext(context, expected, id);
+    const filePath = this.filePathFor(context, id);
+    if (!existsSync(filePath)) return "missing";
+    const releaseLock = acquireFileLock(filePath);
+    try {
+      if (!existsSync(filePath)) return "missing";
+      const existing = this.normalizeForContext(
+        context,
+        JSON.parse(readFileSync(filePath, "utf8")) as T,
+        id
+      );
+      if (!areJsonValuesEqual(existing, normalizedExpected)) return "conflict";
+      unlinkSync(filePath);
+      return "deleted";
+    } finally {
+      releaseLock();
+    }
+  }
+
   private directoryFor(context: BusinessContext): string {
     const businessId = assertBusinessId(context.businessId);
     return path.join(resolveDataRoot(this.options.rootDir), "businesses", businessId, this.options.collectionName);
@@ -1262,6 +1342,12 @@ class PostgresBackedBusinessScopedCollection<T> implements BusinessScopedPersist
   }
 
   async insert(context: BusinessContext, item: T): Promise<"created" | "exists"> {
+    const result = await this.insertWithResult(context, item);
+    if (result.error) throw result.error;
+    return result.status;
+  }
+
+  async insertWithResult(context: BusinessContext, item: T): Promise<PersistentInsertResult> {
     const normalized = this.normalizeForContext(context, item);
     assertIncomingVersion(normalized, this.options.getVersion);
     await this.ensureInitialized();
@@ -1269,7 +1355,7 @@ class PostgresBackedBusinessScopedCollection<T> implements BusinessScopedPersist
       "INSERT INTO catering_business_records (business_id, collection_name, record_id, payload, version_number, updated_at) VALUES ($1, $2, $3, $4::jsonb, $5, NOW()) ON CONFLICT DO NOTHING RETURNING record_id",
       [assertBusinessId(context.businessId), this.options.collectionName, this.options.getId(normalized), JSON.stringify(normalized), collectionVersion(normalized, this.options.getVersion) ?? null]
     );
-    return result.rows.length === 1 ? "created" : "exists";
+    return { status: result.rows.length === 1 ? "created" : "exists" };
   }
 
   async compareAndSet(context: BusinessContext, id: string, expectedVersion: number, item: T): Promise<"updated" | "conflict" | "missing"> {
@@ -1314,6 +1400,22 @@ class PostgresBackedBusinessScopedCollection<T> implements BusinessScopedPersist
       ]
     );
     if (result.rows.length === 1) return "updated";
+    return (await this.get(context, id)) ? "conflict" : "missing";
+  }
+
+  async deleteIfExact(
+    context: BusinessContext,
+    id: string,
+    expected: T
+  ): Promise<"deleted" | "conflict" | "missing"> {
+    const normalizedExpected = this.normalizeForContext(context, expected, id);
+    const businessId = assertBusinessId(context.businessId);
+    await this.ensureInitialized();
+    const result = await this.queryable.query(
+      "DELETE FROM catering_business_records WHERE business_id = $1 AND collection_name = $2 AND record_id = $3 AND payload = $4::jsonb RETURNING record_id",
+      [businessId, this.options.collectionName, id, JSON.stringify(normalizedExpected)]
+    );
+    if (result.rows.length === 1) return "deleted";
     return (await this.get(context, id)) ? "conflict" : "missing";
   }
 

@@ -224,6 +224,48 @@ const mutatingMvpRoutes: MutableRoute[] = [
   {
     service: "production",
     method: "POST",
+    pathTemplate: "/v1/production/cases/:caseId/planning-evidence",
+    requiredRole: "production_operator",
+    url: "/v1/production/cases/matrix-production-case/planning-evidence",
+    payload: {
+      draftId: "matrix-production-draft",
+      draftRevision: 1,
+      componentId: "matrix-component",
+      recipeId: "matrix-recipe",
+      quantityDecision: {
+        decisionId: "matrix-quantity-decision",
+        eventSpecId: "matrix-event-spec",
+        componentId: "matrix-component",
+        guestCount: 25,
+        serviceFormat: "buffet",
+        dishRole: "other",
+        basis: "servings_per_person",
+        perUnitAmount: 1,
+        perUnitUnit: "servings",
+        targetAmount: 25,
+        targetUnit: "servings",
+        rationale: "Auth-Matrix-Payload.",
+        evidence: { kind: "operator_instruction", reference: "auth-matrix" },
+        reviewStatus: "approved"
+      },
+      recipeEventUseReview: {
+        eventSpecId: "matrix-event-spec",
+        recipeId: "matrix-recipe",
+        reviewedBy: "Produktions-Mitarbeiter",
+        reviewedAt: "2026-08-30T12:00:00.000Z",
+        decision: "accepted_for_event",
+        confirmations: {
+          quantitiesAndYield: true,
+          methodAndEquipment: true,
+          allergensAndDiet: true,
+          holdingAndRegeneration: true
+        }
+      }
+    }
+  },
+  {
+    service: "production",
+    method: "POST",
     pathTemplate: "/v1/production/drafts/:draftId/prepare",
     requiredRole: "production_operator",
     url: "/v1/production/drafts/matrix-production-draft/prepare",
@@ -244,7 +286,7 @@ const mutatingMvpRoutes: MutableRoute[] = [
     service: "production",
     method: "POST",
     pathTemplate: "/v1/production/drafts/from-document",
-    requiredRole: "production_operator",
+    requiredRole: "admin",
     payload: { caseId: "matrix-production-case", documentId: "matrix-source-document" },
     prepareCorrectRoleCase: async (app, headers) => {
       const created = await inject(app, {

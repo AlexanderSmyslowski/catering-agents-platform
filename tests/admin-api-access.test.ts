@@ -3,12 +3,16 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { buildIntakeApp } from "../intake-service/src/app.js";
+import { IntakeStore } from "../intake-service/src/store.js";
 import { buildOfferApp } from "../offer-service/src/app.js";
+import { HttpSourceDocumentMetadataReader } from "../offer-service/src/gateways/http-source-document-metadata-reader.js";
 import { buildProductionApp } from "../production-service/src/app.js";
 import { InMemoryRecipeRepository } from "../production-service/src/repositories/in-memory-recipe-repository.js";
 import { ProductionStore } from "../production-service/src/repositories/production-store.js";
 import { HttpProductionHandoffReader } from "../production-service/src/gateways/http-production-handoff-reader.js";
 import { internalRecipes } from "../shared-core/src/fixtures/sample-data.js";
+import type { AcceptedEventSpec } from "../shared-core/src/types.js";
 import { InMemoryIntakeRecordsPort } from "./support/in-memory-intake-records-port.js";
 
 const TRUSTED_SECRET = "gate-b-admin-api-secret";
@@ -22,6 +26,7 @@ const headersFor = (actorName: string) => ({
 const offerHeaders = headersFor("Angebots-Mitarbeiter");
 const productionHeaders = headersFor("Produktions-Mitarbeiter");
 const adminHeaders = headersFor("Administrator");
+const intakeHeaders = headersFor("Intake-Mitarbeiter");
 
 type InjectableApp = { inject: (request: { method: string; url: string; headers: Record<string, string>; payload?: unknown }) => Promise<{ statusCode: number; body: string; json: <T>() => T }>; close: () => Promise<void> };
 
@@ -51,11 +56,58 @@ function offerServiceFetch(offerApp: InjectableApp) {
 }
 
 async function createCanonicalOfferHandoff(rootDir: string) {
-  const offerApp = buildOfferApp({
+  const intakeStore = new IntakeStore({ rootDir });
+  const intakeApp = buildIntakeApp({
     rootDir,
+    store: intakeStore,
     trustedActorSecret: TRUSTED_SECRET,
     env: { CATERING_DEV_AUTH: "1" }
   });
+  const offerApp = buildOfferApp({
+    rootDir,
+    sourceDocumentReader: new HttpSourceDocumentMetadataReader({
+      intakeServiceUrl: "http://intake-service.test",
+      trustedServiceSecret: TRUSTED_SECRET,
+      fetch: offerServiceFetch(intakeApp)
+    }),
+    trustedActorSecret: TRUSTED_SECRET,
+    env: { CATERING_DEV_AUTH: "1" }
+  });
+  const intakeResponse = await intakeApp.inject({
+    method: "POST",
+    url: "/v1/intake/specs/manual",
+    headers: intakeHeaders,
+    payload: {
+      customerName: "Pseudonymisierte Organisation",
+      eventType: "Business Lunch",
+      eventDate: "2026-09-18",
+      attendeeCount: 35,
+      serviceForm: "Buffet",
+      menuItems: ["Caesar Salad Buffet"],
+      notes: "Kanonische Admin-API-Fixture.",
+      requestId: "admin-api-canonical-request"
+    }
+  });
+  expectStatus(intakeResponse, 201);
+  const intakePayload = intakeResponse.json<{
+    eventRequest: Record<string, unknown>;
+    acceptedEventSpec: { specId: string; menuPlan: Array<{ componentId: string }> };
+  }>();
+  const updatedIntake = await intakeApp.inject({
+    method: "PATCH",
+    url: `/v1/intake/specs/${intakePayload.acceptedEventSpec.specId}`,
+    headers: intakeHeaders,
+    payload: {
+      componentUpdates: intakePayload.acceptedEventSpec.menuPlan.map((component) => ({
+        componentId: component.componentId,
+        menuCategory: "classic",
+        productionMode: "scratch",
+        recipeOverrideId: "recipe-caesar-salad",
+        notes: "Explizite kanonische Rezeptentscheidung der Fixture."
+      }))
+    }
+  });
+  expectStatus(updatedIntake, 200);
   const createdCase = await offerApp.inject({
     method: "POST",
     url: "/v1/offers/cases",
@@ -72,11 +124,12 @@ async function createCanonicalOfferHandoff(rootDir: string) {
 
   const createdDraft = await offerApp.inject({
     method: "POST",
-    url: "/v1/offers/from-text",
+    url: "/v1/offers/drafts",
     headers: offerHeaders,
     payload: {
       caseId: offerCaseId,
-      text: "Business Lunch am 2026-09-18 fuer 35 Personen mit Caesar Salad Buffet."
+      ...intakePayload.eventRequest,
+      acceptedEventSpecId: intakePayload.acceptedEventSpec.specId
     }
   });
   expectStatus(createdDraft, 201);
@@ -101,22 +154,24 @@ async function createCanonicalOfferHandoff(rootDir: string) {
   });
   expectStatus(createdHandoff, 201);
   const handoff = createdHandoff.json<{
-    handoff: { handoffId: string; pricingSnapshot: unknown }
+    handoff: { handoffId: string; pricingSnapshot: unknown; eventSpecSnapshot: AcceptedEventSpec }
   }>().handoff;
   expect(handoff.pricingSnapshot).toBeDefined();
 
-  return { offerApp, handoff };
+  return { intakeApp, offerApp, handoff };
 }
 
 async function createCanonicalProductionDraft(rootDir: string) {
-  const { offerApp, handoff } = await createCanonicalOfferHandoff(rootDir);
+  const { intakeApp, offerApp, handoff } = await createCanonicalOfferHandoff(rootDir);
   const repository = new InMemoryRecipeRepository({ rootDir });
   await repository.seed({ businessId: "local" }, internalRecipes);
+  const intakeRecords = new InMemoryIntakeRecordsPort();
+  await intakeRecords.insertSpec({ businessId: "local" }, handoff.eventSpecSnapshot);
   const productionApp = buildProductionApp({
     dataRoot: rootDir,
     repository,
     store: new ProductionStore({ rootDir }),
-    intakeRecords: new InMemoryIntakeRecordsPort(),
+    intakeRecords,
     handoffReader: new HttpProductionHandoffReader({
       offerServiceUrl: "http://offer-service.test",
       trustedServiceSecret: TRUSTED_SECRET,
@@ -141,7 +196,54 @@ async function createCanonicalProductionDraft(rootDir: string) {
     payload: { caseId }
   });
   expectStatus(productionDraft, 201);
-  const draft = productionDraft.json<{ draft: { draftId: string } }>().draft;
+  const draft = productionDraft.json<{
+    draft: { draftId: string; revision: number; draftArtifacts: { eventSpec?: AcceptedEventSpec } }
+  }>().draft;
+  const eventSpec = draft.draftArtifacts.eventSpec;
+  const component = eventSpec?.menuPlan[0];
+  expect(eventSpec?.specId).toBeTruthy();
+  expect(component?.componentId).toBeTruthy();
+  const evidence = await productionApp.inject({
+    method: "POST",
+    url: `/v1/production/cases/${caseId}/planning-evidence`,
+    headers: productionHeaders,
+    payload: {
+      draftId: draft.draftId,
+      draftRevision: draft.revision,
+      componentId: component!.componentId,
+      recipeId: "recipe-caesar-salad",
+      quantityDecision: {
+        decisionId: "admin-api-canonical-quantity",
+        eventSpecId: eventSpec!.specId,
+        componentId: component!.componentId,
+        guestCount: eventSpec!.attendees.expected,
+        serviceFormat: eventSpec!.servicePlan.serviceForm,
+        dishRole: "other",
+        basis: "servings_per_person",
+        perUnitAmount: 1,
+        perUnitUnit: "servings",
+        targetAmount: eventSpec!.attendees.expected,
+        targetUnit: "servings",
+        rationale: "Explizite kanonische Mengenentscheidung der Fixture.",
+        evidence: { kind: "operator_instruction", reference: "admin-api-canonical" },
+        reviewStatus: "approved"
+      },
+      recipeEventUseReview: {
+        eventSpecId: eventSpec!.specId,
+        recipeId: "recipe-caesar-salad",
+        reviewedBy: "Produktions-Mitarbeiter",
+        reviewedAt: "2026-08-30T12:00:00.000Z",
+        decision: "accepted_for_event",
+        confirmations: {
+          quantitiesAndYield: true,
+          methodAndEquipment: true,
+          allergensAndDiet: true,
+          holdingAndRegeneration: true
+        }
+      }
+    }
+  });
+  expectStatus(evidence, 201);
   const prepared = await productionApp.inject({
     method: "POST",
     url: `/v1/production/drafts/${draft.draftId}/prepare`,
@@ -161,7 +263,7 @@ async function createCanonicalProductionDraft(rootDir: string) {
     });
     expectStatus(reviewed, 200);
   }
-  return { offerApp, productionApp, preparedDraft };
+  return { intakeApp, offerApp, productionApp, preparedDraft };
 }
 
 describe("Gate B Slice 1 administrator API access", () => {
@@ -180,7 +282,7 @@ describe("Gate B Slice 1 administrator API access", () => {
   it("lets Administrator read a canonical Offer-Handoff pricing snapshot", async () => {
     const rootDir = createDataRoot();
     roots.push(rootDir);
-    const { offerApp, handoff } = await createCanonicalOfferHandoff(rootDir);
+    const { intakeApp, offerApp, handoff } = await createCanonicalOfferHandoff(rootDir);
     try {
       const response = await offerApp.inject({
         method: "GET",
@@ -190,14 +292,14 @@ describe("Gate B Slice 1 administrator API access", () => {
       expectStatus(response, 200);
       expect(response.json<{ handoff: { pricingSnapshot: unknown } }>().handoff.pricingSnapshot).toEqual(handoff.pricingSnapshot);
     } finally {
-      await offerApp.close();
+      await Promise.all([intakeApp.close(), offerApp.close()]);
     }
   });
 
   it("lets Administrator execute a canonical Production-Decision path", async () => {
     const rootDir = createDataRoot();
     roots.push(rootDir);
-    const { offerApp, productionApp, preparedDraft } = await createCanonicalProductionDraft(rootDir);
+    const { intakeApp, offerApp, productionApp, preparedDraft } = await createCanonicalProductionDraft(rootDir);
     try {
       const response = await productionApp.inject({
         method: "POST",
@@ -208,14 +310,14 @@ describe("Gate B Slice 1 administrator API access", () => {
       expectStatus(response, 201);
       expect(response.json()).toHaveProperty("approvedProductionSpec");
     } finally {
-      await Promise.all([offerApp.close(), productionApp.close()]);
+      await Promise.all([intakeApp.close(), offerApp.close(), productionApp.close()]);
     }
   });
 
   it("lets Administrator execute a canonical ApprovedProductionSpec Apply path", async () => {
     const rootDir = createDataRoot();
     roots.push(rootDir);
-    const { offerApp, productionApp, preparedDraft } = await createCanonicalProductionDraft(rootDir);
+    const { intakeApp, offerApp, productionApp, preparedDraft } = await createCanonicalProductionDraft(rootDir);
     try {
       const decision = await productionApp.inject({
         method: "POST",
@@ -236,7 +338,7 @@ describe("Gate B Slice 1 administrator API access", () => {
       expectStatus(response, 200);
       expect(response.json()).toHaveProperty("plan");
     } finally {
-      await Promise.all([offerApp.close(), productionApp.close()]);
+      await Promise.all([intakeApp.close(), offerApp.close(), productionApp.close()]);
     }
   });
 });

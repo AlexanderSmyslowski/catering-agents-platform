@@ -57,6 +57,7 @@ export {
 export type {
   BusinessScopedPersistentCollection,
   CollectionStorageOptions,
+  PersistentInsertResult,
   PersistentCollectionOptions,
   Queryable
 } from "./persistence.js";

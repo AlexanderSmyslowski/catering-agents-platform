@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createEventRequestFromText,
   createOfferDraft,
+  internalRecipes,
   type ProductionCase,
   type ProductionDraft,
   type ProductionHandoff
@@ -17,6 +18,7 @@ import {
   ProductionStore,
   productionDecisionRepositoryFor
 } from "../production-service/src/repositories/production-store.js";
+import { InMemoryRecipeRepository } from "../production-service/src/repositories/in-memory-recipe-repository.js";
 import { InMemoryIntakeRecordsPort } from "./support/in-memory-intake-records-port.js";
 import { trustedActorFromHeaders } from "../shared-core/src/access-control.js";
 
@@ -69,13 +71,40 @@ function handoff(overrides: Partial<ProductionHandoff> = {}): ProductionHandoff 
   };
 }
 
+/**
+ * These route tests exercise approved production writes, so their event spec
+ * must carry the same explicit recipe decision as the canonical workflow.
+ * The production guard remains responsible for requiring evidence on a
+ * handoff-bound draft; the fixture only supplies the already-decided inputs.
+ */
+function productionReadyEventSpec(
+  spec: ReturnType<typeof handoff>["eventSpecSnapshot"],
+  specId = spec.specId
+) {
+  return {
+    ...structuredClone(spec),
+    specId,
+    menuPlan: spec.menuPlan.map((component) => ({
+      ...component,
+      menuCategory: component.menuCategory ?? "classic",
+      recipeOverrideId: "recipe-caesar-salad",
+      productionDecision: {
+        ...(component.productionDecision ?? {}),
+        mode: "scratch" as const
+      }
+    }))
+  };
+}
+
 function buildHarness(handoffReader?: ProductionHandoffReader) {
   const rootDir = mkdtempSync(path.join(tmpdir(), "catering-production-case-routes-"));
   roots.push(rootDir);
   const store = new ProductionStore({ rootDir });
+  const repository = new InMemoryRecipeRepository({ rootDir });
   const intakeRecords = new InMemoryIntakeRecordsPort();
   const app = buildProductionApp({
     dataRoot: rootDir,
+    repository,
     store,
     intakeRecords,
     handoffReader,
@@ -86,7 +115,20 @@ function buildHarness(handoffReader?: ProductionHandoffReader) {
       CATERING_TRUSTED_ACTOR_SECRET: trustedSecret
     }
   });
-  return { app, store, intakeRecords };
+  return { app, store, repository, intakeRecords };
+}
+
+function failNextDraftTimelineEvent(store: ProductionStore): void {
+  const original = (store as any).appendEventInCollections.bind(store);
+  let failed = false;
+  vi.spyOn(store as any, "appendEventInCollections").mockImplementation(async (...args: any[]) => {
+    const input = args[2] as { kind?: string };
+    if (!failed && (input.kind === "draft_created" || input.kind === "revision_created")) {
+      failed = true;
+      throw new Error("injected draft-created event failure");
+    }
+    return original(...args);
+  });
 }
 
 afterEach(() => {
@@ -456,15 +498,25 @@ describe("production case routes", () => {
     });
     expect(caseResponse.statusCode, caseResponse.body).toBe(201);
     const caseId = caseResponse.json<{ case: ProductionCase }>().case.caseId;
-    const appendEvent = store.appendEvent.bind(store);
     let injectFailure = true;
-    vi.spyOn(store, "appendEvent").mockImplementation(async (context, targetCaseId, input, eventIdentity) => {
-      if (injectFailure && input.kind === "draft_created") {
-        injectFailure = false;
-        throw new Error("injected draft-created event failure");
+    const withPlanningEvidenceCriticalSection = store.withPlanningEvidenceCriticalSection.bind(store);
+    vi.spyOn(store, "withPlanningEvidenceCriticalSection").mockImplementation(
+      async (context, scopedCaseId, draftId, draftRevision, operation) => {
+        return withPlanningEvidenceCriticalSection(context, scopedCaseId, draftId, draftRevision, async (scope) => {
+          const appendDraftCreatedEvent = scope.appendDraftCreatedEvent;
+          return operation({
+            ...scope,
+            appendDraftCreatedEvent: async (draft) => {
+              if (injectFailure) {
+                injectFailure = false;
+                throw new Error("injected draft-created event failure");
+              }
+              return appendDraftCreatedEvent(draft);
+            }
+          });
+        });
       }
-      return appendEvent(context, targetCaseId, input, eventIdentity);
-    });
+    );
     const request = () => app.inject({
       method: "POST" as const,
       url: `/v1/production/drafts/from-handoff/${approvedHandoff.handoffId}`,
@@ -675,6 +727,7 @@ describe("production case routes", () => {
         version: 1
       });
       expect(caseAfterRollback?.sourceSpecId).toBeUndefined();
+      await expect(store.listEvents(context, productionCase.caseId)).resolves.toHaveLength(1);
     } finally {
       await rawPool.end();
     }
@@ -762,7 +815,9 @@ describe("production case routes", () => {
     await expect(store.listProductionDrafts({ businessId: "alpha" })).resolves.toHaveLength(2);
     const events = await store.listEvents({ businessId: "alpha" }, productionCase.caseId);
     expect(events.filter((event) => event.kind === "draft_created")).toEqual([
-      expect.objectContaining({ artifactId: first.json().draft.draftId }),
+      expect.objectContaining({
+        artifactId: first.json().draft.draftId
+      }),
       expect.objectContaining({ artifactId: changed.json().draft.draftId })
     ]);
     const reopened = await store.getCase({ businessId: "alpha" }, productionCase.caseId);
@@ -774,6 +829,260 @@ describe("production case routes", () => {
     expect(reopened?.approvedProductionSpecId).toBeUndefined();
     expect(reopened?.currentPlanId).toBeUndefined();
     expect(reopened?.currentPurchaseListId).toBeUndefined();
+  });
+
+  it("keeps the successor timeline marker when source CAS loses and retries the reopen idempotently", async () => {
+    const { app, store, intakeRecords } = buildHarness();
+    const productionCase = await createProductionCase(app);
+    const spec = handoff().eventSpecSnapshot;
+    await intakeRecords.insertSpec({ businessId: "alpha" }, spec);
+    const first = await app.inject({
+      method: "POST",
+      url: "/v1/production/drafts",
+      headers: alphaHeaders,
+      payload: { caseId: productionCase.caseId, specId: spec.specId }
+    });
+    expect(first.statusCode, first.body).toBe(201);
+    const sourceDraft = first.json<{ draft: ProductionDraft }>().draft;
+    const current = await store.getCase({ businessId: "alpha" }, productionCase.caseId);
+    expect(current).toBeDefined();
+    const completedAt = new Date(Date.parse(current!.updatedAt) + 1_000).toISOString();
+    const continuationAt = new Date(Date.parse(completedAt) + 1_000).toISOString();
+    const completedCase: ProductionCase = {
+      ...current!,
+      status: "completed",
+      approvedProductionSpecId: "approved-production-spec-before-cas-race",
+      currentPlanId: "production-plan-before-cas-race",
+      currentPurchaseListId: "purchase-list-before-cas-race",
+      version: current!.version + 1,
+      updatedAt: completedAt
+    };
+    expect(await store.updateCase(
+      { businessId: "alpha" },
+      productionCase.caseId,
+      current!.version,
+      completedCase
+    )).toBe("updated");
+    await store.appendEvent({ businessId: "alpha" }, productionCase.caseId, {
+      at: completedCase.updatedAt,
+      role: "system",
+      kind: "result",
+      text: "Vorheriger Produktionsstand.",
+      artifactId: completedCase.currentPlanId
+    });
+
+    const nextSpecId = `${spec.specId}-cas-race`;
+    const continuation: ProductionDraft = {
+      ...structuredClone(sourceDraft),
+      draftId: `${sourceDraft.draftId}-cas-race`,
+      revision: sourceDraft.revision + 1,
+      status: "pending_review",
+      createdAt: continuationAt,
+      supersedesDraftId: sourceDraft.draftId,
+      approvalRequestId: undefined,
+      approvedBy: undefined,
+      approvedAt: undefined,
+      draftArtifacts: {
+        ...structuredClone(sourceDraft.draftArtifacts),
+        eventSpec: { ...structuredClone(spec), specId: nextSpecId }
+      }
+    };
+    const cases = (store as any).cases;
+    const originalCompareAndSet = cases.compareAndSet.bind(cases);
+    let injected = false;
+    (vi.spyOn(cases, "compareAndSet") as any).mockImplementation(async (
+      context: { businessId: string },
+      caseId: string,
+      expectedVersion: number,
+      next: ProductionCase
+    ) => {
+      if (!injected && caseId === productionCase.caseId && next.sourceSpecId === nextSpecId) {
+        injected = true;
+        const raced = await store.getCase(context, caseId);
+        if (!raced) throw new Error("CAS-Test konnte den Produktionsfall nicht lesen.");
+        await originalCompareAndSet(context, caseId, raced.version, {
+          ...raced,
+          version: raced.version + 1,
+          updatedAt: new Date(Date.parse(raced.updatedAt) + 500).toISOString()
+        });
+        return "conflict";
+      }
+      return originalCompareAndSet(context, caseId, expectedVersion, next);
+    });
+
+    const commit = () => store.commitDraftForCaseSource({ businessId: "alpha" }, {
+      caseId: productionCase.caseId,
+      expectedSourceSpecId: spec.specId,
+      nextSourceSpecId: nextSpecId,
+      at: continuation.createdAt,
+      draftTarget: {
+        kind: "production_draft",
+        artifactId: sourceDraft.draftId,
+        revision: sourceDraft.revision
+      },
+      draftForCaseEvent: continuation,
+      commitDraft: async (scope) => {
+        const inserted = await scope.insertDraft(continuation);
+        const persisted = inserted === "created" ? continuation : await scope.getDraft(continuation.draftId);
+        return persisted
+          ? { status: "committed" as const, value: persisted }
+          : { status: "conflict" as const };
+      }
+    });
+
+    try {
+      const firstCommit = await commit();
+      expect(firstCommit).toEqual({ status: "case_conflict" });
+      expect(await store.getProductionDraft({ businessId: "alpha" }, continuation.draftId)).toEqual(continuation);
+      const eventsAfterCasConflict = await store.listEvents({ businessId: "alpha" }, productionCase.caseId);
+      expect(eventsAfterCasConflict.filter((event) => event.kind === "revision_created")).toEqual([
+        expect.objectContaining({
+          artifactId: continuation.draftId,
+          revisionRef: expect.objectContaining({
+            supersedesArtifactId: sourceDraft.draftId,
+            revision: continuation.revision
+          })
+        })
+      ]);
+      await expect(store.getCase({ businessId: "alpha" }, productionCase.caseId)).resolves.toMatchObject({
+        status: "completed",
+        approvedProductionSpecId: completedCase.approvedProductionSpecId,
+        currentPlanId: completedCase.currentPlanId,
+        currentPurchaseListId: completedCase.currentPurchaseListId,
+        sourceSpecId: spec.specId
+      });
+
+      vi.restoreAllMocks();
+      const retry = await commit();
+      expect(retry).toEqual({ status: "committed", value: continuation });
+      const eventsAfterRetry = await store.listEvents({ businessId: "alpha" }, productionCase.caseId);
+      expect(eventsAfterRetry.filter((event) => event.kind === "revision_created")).toHaveLength(1);
+      const reopened = await store.getCase({ businessId: "alpha" }, productionCase.caseId);
+      expect(reopened).toMatchObject({ status: "open", sourceSpecId: nextSpecId });
+      expect(reopened?.approvedProductionSpecId).toBeUndefined();
+      expect(reopened?.currentPlanId).toBeUndefined();
+      expect(reopened?.currentPurchaseListId).toBeUndefined();
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
+  it("recovers idempotently when reopen fails after successor event and source CAS", async () => {
+    const { app, store, intakeRecords } = buildHarness();
+    const productionCase = await createProductionCase(app);
+    const spec = handoff().eventSpecSnapshot;
+    await intakeRecords.insertSpec({ businessId: "alpha" }, spec);
+    const first = await app.inject({
+      method: "POST",
+      url: "/v1/production/drafts",
+      headers: alphaHeaders,
+      payload: { caseId: productionCase.caseId, specId: spec.specId }
+    });
+    expect(first.statusCode, first.body).toBe(201);
+    const sourceDraft = first.json<{ draft: ProductionDraft }>().draft;
+    const current = await store.getCase({ businessId: "alpha" }, productionCase.caseId);
+    expect(current).toBeDefined();
+    const completedAt = new Date(Date.parse(current!.updatedAt) + 1_000).toISOString();
+    const completedCase: ProductionCase = {
+      ...current!,
+      status: "completed",
+      approvedProductionSpecId: "approved-production-spec-before-reopen-failure",
+      currentPlanId: "production-plan-before-reopen-failure",
+      currentPurchaseListId: "purchase-list-before-reopen-failure",
+      version: current!.version + 1,
+      updatedAt: completedAt
+    };
+    expect(await store.updateCase(
+      { businessId: "alpha" },
+      productionCase.caseId,
+      current!.version,
+      completedCase
+    )).toBe("updated");
+    await store.appendEvent({ businessId: "alpha" }, productionCase.caseId, {
+      at: completedAt,
+      role: "system",
+      kind: "result",
+      text: "Vorheriger Produktionsstand.",
+      artifactId: completedCase.currentPlanId
+    });
+
+    const nextSpecId = `${spec.specId}-reopen-failure`;
+    const continuation: ProductionDraft = {
+      ...structuredClone(sourceDraft),
+      draftId: `${sourceDraft.draftId}-reopen-failure`,
+      revision: sourceDraft.revision + 1,
+      status: "pending_review",
+      createdAt: new Date(Date.parse(completedAt) + 1_000).toISOString(),
+      supersedesDraftId: sourceDraft.draftId,
+      approvalRequestId: undefined,
+      approvedBy: undefined,
+      approvedAt: undefined,
+      draftArtifacts: {
+        ...structuredClone(sourceDraft.draftArtifacts),
+        eventSpec: { ...structuredClone(spec), specId: nextSpecId }
+      }
+    };
+    const cases = (store as any).cases;
+    const originalCompareAndSet = cases.compareAndSet.bind(cases);
+    let caseWrites = 0;
+    (vi.spyOn(cases, "compareAndSet") as any).mockImplementation(async (
+      context: { businessId: string },
+      caseId: string,
+      expectedVersion: number,
+      next: ProductionCase
+    ) => {
+      if (caseId === productionCase.caseId && next.sourceSpecId === nextSpecId) {
+        caseWrites += 1;
+        if (caseWrites === 2) throw new Error("simulated reopen failure");
+      }
+      return originalCompareAndSet(context, caseId, expectedVersion, next);
+    });
+
+    const commit = () => store.commitDraftForCaseSource({ businessId: "alpha" }, {
+      caseId: productionCase.caseId,
+      expectedSourceSpecId: spec.specId,
+      nextSourceSpecId: nextSpecId,
+      at: continuation.createdAt,
+      draftTarget: {
+        kind: "production_draft",
+        artifactId: sourceDraft.draftId,
+        revision: sourceDraft.revision
+      },
+      draftForCaseEvent: continuation,
+      commitDraft: async (scope) => {
+        const inserted = await scope.insertDraft(continuation);
+        const persisted = inserted === "created" ? continuation : await scope.getDraft(continuation.draftId);
+        return persisted
+          ? { status: "committed" as const, value: persisted }
+          : { status: "conflict" as const };
+      }
+    });
+
+    try {
+      await expect(commit()).rejects.toThrow("simulated reopen failure");
+      expect(caseWrites).toBe(2);
+      const eventsAfterFailure = await store.listEvents({ businessId: "alpha" }, productionCase.caseId);
+      expect(eventsAfterFailure.filter((event) => event.kind === "revision_created")).toHaveLength(1);
+      await expect(store.getCase({ businessId: "alpha" }, productionCase.caseId)).resolves.toMatchObject({
+        status: "completed",
+        sourceSpecId: nextSpecId,
+        approvedProductionSpecId: completedCase.approvedProductionSpecId,
+        currentPlanId: completedCase.currentPlanId,
+        currentPurchaseListId: completedCase.currentPurchaseListId
+      });
+
+      vi.restoreAllMocks();
+      await expect(commit()).resolves.toEqual({ status: "committed", value: continuation });
+      const eventsAfterRetry = await store.listEvents({ businessId: "alpha" }, productionCase.caseId);
+      expect(eventsAfterRetry.filter((event) => event.kind === "revision_created")).toHaveLength(1);
+      const reopened = await store.getCase({ businessId: "alpha" }, productionCase.caseId);
+      expect(reopened).toMatchObject({ status: "open", sourceSpecId: nextSpecId });
+      expect(reopened?.approvedProductionSpecId).toBeUndefined();
+      expect(reopened?.currentPlanId).toBeUndefined();
+      expect(reopened?.currentPurchaseListId).toBeUndefined();
+    } finally {
+      vi.restoreAllMocks();
+    }
   });
 
   it("rejects a different canonical spec after a production case is bound", async () => {
@@ -920,11 +1229,14 @@ describe("production case routes", () => {
   });
 
   it("does not return approval projections belonging to another production case", async () => {
-    const { app, intakeRecords } = buildHarness();
+    const { app, intakeRecords, repository } = buildHarness();
+    await repository.seed({ businessId: "alpha" }, [
+      internalRecipes.find((recipe) => recipe.recipeId === "recipe-caesar-salad")!
+    ]);
     const firstCase = await createProductionCase(app);
     const secondCase = await createProductionCase(app, { customerName: "Zweiter Auftrag" });
-    const firstSpec = { ...handoff().eventSpecSnapshot, specId: "spec-route-case-a" };
-    const secondSpec = { ...handoff().eventSpecSnapshot, specId: "spec-route-case-b" };
+    const firstSpec = productionReadyEventSpec(handoff().eventSpecSnapshot, "spec-route-case-a");
+    const secondSpec = productionReadyEventSpec(handoff().eventSpecSnapshot, "spec-route-case-b");
     const emptyScoped = await app.inject({
       method: "GET",
       url: `/v1/production/drafts?caseId=${firstCase.caseId}`,
@@ -984,15 +1296,7 @@ describe("production case routes", () => {
     const productionCase = await createProductionCase(app);
     const spec = handoff().eventSpecSnapshot;
     await intakeRecords.insertSpec({ businessId: "alpha" }, spec);
-    const appendEvent = store.appendEvent.bind(store);
-    let injectFailure = true;
-    vi.spyOn(store, "appendEvent").mockImplementation(async (context, caseId, input, eventIdentity) => {
-      if (injectFailure && input.kind === "draft_created") {
-        injectFailure = false;
-        throw new Error("injected draft-created event failure");
-      }
-      return appendEvent(context, caseId, input, eventIdentity);
-    });
+    failNextDraftTimelineEvent(store);
     const request = () => app.inject({
       method: "POST" as const,
       url: "/v1/production/drafts",
@@ -1039,18 +1343,79 @@ describe("production case routes", () => {
   });
 
   it("records review, approval and applied result only after their product writes succeed", async () => {
-    const { app, store, intakeRecords } = buildHarness();
-    const productionCase = await createProductionCase(app);
-    const spec = handoff().eventSpecSnapshot;
+    const baseHandoff = handoff();
+    const approvedHandoff = {
+      ...baseHandoff,
+      eventSpecSnapshot: productionReadyEventSpec(baseHandoff.eventSpecSnapshot),
+      pricingSnapshot: baseHandoff.pricingSnapshot
+    };
+    const { app, store, repository, intakeRecords } = buildHarness({
+      get: async (_context, handoffId) => handoffId === approvedHandoff.handoffId ? approvedHandoff : undefined
+    });
+    await repository.seed({ businessId: "alpha" }, [
+      internalRecipes.find((recipe) => recipe.recipeId === "recipe-caesar-salad")!
+    ]);
+    const caseResponse = await app.inject({
+      method: "POST",
+      url: `/v1/production/cases/from-handoff/${approvedHandoff.handoffId}`,
+      headers: alphaHeaders,
+      payload: {}
+    });
+    expect(caseResponse.statusCode, caseResponse.body).toBe(201);
+    const productionCase = caseResponse.json<{ case: ProductionCase }>().case;
+    const spec = approvedHandoff.eventSpecSnapshot;
     await intakeRecords.insertSpec({ businessId: "alpha" }, spec);
     const created = await app.inject({
       method: "POST",
-      url: "/v1/production/drafts",
+      url: `/v1/production/drafts/from-handoff/${approvedHandoff.handoffId}`,
       headers: alphaHeaders,
-      payload: { caseId: productionCase.caseId, specId: spec.specId }
+      payload: { caseId: productionCase.caseId }
     });
     expect(created.statusCode, created.body).toBe(201);
     const initialDraft = created.json().draft;
+    for (const [index, component] of approvedHandoff.eventSpecSnapshot.menuPlan.entries()) {
+      const evidence = await app.inject({
+        method: "POST",
+        url: `/v1/production/cases/${productionCase.caseId}/planning-evidence`,
+        headers: alphaHeaders,
+        payload: {
+          draftId: initialDraft.draftId,
+          draftRevision: initialDraft.revision,
+          componentId: component.componentId,
+          recipeId: "recipe-caesar-salad",
+          quantityDecision: {
+            decisionId: `production-case-route-quantity-${index}`,
+            eventSpecId: approvedHandoff.eventSpecSnapshot.specId,
+            componentId: component.componentId,
+            guestCount: approvedHandoff.eventSpecSnapshot.attendees.expected,
+            serviceFormat: approvedHandoff.eventSpecSnapshot.servicePlan.serviceForm,
+            dishRole: "other",
+            basis: "servings_per_person",
+            perUnitAmount: 1,
+            perUnitUnit: "servings",
+            targetAmount: approvedHandoff.eventSpecSnapshot.attendees.expected,
+            targetUnit: "servings",
+            rationale: "Explizite kanonische Mengenentscheidung der Fixture.",
+            evidence: { kind: "operator_instruction", reference: "production-case-route" },
+            reviewStatus: "approved"
+          },
+          recipeEventUseReview: {
+            eventSpecId: approvedHandoff.eventSpecSnapshot.specId,
+            recipeId: "recipe-caesar-salad",
+            reviewedBy: "Produktions-Mitarbeiter",
+            reviewedAt: "2026-08-30T12:00:00.000Z",
+            decision: "accepted_for_event",
+            confirmations: {
+              quantitiesAndYield: true,
+              methodAndEquipment: true,
+              allergensAndDiet: true,
+              holdingAndRegeneration: true
+            }
+          }
+        }
+      });
+      expect(evidence.statusCode, evidence.body).toBe(201);
+    }
     const prepared = await app.inject({
       method: "POST",
       url: `/v1/production/drafts/${initialDraft.draftId}/prepare`,

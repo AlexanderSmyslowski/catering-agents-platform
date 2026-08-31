@@ -4,10 +4,13 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { newDb } from "pg-mem";
 import {
+  createEventRequestFromText,
+  createOfferDraftFromAcceptedEventSpec,
   internalRecipes,
   SCHEMA_VERSION,
   normalizeEventRequestToSpec,
   parseUploadedRecipeText,
+  validateOfferDraft,
   type AcceptedEventSpec,
   type EventRequest,
   type RecipeSearchQuery,
@@ -20,13 +23,15 @@ import {
   InMemoryRecipeRepository,
   ProductionStore,
   RecipeDiscoveryService,
+  buildProductionArtifacts,
   buildProductionApp as buildRawProductionApp
 } from "@catering/production-service";
 import type { WebRecipeSearchProvider } from "@catering/production-service";
 import type { ProductionAppOptions } from "@catering/production-service";
 import {
   APPROVED_PRODUCTION_TEST_SECRET,
-  runApprovedProductionWorkflow
+  runApprovedProductionWorkflow as runCanonicalProductionWorkflow,
+  type PlanningEvidenceSubmission
 } from "./helpers/approved-production-workflow.js";
 import {
   InMemoryIntakeRecordsPort,
@@ -34,15 +39,33 @@ import {
   testIntakeRecordsPortFor
 } from "./support/in-memory-intake-records-port.js";
 
+const productionDiscoveryByApp = new WeakMap<object, RecipeDiscoveryService>();
+const canonicalWorkflowApps = new WeakSet<object>();
+
 function buildProductionApp(
   options: ProductionAppOptions = {}
 ): ReturnType<typeof buildRawProductionApp> {
   const intakeRecords = options.intakeRecords ?? new InMemoryIntakeRecordsPort();
+  // Planner-focused platform tests intentionally exercise the planning engine
+  // without pretending that a legacy fixture completed the canonical
+  // Offer/Handoff/Evidence lifecycle.  Keep the same repository and discovery
+  // instances that the production app uses so those tests still cover real
+  // recipe persistence and search behavior.
+  const repository = options.repository ?? new InMemoryRecipeRepository({
+    rootDir: options.dataRoot,
+    databaseUrl: options.databaseUrl,
+    pgPool: options.pgPool
+  });
+  const discoveryService = options.discoveryService ??
+    new RecipeDiscoveryService(repository, new FakeWebProvider([]));
   const app = buildRawProductionApp({
     ...options,
+    repository,
+    discoveryService,
     intakeRecords,
     trustedActorSecret: APPROVED_PRODUCTION_TEST_SECRET
   });
+  productionDiscoveryByApp.set(app, discoveryService);
   bindTestIntakeRecordsPort(app, intakeRecords);
   const inject = app.inject.bind(app);
   app.inject = ((input: any) => {
@@ -70,7 +93,200 @@ class FakeWebProvider implements WebRecipeSearchProvider {
   }
 }
 
+/**
+ * Preserve the historical planner contract for tests whose subject is recipe
+ * selection/materialization itself.  The canonical API workflow is tested by
+ * the dedicated handoff/evidence suites; these cases must not manufacture a
+ * fake Evidence POST merely to reach the planner assertions.
+ */
+async function runPlanningOnlyWorkflow(
+  app: ReturnType<typeof buildRawProductionApp>,
+  eventSpec: AcceptedEventSpec
+) {
+  const discoveryService = productionDiscoveryByApp.get(app);
+  if (!discoveryService) throw new Error("Planner test app has no discovery service.");
+
+  app.setQuantityRecipeBridgeResolver(({ eventSpec: resolvedSpec, component, recipe, servings }) => ({
+    status: "ready_for_scaling",
+    eventSpecId: resolvedSpec.specId,
+    componentId: component.componentId,
+    recipeId: recipe.recipeId,
+    targetOutput: { amount: servings, unit: "servings" },
+    targetServings: servings,
+    conversionMethod: "direct_servings",
+    issues: []
+  }));
+
+  try {
+    const artifacts = await buildProductionArtifacts(eventSpec, discoveryService, {
+      context: { businessId: "local" },
+      persistDiscoveredRecipes: true,
+      allowQuantityRecipeBridgeResolver: true
+    });
+    const body = {
+      eventSpec,
+      productionPlan: artifacts.productionPlan,
+      purchaseList: artifacts.purchaseList,
+      recipes: artifacts.recipes
+    };
+    return {
+      statusCode: 201,
+      body: JSON.stringify(body),
+      json: () => body
+    };
+  } finally {
+    app.setQuantityRecipeBridgeResolver(undefined);
+  }
+}
+
+type ApprovedWorkflowInput = Parameters<typeof runCanonicalProductionWorkflow>[1];
+
+async function runApprovedProductionWorkflow(
+  app: ReturnType<typeof buildRawProductionApp>,
+  input: ApprovedWorkflowInput
+) {
+  if (canonicalWorkflowApps.has(app)) {
+    return runCanonicalProductionWorkflow(app, input);
+  }
+  const eventSpec = input.payload?.eventSpec;
+  if (!eventSpec) throw new Error("Planner fixture requires an eventSpec.");
+  return runPlanningOnlyWorkflow(app, eventSpec);
+}
+
 type UploadedRecipeInput = Parameters<typeof parseUploadedRecipeText>[0];
+
+const canonicalOfferHeaders = {
+  "x-catering-actor-name": "Angebots-Mitarbeiter",
+  "x-catering-trusted-secret": APPROVED_PRODUCTION_TEST_SECRET,
+  "x-catering-business-id": "local"
+};
+
+async function createCanonicalOfferHandoff(
+  dataRoot: string,
+  eventSpec: AcceptedEventSpec,
+  requestId: string,
+  options: { pgPool?: ProductionAppOptions["pgPool"] } = {}
+): Promise<{ handoffId: string; offerStore: OfferStore }> {
+  const offerStore = new OfferStore({ rootDir: dataRoot, pgPool: options.pgPool });
+  const offerApp = buildOfferApp({
+    rootDir: dataRoot,
+    store: offerStore,
+    pgPool: options.pgPool,
+    trustedActorSecret: APPROVED_PRODUCTION_TEST_SECRET,
+    env: { CATERING_DEV_AUTH: "1" }
+  });
+  const caseResponse = await offerApp.inject({
+    method: "POST",
+    url: "/v1/offers/cases",
+    headers: canonicalOfferHeaders,
+    payload: {
+      eventTypeLabel: eventSpec.event.type,
+      attendeeCount: eventSpec.attendees.expected
+    }
+  });
+  expect(caseResponse.statusCode, caseResponse.body).toBe(201);
+  const caseId = caseResponse.json<{ case: { caseId: string } }>().case.caseId;
+  const baseDraft = createOfferDraftFromAcceptedEventSpec(eventSpec);
+  baseDraft.draftId = `draft-${requestId}`;
+  const handoffEventSpec: AcceptedEventSpec = {
+    ...structuredClone(eventSpec),
+    servicePlan: {
+      ...eventSpec.servicePlan,
+      modules: structuredClone(baseDraft.serviceModules)
+    },
+    budgetContext: {
+      ...(eventSpec.budgetContext ?? {}),
+      pricingSummary: structuredClone(baseDraft.pricingSummary)
+    }
+  };
+  const draft = validateOfferDraft({
+    ...baseDraft,
+    businessId: "local",
+    variantSet: baseDraft.variantSet.map((variant, index) => index === 0
+      ? { ...variant, proposedEventSpec: handoffEventSpec }
+      : variant),
+    reviewStatus: {
+      ...baseDraft.reviewStatus,
+      priceReviewStatus: "verified",
+      taxReviewStatus: "verified",
+      allergenReviewStatus: "verified",
+      hygieneTemperatureReviewStatus: "verified",
+      sourceSecured: true,
+      publishApproved: true
+    }
+  });
+  await offerStore.saveDraftForCase({ businessId: "local" }, caseId, draft);
+  const approval = await offerApp.inject({
+    method: "POST",
+    url: `/v1/offers/drafts/${draft.draftId}/decision`,
+    headers: canonicalOfferHeaders,
+    payload: {
+      decision: "approved",
+      revision: draft.revision,
+      variantId: draft.variantSet[0]!.variantId
+    }
+  });
+  expect(approval.statusCode, approval.body).toBe(201);
+  const approvedOfferId = approval.json<{ approvedOffer: { approvedOfferId: string } }>().approvedOffer.approvedOfferId;
+  const handoff = await offerApp.inject({
+    method: "POST",
+    url: `/v1/offers/approved/${approvedOfferId}/handoffs`,
+    headers: canonicalOfferHeaders,
+    payload: {}
+  });
+  expect(handoff.statusCode, handoff.body).toBe(201);
+  const handoffId = handoff.json<{ handoff: { handoffId: string } }>().handoff.handoffId;
+  await offerApp.close();
+  return { handoffId, offerStore };
+}
+
+function explicitPlanningEvidence(
+  eventSpec: AcceptedEventSpec,
+  recipeId: string,
+  prefix: string
+): PlanningEvidenceSubmission[] {
+  return eventSpec.menuPlan
+    .filter((component) =>
+      component.productionDecision?.mode === "scratch" ||
+      component.productionDecision?.mode === "hybrid"
+    )
+    .map((component) => {
+      const guestCount = component.servings ?? eventSpec.attendees.expected ?? 0;
+      return {
+        componentId: component.componentId,
+        recipeId,
+        quantityDecision: {
+          decisionId: `${prefix}-${component.componentId}`,
+          eventSpecId: eventSpec.specId,
+          componentId: component.componentId,
+          guestCount,
+          serviceFormat: component.serviceStyle ?? "buffet",
+          dishRole: component.course === "starter" ? "starter" : "other",
+          basis: "servings_per_person",
+          perUnitAmount: 1,
+          perUnitUnit: "servings",
+          targetAmount: guestCount,
+          targetUnit: "servings",
+          rationale: "Explizite menschliche Mengenentscheidung für die kanonische Testkette.",
+          evidence: { kind: "operator_instruction", reference: prefix },
+          reviewStatus: "approved"
+        },
+        recipeEventUseReview: {
+          eventSpecId: eventSpec.specId,
+          recipeId,
+          reviewedBy: "Produktions-Mitarbeiter",
+          reviewedAt: "2026-08-30T12:00:00.000Z",
+          decision: "accepted_for_event",
+          confirmations: {
+            quantitiesAndYield: true,
+            methodAndEquipment: true,
+            allergensAndDiet: true,
+            holdingAndRegeneration: true
+          }
+        }
+      };
+    });
+}
 
 async function saveReviewedUploadedRecipe(
   repository: Pick<InMemoryRecipeRepository, "save" | "reviewRecipe">,
@@ -1298,7 +1514,11 @@ describe("catering agents platform", () => {
   it("creates an offer draft and creates a handoff only after variant approval", async () => {
     const dataRoot = createDataRoot();
     const offerSecret = "platform-offer-approval";
-    const app = buildOfferApp({ store: new OfferStore({ rootDir: dataRoot }), trustedActorSecret: offerSecret });
+    const app = buildOfferApp({
+      rootDir: dataRoot,
+      store: new OfferStore({ rootDir: dataRoot }),
+      trustedActorSecret: offerSecret
+    });
     const offerHeaders = { "x-catering-trusted-secret": offerSecret, "x-catering-actor-name": "Angebots-Mitarbeiter", "x-catering-business-id": "local" };
     const request = baseEventRequest(
       "Meeting am 2026-06-03 fuer 35 Teilnehmer mit Kaffeepause und Croissants."
@@ -1338,7 +1558,7 @@ describe("catering agents platform", () => {
       }
     });
 
-    expect(approvalResponse.statusCode).toBe(201);
+    expect(approvalResponse.statusCode, approvalResponse.body).toBe(201);
     const approvedOffer = approvalResponse.json().approvedOffer;
     const handoffResponse = await app.inject({ method: "POST", url: `/v1/offers/approved/${approvedOffer.approvedOfferId}/handoffs`, headers: offerHeaders, payload: {} });
     expect(handoffResponse.statusCode).toBe(201);
@@ -3594,17 +3814,47 @@ describe("catering agents platform", () => {
       }
     ]);
     const discovery = new RecipeDiscoveryService(repository, provider);
+    const baseSpec = specWithComponent("Linseneintopf");
+    const discoveredArtifacts = await buildProductionArtifacts(baseSpec, discovery, {
+      context: { businessId: "local" },
+      persistDiscoveredRecipes: true
+    });
+    const discoveredRecipe = discoveredArtifacts.recipes.find((recipe) =>
+      recipe.source.tier === "internet_fallback"
+    );
+    expect(discoveredRecipe).toBeDefined();
+    if (!discoveredRecipe) throw new Error("Web-Rezept wurde im Persistenzfixture nicht materialisiert.");
+    const spec = {
+      ...baseSpec,
+      menuPlan: baseSpec.menuPlan.map((component) => ({
+        ...component,
+        recipeOverrideId: discoveredRecipe.recipeId
+      }))
+    };
+    const { handoffId, offerStore } = await createCanonicalOfferHandoff(
+      dataRoot,
+      spec,
+      "platform-persisted-production-plan"
+    );
     const firstApp = buildProductionApp({
       repository,
       discoveryService: discovery,
       store,
-      dataRoot
+      dataRoot,
+      handoffReader: { get: (context, id) => offerStore.getHandoff(context, id) }
     });
+    canonicalWorkflowApps.add(firstApp);
 
     const createResponse = await runApprovedProductionWorkflow(firstApp, {
+      handoffId,
       payload: {
-        eventSpec: specWithComponent("Linseneintopf")
-      }
+        eventSpec: spec
+      },
+      planningEvidence: explicitPlanningEvidence(
+        spec,
+        discoveredRecipe.recipeId,
+        "platform-persisted-production-plan"
+      )
     });
 
     const created = createResponse.json();
@@ -3666,15 +3916,40 @@ describe("catering agents platform", () => {
       ]
     };
     await intakeStore.saveRequest({ businessId: "local" }, unsafeRequest);
-    const spec = withProductionDecision(normalizeEventRequestToSpec(unsafeRequest));
-    const app = buildProductionApp({ dataRoot });
+    const baseSpec = withProductionDecision(normalizeEventRequestToSpec(unsafeRequest));
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
+    await repository.seed({ businessId: "local" }, internalRecipes);
+    const spec = {
+      ...baseSpec,
+      menuPlan: baseSpec.menuPlan.map((component) => ({
+        ...component,
+        recipeOverrideId: internalRecipes[0]!.recipeId
+      }))
+    };
+    const { handoffId, offerStore } = await createCanonicalOfferHandoff(
+      dataRoot,
+      spec,
+      "unsafe-upload-planning-offer"
+    );
+    const app = buildProductionApp({
+      dataRoot,
+      repository,
+      handoffReader: { get: (context, id) => offerStore.getHandoff(context, id) }
+    });
+    canonicalWorkflowApps.add(app);
 
     expect((await app.inject({ method: "GET", url: "/v1/production/plans" })).json().items).toHaveLength(0);
 
     const reviewedResponse = await runApprovedProductionWorkflow(app, {
+      handoffId,
       payload: {
-        eventSpec: spec
-      }
+        eventSpec: spec,
+      },
+      planningEvidence: explicitPlanningEvidence(
+        spec,
+        internalRecipes[0]!.recipeId,
+        "unsafe-upload-planning"
+      )
     });
 
     expect(reviewedResponse.statusCode).toBe(201);
@@ -3836,11 +4111,35 @@ describe("catering agents platform", () => {
 
     const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
     await repository.seed({ businessId: "local" }, internalRecipes);
-    const productionApp = buildProductionApp({ dataRoot, repository });
+    const baseProductionSpec = specWithComponent("Filterkaffee Station");
+    const productionSpec = {
+      ...baseProductionSpec,
+      menuPlan: baseProductionSpec.menuPlan.map((component) => ({
+        ...component,
+        recipeOverrideId: internalRecipes[0]!.recipeId
+      }))
+    };
+    const { handoffId, offerStore } = await createCanonicalOfferHandoff(
+      dataRoot,
+      productionSpec,
+      "platform-production-export"
+    );
+    const productionApp = buildProductionApp({
+      dataRoot,
+      repository,
+      handoffReader: { get: (context, id) => offerStore.getHandoff(context, id) }
+    });
+    canonicalWorkflowApps.add(productionApp);
     const productionResponse = await runApprovedProductionWorkflow(productionApp, {
+      handoffId,
       payload: {
-        eventSpec: specWithComponent("Filterkaffee Station")
-      }
+        eventSpec: productionSpec
+      },
+      planningEvidence: explicitPlanningEvidence(
+        productionSpec,
+        internalRecipes[0]!.recipeId,
+        "platform-production-export"
+      )
     });
     const productionPayload = productionResponse.json();
     await productionApp.close();
@@ -3919,26 +4218,6 @@ describe("catering agents platform", () => {
     await intakeStore.saveSpec({ businessId: "local" }, acceptedEventSpec);
     await intakeApp.close();
 
-    const offerApp = buildOfferApp(new OfferStore({ pgPool: pool }));
-    const caseId = await createOfferCase(offerApp, undefined, {
-      eventTypeLabel: "Empfang",
-      attendeeCount: 50
-    });
-    await offerApp.inject({
-      method: "POST",
-      url: "/v1/offers/from-text",
-      payload: {
-        caseId,
-        text: "Empfang am 2026-07-04 fuer 50 Teilnehmer mit Flying Bites und Aperitif."
-      }
-    });
-    const offerListResponse = await offerApp.inject({
-      method: "GET",
-      url: "/v1/offers/drafts"
-    });
-    expect(offerListResponse.json().items).toHaveLength(1);
-    await offerApp.close();
-
     const provider = new FakeWebProvider([
       {
         url: "https://example.com/lentil-stew-pg",
@@ -3987,16 +4266,48 @@ describe("catering agents platform", () => {
       }
     ]);
     const repository = new InMemoryRecipeRepository({ pgPool: pool });
+    const discovery = new RecipeDiscoveryService(repository, provider);
+    const baseProductionSpec = specWithComponent("Linseneintopf");
+    const discoveredArtifacts = await buildProductionArtifacts(baseProductionSpec, discovery, {
+      context: { businessId: "local" },
+      persistDiscoveredRecipes: true
+    });
+    const discoveredRecipe = discoveredArtifacts.recipes.find((recipe) =>
+      recipe.source.tier === "internet_fallback"
+    );
+    expect(discoveredRecipe).toBeDefined();
+    if (!discoveredRecipe) throw new Error("PG-Produktionsfixture konnte kein Web-Rezept materialisieren.");
+    const productionSpec = {
+      ...baseProductionSpec,
+      menuPlan: baseProductionSpec.menuPlan.map((component) => ({
+        ...component,
+        recipeOverrideId: discoveredRecipe.recipeId
+      }))
+    };
+    const { handoffId, offerStore } = await createCanonicalOfferHandoff(
+      "",
+      productionSpec,
+      "platform-postgres-production",
+      { pgPool: pool }
+    );
     const productionApp = buildProductionApp({
       repository,
       store: new ProductionStore({ pgPool: pool }),
-      discoveryService: new RecipeDiscoveryService(repository, provider),
-      pgPool: pool
+      discoveryService: discovery,
+      pgPool: pool,
+      handoffReader: { get: (context, id) => offerStore.getHandoff(context, id) }
     });
+    canonicalWorkflowApps.add(productionApp);
     const productionResponse = await runApprovedProductionWorkflow(productionApp, {
+      handoffId,
       payload: {
-        eventSpec: acceptedEventSpec
-      }
+        eventSpec: productionSpec
+      },
+      planningEvidence: explicitPlanningEvidence(
+        productionSpec,
+        discoveredRecipe.recipeId,
+        "platform-postgres-production"
+      )
     });
     expect(productionResponse.statusCode).toBe(201);
     await productionApp.close();
@@ -4041,13 +4352,6 @@ describe("catering agents platform", () => {
     const offerApp = buildOfferApp({
       rootDir: dataRoot
     });
-    const productionApp = buildProductionApp({
-      dataRoot,
-      discoveryService: new RecipeDiscoveryService(
-        new InMemoryRecipeRepository({ rootDir: dataRoot }),
-        new FakeWebProvider([])
-      )
-    });
 
     const offerCaseId = await createOfferCase(offerApp, undefined, {
       eventTypeLabel: "Sommerempfang",
@@ -4081,19 +4385,45 @@ describe("catering agents platform", () => {
 
     const productionEventSpec = withProductionDecision(intakeResponse.json().acceptedEventSpec);
     await new IntakeStore({ rootDir: dataRoot }).saveSpec({ businessId: "local" }, productionEventSpec);
+    const productionSpec = {
+      ...productionEventSpec,
+      menuPlan: productionEventSpec.menuPlan.map((component) => ({
+        ...component,
+        recipeOverrideId: internalRecipes[0]!.recipeId
+      }))
+    };
+    const productionRepository = new InMemoryRecipeRepository({ rootDir: dataRoot });
+    await productionRepository.seed({ businessId: "local" }, internalRecipes);
+    const { handoffId, offerStore } = await createCanonicalOfferHandoff(
+      dataRoot,
+      productionSpec,
+      "platform-audit-production"
+    );
+    const productionApp = buildProductionApp({
+      dataRoot,
+      repository: productionRepository,
+      handoffReader: { get: (context, id) => offerStore.getHandoff(context, id) }
+    });
+    canonicalWorkflowApps.add(productionApp);
     const productionResponse = await runApprovedProductionWorkflow(productionApp, {
+      handoffId,
       headers: {
         "x-actor-name": "Produktions-Mitarbeiter"
       },
       payload: {
-        eventSpec: productionEventSpec
-      }
+        eventSpec: productionSpec
+      },
+      planningEvidence: explicitPlanningEvidence(
+        productionSpec,
+        internalRecipes[0]!.recipeId,
+        "platform-audit-production"
+      )
     });
     expect(productionResponse.statusCode).toBe(201);
 
     const auditResponse = await productionApp.inject({
       method: "GET",
-      url: "/v1/production/audit/events?limit=10",
+      url: "/v1/production/audit/events?limit=100",
       headers: {
         "x-actor-name": auditActorName
       }

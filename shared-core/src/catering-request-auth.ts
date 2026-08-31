@@ -50,6 +50,7 @@ interface CateringInternalServiceRoute {
 export const CATERING_INTERNAL_SERVICE_ROUTES: readonly CateringInternalServiceRoute[] = [
   { targetService: "intake-service", actorName: "Offer-Service", method: "GET", pathTemplate: "/v1/intake/internal/requests/:requestId" },
   { targetService: "intake-service", actorName: "Offer-Service", method: "GET", pathTemplate: "/v1/intake/internal/source-documents/:documentId" },
+  { targetService: "intake-service", actorName: "Offer-Service", method: "GET", pathTemplate: "/v1/intake/internal/specs/:specId" },
   { targetService: "intake-service", actorName: "Production-Service", method: "GET", pathTemplate: "/v1/intake/internal/requests/:requestId" },
   { targetService: "intake-service", actorName: "Production-Service", method: "GET", pathTemplate: "/v1/intake/internal/specs/:specId" },
   { targetService: "intake-service", actorName: "Production-Service", method: "GET", pathTemplate: "/v1/intake/internal/source-documents/:documentId" },
