@@ -101,7 +101,7 @@ jobs:
           safe_path() {
             local value="${1-}"
             [[ "$value" == /* && "$value" != *$'\t'* && "$value" != *$'\n'* && "$value" != *$'\r'* ]] || return 1
-            [[ "$value" != *".."* && "$value" =~ ^/[A-Za-z0-9._/-]+$ ]]
+            [[ "$value" != *".."* && ( "$value" == / || "$value" =~ ^/[A-Za-z0-9._/-]+$ ) ]]
           }
 
           path_absence_is_authoritative() {
@@ -187,6 +187,28 @@ jobs:
             done
             [[ -n "$canonical" ]] || canonical=/
             printf '%s' "$canonical"
+          }
+
+          container_path_has_mount_prefix() {
+            local path="$1" mount_destination="$2"
+            [[ "$mount_destination" == / || "$path" == "$mount_destination" || "$path" == "$mount_destination/"* ]]
+          }
+
+          resolve_mount_source_path() {
+            local path="$1" mount_destination="$2" mount_source="$3" suffix resolved
+            [[ "$mount_source" != absent ]] && safe_path "$mount_source" || return 1
+            mount_source="$(canonical_container_path "$mount_source")" || return 1
+            if [[ "$mount_destination" == / ]]; then
+              suffix="$path"
+            else
+              suffix="${path#"$mount_destination"}"
+            fi
+            if [[ -z "$suffix" ]]; then
+              resolved="$mount_source"
+            else
+              resolved="${mount_source%/}$suffix"
+            fi
+            canonical_container_path "$resolved"
           }
 
           mount_records_readout() {
@@ -297,7 +319,7 @@ jobs:
 
           data_root_readout() {
             local rows container env_lines env_encoded env_line value canonical_value found=false unavailable_seen=false count=0 mount_lines
-            local mount_type volume_name source destination writable data_root_status match_count
+            local mount_type volume_name source destination writable match_count longest_destination_length destination_length
             local data_root_mount_type data_root_volume_name data_root_source data_root_destination data_root_writable
             if ! rows="$(docker ps -a --filter 'label=com.docker.compose.project=platform-infra' --format '{{.Names}}' 2>/dev/null)"; then
               printf 'READOUT data_root status=unavailable\n'
@@ -331,20 +353,27 @@ jobs:
                   printf 'READOUT data_root container=%s status=unavailable\n' "$(safe_scalar "$container")"
                   continue
                 fi
-                data_root_status=unmatched
                 match_count=0
+                longest_destination_length=-1
                 while IFS=$'\t' read -r mount_type volume_name source destination writable; do
                   [[ -n "$mount_type" ]] || continue
-                  [[ "$destination" == "$canonical_value" ]] || continue
-                  data_root_status=matched
-                  match_count=$((match_count + 1))
-                  data_root_mount_type="$mount_type"
-                  data_root_volume_name="$volume_name"
-                  data_root_source="$source"
-                  data_root_destination="$destination"
-                  data_root_writable="$writable"
+                  container_path_has_mount_prefix "$canonical_value" "$destination" || continue
+                  destination_length=${#destination}
+                  if (( destination_length > longest_destination_length )); then
+                    longest_destination_length=$destination_length
+                    match_count=1
+                    data_root_mount_type="$mount_type"
+                    data_root_volume_name="$volume_name"
+                    data_root_source="$source"
+                    data_root_destination="$destination"
+                    data_root_writable="$writable"
+                  elif (( destination_length == longest_destination_length )); then
+                    match_count=$((match_count + 1))
+                  fi
                 done <<<"$mount_lines"
-                if (( match_count == 1 )); then
+                if (( match_count == 1 )) && ! data_root_source="$(resolve_mount_source_path "$canonical_value" "$data_root_destination" "$data_root_source")"; then
+                  printf 'READOUT data_root container=%s status=unavailable\n' "$(safe_scalar "$container")"
+                elif (( match_count == 1 )); then
                   printf 'READOUT data_root container=%s status=present path=%s type=%s name=%s source=%s destination=%s writable=%s\n' \
                     "$(safe_scalar "$container")" "$(safe_scalar "$canonical_value")" \
                     "$(safe_scalar "$data_root_mount_type")" "$(safe_scalar "$data_root_volume_name")" \
@@ -353,7 +382,7 @@ jobs:
                 elif (( match_count > 1 )); then
                   printf 'READOUT data_root container=%s status=ambiguous\n' "$(safe_scalar "$container")"
                 else
-                  printf 'READOUT data_root container=%s status=%s\n' "$(safe_scalar "$container")" "$data_root_status"
+                  printf 'READOUT data_root container=%s status=unmatched\n' "$(safe_scalar "$container")"
                 fi
               done <<<"$env_lines"
             done <<<"$rows"
@@ -420,9 +449,12 @@ jobs:
           }
 
           backup_file_readout() {
-          local label="$1" path="$2" metadata file_type owner mode _size _mtime key value
-            if metadata="$(stat -c '%F:%u:%a:%s:%Y' -- "$path" 2>/dev/null)"; then
-              if [[ -L "$path" ]]; then
+            local label="$1" path="$2" initial_stat post_path_stat opened_fd_stat post_fd_stat
+            local device inode file_type owner mode size mtime identity key value line evidence_content
+            local -a buffered_fields=()
+            if initial_stat="$(stat -c $'%d\t%i\t%F\t%u\t%a\t%s\t%Y' -- "$path" 2>/dev/null)"; then
+              IFS=$'\t' read -r device inode file_type owner mode size mtime <<<"$initial_stat"
+              if [[ "$file_type" == 'symbolic link' ]]; then
                 printf 'READOUT backup_file=%s status=unavailable\n' "$(safe_scalar "$label")"
                 return 0
               fi
@@ -433,25 +465,53 @@ jobs:
               printf 'READOUT backup_file=%s status=unavailable\n' "$(safe_scalar "$label")"
               return 0
             fi
-            IFS=: read -r file_type owner mode _size _mtime <<<"$metadata"
-            printf 'READOUT backup_file=%s metadata=%s\n' "$(safe_scalar "$label")" "$(safe_scalar "$metadata")"
             if [[ "$file_type" != 'regular file' || "$owner" != 0 || ! "$mode" =~ ^[0-7]{3,4}$ || "${mode: -1}" =~ [2367] || "${mode: -2:1}" =~ [2367] ]]; then
               printf 'READOUT backup_file=%s status=unsafe\n' "$(safe_scalar "$label")"
               return 0
             fi
-            if [[ -L "$path" || ! -r "$path" ]]; then
+            identity="$device:$inode:$file_type:$owner:$mode"
+            if ! exec 9<"$path"; then
               printf 'READOUT backup_file=%s status=unavailable\n' "$(safe_scalar "$label")"
               return 0
             fi
-            printf 'READOUT backup_file=%s status=regular_root_owned\n' "$(safe_scalar "$label")"
-            while IFS='=' read -r key value; do
+            if ! opened_fd_stat="$(stat -Lc $'%d\t%i\t%F\t%u\t%a\t%s\t%Y' -- /proc/self/fd/9 2>/dev/null)"; then
+              exec 9<&-
+              printf 'READOUT backup_file=%s status=unavailable\n' "$(safe_scalar "$label")"
+              return 0
+            fi
+            IFS=$'\t' read -r device inode file_type owner mode size mtime <<<"$opened_fd_stat"
+            if [[ "$device:$inode:$file_type:$owner:$mode" != "$identity" ]]; then
+              exec 9<&-
+              printf 'READOUT backup_file=%s status=unavailable\n' "$(safe_scalar "$label")"
+              return 0
+            fi
+            if ! evidence_content="$(cat <&9)"; then
+              exec 9<&-
+              printf 'READOUT backup_file=%s status=unavailable\n' "$(safe_scalar "$label")"
+              return 0
+            fi
+            if ! post_fd_stat="$(stat -Lc $'%d\t%i\t%F\t%u\t%a\t%s\t%Y' -- /proc/self/fd/9 2>/dev/null)" ||
+               ! post_path_stat="$(stat -c $'%d\t%i\t%F\t%u\t%a\t%s\t%Y' -- "$path" 2>/dev/null)" ||
+               [[ "$post_fd_stat" != "$opened_fd_stat" || "$post_path_stat" != "$initial_stat" ]]; then
+              exec 9<&-
+              printf 'READOUT backup_file=%s status=unavailable\n' "$(safe_scalar "$label")"
+              return 0
+            fi
+            exec 9<&-
+            while IFS= read -r line; do
+              IFS='=' read -r key value <<<"$line"
               case "$key" in
                 status|project|scope|created_at|repository_status|verified_at)
-                  printf 'READOUT backup_file=%s field=%s value=%s\n' \
-                    "$(safe_scalar "$label")" "$(safe_scalar "$key")" "$(safe_scalar "$value")"
+                  buffered_fields+=("READOUT backup_file=$(safe_scalar "$label") field=$(safe_scalar "$key") value=$(safe_scalar "$value")")
                   ;;
               esac
-            done <"$path"
+            done <<<"$evidence_content"
+            printf 'READOUT backup_file=%s metadata=%s\n' "$(safe_scalar "$label")" \
+              "$(safe_scalar "$file_type:$owner:$mode:$size:$mtime")"
+            printf 'READOUT backup_file=%s status=regular_root_owned\n' "$(safe_scalar "$label")"
+            if ((${#buffered_fields[@]} > 0)); then
+              printf '%s\n' "${buffered_fields[@]}"
+            fi
           }
 
           printf 'READOUT dispatch_sha=%s\n' "$(short_id "$expected_sha")"
