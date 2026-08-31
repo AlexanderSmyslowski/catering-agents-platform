@@ -148,7 +148,7 @@ jobs:
               printf 'READOUT network=%s status=absent\n' "$(safe_scalar "$network")"
               return 0
             fi
-            if ! metadata="$(docker network inspect --format '{{printf "%s\t%s\t%s\t%s\t%s\t%s" .Name .Id .Driver .Scope .Internal .EnableIPv6}}' "$network" 2>/dev/null)"; then
+            if ! metadata="$(docker network inspect --format '{{printf "%s\t%s\t%s\t%s\t%t\t%t" .Name .Id .Driver .Scope .Internal .EnableIPv6}}' "$network" 2>/dev/null)"; then
               printf 'READOUT network=%s status=unavailable\n' "$(safe_scalar "$network")"
               return 0
             fi
@@ -257,7 +257,7 @@ jobs:
             fi
           while IFS=$'\t' read -r name id _state _status _image; do
               [[ -n "$name" ]] || continue
-              if ! inspect_line="$(docker inspect --format '{{printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t" .Id .State.Status .State.Running .State.StartedAt .RestartCount .Image (index .Config.Labels "com.docker.compose.project") (index .Config.Labels "com.docker.compose.service")}}{{if .State.Health}}{{.State.Health.Status}}{{else}}absent{{end}}' "$name" 2>/dev/null)"; then
+              if ! inspect_line="$(docker inspect --format '{{printf "%s\t%s\t%t\t%s\t%d\t%s\t%s\t%s\t" .Id .State.Status .State.Running .State.StartedAt .RestartCount .Image (index .Config.Labels "com.docker.compose.project") (index .Config.Labels "com.docker.compose.service")}}{{if .State.Health}}{{.State.Health.Status}}{{else}}absent{{end}}' "$name" 2>/dev/null)"; then
                 printf 'READOUT container=%s project=%s status=unavailable\n' "$(safe_scalar "$name")" "$(safe_scalar "$project")"
                 continue
               fi
