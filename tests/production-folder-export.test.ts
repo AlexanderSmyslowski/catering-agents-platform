@@ -403,6 +403,65 @@ describe("production folder export", () => {
     expect(html).not.toContain("review_required");
   });
 
+  it("renders plan-frozen kitchen allergens instead of live recipe values", () => {
+    const input = fixture();
+    input.recipe.allergens = ["milk"];
+    input.plan.kitchenSheets[0].allergens = ["egg", "mustard"];
+    const html = renderProductionFolderHtml({
+      plan: input.plan,
+      spec: input.spec,
+      purchaseLists: [input.purchaseList],
+      recipes: [input.recipe]
+    });
+
+    expect(html).toContain("<strong>Allergene:</strong> Ei, Senf");
+    expect(html).not.toContain("<strong>Allergene:</strong> Milch");
+  });
+
+  it("does not fall back to live recipe allergens when the plan has none", () => {
+    const input = fixture();
+    input.recipe.allergens = ["milk"];
+    input.plan.kitchenSheets[0].allergens = [];
+    const html = renderProductionFolderHtml({
+      plan: input.plan,
+      spec: input.spec,
+      purchaseLists: [input.purchaseList],
+      recipes: [input.recipe]
+    });
+
+    expect(html).toContain("<strong>Allergene:</strong> Keine ausgewiesenen Allergene");
+    expect(html).not.toContain("<strong>Allergene:</strong> Milch");
+  });
+
+  it("marks an absent plan allergen snapshot for pre-production review", () => {
+    const input = fixture();
+    input.recipe.allergens = ["milk"];
+    delete input.plan.kitchenSheets[0].allergens;
+    const html = renderProductionFolderHtml({
+      plan: input.plan,
+      spec: input.spec,
+      purchaseLists: [input.purchaseList],
+      recipes: [input.recipe]
+    });
+
+    expect(html).toContain("<strong>Allergene:</strong> Allergene nicht hinterlegt – vor Produktion prüfen");
+    expect(html).not.toContain("<strong>Allergene:</strong> Milch");
+  });
+
+  it("escapes canonical allergen labels before placing them in the recipe card", () => {
+    const input = fixture();
+    input.plan.kitchenSheets[0].allergens = ['egg<script>alert("x")</script>'];
+    const html = renderProductionFolderHtml({
+      plan: input.plan,
+      spec: input.spec,
+      purchaseLists: [input.purchaseList],
+      recipes: [input.recipe]
+    });
+
+    expect(html).toContain("egg&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;");
+    expect(html).not.toContain("<script>alert(");
+  });
+
   it("paginates long recipe and audit tables by complete rows", () => {
     const input = fixture();
     const ingredient = input.recipe.ingredients[0]!;

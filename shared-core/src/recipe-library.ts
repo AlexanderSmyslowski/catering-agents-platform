@@ -545,26 +545,89 @@ function recipeNameFromText(
 }
 
 function servingsFromText(text: string): number {
-  const match =
-    text.match(/(\d{1,3})\s*(portionen|portions|servings|personen|gaeste|gäste|people)/i) ??
-    text.match(/yield\s*[:\-]?\s*(\d{1,3})/i);
-  return match ? Number(match[1]) : 8;
+  const yieldLabels = "(?:portionen?|portions?|servings?|personen|gaeste|gäste|people|pax|yield)";
+  const wholeYieldLabel = `(?<![\\p{L}\\p{N}])${yieldLabels}(?![\\p{L}\\p{N}])`;
+  const compactNumberBeforeLabelHint = `\\d+${yieldLabels}`;
+  const compactLabelBeforeNumberHint = `${yieldLabels}\\d+`;
+  const spacedNumberBeforeLabelHint = `\\d+[ \\t]+${yieldLabels}`;
+  const yieldHintLine = new RegExp(
+    `(?:${wholeYieldLabel}|${compactNumberBeforeLabelHint}|${compactLabelBeforeNumberHint}|${spacedNumberBeforeLabelHint})`,
+    "iu"
+  );
+  const hintLines = text.split(/\r?\n/).filter((line) => yieldHintLine.test(line));
+  const numberBeforeLabel = new RegExp(
+    `^\\s*(\\d{1,4})[ \\t]+${wholeYieldLabel}[ \\t]*$`,
+    "iu"
+  );
+  const compactNumberBeforeLabel = new RegExp(
+    `^\\s*(\\d{1,4})${yieldLabels}(?![\\p{L}\\p{N}])[ \\t]*$`,
+    "iu"
+  );
+  const labelBeforeNumber = new RegExp(
+    `^\\s*${wholeYieldLabel}(?:[ \\t]*:[ \\t]*|[ \\t]+)(\\d{1,4})(?=[ \\t]*$)`,
+    "iu"
+  );
+  const candidates: number[] = [];
+  for (const line of hintLines) {
+    const lineCandidates = [
+      numberBeforeLabel.exec(line),
+      compactNumberBeforeLabel.exec(line),
+      labelBeforeNumber.exec(line)
+    ]
+      .filter((match): match is RegExpExecArray => match !== null)
+      .map((match) => Number(match[1]));
+    if ((line.match(/\d{1,4}/g) ?? []).length !== 1 || lineCandidates.length !== 1) {
+      throw new Error("Die Ertragsangabe des Rezepts ist nicht eindeutig auswertbar.");
+    }
+    candidates.push(lineCandidates[0]!);
+  }
+  const hasYieldHint = hintLines.length > 0;
+
+  if (!hasYieldHint) {
+    return 8;
+  }
+
+  if (candidates.length === 0 || candidates.some((candidate) => !Number.isSafeInteger(candidate) || candidate <= 0)) {
+    throw new Error("Die Ertragsangabe des Rezepts ist nicht eindeutig auswertbar.");
+  }
+
+  const distinctCandidates = new Set(candidates);
+  if (distinctCandidates.size !== 1) {
+    throw new Error("Das Rezept enthält widersprüchliche Ertragsangaben.");
+  }
+
+  return candidates[0];
+}
+
+function containsWholeAllergenTerm(text: string, terms: string[]): boolean {
+  return terms.some((term) => {
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, "iu").test(text);
+  });
 }
 
 function detectAllergens(text: string): string[] {
   const normalized = text.toLowerCase();
   const allergens = new Set<string>();
-  if (/(milch|milk|butter|cream|parmesan|cheese)/i.test(normalized)) {
+  const controlledNutRootSuffix = /(?<![\p{L}\p{N}])(?:nuss|erdnuss|haselnuss|walnuss|pekannuss|macadamianuss)(?:öl|oel|mehl|kern(?:e)?|creme|butter|nougat)(?![\p{L}\p{N}])/iu;
+  const milkSearchText = normalized.replace(
+    /(?<![\p{L}\p{N}])(?:erdnussbutter|peanuts?[ \t]+butter)(?![\p{L}\p{N}])/giu,
+    " "
+  );
+  if (containsWholeAllergenTerm(milkSearchText, ["milch", "milchpulver", "vollmilch", "buttermilch", "kondensmilch", "milchschokolade", "milk", "butter", "buttercreme", "butterkeks", "cream", "parmesan", "cheese", "cheesecake"])) {
     allergens.add("milk");
   }
-  if (/(weizen|flour|bread|brot|croissant|pasta|croutons)/i.test(normalized)) {
+  if (containsWholeAllergenTerm(normalized, ["weizen", "weizenmehl", "weizenstärke", "weizenbrot", "weizengrieß", "vollkornbrot", "wheat", "flour", "bread", "breadcrumbs", "brot", "croissant", "pasta", "croutons"])) {
     allergens.add("gluten");
   }
-  if (/(nuss|nut|almond|hazelnut|walnut)/i.test(normalized)) {
+  if (controlledNutRootSuffix.test(normalized) || containsWholeAllergenTerm(normalized, ["nuss", "nüsse", "nuesse", "haselnuss", "haselnüsse", "haselnuesse", "walnuss", "walnüsse", "walnuesse", "erdnuss", "erdnüsse", "erdnuesse", "pekannuss", "pekannüsse", "pekannuesse", "nussmix", "macadamianuss", "peanut", "peanuts", "peanut butter", "peanutbutter", "nut", "nuts", "mandel", "mandeln", "almond", "almonds", "hazelnut", "hazelnuts", "walnut", "walnuts"])) {
     allergens.add("nuts");
   }
-  if (/(egg|ei\b)/i.test(normalized)) {
+  if (containsWholeAllergenTerm(normalized, ["egg", "eggs", "ei", "eier"])) {
     allergens.add("egg");
+  }
+  if (containsWholeAllergenTerm(normalized, ["senf", "mustard"])) {
+    allergens.add("mustard");
   }
   return [...allergens];
 }
