@@ -10,7 +10,7 @@ const workflowPath = path.join(
   ".github/workflows/catering-production-operator-readout.yml",
 );
 
-function remoteDefinitions(): string {
+function remoteScript(): string {
   const workflow = readFileSync(workflowPath, "utf8");
   const marker = "<<'REMOTE_READOUT'\n";
   const start = workflow.indexOf(marker);
@@ -18,7 +18,11 @@ function remoteDefinitions(): string {
   const remoteStart = start + marker.length;
   const remoteEnd = workflow.indexOf("\n          REMOTE_READOUT", remoteStart);
   if (remoteEnd < 0) throw new Error("Missing REMOTE_READOUT end marker");
-  const remote = workflow.slice(remoteStart, remoteEnd);
+  return workflow.slice(remoteStart, remoteEnd);
+}
+
+function remoteDefinitions(): string {
+  const remote = remoteScript();
   const executionStart = remote.indexOf("\n          printf 'READOUT dispatch_sha=");
   if (executionStart < 0) throw new Error("Missing remote execution boundary");
   return remote.slice(0, executionStart);
@@ -59,16 +63,54 @@ function fakeDockerSource(): string {
     "    fi",
     "    exit 66",
     "    ;;",
-    "  *) exit 67 ;;",
+    "  network)",
+    "    [[ \"$scenario\" != network-unavailable ]] || exit 55",
+    "    exit 67",
+    "    ;;",
+    "  volume)",
+    "    case \"$scenario\" in",
+    "      volume-unavailable) exit 56 ;;",
+    "      volume-mount-unavailable)",
+    "        case \"${2-}\" in",
+    "          ls) printf 'fixture-volume\\n' ;;",
+    "          inspect) printf 'fixture-volume\\tlocal\\t%s/volume-data\\n' \"${FIXTURE_ROOT:?}\" ;;",
+    "          *) exit 57 ;;",
+    "        esac",
+    "        ;;",
+    "      *) exit 68 ;;",
+    "    esac",
+    "    ;;",
+    "  *) exit 69 ;;",
     "esac",
+    "",
+  ].join("\n");
+}
+
+function fakeSystemctlSource(): string {
+  return [
+    "#!/usr/bin/env bash",
+    "set -euo pipefail",
+    "[[ \"${FAKE_SCENARIO:?}\" != systemd-unavailable ]] || exit 55",
+    "exit 66",
+    "",
+  ].join("\n");
+}
+
+function fakeFindmntSource(): string {
+  return [
+    "#!/usr/bin/env bash",
+    "set -euo pipefail",
+    "[[ \"${FAKE_SCENARIO:?}\" != volume-mount-unavailable ]] || exit 55",
+    "printf '/dev/root ext4 rw\\n'",
     "",
   ].join("\n");
 }
 
 function runRemote(command: string, scenario: string): ReturnType<typeof spawnSync> {
   const fixtureRoot = mkdtempSync(path.join(tmpdir(), "operator-readout-contract-"));
-  const dockerPath = path.join(fixtureRoot, "docker");
-  writeFileSync(dockerPath, fakeDockerSource(), { mode: 0o755 });
+  writeFileSync(path.join(fixtureRoot, "docker"), fakeDockerSource(), { mode: 0o755 });
+  writeFileSync(path.join(fixtureRoot, "systemctl"), fakeSystemctlSource(), { mode: 0o755 });
+  writeFileSync(path.join(fixtureRoot, "findmnt"), fakeFindmntSource(), { mode: 0o755 });
   try {
     return spawnSync(
       "bash",
@@ -78,6 +120,7 @@ function runRemote(command: string, scenario: string): ReturnType<typeof spawnSy
         env: {
           ...process.env,
           FAKE_SCENARIO: scenario,
+          FIXTURE_ROOT: fixtureRoot,
           PATH: `${fixtureRoot}:${process.env.PATH ?? ""}`,
         },
       },
@@ -114,7 +157,7 @@ describe("Catering production operator readout contract", () => {
     expect(result.stdout).not.toContain("postgres://");
   });
 
-  test("surfaces critical readout loss in a collection-level marker", () => {
+  test("surfaces container evidence loss as a partial collection", () => {
     const result = runRemote(
       "container_readout platform-infra; collection_status_readout",
       "container-unavailable",
@@ -123,5 +166,100 @@ describe("Catering production operator readout contract", () => {
     expect(result.status, String(result.stderr)).toBe(0);
     expect(result.stdout).toContain("READOUT critical_unavailable area=container_identity subject=fixture-container");
     expect(result.stdout).toContain("READOUT collection_status=partial critical_unavailable_count=1");
+    expect(result.stdout).toContain("READOUT collection=partial");
+    expect(result.stdout).not.toContain("READOUT collection=complete");
+  });
+
+  test("marks an inaccessible state path as a partial collection", () => {
+    const result = runRemote(
+      'ln -s missing "$FIXTURE_ROOT/blocked"; readout_path phase3_fixture "$FIXTURE_ROOT/blocked/marker"; collection_status_readout',
+      "path-unavailable",
+    );
+
+    expect(result.status, String(result.stderr)).toBe(0);
+    expect(result.stdout).toContain("READOUT path=phase3_fixture status=unavailable");
+    expect(result.stdout).toContain("READOUT critical_unavailable area=path subject=phase3_fixture");
+    expect(result.stdout).toContain("READOUT collection=partial");
+  });
+
+  test("marks unavailable Docker network evidence as a partial collection", () => {
+    const result = runRemote(
+      "network_readout catering_ingress; collection_status_readout",
+      "network-unavailable",
+    );
+
+    expect(result.status, String(result.stderr)).toBe(0);
+    expect(result.stdout).toContain("READOUT network=catering_ingress status=unavailable");
+    expect(result.stdout).toContain("READOUT critical_unavailable area=network subject=catering_ingress");
+    expect(result.stdout).toContain("READOUT collection=partial");
+  });
+
+  test("marks unavailable Docker volume inventory as a partial collection", () => {
+    const result = runRemote(
+      "volume_readout platform-infra; collection_status_readout",
+      "volume-unavailable",
+    );
+
+    expect(result.status, String(result.stderr)).toBe(0);
+    expect(result.stdout).toContain("READOUT volumes_project=platform-infra status=unavailable");
+    expect(result.stdout).toContain("READOUT critical_unavailable area=volume_inventory subject=platform-infra");
+    expect(result.stdout).toContain("READOUT collection=partial");
+  });
+
+  test("marks an unreadable Docker volume filesystem as a partial collection", () => {
+    const result = runRemote(
+      "volume_readout platform-infra; collection_status_readout",
+      "volume-mount-unavailable",
+    );
+
+    expect(result.status, String(result.stderr)).toBe(0);
+    expect(result.stdout).toContain("READOUT volume_mount volume=fixture-volume status=unavailable");
+    expect(result.stdout).toContain("READOUT critical_unavailable area=volume_mount subject=fixture-volume");
+    expect(result.stdout).toContain("READOUT collection=partial");
+  });
+
+  test("marks unavailable systemd evidence as a partial collection", () => {
+    const result = runRemote(
+      "systemd_readout; collection_status_readout",
+      "systemd-unavailable",
+    );
+
+    expect(result.status, String(result.stderr)).toBe(0);
+    expect(result.stdout).toContain("READOUT systemd_timers status=unavailable");
+    expect(result.stdout).toContain("READOUT systemd_units status=unavailable");
+    expect(result.stdout).toContain("READOUT critical_unavailable area=systemd_timers subject=host");
+    expect(result.stdout).toContain("READOUT critical_unavailable area=systemd_units subject=host");
+    expect(result.stdout).toContain("READOUT collection_status=partial critical_unavailable_count=2");
+  });
+
+  test("marks unsafe backup evidence as a partial collection", () => {
+    const result = runRemote(
+      'printf unsafe >"$FIXTURE_ROOT/backup-evidence"; chmod 0666 "$FIXTURE_ROOT/backup-evidence"; backup_file_readout fixture_backup "$FIXTURE_ROOT/backup-evidence"; collection_status_readout',
+      "backup-unsafe",
+    );
+
+    expect(result.status, String(result.stderr)).toBe(0);
+    expect(result.stdout).toContain("READOUT backup_file=fixture_backup status=unsafe");
+    expect(result.stdout).toContain("READOUT critical_unavailable area=backup_file subject=fixture_backup");
+    expect(result.stdout).toContain("READOUT collection=partial");
+  });
+
+  test("emits the legacy complete marker only for authoritative collections", () => {
+    const result = runRemote("collection_status_readout", "complete");
+
+    expect(result.status, String(result.stderr)).toBe(0);
+    expect(result.stdout).toContain("READOUT collection_status=complete critical_unavailable_count=0");
+    expect(result.stdout).toContain("READOUT collection=complete");
+    expect(result.stdout).not.toContain("READOUT collection=partial");
+  });
+
+  test("delegates the terminal collection marker to collection status", () => {
+    const remote = remoteScript();
+    const execution = remote.slice(
+      remote.indexOf("backup_file_readout catering_backup_repository_status"),
+    );
+
+    expect(execution).toContain("collection_status_readout");
+    expect(execution).not.toContain("printf 'READOUT collection=complete");
   });
 });
