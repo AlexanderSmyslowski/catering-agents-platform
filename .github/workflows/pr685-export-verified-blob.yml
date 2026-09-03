@@ -70,7 +70,7 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- tmp/pr685-corrected-readout.yml
+          git add -f -- tmp/pr685-corrected-readout.yml
           test "$(git diff --cached --name-only)" = "tmp/pr685-corrected-readout.yml"
           git commit -m "chore(infra): stage verified operator readout blob"
           git push origin "HEAD:refs/heads/$GITHUB_REF_NAME"
