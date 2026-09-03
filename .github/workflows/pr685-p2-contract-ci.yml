@@ -35,3 +35,5 @@ jobs:
 
       - name: Run focused operator-readout contract
         run: npx vitest run tests/catering-production-operator-readout-contract.test.ts --maxWorkers=1
+
+# Direct user-authored trigger for the RED evidence run.
