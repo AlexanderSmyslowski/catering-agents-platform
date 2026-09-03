@@ -36,7 +36,7 @@ function fakeDockerSource(): string {
     "case \"${1-}\" in",
     "  ps)",
     "    case \"$scenario\" in",
-    "      storage-postgres) printf 'fixture-app\\n' ;;",
+    "      storage-postgres|storage-database-url|storage-default-file|storage-default-unmounted|storage-precedence) printf 'fixture-app\\n' ;;",
     "      *) printf 'fixture-container\\tfixture-short\\trunning\\tUp 5 minutes\\tfixture-image\\n' ;;",
     "    esac",
     "    ;;",
@@ -54,11 +54,33 @@ function fakeDockerSource(): string {
     "      printf 'platform-infra_default\\tfixture-network-id\\tfixture-container,intake,\\n'",
     "      exit 0",
     "    fi",
-    "    if [[ \"$template\" == *'.Mounts'* ]]; then exit 0; fi",
-    "    if [[ \"$template\" == *'.Config.Env'* ]]; then",
-    "      if [[ \"$scenario\" == storage-postgres && \"$template\" == *'CATERING_DATABASE_URL'* ]]; then",
-    "        printf 'CATERING_DATABASE_URL\\n'",
+    "    if [[ \"$template\" == *'.Mounts'* ]]; then",
+    "      if [[ \"$scenario\" == storage-default-file ]]; then",
+    "        printf '\"bind\"\\x1f\"\"\\x1f\"%s/default-data\"\\x1f\"/srv/catering/data\"\\x1ftrue\\n' \"${FIXTURE_ROOT:?}\"",
     "      fi",
+    "      exit 0",
+    "    fi",
+    "    if [[ \"$template\" == *'.Config.WorkingDir'* ]]; then",
+    "      printf '\"/srv/catering\"\\n'",
+    "      exit 0",
+    "    fi",
+    "    if [[ \"$template\" == *'.Config.Env'* ]]; then",
+    "      case \"$scenario\" in",
+    "        storage-postgres)",
+    "          [[ \"$template\" == *'\"CATERING_DATABASE_URL\"'* ]] && printf 'CATERING_DATABASE_URL\\n'",
+    "          ;;",
+    "        storage-database-url)",
+    "          [[ \"$template\" == *'\"DATABASE_URL\"'* ]] && printf 'DATABASE_URL\\n'",
+    "          ;;",
+    "        storage-precedence)",
+    "          if [[ \"$template\" == *'%q'* ]]; then",
+    "            printf '\"CATERING_DATA_ROOT=/legacy-data\"\\n'",
+    "          else",
+    "            [[ \"$template\" == *'\"CATERING_DATABASE_URL\"'* ]] && printf 'CATERING_DATABASE_URL\\n'",
+    "            [[ \"$template\" == *'\"CATERING_DATA_ROOT\"'* ]] && printf 'CATERING_DATA_ROOT\\n'",
+    "          fi",
+    "          ;;",
+    "      esac",
     "      exit 0",
     "    fi",
     "    exit 66",
@@ -155,6 +177,58 @@ describe("Catering production operator readout contract", () => {
     expect(result.stdout).toContain("READOUT storage_backend container=fixture-app mode=postgres");
     expect(result.stdout).toContain("READOUT data_root status=not_applicable backend=postgres");
     expect(result.stdout).not.toContain("postgres://");
+  });
+
+  test("recognizes DATABASE_URL as the runtime PostgreSQL fallback", () => {
+    const result = runRemote("data_root_readout; collection_status_readout", "storage-database-url");
+
+    expect(result.status, String(result.stderr)).toBe(0);
+    expect(result.stdout).toContain("READOUT storage_backend container=fixture-app mode=postgres");
+    expect(result.stdout).toContain("READOUT data_root status=not_applicable backend=postgres");
+    expect(result.stdout).toContain("READOUT collection=complete");
+    expect(result.stdout).not.toContain("postgres://");
+    expect(result.stdout).not.toContain("DATABASE_URL");
+  });
+
+  test("maps the default file data root from the container working directory", () => {
+    const result = runRemote("data_root_readout; collection_status_readout", "storage-default-file");
+
+    expect(result.status, String(result.stderr)).toBe(0);
+    expect(result.stdout).toContain("READOUT storage_backend container=fixture-app mode=file");
+    expect(result.stdout).toContain(
+      "READOUT data_root container=fixture-app status=present path=/srv/catering/data origin=default_workdir",
+    );
+    expect(result.stdout).toContain("destination=/srv/catering/data writable=true");
+    expect(result.stdout).toMatch(
+      /source=\/tmp\/operator-readout-contract-[^ ]+\/default-data/,
+    );
+    expect(result.stdout).toContain("READOUT collection=complete");
+  });
+
+  test("marks an unmounted default file data root as a partial collection", () => {
+    const result = runRemote(
+      "data_root_readout; collection_status_readout",
+      "storage-default-unmounted",
+    );
+
+    expect(result.status, String(result.stderr)).toBe(0);
+    expect(result.stdout).toContain("READOUT storage_backend container=fixture-app mode=file");
+    expect(result.stdout).toContain(
+      "READOUT data_root container=fixture-app status=unmatched path=/srv/catering/data origin=default_workdir",
+    );
+    expect(result.stdout).toContain("READOUT critical_unavailable area=data_root subject=fixture-app");
+    expect(result.stdout).toContain("READOUT collection=partial");
+  });
+
+  test("uses PostgreSQL precedence when a file root is also configured", () => {
+    const result = runRemote("data_root_readout; collection_status_readout", "storage-precedence");
+
+    expect(result.status, String(result.stderr)).toBe(0);
+    expect(result.stdout).toContain("READOUT storage_backend container=fixture-app mode=postgres");
+    expect(result.stdout).toContain("READOUT data_root status=not_applicable backend=postgres");
+    expect(result.stdout).toContain("READOUT collection=complete");
+    expect(result.stdout).not.toContain("mode=hybrid");
+    expect(result.stdout).not.toContain("critical_unavailable area=storage_backend");
   });
 
   test("surfaces container evidence loss as a partial collection", () => {
