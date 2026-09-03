@@ -348,7 +348,7 @@ jobs:
           }
 
           data_root_readout() {
-            local rows container env_keys env_key env_lines env_encoded env_line value canonical_value origin
+            local rows container compose_service env_keys env_key env_lines env_encoded env_line value canonical_value origin
             local working_dir_encoded working_dir database_source
             local found=false database_seen=false unavailable_seen=false count=0 mount_lines
             local catering_database_present catering_database_nonempty database_fallback_present database_fallback_nonempty
@@ -362,6 +362,30 @@ jobs:
             fi
             while IFS= read -r container; do
               [[ -n "$container" ]] || continue
+              if ! compose_service="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "$container" 2>/dev/null)" ||
+                 [[ -z "$compose_service" ]]; then
+                printf 'READOUT storage_backend container=%s service=unknown status=unavailable\n' \
+                  "$(safe_scalar "$container")"
+                critical_unavailable storage_backend "$container"
+                unavailable_seen=true
+                continue
+              fi
+              case "$compose_service" in
+                intake|offer|production|exports)
+                  ;;
+                postgres|web)
+                  printf 'READOUT storage_backend container=%s mode=not_applicable service=%s\n' \
+                    "$(safe_scalar "$container")" "$(safe_scalar "$compose_service")"
+                  continue
+                  ;;
+                *)
+                  printf 'READOUT storage_backend container=%s service=%s status=unavailable\n' \
+                    "$(safe_scalar "$container")" "$(safe_scalar "$compose_service")"
+                  critical_unavailable storage_backend "$container"
+                  unavailable_seen=true
+                  continue
+                  ;;
+              esac
               if ! env_keys="$(docker inspect --format '{{range .Config.Env}}{{if eq (index (split . "=") 0) "CATERING_DATABASE_URL"}}{{if eq . "CATERING_DATABASE_URL="}}{{println "CATERING_DATABASE_URL_EMPTY"}}{{else}}{{println "CATERING_DATABASE_URL"}}{{end}}{{end}}{{if eq (index (split . "=") 0) "DATABASE_URL"}}{{if eq . "DATABASE_URL="}}{{println "DATABASE_URL_EMPTY"}}{{else}}{{println "DATABASE_URL"}}{{end}}{{end}}{{if eq (index (split . "=") 0) "CATERING_DATA_ROOT"}}{{println "CATERING_DATA_ROOT"}}{{end}}{{end}}' "$container" 2>/dev/null)"; then
                 printf 'READOUT storage_backend container=%s status=unavailable\n' "$(safe_scalar "$container")"
                 critical_unavailable storage_backend "$container"
