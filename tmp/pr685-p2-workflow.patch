@@ -1,0 +1,199 @@
+--- a/.github/workflows/catering-production-operator-readout.yml
++++ b/.github/workflows/catering-production-operator-readout.yml
+@@ -348,8 +348,10 @@
+           }
+ 
+           data_root_readout() {
+-            local rows container env_keys env_key env_lines env_encoded env_line value canonical_value
+-            local found=false database_seen=false unavailable_seen=false count=0 mount_lines backend
++            local rows container env_keys env_key env_lines env_encoded env_line value canonical_value origin
++            local working_dir_encoded working_dir database_source
++            local found=false database_seen=false unavailable_seen=false count=0 mount_lines
++            local catering_database_present catering_database_nonempty database_fallback_present database_fallback_nonempty
+             local has_database has_data_root
+             local mount_type volume_name source destination writable match_count longest_destination_length destination_length
+             local data_root_mount_type data_root_volume_name data_root_source data_root_destination data_root_writable
+@@ -360,64 +362,124 @@
+             fi
+             while IFS= read -r container; do
+               [[ -n "$container" ]] || continue
+-              if ! env_keys="$(docker inspect --format '{{range .Config.Env}}{{if eq (index (split . "=") 0) "CATERING_DATABASE_URL"}}{{println "CATERING_DATABASE_URL"}}{{end}}{{if eq (index (split . "=") 0) "CATERING_DATA_ROOT"}}{{println "CATERING_DATA_ROOT"}}{{end}}{{end}}' "$container" 2>/dev/null)"; then
++              if ! env_keys="$(docker inspect --format '{{range .Config.Env}}{{if eq (index (split . "=") 0) "CATERING_DATABASE_URL"}}{{if eq . "CATERING_DATABASE_URL="}}{{println "CATERING_DATABASE_URL_EMPTY"}}{{else}}{{println "CATERING_DATABASE_URL"}}{{end}}{{end}}{{if eq (index (split . "=") 0) "DATABASE_URL"}}{{if eq . "DATABASE_URL="}}{{println "DATABASE_URL_EMPTY"}}{{else}}{{println "DATABASE_URL"}}{{end}}{{end}}{{if eq (index (split . "=") 0) "CATERING_DATA_ROOT"}}{{println "CATERING_DATA_ROOT"}}{{end}}{{end}}' "$container" 2>/dev/null)"; then
+                 printf 'READOUT storage_backend container=%s status=unavailable\n' "$(safe_scalar "$container")"
+                 critical_unavailable storage_backend "$container"
+                 unavailable_seen=true
+                 continue
+               fi
+-              has_database=false
++              catering_database_present=false
++              catering_database_nonempty=false
++              database_fallback_present=false
++              database_fallback_nonempty=false
+               has_data_root=false
+               while IFS= read -r env_key; do
+                 case "$env_key" in
+-                  CATERING_DATABASE_URL) has_database=true ;;
++                  CATERING_DATABASE_URL)
++                    catering_database_present=true
++                    catering_database_nonempty=true
++                    ;;
++                  CATERING_DATABASE_URL_EMPTY)
++                    catering_database_present=true
++                    ;;
++                  DATABASE_URL)
++                    database_fallback_present=true
++                    database_fallback_nonempty=true
++                    ;;
++                  DATABASE_URL_EMPTY)
++                    database_fallback_present=true
++                    ;;
+                   CATERING_DATA_ROOT) has_data_root=true ;;
+                 esac
+               done <<<"$env_keys"
+-              if [[ "$has_database" == true && "$has_data_root" == true ]]; then
+-                backend=hybrid
+-                database_seen=true
+-                critical_unavailable storage_backend "$container"
+-              elif [[ "$has_database" == true ]]; then
+-                backend=postgres
+-                database_seen=true
+-              elif [[ "$has_data_root" == true ]]; then
+-                backend=file
+-              else
+-                backend=none
++
++              has_database=false
++              database_source=absent
++              if [[ "$catering_database_present" == true ]]; then
++                database_source=catering
++                [[ "$catering_database_nonempty" == true ]] && has_database=true
++              elif [[ "$database_fallback_present" == true ]]; then
++                database_source=fallback
++                [[ "$database_fallback_nonempty" == true ]] && has_database=true
+               fi
+-              printf 'READOUT storage_backend container=%s mode=%s\n' \
+-                "$(safe_scalar "$container")" "$(safe_scalar "$backend")"
+-              [[ "$has_data_root" == true ]] || continue
+-              if ! env_lines="$(docker inspect --format '{{range .Config.Env}}{{if eq (index (split . "=") 0) "CATERING_DATA_ROOT"}}{{printf "%q" .}}{{println}}{{end}}{{end}}' "$container" 2>/dev/null)"; then
+-                printf 'READOUT data_root container=%s status=unavailable\n' "$(safe_scalar "$container")"
+-                critical_unavailable data_root "$container"
+-                unavailable_seen=true
++
++              if [[ "$has_database" == true ]]; then
++                database_seen=true
++                printf 'READOUT storage_backend container=%s mode=postgres database_source=%s\n' \
++                  "$(safe_scalar "$container")" "$(safe_scalar "$database_source")"
+                 continue
+               fi
++
++              printf 'READOUT storage_backend container=%s mode=file database_source=%s\n' \
++                "$(safe_scalar "$container")" "$(safe_scalar "$database_source")"
++              found=true
++
++              origin=environment
++              if [[ "$has_data_root" == true ]]; then
++                if ! env_lines="$(docker inspect --format '{{range .Config.Env}}{{if eq (index (split . "=") 0) "CATERING_DATA_ROOT"}}{{printf "%q" .}}{{println}}{{end}}{{end}}' "$container" 2>/dev/null)"; then
++                  printf 'READOUT data_root container=%s status=unavailable origin=%s\n' \
++                    "$(safe_scalar "$container")" "$(safe_scalar "$origin")"
++                  critical_unavailable data_root "$container"
++                  unavailable_seen=true
++                  continue
++                fi
++              else
++                origin=default_workdir
++                if ! working_dir_encoded="$(docker inspect --format '{{printf "%q" .Config.WorkingDir}}' "$container" 2>/dev/null)" ||
++                   ! working_dir="$(decode_mount_q "$working_dir_encoded")"; then
++                  printf 'READOUT data_root container=%s status=unavailable origin=%s\n' \
++                    "$(safe_scalar "$container")" "$(safe_scalar "$origin")"
++                  critical_unavailable data_root "$container"
++                  unavailable_seen=true
++                  continue
++                fi
++                [[ -n "$working_dir" ]] || working_dir=/
++                if ! working_dir="$(canonical_container_path "$working_dir")"; then
++                  printf 'READOUT data_root container=%s status=invalid origin=%s\n' \
++                    "$(safe_scalar "$container")" "$(safe_scalar "$origin")"
++                  critical_unavailable data_root "$container"
++                  continue
++                fi
++                if [[ "$working_dir" == / ]]; then
++                  value=/data
++                else
++                  value="${working_dir%/}/data"
++                fi
++                env_lines="DEFAULT_DATA_ROOT=$value"
++              fi
++
+               while IFS= read -r env_encoded; do
+                 [[ -n "$env_encoded" ]] || continue
+-                found=true
+                 count=$((count + 1))
+-                if ! env_line="$(decode_mount_q "$env_encoded")" || [[ "$env_line" != CATERING_DATA_ROOT=* ]]; then
+-                  printf 'READOUT data_root container=%s status=invalid\n' "$(safe_scalar "$container")"
+-                  critical_unavailable data_root "$container"
+-                  continue
++                if [[ "$origin" == environment ]]; then
++                  if ! env_line="$(decode_mount_q "$env_encoded")" || [[ "$env_line" != CATERING_DATA_ROOT=* ]]; then
++                    printf 'READOUT data_root container=%s status=invalid origin=%s\n' \
++                      "$(safe_scalar "$container")" "$(safe_scalar "$origin")"
++                    critical_unavailable data_root "$container"
++                    continue
++                  fi
++                  value="${env_line#CATERING_DATA_ROOT=}"
++                else
++                  [[ "$env_encoded" == DEFAULT_DATA_ROOT=* ]] || continue
++                  value="${env_encoded#DEFAULT_DATA_ROOT=}"
+                 fi
+-                value="${env_line#CATERING_DATA_ROOT=}"
+                 if ! safe_path "$value"; then
+-                  printf 'READOUT data_root container=%s status=invalid\n' "$(safe_scalar "$container")"
++                  printf 'READOUT data_root container=%s status=invalid origin=%s\n' \
++                    "$(safe_scalar "$container")" "$(safe_scalar "$origin")"
+                   critical_unavailable data_root "$container"
+                   continue
+                 fi
+                 if ! canonical_value="$(canonical_container_path "$value")"; then
+-                  printf 'READOUT data_root container=%s status=invalid\n' "$(safe_scalar "$container")"
++                  printf 'READOUT data_root container=%s status=invalid origin=%s\n' \
++                    "$(safe_scalar "$container")" "$(safe_scalar "$origin")"
+                   critical_unavailable data_root "$container"
+                   continue
+                 fi
+                 if ! mount_lines="$(mount_records_readout "$container")"; then
+-                  printf 'READOUT data_root container=%s status=unavailable\n' "$(safe_scalar "$container")"
++                  printf 'READOUT data_root container=%s status=unavailable path=%s origin=%s\n' \
++                    "$(safe_scalar "$container")" "$(safe_scalar "$canonical_value")" "$(safe_scalar "$origin")"
+                   critical_unavailable data_root "$container"
++                  unavailable_seen=true
+                   continue
+                 fi
+                 match_count=0
+@@ -439,19 +501,23 @@
+                   fi
+                 done <<<"$mount_lines"
+                 if (( match_count == 1 )) && ! data_root_source="$(resolve_mount_source_path "$canonical_value" "$data_root_destination" "$data_root_source")"; then
+-                  printf 'READOUT data_root container=%s status=unavailable\n' "$(safe_scalar "$container")"
++                  printf 'READOUT data_root container=%s status=unavailable path=%s origin=%s\n' \
++                    "$(safe_scalar "$container")" "$(safe_scalar "$canonical_value")" "$(safe_scalar "$origin")"
+                   critical_unavailable data_root "$container"
++                  unavailable_seen=true
+                 elif (( match_count == 1 )); then
+-                  printf 'READOUT data_root container=%s status=present path=%s type=%s name=%s source=%s destination=%s writable=%s\n' \
+-                    "$(safe_scalar "$container")" "$(safe_scalar "$canonical_value")" \
++                  printf 'READOUT data_root container=%s status=present path=%s origin=%s type=%s name=%s source=%s destination=%s writable=%s\n' \
++                    "$(safe_scalar "$container")" "$(safe_scalar "$canonical_value")" "$(safe_scalar "$origin")" \
+                     "$(safe_scalar "$data_root_mount_type")" "$(safe_scalar "$data_root_volume_name")" \
+                     "$(safe_scalar "$data_root_source")" "$(safe_scalar "$data_root_destination")" \
+                     "$(safe_scalar "$data_root_writable")"
+                 elif (( match_count > 1 )); then
+-                  printf 'READOUT data_root container=%s status=ambiguous\n' "$(safe_scalar "$container")"
++                  printf 'READOUT data_root container=%s status=ambiguous path=%s origin=%s\n' \
++                    "$(safe_scalar "$container")" "$(safe_scalar "$canonical_value")" "$(safe_scalar "$origin")"
+                   critical_unavailable data_root "$container"
+                 else
+-                  printf 'READOUT data_root container=%s status=unmatched\n' "$(safe_scalar "$container")"
++                  printf 'READOUT data_root container=%s status=unmatched path=%s origin=%s\n' \
++                    "$(safe_scalar "$container")" "$(safe_scalar "$canonical_value")" "$(safe_scalar "$origin")"
+                   critical_unavailable data_root "$container"
+                 fi
+               done <<<"$env_lines"
