@@ -1,0 +1,79 @@
+name: PR 685 P2 GREEN stage
+
+on:
+  push:
+    branches:
+      - codex/operator-readout-container-fix-20260903
+    paths:
+      - ".github/workflows/pr685-p2-green-stage.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pr685-p2-green-stage
+  cancel-in-progress: false
+
+jobs:
+  green-stage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout exact branch head
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Apply the bounded P2 implementation
+        run: |
+          set -euo pipefail
+          git apply --check tmp/pr685-p2-workflow.patch
+          git apply tmp/pr685-p2-workflow.patch
+          git diff --check
+          test "$(git diff --name-only)" = ".github/workflows/catering-production-operator-readout.yml"
+
+      - name: Verify remote Bash syntax
+        run: |
+          set -euo pipefail
+          python3 - <<'PYTHON'
+          from pathlib import Path
+
+          workflow = Path('.github/workflows/catering-production-operator-readout.yml').read_text()
+          marker = "<<'REMOTE_READOUT'\n"
+          start = workflow.index(marker) + len(marker)
+          end = workflow.index("\n          REMOTE_READOUT", start)
+          Path('/tmp/pr685-p2-remote-readout.sh').write_text(workflow[start:end] + "\n")
+          PYTHON
+          bash -n /tmp/pr685-p2-remote-readout.sh
+
+      - name: Run all focused operator-readout contracts
+        run: npx vitest run tests/catering-production-operator-readout-contract.test.ts --maxWorkers=1
+
+      - name: Build
+        run: npm run build
+
+      - name: Stage only the verified corrected workflow
+        run: |
+          set -euo pipefail
+          mkdir -p pr685-stage
+          cp .github/workflows/catering-production-operator-readout.yml pr685-stage/corrected-readout.yml
+          test "$(sha256sum pr685-stage/corrected-readout.yml | awk '{print $1}')" = \
+            5daa45787fa86ae01164b2c92872004783b03358fd61b87b60e05bdf13ad455e
+          git restore -- .github/workflows/catering-production-operator-readout.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f -- pr685-stage/corrected-readout.yml
+          test "$(git diff --cached --name-only)" = "pr685-stage/corrected-readout.yml"
+          git commit -m "chore(infra): stage verified P2 readout correction"
+          git push origin "HEAD:refs/heads/$GITHUB_REF_NAME"
