@@ -1,0 +1,103 @@
+name: PR 685 fast finalize
+
+on:
+  push:
+    branches:
+      - codex/operator-readout-container-fix-20260903
+    paths:
+      - ".github/workflows/pr685-fast-finalize.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pr685-fast-finalize
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    if: github.ref == 'refs/heads/codex/operator-readout-container-fix-20260903'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout exact branch head
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Extract and apply bounded patch
+        run: |
+          set -euo pipefail
+          python3 - <<'PYTHON'
+          from pathlib import Path
+
+          source = Path('.github/workflows/pr685-one-shot-repair.yml').read_text()
+          marker = "          cat >\"$patch_file\" <<'PATCH'\n"
+          start = source.index(marker) + len(marker)
+          end = source.index("\n          PATCH", start)
+          raw = source[start:end]
+          lines = []
+          for line in raw.splitlines():
+              if not line.startswith('          '):
+                  raise SystemExit(f'unexpected patch indentation: {line!r}')
+              lines.append(line[10:])
+          Path('/tmp/pr685-readout.patch').write_text('\n'.join(lines) + '\n')
+          PYTHON
+          git apply --check /tmp/pr685-readout.patch
+          git apply /tmp/pr685-readout.patch
+          rm -f -- \
+            platform-infra/scripts/operator-readout/00-core.sh \
+            platform-infra/scripts/operator-readout/10-network-mounts.sh \
+            .github/workflows/pr685-one-shot-repair.yml \
+            .github/workflows/pr685-fast-finalize.yml
+          git diff --check
+
+          actual="$(git diff --name-only | LC_ALL=C sort)"
+          expected="$(printf '%s\n' \
+            .github/workflows/catering-production-operator-readout.yml \
+            .github/workflows/pr685-fast-finalize.yml \
+            .github/workflows/pr685-one-shot-repair.yml \
+            platform-infra/scripts/operator-readout/00-core.sh \
+            platform-infra/scripts/operator-readout/10-network-mounts.sh \
+            | LC_ALL=C sort)"
+          test "$actual" = "$expected"
+
+      - name: Verify remote script syntax
+        run: |
+          set -euo pipefail
+          python3 - <<'PYTHON'
+          from pathlib import Path
+
+          workflow = Path('.github/workflows/catering-production-operator-readout.yml').read_text()
+          marker = "<<'REMOTE_READOUT'\n"
+          start = workflow.index(marker) + len(marker)
+          end = workflow.index("\n          REMOTE_READOUT", start)
+          Path('/tmp/pr685-remote-readout.sh').write_text(workflow[start:end] + "\n")
+          PYTHON
+          bash -n /tmp/pr685-remote-readout.sh
+
+      - name: Run focused contract
+        run: npx vitest run tests/catering-production-operator-readout-contract.test.ts --maxWorkers=1
+
+      - name: Build
+        run: npm run build
+
+      - name: Commit verified correction
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(infra): make operator readout status authoritative"
+          git push origin "HEAD:refs/heads/$GITHUB_REF_NAME"
