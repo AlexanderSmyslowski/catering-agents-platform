@@ -52,10 +52,12 @@ jobs:
           import base64
           import hashlib
           import json
+          import os
           from pathlib import Path
 
-          response = json.loads(Path('/home/runner/work/_temp/pr685-blob.json').read_text())
+          response = json.loads(Path(os.environ['RUNNER_TEMP'], 'pr685-blob.json').read_text())
           encoded_payload = base64.b64decode(response['content']).decode('ascii')
+          encoded_payload = ''.join(encoded_payload.split())
           workflow = base64.b64decode(encoded_payload, validate=True)
           digest = hashlib.sha256(workflow).hexdigest()
           expected = 'b540337d2977e22314d5965bfe96e07244a78193260aec1a1d1f779ffd908af8'
