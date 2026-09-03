@@ -7,6 +7,7 @@ import type { BusinessScopedPersistentCollection } from "./persistence.js";
 export type CaseStatus = "open" | "completed" | "archived";
 export type CaseProduct = "offer" | "production";
 export type CaseEventRole = "user" | "assistant" | "system";
+export type CaseEventVisibility = "operational" | "commercial";
 export type CaseEventKind =
   | "case_created"
   | "case_copied"
@@ -48,6 +49,7 @@ export interface CaseEvent {
   role: CaseEventRole;
   kind: CaseEventKind;
   text: string;
+  visibility?: CaseEventVisibility;
   sourceId?: string;
   artifactId?: string;
   sourceRef?: CaseSourceRef;

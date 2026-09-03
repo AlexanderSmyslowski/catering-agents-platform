@@ -12,11 +12,13 @@ import {
 } from "@catering/shared-core";
 import { buildProductionApp } from "../production-service/src/app.js";
 import type { ProductionHandoffReader } from "../production-service/src/ports/production-handoff-reader.js";
+import { projectProductionDraft } from "../production-service/src/routes/production-response-projection.js";
 import {
   ProductionStore,
   productionDecisionRepositoryFor
 } from "../production-service/src/repositories/production-store.js";
 import { InMemoryIntakeRecordsPort } from "./support/in-memory-intake-records-port.js";
+import { trustedActorFromHeaders } from "../shared-core/src/access-control.js";
 
 const trustedSecret = "production-case-route-secret";
 const alphaHeaders = {
@@ -24,6 +26,15 @@ const alphaHeaders = {
   "x-catering-actor-name": "Produktions-Mitarbeiter",
   "x-catering-business-id": "alpha"
 };
+const alphaAdminHeaders = {
+  ...alphaHeaders,
+  "x-catering-actor-name": "Administrator"
+};
+const alphaActor = trustedActorFromHeaders(alphaHeaders, {
+  fallbackActorName: "Produktions-Mitarbeiter",
+  fallbackBusinessId: "alpha",
+  trustedActorSecret: trustedSecret
+});
 const roots: string[] = [];
 
 function handoff(overrides: Partial<ProductionHandoff> = {}): ProductionHandoff {
@@ -265,6 +276,69 @@ describe("production case routes", () => {
       events: [{ sequence: 1, role: "system", kind: "case_created" }]
     });
     expect(hidden.statusCode).toBe(404);
+  });
+
+  it("keeps commercial administrator messages out of the non-commercial production history", async () => {
+    const { app, store } = buildHarness();
+    const productionCase = await createProductionCase(app);
+    const commercialSentinel = "Verkaufspreis 9.876,54 EUR bei Marge 31 Prozent.";
+    const operationalInstruction = "Roastbeef vor dem Anschnitt zehn Minuten ruhen lassen.";
+
+    const commercialMessage = await app.inject({
+      method: "POST",
+      url: `/v1/production/cases/${productionCase.caseId}/messages`,
+      headers: alphaAdminHeaders,
+      payload: { text: commercialSentinel, sourceId: "commercial-source-9876" }
+    });
+    const productionMessage = await app.inject({
+      method: "POST",
+      url: `/v1/production/cases/${productionCase.caseId}/messages`,
+      headers: alphaHeaders,
+      payload: { text: operationalInstruction, sourceId: "production-source-roastbeef" }
+    });
+    const historicalSentinel = "Historische Kalkulation 7.314,29 EUR.";
+    await store.appendEvent({ businessId: "alpha" }, productionCase.caseId, {
+      at: new Date().toISOString(),
+      role: "user",
+      kind: "instruction",
+      text: historicalSentinel,
+      sourceId: "historical-source-7314"
+    });
+
+    expect(commercialMessage.statusCode, commercialMessage.body).toBe(201);
+    expect(productionMessage.statusCode, productionMessage.body).toBe(201);
+
+    const productionDetail = await app.inject({
+      method: "GET",
+      url: `/v1/production/cases/${productionCase.caseId}`,
+      headers: alphaHeaders
+    });
+    const adminDetail = await app.inject({
+      method: "GET",
+      url: `/v1/production/cases/${productionCase.caseId}`,
+      headers: alphaAdminHeaders
+    });
+
+    expect(productionDetail.statusCode, productionDetail.body).toBe(200);
+    expect(productionDetail.body).not.toContain(commercialSentinel);
+    expect(productionDetail.body).not.toContain("commercial-source-9876");
+    expect(productionDetail.body).not.toContain(historicalSentinel);
+    expect(productionDetail.body).not.toContain("historical-source-7314");
+    expect(productionDetail.json().events.filter(
+      (event: { text?: string }) => event.text === "Vertrauliche Nachricht ausgeblendet."
+    )).toHaveLength(2);
+    expect(productionDetail.body).toContain(operationalInstruction);
+    expect(adminDetail.statusCode, adminDetail.body).toBe(200);
+    expect(adminDetail.body).toContain(commercialSentinel);
+    expect(adminDetail.body).toContain(historicalSentinel);
+    expect(adminDetail.body).toContain(operationalInstruction);
+
+    await expect(store.listEvents({ businessId: "alpha" }, productionCase.caseId)).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ text: commercialSentinel, visibility: "commercial" }),
+        expect.objectContaining({ text: operationalInstruction, visibility: "operational" })
+      ])
+    );
   });
 
   it("copies into a new open case without inherited approvals or result references", async () => {
@@ -1101,8 +1175,12 @@ describe("production case routes", () => {
     expect(caseAfterFailure).toEqual(completedBeforePreparation);
     expect(retry.statusCode, retry.body).toBe(201);
     expect(secondRetry.statusCode, secondRetry.body).toBe(201);
-    expect(retry.json().draft).toEqual(persistedAfterFailure);
-    expect(secondRetry.json().draft).toEqual(persistedAfterFailure);
+    expect(retry.json().draft).toEqual(projectProductionDraft(alphaActor, persistedAfterFailure!));
+    expect(secondRetry.json().draft).toEqual(projectProductionDraft(alphaActor, persistedAfterFailure!));
+    const persistedAfterRecovery = await store.getProductionDraft({ businessId: "alpha" }, persistedAfterFailure!.draftId);
+    expect(persistedAfterRecovery).toEqual(persistedAfterFailure);
+    expect(persistedAfterRecovery!.source.processingPolicy)
+      .toEqual(persistedAfterFailure!.source.processingPolicy);
     expect(await store.listProductionDrafts({ businessId: "alpha" })).toHaveLength(2);
     expect((await store.listEvents({ businessId: "alpha" }, productionCase.caseId))
       .filter((event) => event.kind === "revision_created")).toEqual([
@@ -1119,7 +1197,7 @@ describe("production case routes", () => {
     const completedAfterRevision = await completeProductionCase(store, productionCase.caseId);
     const oldRevisionRetry = await prepare();
     expect(oldRevisionRetry.statusCode, oldRevisionRetry.body).toBe(201);
-    expect(oldRevisionRetry.json().draft).toEqual(persistedAfterFailure);
+    expect(oldRevisionRetry.json().draft).toEqual(projectProductionDraft(alphaActor, persistedAfterFailure!));
     expect(await store.getCase({ businessId: "alpha" }, productionCase.caseId))
       .toEqual(completedAfterRevision);
     expect((await store.listEvents({ businessId: "alpha" }, productionCase.caseId))

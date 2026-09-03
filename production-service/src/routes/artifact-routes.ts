@@ -7,7 +7,9 @@ import {
   createEventRequestFromManualForm,
   createUploadSourceMetadata,
   findLlmReadinessPromptSchemaEntryByInputKind,
+  hasMinimalMvpCapability,
   ingestDocument,
+  isTrustedFinalApprovalSource,
   llmReadinessForbiddenPayloadKeys,
   llmReadinessContractVersion,
   normalizeEventRequestToSpec,
@@ -42,6 +44,15 @@ import {
 } from "../repositories/production-store.js";
 import type { ProductionDecisionTargetScope } from "../repositories/production-decision-repository.js";
 import { buildProductionArtifacts } from "../rules/planning.js";
+import {
+  canReadProductionCommercials,
+  projectProductionDraft,
+  projectProductionEventSpec
+} from "./production-response-projection.js";
+import {
+  projectProductionPlanReadResponse,
+  projectPurchaseListReadResponse
+} from "./production-read-response-projection.js";
 import type { ProductionHandoffReader } from "../ports/production-handoff-reader.js";
 import type { IntakeRecordsPort } from "../ports/intake-records-port.js";
 import type {
@@ -61,6 +72,25 @@ const productionDraftExtractionRevisionCardKinds = [
   "menu_component",
   "open_question"
 ] as const satisfies readonly ProductionDraftReviewCard["kind"][];
+
+function canAccessProductionFeedback(
+  reader: TrustedActor,
+  feedback: ProductionFeedbackDraft
+): boolean {
+  if (!hasMinimalMvpCapability(reader, "production")) return false;
+  if (canReadProductionCommercials(reader)) return true;
+  if (!isTrustedFinalApprovalSource(feedback.createdBy.source)) return false;
+
+  // Die gespeicherte Ersteller-Provenienz reicht an dieser engen Grenze aus:
+  // Nur ein vertrauenswürdiger Produktions-Ersteller ohne Preisrecht ist sichtbar.
+  const creator: TrustedActor = {
+    name: feedback.createdBy.name,
+    businessId: reader.businessId,
+    source: feedback.createdBy.source,
+    trusted: true
+  };
+  return hasMinimalMvpCapability(creator, "production") && !canReadProductionCommercials(creator);
+}
 
 function stableJson(value: unknown): string {
   if (Array.isArray(value)) {
@@ -173,6 +203,12 @@ export interface ProductionArtifactRouteDependencies {
     allowDevActorHeader?: boolean
   ) => boolean;
   requireProductionOperator: (
+    request: { headers: Record<string, string | string[] | undefined> },
+    reply: { code: (statusCode: number) => { send: (payload: unknown) => unknown } },
+    trustedActorSecret?: string,
+    allowDevActorHeader?: boolean
+  ) => unknown | undefined;
+  requireProductionReader: (
     request: { headers: Record<string, string | string[] | undefined> },
     reply: { code: (statusCode: number) => { send: (payload: unknown) => unknown } },
     trustedActorSecret?: string,
@@ -935,6 +971,7 @@ export function registerProductionArtifactRoutes(
     allowDevActorHeader,
     isProductionOperator,
     requireProductionOperator,
+    requireProductionReader,
     actorForRequest
   } = deps;
   const decisionRepository = productionDecisionRepositoryFor(store);
@@ -1071,65 +1108,66 @@ export function registerProductionArtifactRoutes(
       summary: "ProductionDraft aus unveränderlicher Angebotsübergabe angelegt.",
       details: { handoffId: handoff.handoffId }
     });
-    return reply.code(201).send({ draft });
+    return reply.code(201).send({ draft: projectProductionDraft(actor, draft) });
   });
 
   app.get("/v1/production/plans", async (request, reply) => {
-    const forbidden = requireProductionOperator(request, reply, trustedActorSecret, allowDevActorHeader);
+    const forbidden = requireProductionReader(request, reply, trustedActorSecret, allowDevActorHeader);
     if (forbidden) {
       return forbidden;
     }
 
+    const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
     return reply.send({
-      items: await store.listPlans(actorForRequest(request, trustedActorSecret, allowDevActorHeader))
+      access: {
+        canOperateProduction: hasMinimalMvpCapability(actor, "production")
+      },
+      items: (await store.listPlans(actor)).map((plan) => projectProductionPlanReadResponse(actor, plan))
     });
   });
 
   app.get<{ Params: { planId: string } }>("/v1/production/plans/:planId", async (request, reply) => {
-    const forbidden = requireProductionOperator(request, reply, trustedActorSecret, allowDevActorHeader);
+    const forbidden = requireProductionReader(request, reply, trustedActorSecret, allowDevActorHeader);
     if (forbidden) {
       return forbidden;
     }
 
-    const plan = await store.getPlan(
-      actorForRequest(request, trustedActorSecret, allowDevActorHeader),
-      request.params.planId
-    );
+    const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+    const plan = await store.getPlan(actor, request.params.planId);
     if (!plan) {
       return reply.code(404).send({ message: "ProductionPlan nicht gefunden." });
     }
 
-    return reply.send(plan);
+    return reply.send(projectProductionPlanReadResponse(actor, plan));
   });
 
   app.get<{ Params: { purchaseListId: string } }>(
     "/v1/production/purchase-lists/:purchaseListId",
     async (request, reply) => {
-      const forbidden = requireProductionOperator(request, reply, trustedActorSecret, allowDevActorHeader);
+      const forbidden = requireProductionReader(request, reply, trustedActorSecret, allowDevActorHeader);
       if (forbidden) {
         return forbidden;
       }
 
-      const list = await store.getPurchaseList(
-        actorForRequest(request, trustedActorSecret, allowDevActorHeader),
-        request.params.purchaseListId
-      );
+      const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+      const list = await store.getPurchaseList(actor, request.params.purchaseListId);
       if (!list) {
         return reply.code(404).send({ message: "PurchaseList nicht gefunden." });
       }
 
-      return reply.send(list);
+      return reply.send(projectPurchaseListReadResponse(actor, list));
     }
   );
 
   app.get("/v1/production/purchase-lists", async (request, reply) => {
-    const forbidden = requireProductionOperator(request, reply, trustedActorSecret, allowDevActorHeader);
+    const forbidden = requireProductionReader(request, reply, trustedActorSecret, allowDevActorHeader);
     if (forbidden) {
       return forbidden;
     }
 
+    const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
     return reply.send({
-      items: await store.listPurchaseLists(actorForRequest(request, trustedActorSecret, allowDevActorHeader))
+      items: (await store.listPurchaseLists(actor)).map((list) => projectPurchaseListReadResponse(actor, list))
     });
   });
 
@@ -1220,7 +1258,7 @@ export function registerProductionArtifactRoutes(
           body.documentId,
           existingDraft
         );
-        return reply.code(201).send({ draft: existingDraft });
+        return reply.code(201).send({ draft: projectProductionDraft(actor, existingDraft) });
       }
       if (!sourceDocumentReader) {
         return reply.code(503).send({ message: "Quelldokumente sind nicht konfiguriert." });
@@ -1555,7 +1593,7 @@ export function registerProductionArtifactRoutes(
         persistedDraft
       );
 
-      return reply.code(201).send({ draft: persistedDraft });
+      return reply.code(201).send({ draft: projectProductionDraft(actor, persistedDraft) });
     }
   );
 
@@ -1702,7 +1740,7 @@ export function registerProductionArtifactRoutes(
       })
     });
 
-    return reply.code(201).send({ draft });
+    return reply.code(201).send({ draft: projectProductionDraft(actor, draft) });
   });
 
   app.get<{ Querystring: { caseId?: string } }>("/v1/production/drafts", async (request, reply) => {
@@ -1723,7 +1761,7 @@ export function registerProductionArtifactRoutes(
       : new Set(items.map((draft) => draft.draftId));
     const appliedIds = new Set(applyManifests.map((manifest) => manifest.approvedProductionSpecId));
     return reply.send({
-      items,
+      items: items.map((item) => projectProductionDraft(actor, item)),
       approvedProductionSpecs: approvedProductionSpecs
         .filter((spec) => scopedDraftIds === undefined || scopedDraftIds.has(spec.sourceDraft.draftId))
         .map((spec) => ({
@@ -1781,7 +1819,7 @@ export function registerProductionArtifactRoutes(
           existingPreparedDraft,
           "Vollständige Produktionsrevision zur Prüfung erstellt."
         );
-        return reply.code(201).send({ draft: existingPreparedDraft });
+        return reply.code(201).send({ draft: projectProductionDraft(actor, existingPreparedDraft) });
       }
       if (draft.status !== "pending_review") {
         return reply.code(409).send({ message: "Nur ein offener ProductionDraft kann vorbereitet werden." });
@@ -1918,7 +1956,7 @@ export function registerProductionArtifactRoutes(
             racedPreparedDraft,
             "Vollständige Produktionsrevision zur Prüfung erstellt."
           );
-          return reply.code(201).send({ draft: racedPreparedDraft });
+          return reply.code(201).send({ draft: projectProductionDraft(actor, racedPreparedDraft) });
         }
         return reply.code(409).send({
           message: "ProductionDraft wurde während der Vorbereitung verändert oder entschieden."
@@ -1931,7 +1969,7 @@ export function registerProductionArtifactRoutes(
         prepared,
         "Vollständige Produktionsrevision zur Prüfung erstellt."
       );
-      return reply.code(201).send({ draft: prepared });
+      return reply.code(201).send({ draft: projectProductionDraft(actor, prepared) });
     }
   );
 
@@ -1991,6 +2029,8 @@ export function registerProductionArtifactRoutes(
         }
 
         const decidedAt = new Date().toISOString();
+        const replacesOperatorComment = operatorComment !== undefined &&
+          operatorComment !== currentCard.operatorComment;
         const reviewCards = current.reviewCards.map((card, index) =>
           index === cardIndex
             ? {
@@ -1998,7 +2038,14 @@ export function registerProductionArtifactRoutes(
               decision,
               decidedBy: actor.name,
               decidedAt,
-              ...(operatorComment ? { operatorComment } : {})
+              ...(replacesOperatorComment
+                ? {
+                    operatorComment,
+                    operatorCommentVisibility: canReadProductionCommercials(actor)
+                      ? "commercial" as const
+                      : "operational" as const
+                  }
+                : {})
             }
             : card
         );
@@ -2046,9 +2093,10 @@ export function registerProductionArtifactRoutes(
         })
       });
 
+      const projectedDraft = projectProductionDraft(actor, reviewedDraft);
       return reply.send({
-        draft: reviewedDraft,
-        reviewCard: card
+        draft: projectedDraft,
+        reviewCard: projectedDraft.reviewCards[cardIndex]
       });
     }
   );
@@ -2066,11 +2114,6 @@ export function registerProductionArtifactRoutes(
       if (!draft) {
         return reply.code(404).send({ message: "ProductionDraft nicht gefunden." });
       }
-      const target = {
-        kind: "production_draft" as const,
-        artifactId: draft.draftId,
-        revision: draft.revision
-      };
 
       const requestedChanges = draft.reviewCards.filter((card) => card.decision === "change_requested");
       const missingComments = requestedChanges.filter((card) => !card.operatorComment?.trim());
@@ -2091,6 +2134,20 @@ export function registerProductionArtifactRoutes(
           errors: unsupportedChanges.map((card) => `reviewCard ${card.cardId} kind ${card.kind} is not revision-supported`)
         });
       }
+      if (
+        !canReadProductionCommercials(actor) &&
+        requestedChanges.some((card) => card.operatorCommentVisibility !== "operational")
+      ) {
+        return reply.code(422).send({
+          message: "Für eine Überarbeitung ist ein operativ freigegebener Änderungswunsch erforderlich."
+        });
+      }
+
+      const target = {
+        kind: "production_draft" as const,
+        artifactId: draft.draftId,
+        revision: draft.revision
+      };
 
       const promptContext = productionDraftRevisionPromptContext(draft, requestedChanges);
       const contextHash = hashText(promptContext);
@@ -2126,7 +2183,7 @@ export function registerProductionArtifactRoutes(
           requestedChanges.length,
           changeRequestHash
         );
-        return reply.code(201).send({ draft: existingRevision });
+        return reply.code(201).send({ draft: projectProductionDraft(actor, existingRevision) });
       }
       if (draft.status !== "pending_review") {
         return reply.code(409).send({ message: "Nur ein offener ProductionDraft kann überarbeitet werden." });
@@ -2316,7 +2373,7 @@ export function registerProductionArtifactRoutes(
             requestedChanges.length,
             changeRequestHash
           );
-          return reply.code(201).send({ draft: racedRevision });
+          return reply.code(201).send({ draft: projectProductionDraft(actor, racedRevision) });
         }
         return reply.code(409).send({
           message: "ProductionDraft wurde während der Überarbeitung verändert oder entschieden."
@@ -2333,7 +2390,7 @@ export function registerProductionArtifactRoutes(
         changeRequestHash
       );
 
-      return reply.code(201).send({ draft: revision });
+      return reply.code(201).send({ draft: projectProductionDraft(actor, revision) });
     }
   );
 
@@ -2433,6 +2490,9 @@ export function registerProductionArtifactRoutes(
       if (!draft) {
         return reply.code(404).send({ message: "ProductionFeedbackDraft nicht gefunden." });
       }
+      if (!canAccessProductionFeedback(actor, draft)) {
+        return reply.code(403).send({ message: "ProductionFeedbackDraft ist nicht zugänglich." });
+      }
       if (draft.status !== "pending_review") {
         return reply.code(409).send({ message: "ProductionFeedbackDraft wurde bereits entschieden." });
       }
@@ -2489,11 +2549,9 @@ export function registerProductionArtifactRoutes(
       return forbidden;
     }
 
-    return reply.send({
-      items: await store.listReviewedProductionFeedbackKnowledge(
-        actorForRequest(request, trustedActorSecret, allowDevActorHeader)
-      )
-    });
+    const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+    const items = await store.listReviewedProductionFeedbackKnowledge(actor);
+    return reply.send({ items: items.filter((feedback) => canAccessProductionFeedback(actor, feedback)) });
   });
 
   app.get<{ Params: { specId: string } }>(
@@ -2749,7 +2807,9 @@ export function registerProductionArtifactRoutes(
 
       return reply.send({
         draft: decidedDraft,
-        ...(acceptedEventSpec ? { acceptedEventSpec } : {})
+        ...(acceptedEventSpec
+          ? { acceptedEventSpec: projectProductionEventSpec(actor, acceptedEventSpec) }
+          : {})
       });
     }
   );

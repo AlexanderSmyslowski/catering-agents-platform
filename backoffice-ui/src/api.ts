@@ -1,6 +1,5 @@
 import type {
   ApprovedOffer,
-  ApprovedProductionSpec,
   AcceptedEventSpec,
   AuditEntry,
   CaseEvent,
@@ -58,7 +57,7 @@ export interface ProductionWorkspaceState {
   activeEvents: CaseEvent[];
   activeSources: CaseSourceRef[];
   currentDraft?: ProductionDraft;
-  approvedProductionSpec?: ApprovedProductionSpec;
+  approvedProductionSpec?: ApprovedProductionSpecProjection;
   currentPlan?: ProductionPlan;
   currentPurchaseList?: PurchaseList;
   referencedRecipes: Recipe[];
@@ -77,8 +76,8 @@ const emptyProductionWorkspaceState: ProductionWorkspaceState = {
   referencedRecipes: []
 };
 
-export interface IntakeRequestDetail extends Record<string, unknown> {
-  requestId: string;
+export interface ProductionSourceDetail extends Record<string, unknown> {
+  requestId?: string;
   source?: {
     channel?: string;
     receivedAt?: string;
@@ -101,6 +100,10 @@ export interface IntakeRequestDetail extends Record<string, unknown> {
       warnings?: string[];
     };
   }>;
+}
+
+export interface IntakeRequestDetail extends ProductionSourceDetail {
+  requestId: string;
 }
 
 export type RecipeUploadTarget = "offer" | "production";
@@ -160,6 +163,8 @@ export interface ProductionDraft {
   source?: {
     kind?: string;
     receivedAt?: string;
+    sourceRef?: string;
+    inputHash?: string;
     providerId?: string;
     modelId?: string;
   };
@@ -229,6 +234,14 @@ export interface ProductionProductData {
   recipes: Recipe[];
   auditEvents: AuditEntry[];
   serviceHealth: ServiceHealthState;
+}
+
+export interface ProductionRouteAccessData {
+  access: {
+    canOperateProduction: boolean;
+  };
+  productionPlans: ProductionPlan[];
+  purchaseLists: PurchaseList[];
 }
 
 export interface WorkspaceRefreshOptions {
@@ -305,6 +318,54 @@ async function fetchJson<T>(input: string, init?: RequestInit, defaultActorName?
   return (await response.json()) as T;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Resolve the server-authoritative production capability before mounting any
+ * interactive workspace. Read-only access intentionally receives only the two
+ * projected operational collections that it is allowed to display.
+ */
+export async function loadProductionRouteAccessData(): Promise<ProductionRouteAccessData> {
+  const planResponse = await fetchJson<unknown>(
+    "/api/production/v1/production/plans",
+    undefined,
+    DEFAULT_MUTATION_ACTOR_NAMES.production
+  );
+  if (
+    !isRecord(planResponse) ||
+    !isRecord(planResponse.access) ||
+    typeof planResponse.access.canOperateProduction !== "boolean" ||
+    !Array.isArray(planResponse.items)
+  ) {
+    throw new Error("Der Produktionszugriff konnte nicht eindeutig bestimmt werden.");
+  }
+
+  const access = {
+    canOperateProduction: planResponse.access.canOperateProduction
+  };
+  const productionPlans = planResponse.items as ProductionPlan[];
+  if (access.canOperateProduction) {
+    return { access, productionPlans, purchaseLists: [] };
+  }
+
+  const purchaseListResponse = await fetchJson<unknown>(
+    "/api/production/v1/production/purchase-lists",
+    undefined,
+    DEFAULT_MUTATION_ACTOR_NAMES.production
+  );
+  if (!isRecord(purchaseListResponse) || !Array.isArray(purchaseListResponse.items)) {
+    throw new Error("Die freigegebene Produktionsleseansicht konnte nicht geladen werden.");
+  }
+
+  return {
+    access,
+    productionPlans,
+    purchaseLists: purchaseListResponse.items as PurchaseList[]
+  };
+}
+
 function sourcesFromCaseEvents(events: CaseEvent[]): CaseSourceRef[] {
   const sources = new Map<string, CaseSourceRef>();
   for (const event of events) {
@@ -320,6 +381,17 @@ function artifactIdFromCaseEvents(events: CaseEvent[], artifactType: "OfferDraft
     .sort((left, right) => right.sequence - left.sequence)
     .map((event) => event.revisionRef)
     .find((reference) => reference?.artifactType === artifactType)?.artifactId;
+}
+
+function productionDraftRevisionFromCaseEvents(events: CaseEvent[]) {
+  return [...events]
+    .sort((left, right) => right.sequence - left.sequence)
+    .map((event) => event.revisionRef)
+    .find((reference) => reference?.artifactType === "ProductionDraft");
+}
+
+function productionSnapshotError(detail: string): Error {
+  return new Error(`Produktionssnapshot ist nicht vertrauenswürdig gebunden: ${detail}`);
 }
 
 function unknownServiceHealth(service: string): ServiceHealth {
@@ -417,12 +489,7 @@ export async function loadProductionWorkspaceState(activeCaseId?: string): Promi
   const base: ProductionWorkspaceState = { cases, activeEvents: [], activeSources: [], referencedRecipes: [] };
   if (!activeCaseId) return base;
 
-  const detail = await fetchJson<{
-    case: ProductionCase;
-    events: CaseEvent[];
-    currentDraft?: ProductionDraft;
-    approvedProductionSpec?: ApprovedProductionSpec;
-  }>(
+  const detail = await fetchJson<{ case: ProductionCase; events: CaseEvent[] }>(
     `/api/production/v1/production/cases/${encodeURIComponent(activeCaseId)}`,
     undefined,
     DEFAULT_MUTATION_ACTOR_NAMES.production
@@ -431,32 +498,85 @@ export async function loadProductionWorkspaceState(activeCaseId?: string): Promi
     return { ...emptyProductionWorkspaceState, cases };
   }
   const activeEvents = detail.events.filter((event) => event.caseId === activeCaseId);
-  const [currentPlan, currentPurchaseList] = await Promise.all([
+  const draftReference = productionDraftRevisionFromCaseEvents(activeEvents);
+  const [draftListResponse, currentPlan, currentPurchaseList] = await Promise.all([
+    draftReference
+      ? fetchJson<ProductionDraftListResponse>(
+          `/api/production/v1/production/drafts?caseId=${encodeURIComponent(activeCaseId)}`,
+          undefined,
+          DEFAULT_MUTATION_ACTOR_NAMES.production
+        )
+      : Promise.resolve(undefined),
     detail.case.currentPlanId
       ? fetchJson<ProductionPlan>(
           `/api/production/v1/production/plans/${encodeURIComponent(detail.case.currentPlanId)}`,
           undefined,
           DEFAULT_MUTATION_ACTOR_NAMES.production
-        ).then((plan) => (
-          plan.planId !== detail.case.currentPlanId ||
-          (detail.case.sourceSpecId && plan.eventSpecId !== detail.case.sourceSpecId)
-            ? undefined
-            : plan
-        ))
+        )
       : Promise.resolve(undefined),
     detail.case.currentPurchaseListId
       ? fetchJson<PurchaseList>(
           `/api/production/v1/production/purchase-lists/${encodeURIComponent(detail.case.currentPurchaseListId)}`,
           undefined,
           DEFAULT_MUTATION_ACTOR_NAMES.production
-        ).then((purchaseList) => (
-          purchaseList.purchaseListId !== detail.case.currentPurchaseListId ||
-          (detail.case.sourceSpecId && purchaseList.eventSpecId !== detail.case.sourceSpecId)
-            ? undefined
-            : purchaseList
-        ))
+        )
       : Promise.resolve(undefined)
   ]);
+
+  const currentDraft = draftReference
+    ? draftListResponse?.items.find((draft) => (
+        draft.draftId === draftReference.artifactId &&
+        draft.revision === draftReference.revision
+      ))
+    : undefined;
+  if (draftReference && !currentDraft) {
+    throw productionSnapshotError("aktuelle Draft-ID oder Revision weicht von der Fallhistorie ab");
+  }
+  if (currentDraft?.businessId && currentDraft.businessId !== detail.case.businessId) {
+    throw productionSnapshotError("Draft und ProductionCase gehören nicht zum selben Betrieb");
+  }
+
+  const approvedProductionSpec = detail.case.approvedProductionSpecId
+    ? draftListResponse?.approvedProductionSpecs?.find((approved) => (
+        approved.approvedProductionSpecId === detail.case.approvedProductionSpecId
+      ))
+    : undefined;
+  if (detail.case.approvedProductionSpecId) {
+    if (!draftReference || !approvedProductionSpec) {
+      throw productionSnapshotError("die freigegebene Produktionsversion fehlt");
+    }
+    if (
+      approvedProductionSpec.sourceDraft.draftId !== draftReference.artifactId ||
+      approvedProductionSpec.sourceDraft.revision !== draftReference.revision
+    ) {
+      throw productionSnapshotError("Freigabe und aktuelle Draft-Revision stimmen nicht überein");
+    }
+  }
+
+  const eventSpecSnapshot = currentDraft?.draftArtifacts?.eventSpec;
+  const snapshotSpecId = isRecord(eventSpecSnapshot) && typeof eventSpecSnapshot.specId === "string"
+    ? eventSpecSnapshot.specId
+    : undefined;
+  if (currentDraft && (!snapshotSpecId || !detail.case.sourceSpecId || snapshotSpecId !== detail.case.sourceSpecId)) {
+    throw productionSnapshotError("AcceptedEventSpec und ProductionCase stimmen nicht überein");
+  }
+  if (
+    detail.case.currentPlanId &&
+    (!currentPlan || currentPlan.planId !== detail.case.currentPlanId || currentPlan.eventSpecId !== snapshotSpecId)
+  ) {
+    throw productionSnapshotError("Produktionsartefakt Plan weicht vom freigegebenen Spec-Snapshot ab");
+  }
+  if (
+    detail.case.currentPurchaseListId &&
+    (
+      !currentPurchaseList ||
+      currentPurchaseList.purchaseListId !== detail.case.currentPurchaseListId ||
+      currentPurchaseList.eventSpecId !== snapshotSpecId
+    )
+  ) {
+    throw productionSnapshotError("Produktionsartefakt Einkauf weicht vom freigegebenen Spec-Snapshot ab");
+  }
+
   const recipeIds = (currentPlan?.recipeSelections ?? [])
     .map((selection) => selection.recipeId)
     .filter((recipeId): recipeId is string => Boolean(recipeId));
@@ -475,8 +595,8 @@ export async function loadProductionWorkspaceState(activeCaseId?: string): Promi
     activeEvents,
     activeSources: sourcesFromCaseEvents(activeEvents),
     referencedRecipes,
-    ...(detail.currentDraft ? { currentDraft: detail.currentDraft } : {}),
-    ...(detail.approvedProductionSpec ? { approvedProductionSpec: detail.approvedProductionSpec } : {}),
+    ...(currentDraft ? { currentDraft } : {}),
+    ...(approvedProductionSpec ? { approvedProductionSpec } : {}),
     ...(currentPlan ? { currentPlan } : {}),
     ...(currentPurchaseList ? { currentPurchaseList } : {})
   };
@@ -549,57 +669,22 @@ export async function loadOfferProductData(activeCaseId?: string): Promise<Offer
 
 export async function loadProductionProductData(
   activeCaseId?: string,
-  focusedSpecId?: string
+  _focusedSpecId?: string
 ): Promise<ProductionProductData> {
   const [workspace, health] = await Promise.all([
     loadProductionWorkspaceState(activeCaseId),
     loadProductionWorkspaceHealth()
   ]);
 
-  const activeRequestIds = new Set(
-    [
-      ...workspace.activeSources.map((source) => source.requestId?.trim()),
-      ...workspace.activeEvents.map((event) => event.sourceRef?.requestId?.trim())
-    ]
-      .filter((requestId): requestId is string => Boolean(requestId))
-  );
-  const activeSpecIds = new Set(
-    [
-      workspace.activeCase?.sourceSpecId,
-      workspace.currentPlan?.eventSpecId,
-      workspace.currentPurchaseList?.eventSpecId
-    ].filter((specId): specId is string => Boolean(specId?.trim()))
-  );
-  if (focusedSpecId) activeSpecIds.add(focusedSpecId);
-  const [intakeRequests, acceptedSpecs] = await Promise.all([
-    Promise.all([...activeRequestIds].map(async (requestId) => {
-      try {
-        return await fetchJson<IntakeRequestDetail>(
-          `/api/intake/v1/intake/requests/${encodeURIComponent(requestId)}`,
-          undefined,
-          DEFAULT_MUTATION_ACTOR_NAMES.intake
-        );
-      } catch {
-        return undefined;
-      }
-    })).then((items) => items.filter((item): item is IntakeRequestDetail => item !== undefined)),
-    Promise.all([...activeSpecIds].map(async (specId) => {
-      try {
-        return await fetchJson<AcceptedEventSpec>(
-          `/api/intake/v1/intake/specs/${encodeURIComponent(specId)}`,
-          undefined,
-          DEFAULT_MUTATION_ACTOR_NAMES.intake
-        );
-      } catch {
-        return undefined;
-      }
-    })).then((items) => items.filter((item): item is AcceptedEventSpec => item !== undefined))
-  ]);
+  const eventSpecSnapshot = workspace.currentDraft?.draftArtifacts?.eventSpec;
+  const acceptedSpecs = activeCaseId && eventSpecSnapshot
+    ? [eventSpecSnapshot as unknown as AcceptedEventSpec]
+    : [];
 
   return {
     workspace,
-    intakeRequests: activeCaseId ? intakeRequests : [],
-    acceptedSpecs: activeCaseId || focusedSpecId ? acceptedSpecs : [],
+    intakeRequests: [],
+    acceptedSpecs,
     productionPlans: workspace.currentPlan ? [workspace.currentPlan] : [],
     purchaseLists: workspace.currentPurchaseList ? [workspace.currentPurchaseList] : [],
     recipes: workspace.referencedRecipes,

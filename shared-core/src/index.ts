@@ -1,4 +1,5 @@
 export * from "./access-control.js";
+export * from "./accepted-event-spec-projection.js";
 export * from "./approval-request.js";
 export * from "./audit-log.js";
 export * from "./byo-llm-boundary.js";

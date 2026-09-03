@@ -9,6 +9,7 @@ import {
 } from "@catering/production-service";
 import type { SourceDocumentReader } from "../production-service/src/ports/source-document-reader.js";
 import { productionDecisionRepositoryFor } from "../production-service/src/repositories/production-store.js";
+import { projectProductionDraft } from "../production-service/src/routes/production-response-projection.js";
 import { InMemoryIntakeRecordsPort } from "./support/in-memory-intake-records-port.js";
 import {
   AuditLogStore,
@@ -17,7 +18,8 @@ import {
   type ByoLlmDataClass,
   type LlmReadinessProviderAdapter,
   type LlmReadinessProviderAdapterRequest,
-  type ProductionDraft
+  type ProductionDraft,
+  trustedActorFromHeaders
 } from "@catering/shared-core";
 import { assessProductionDraftReference } from "../shared-core/src/production-reference-quality.js";
 
@@ -27,6 +29,15 @@ const trustedProductionHeaders = {
   "x-catering-actor-name": "Produktions-Mitarbeiter",
   "x-catering-trusted-secret": TRUSTED_SECRET
 };
+const trustedProductionActor = trustedActorFromHeaders(trustedProductionHeaders, {
+  fallbackActorName: "Produktions-Mitarbeiter",
+  fallbackBusinessId: "local",
+  trustedActorSecret: TRUSTED_SECRET
+});
+
+function productionDraftResponse(draft: ProductionDraft): ProductionDraft {
+  return projectProductionDraft(trustedProductionActor, draft);
+}
 
 const documentText = [
   "AB 16.30 UHR | WELCOME DRINK",
@@ -437,7 +448,8 @@ describe("ProductionDraft document BYO extraction", () => {
         })
       ]);
       expect(responseDrafts[0]).toEqual(responseDrafts[1]);
-      expect(await store.listProductionDrafts(localBusiness)).toEqual([responseDrafts[0]]);
+      expect(projectProductionDraft(trustedProductionActor, (await store.listProductionDrafts(localBusiness))[0]!))
+        .toEqual(responseDrafts[0]);
       expect(events.filter((event) => event.kind === "draft_created")).toEqual([
         expect.objectContaining({ artifactId: responseDrafts[0].draftId })
       ]);
@@ -496,8 +508,11 @@ describe("ProductionDraft document BYO extraction", () => {
       expect(first.statusCode).toBe(500);
       expect(persistedAfterLoss).toHaveLength(1);
       expect(retried.statusCode, retried.body).toBe(201);
-      expect(retriedDraft).toEqual(persistedAfterLoss[0]);
-      expect(await store.listProductionDrafts(localBusiness)).toEqual([persistedAfterLoss[0]]);
+      expect(retriedDraft).toEqual(productionDraftResponse(persistedAfterLoss[0]!));
+      const persistedAfterRetry = await store.listProductionDrafts(localBusiness);
+      expect(persistedAfterRetry).toEqual([persistedAfterLoss[0]]);
+      expect(persistedAfterRetry[0]!.source.processingPolicy)
+        .toEqual(persistedAfterLoss[0]!.source.processingPolicy);
       expect(run).toHaveBeenCalledTimes(1);
       expect(draftEvents).toEqual([
         expect.objectContaining({
@@ -710,9 +725,12 @@ describe("ProductionDraft document BYO extraction", () => {
       expect(first.statusCode).toBe(500);
       expect(persistedAfterAuditFailure).toHaveLength(1);
       expect(retried.statusCode, retried.body).toBe(201);
-      expect(retried.json<{ draft: ProductionDraft }>().draft).toEqual(persistedAfterAuditFailure[0]);
+      expect(retried.json<{ draft: ProductionDraft }>().draft)
+        .toEqual(productionDraftResponse(persistedAfterAuditFailure[0]!));
       expect(run).toHaveBeenCalledTimes(1);
       const persistedDraft = persistedAfterAuditFailure[0];
+      expect((await store.getProductionDraft(localBusiness, persistedDraft.draftId))!.source.processingPolicy)
+        .toEqual(persistedDraft.source.processingPolicy);
       expect(persistedDraft.source.processingPolicy).toMatchObject({
         approvalId: "approval-local-production-document-test-v1",
         businessId: "local",
@@ -927,6 +945,9 @@ describe("ProductionDraft document BYO extraction", () => {
 
       const first = await createDraft(firstPayload.documentId);
       const firstDraft = first.json<{ draft: ProductionDraft }>().draft;
+      const persistedFirstDraft = await store.getProductionDraft(localBusiness, firstDraft.draftId);
+      expect(persistedFirstDraft).toBeDefined();
+      const firstProcessingPolicy = persistedFirstDraft!.source.processingPolicy;
       const corrected = await createDraft(correctedDocumentId);
       const correctedDraft = corrected.json<{ draft: ProductionDraft }>().draft;
       const correctedRetry = await createDraft(correctedDocumentId);
@@ -949,9 +970,11 @@ describe("ProductionDraft document BYO extraction", () => {
         ])
       );
       expect(await store.getProductionDraft(localBusiness, firstDraft.draftId)).toEqual({
-        ...firstDraft,
+        ...persistedFirstDraft!,
         status: "superseded"
       });
+      expect((await store.getProductionDraft(localBusiness, firstDraft.draftId))!.source.processingPolicy)
+        .toEqual(firstProcessingPolicy);
       expect(await store.listProductionDrafts(localBusiness)).toHaveLength(2);
       expect(await store.getCase(localBusiness, firstPayload.caseId)).toMatchObject({
         sourceSpecId: correctedDraft.draftArtifacts.eventSpec?.specId
@@ -1000,6 +1023,9 @@ describe("ProductionDraft document BYO extraction", () => {
       });
       expect(first.statusCode, first.body).toBe(201);
       const firstDraft = first.json<{ draft: ProductionDraft }>().draft;
+      const persistedFirstDraft = await store.getProductionDraft(localBusiness, firstDraft.draftId);
+      expect(persistedFirstDraft).toBeDefined();
+      const firstProcessingPolicy = persistedFirstDraft!.source.processingPolicy;
       const caseBeforeCorrection = await store.getCase(localBusiness, firstPayload.caseId);
 
       const correctedContent = Buffer.from(`${documentText}\nKORREKTUR: 50 PERSONEN`, "utf8");
@@ -1047,8 +1073,11 @@ describe("ProductionDraft document BYO extraction", () => {
       const publishedCorrection = draftsAfterFailure.find((draft) => draft.supersedesDraftId === firstDraft.draftId);
 
       expect(failed.statusCode).toBe(500);
-      expect(publishedCorrection).toMatchObject({ status: "pending_review" });
-      expect(await store.getProductionDraft(localBusiness, firstDraft.draftId)).toEqual(firstDraft);
+      expect(publishedCorrection).toBeDefined();
+      expect(publishedCorrection!.status).toBe("pending_review");
+      expect(await store.getProductionDraft(localBusiness, firstDraft.draftId)).toEqual(persistedFirstDraft);
+      expect((await store.getProductionDraft(localBusiness, firstDraft.draftId))!.source.processingPolicy)
+        .toEqual(firstProcessingPolicy);
       expect(await store.getCase(localBusiness, firstPayload.caseId)).toEqual(caseBeforeCorrection);
       expect((await store.listEvents(localBusiness, firstPayload.caseId))
         .filter((event) => event.kind === "draft_created" && event.artifactId === publishedCorrection?.draftId))
@@ -1059,14 +1088,19 @@ describe("ProductionDraft document BYO extraction", () => {
       const draftsAfterRecovery = await store.listProductionDrafts(localBusiness);
 
       expect(retry.statusCode, retry.body).toBe(201);
-      expect(recoveredDraft).toEqual(publishedCorrection);
+      expect(recoveredDraft).toEqual(productionDraftResponse(publishedCorrection!));
       expect(run).toHaveBeenCalledTimes(2);
       expect(draftsAfterRecovery).toHaveLength(2);
-      expect(draftsAfterRecovery.filter((draft) => draft.status === "pending_review")).toEqual([recoveredDraft]);
+      const pendingStoredDrafts = draftsAfterRecovery.filter((draft) => draft.status === "pending_review");
+      expect(pendingStoredDrafts).toHaveLength(1);
+      expect(pendingStoredDrafts[0]).toEqual(publishedCorrection);
+      expect(projectProductionDraft(trustedProductionActor, pendingStoredDrafts[0]!)).toEqual(recoveredDraft);
       expect(await store.getProductionDraft(localBusiness, firstDraft.draftId)).toEqual({
-        ...firstDraft,
+        ...persistedFirstDraft!,
         status: "superseded"
       });
+      expect((await store.getProductionDraft(localBusiness, firstDraft.draftId))!.source.processingPolicy)
+        .toEqual(firstProcessingPolicy);
       expect(await store.getCase(localBusiness, firstPayload.caseId)).toMatchObject({
         sourceSpecId: recoveredDraft.draftArtifacts.eventSpec?.specId
       });
@@ -1440,8 +1474,13 @@ describe("ProductionDraft document BYO extraction", () => {
       });
       expect(retry.statusCode, retry.body).toBe(201);
       expect(secondRetry.statusCode, secondRetry.body).toBe(201);
-      expect(recoveredDraft).toEqual(persistedAfterLoss);
-      expect(secondRetry.json<{ draft: ProductionDraft }>().draft).toEqual(persistedAfterLoss);
+      expect(recoveredDraft).toEqual(productionDraftResponse(persistedAfterLoss!));
+      expect(secondRetry.json<{ draft: ProductionDraft }>().draft)
+        .toEqual(productionDraftResponse(persistedAfterLoss!));
+      const persistedAfterRecovery = await store.getProductionDraft(localBusiness, persistedAfterLoss!.draftId);
+      expect(persistedAfterRecovery).toEqual(persistedAfterLoss);
+      expect(persistedAfterRecovery!.source.processingPolicy)
+        .toEqual(persistedAfterLoss!.source.processingPolicy);
       expect(await store.listProductionDrafts(localBusiness)).toHaveLength(2);
       expect(run).toHaveBeenCalledTimes(2);
       expect(revisionEvents).toEqual([

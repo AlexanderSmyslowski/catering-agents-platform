@@ -413,7 +413,10 @@ describe("UI critical path rehearsal", () => {
         }
 
         if (method === "GET" && url.endsWith("/api/production/v1/production/plans")) {
-          return Response.json({ items: [artifacts.productionPlan] });
+          return Response.json({
+            access: { canOperateProduction: true },
+            items: [artifacts.productionPlan]
+          });
         }
 
         if (method === "GET" && url.endsWith("/api/production/v1/production/purchase-lists")) {

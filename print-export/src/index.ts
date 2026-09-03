@@ -17,13 +17,14 @@ import {
   assertBusinessId,
   assertTrustedActorConfiguration,
   createTrustedActorResolver,
+  hasMinimalMvpCapability,
   formatMetroGroupLabel,
   isDevAuthEnabled,
   hostedMultiBusinessReady,
+  projectAcceptedEventSpecForActor,
   RecipeLibrary,
   recipeSourceOriginLabel,
   recipeSourceReferenceLabel,
-  resolveMinimalMvpRoleFromTrustedActor,
 } from "@catering/shared-core";
 import { renderProductionFolderHtml } from "./production-folder.js";
 
@@ -322,9 +323,9 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
   }));
   const actorForRequest = (request: PrintExportRequest, ..._ignored: unknown[]) => resolveActor(request);
   const isOfferOperator = (request: PrintExportRequest, ..._ignored: unknown[]) =>
-    resolveMinimalMvpRoleFromTrustedActor(actorForRequest(request)) === "offer_operator";
+    hasMinimalMvpCapability(actorForRequest(request), "offer");
   const isProductionOperator = (request: PrintExportRequest, ..._ignored: unknown[]) =>
-    resolveMinimalMvpRoleFromTrustedActor(actorForRequest(request)) === "production_operator";
+    hasMinimalMvpCapability(actorForRequest(request), "production");
   const requireOfferOperator = (
     request: PrintExportRequest,
     reply: { code: (statusCode: number) => { send: (payload: unknown) => unknown } },
@@ -433,7 +434,10 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
       );
       return reply
         .type("text/html; charset=utf-8")
-        .send(renderProductionPlanHtml(plan, spec));
+        .send(renderProductionPlanHtml(
+          plan,
+          spec ? projectAcceptedEventSpecForActor(actor, spec) : undefined
+        ));
     }
   );
 
@@ -477,7 +481,7 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
         .type("text/html; charset=utf-8")
         .send(renderProductionFolderHtml({
           plan,
-          spec,
+          spec: projectAcceptedEventSpecForActor(actor, spec),
           purchaseLists: purchaseLists.filter((list) => list.eventSpecId === spec.specId),
           recipes: linkedRecipes,
           clarificationAnswers: clarificationAnswers.filter((answer) => answer.context.specId === spec.specId)

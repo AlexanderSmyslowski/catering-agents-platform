@@ -22,6 +22,9 @@ function responseFor(url: string): Response {
   if (url.includes("/health")) {
     return Response.json({ service: "local", status: "ok", timestamp: "", counts: {} });
   }
+  if (url.endsWith("/api/production/v1/production/plans")) {
+    return Response.json({ access: { canOperateProduction: true }, items: [] });
+  }
   return Response.json({ items: [] });
 }
 
@@ -109,6 +112,16 @@ function productionDraftSentinel(draftId: string, title: string): ProductionDraf
       eventSpec: { specId: `${draftId}-spec`, event: { title } }
     }
   } as unknown as ProductionDraft;
+}
+
+function projectedProductionDraft(draftId: string, revision: number, specId: string): ProductionDraft {
+  return {
+    ...productionDraftSentinel(draftId, "Aktiver Produktionsauftrag"),
+    revision,
+    draftArtifacts: {
+      eventSpec: acceptedSpecSentinel(specId, "Aktiver Produktionsauftrag") as unknown as Record<string, unknown>
+    }
+  };
 }
 
 function productionProductData(plan?: unknown, purchaseList?: unknown, activeCaseId?: string): ProductionProductData {
@@ -902,7 +915,21 @@ describe("independent product loader boundaries", () => {
         return Response.json({ items: [{ caseId: "case-a", product: "production", displayName: "A", status: "open", createdAt: "", updatedAt: "" }] });
       }
       if (url.endsWith("/api/production/v1/production/cases/case-a")) {
-        return Response.json({ case: { caseId: "case-a", product: "production", displayName: "A", status: "open", schemaVersion: "1.0", businessId: "local", version: 1, createdAt: "", updatedAt: "", currentPlanId: "plan-a", currentPurchaseListId: "list-a" }, events: [] });
+        return Response.json({
+          case: {
+            caseId: "case-a", product: "production", displayName: "A", status: "open",
+            schemaVersion: "1.0", businessId: "local", version: 1, createdAt: "", updatedAt: "",
+            sourceSpecId: "spec-a", currentPlanId: "plan-a", currentPurchaseListId: "list-a"
+          },
+          events: [{
+            businessId: "local", eventId: "event-a", caseId: "case-a", sequence: 1, at: "",
+            role: "assistant", kind: "draft_created", text: "Entwurf erstellt.", artifactId: "draft-a",
+            revisionRef: { artifactType: "ProductionDraft", artifactId: "draft-a", revision: 1, createdAt: "" }
+          }]
+        });
+      }
+      if (url.endsWith("/api/production/v1/production/drafts?caseId=case-a")) {
+        return Response.json({ items: [projectedProductionDraft("draft-a", 1, "spec-a")], approvedProductionSpecs: [] });
       }
       if (url.endsWith("/api/production/v1/production/plans/plan-a")) return Response.json({ planId: "plan-a", eventSpecId: "spec-a" });
       if (url.endsWith("/api/production/v1/production/purchase-lists/list-a")) return Response.json({ purchaseListId: "list-a", eventSpecId: "spec-a" });
@@ -938,9 +965,7 @@ describe("independent product loader boundaries", () => {
       throw new Error(`Unerwartete Planladung: ${url}`);
     }));
 
-    const state = await api.loadProductionWorkspaceState("case-a");
-
-    expect(state.currentPlan).toBeUndefined();
+    await expect(api.loadProductionWorkspaceState("case-a")).rejects.toThrow("Produktionssnapshot");
   });
 
   it("rejects a purchase-list response whose id differs from the active case reference", async () => {
@@ -965,14 +990,16 @@ describe("independent product loader boundaries", () => {
       throw new Error(`Unerwartete Einkaufslistenladung: ${url}`);
     }));
 
-    const state = await api.loadProductionWorkspaceState("case-a");
-
-    expect(state.currentPurchaseList).toBeUndefined();
+    await expect(api.loadProductionWorkspaceState("case-a")).rejects.toThrow("Produktionssnapshot");
   });
 
   it("rehydrates the persisted production draft and approved specification for the active case", async () => {
-    const currentDraft = { draftId: "production-draft-a", revision: 1, status: "pending_review", reviewCards: [], createdAt: "" };
-    const approvedProductionSpec = { approvedProductionSpecId: "approved-production-spec-a", sourceDraft: { draftId: "production-draft-a", revision: 1 } };
+    const currentDraft = projectedProductionDraft("production-draft-a", 1, "spec-a");
+    const approvedProductionSpec = {
+      approvedProductionSpecId: "approved-production-spec-a",
+      sourceDraft: { draftId: "production-draft-a", revision: 1 },
+      applied: false
+    };
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith("/api/production/v1/production/cases")) {
@@ -985,10 +1012,15 @@ describe("independent product loader boundaries", () => {
             schemaVersion: "1.0", businessId: "local", version: 2, createdAt: "", updatedAt: "",
             sourceSpecId: "spec-a", approvedProductionSpecId: "approved-production-spec-a"
           },
-          events: [],
-          currentDraft,
-          approvedProductionSpec
+          events: [{
+            businessId: "local", eventId: "event-a", caseId: "case-a", sequence: 1, at: "",
+            role: "assistant", kind: "draft_created", text: "Entwurf erstellt.", artifactId: "production-draft-a",
+            revisionRef: { artifactType: "ProductionDraft", artifactId: "production-draft-a", revision: 1, createdAt: "" }
+          }]
         });
+      }
+      if (url.endsWith("/api/production/v1/production/drafts?caseId=case-a")) {
+        return Response.json({ items: [currentDraft], approvedProductionSpecs: [approvedProductionSpec] });
       }
       throw new Error(`Unerwartete persistierte Produktionsladung: ${url}`);
     }));
@@ -1168,16 +1200,13 @@ describe("independent product loader boundaries", () => {
     container.remove();
   });
 
-  it("keeps a newly created production spec addressable through an explicit detail refresh", async () => {
+  it("does not reload a pre-case production spec through the commercial Intake boundary", async () => {
     const calls: string[] = [];
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       calls.push(url);
       if (url.endsWith("/api/production/v1/production/cases")) {
         return Response.json({ items: [] });
-      }
-      if (url.endsWith("/api/intake/v1/intake/specs/spec-new")) {
-        return Response.json({ specId: "spec-new", lifecycle: { commercialState: "draft" }, readiness: { status: "complete", reasons: [] }, sourceLineage: [], event: {}, attendees: {}, servicePlan: { eventType: "lunch", serviceForm: "buffet", modules: [] }, menuPlan: [] });
       }
       if (url.endsWith("/api/production/health")) {
         return Response.json({ service: "production", status: "ok", timestamp: "", counts: {} });
@@ -1187,9 +1216,7 @@ describe("independent product loader boundaries", () => {
 
     const result = await api.loadProductionProductData(undefined, "spec-new");
 
-    expect(result.acceptedSpecs).toHaveLength(1);
-    expect(result.acceptedSpecs[0]?.specId).toBe("spec-new");
-    expect(calls).toContain("/api/intake/v1/intake/specs/spec-new");
-    expect(calls).not.toContain("/api/intake/v1/intake/specs");
+    expect(result.acceptedSpecs).toEqual([]);
+    expect(calls.some((url) => url.includes("/api/intake/"))).toBe(false);
   });
 });

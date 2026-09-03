@@ -11,6 +11,10 @@ import {
 } from "@catering/shared-core";
 import type { ProductionHandoffReader } from "../ports/production-handoff-reader.js";
 import type { ProductionStore } from "../repositories/production-store.js";
+import {
+  canReadProductionCommercials,
+  projectProductionCaseEvent
+} from "./production-response-projection.js";
 
 interface ProductionCaseCreateBody {
   customerName?: unknown;
@@ -164,7 +168,8 @@ export function registerProductionCaseRoutes(
     if (!productionCase) return reply.code(404).send({ message: "Produktionsauftrag nicht gefunden." });
     return reply.send({
       case: productionCase,
-      events: await store.listEvents(trustedActor, productionCase.caseId)
+      events: (await store.listEvents(trustedActor, productionCase.caseId))
+        .map((event) => projectProductionCaseEvent(trustedActor, event))
     });
   });
 
@@ -262,9 +267,10 @@ export function registerProductionCaseRoutes(
         role: "user",
         kind: "instruction",
         text: input.text,
+        visibility: canReadProductionCommercials(trustedActor) ? "commercial" : "operational",
         ...(input.sourceId ? { sourceId: input.sourceId } : {})
       });
-      return reply.code(201).send({ event });
+      return reply.code(201).send({ event: projectProductionCaseEvent(trustedActor, event) });
     }
   );
 }

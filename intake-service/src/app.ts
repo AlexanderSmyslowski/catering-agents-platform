@@ -8,6 +8,7 @@ import {
   loadByoLlmExternalProcessingApprovalFromEnv,
   createTrustedActorResolver,
   assertBusinessId,
+  hasMinimalMvpCapability,
   type CollectionStorageOptions,
   createLlmReadinessAgentAuditRecord,
   createEventRequestFromManualForm,
@@ -18,7 +19,6 @@ import {
   isDevAuthEnabled,
   llmReadinessContractVersion,
   normalizeEventRequestToSpec,
-  resolveMinimalMvpRoleFromTrustedActor,
   DOCUMENT_UPLOAD_LIMITS,
   withEvaluatedReadiness,
   validateAcceptedEventSpec,
@@ -470,7 +470,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
     });
   const actorForRequest = (request: { headers: Record<string, string | string[] | undefined> }, ..._ignored: unknown[]) => resolveActor(request);
   const isIntakeOperator = (request: { headers: Record<string, string | string[] | undefined> }, ..._ignored: unknown[]) =>
-    resolveMinimalMvpRoleFromTrustedActor(actorForRequest(request)) === "intake_operator";
+    hasMinimalMvpCapability(actorForRequest(request), "intake");
   const requireIntakeOperator = (
     request: { headers: Record<string, string | string[] | undefined> },
     reply: { code: (statusCode: number) => { send: (payload: unknown) => unknown } },
@@ -479,7 +479,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
     ? undefined
     : reply.code(403).send({ message: "Intake-Operator erforderlich." });
   const isOperationsAuditOperator = (request: { headers: Record<string, string | string[] | undefined> }, ..._ignored: unknown[]) =>
-    resolveMinimalMvpRoleFromTrustedActor(actorForRequest(request)) === "operations_audit_operator";
+    hasMinimalMvpCapability(actorForRequest(request), "operations_audit");
   const storageOptions = isIntakeStore(input) ? input.storageOptions : options;
   const store =
     options.store ??

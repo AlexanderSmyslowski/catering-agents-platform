@@ -4,6 +4,7 @@ import {
   createApprovedProductionSpec,
   createApprovalRequestRecord,
   createProductionApplyManifest,
+  resolveMinimalMvpRoleFromTrustedActor,
   validateProductionDraft,
   type ApprovedProductionSpec,
   type ApprovalRequestRecord,
@@ -12,6 +13,10 @@ import {
   type ProductionApplyManifest,
   type TrustedActor
 } from "@catering/shared-core";
+import {
+  projectApprovedProductionSpec,
+  projectProductionEventSpec
+} from "./production-response-projection.js";
 import type { InMemoryRecipeRepository } from "../repositories/in-memory-recipe-repository.js";
 import {
   productionDecisionRepositoryFor,
@@ -32,6 +37,10 @@ export type ProductionApplyFaultPhase =
   | "after_purchase_list_write"
   | "after_recipe_write"
   | "before_manifest_publish";
+
+function approvalRoleForActor(actor: TrustedActor): "production_operator" | "admin" {
+  return resolveMinimalMvpRoleFromTrustedActor(actor) === "admin" ? "admin" : "production_operator";
+}
 
 export interface ProductionApprovalRouteDependencies {
   store: ProductionStore;
@@ -239,7 +248,7 @@ export function registerProductionApprovalRoutes(
     };
     const requestedApproval = createApprovalRequestRecord({
       actor,
-      role: "production_operator",
+      role: approvalRoleForActor(actor),
       target,
       decision: request.body.decision,
       ...(request.body.comment?.trim() ? { comment: request.body.comment.trim() } : {})
@@ -367,7 +376,7 @@ export function registerProductionApprovalRoutes(
     await appendProductionDecisionEvents(store, actor, aggregate);
     return reply.code(201).send({
       approval,
-      approvedProductionSpec
+      approvedProductionSpec: projectApprovedProductionSpec(actor, approvedProductionSpec)
     });
   });
 
@@ -483,7 +492,12 @@ export function registerProductionApprovalRoutes(
         text: "Produktionsplan und Einkaufsliste erstellt.",
         artifactId: productionPlan.planId
       });
-      return reply.send({ eventSpec, plan: productionPlan, purchaseList, recipes });
+      return reply.send({
+        eventSpec: projectProductionEventSpec(actor, eventSpec),
+        plan: productionPlan,
+        purchaseList,
+        recipes
+      });
     }
   );
 }

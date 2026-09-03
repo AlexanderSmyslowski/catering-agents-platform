@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   isMinimalMvpProtectedPath,
   isMinimalMvpRole,
+  hasMinimalMvpCapability,
   MINIMAL_MVP_PROTECTED_PATHS,
   MINIMAL_MVP_ROLE_DEFAULT_ACTOR_NAMES,
   MINIMAL_MVP_ROLE_LABELS,
@@ -12,18 +13,22 @@ import {
 } from "../shared-core/src/access-control.js";
 
 describe("minimal MVP roles convention", () => {
-  it("exposes the four minimal MVP roles and their labels", () => {
+  it("exposes the minimal MVP roles and their labels", () => {
     expect(MINIMAL_MVP_ROLES).toEqual([
       "intake_operator",
       "offer_operator",
       "production_operator",
-      "operations_audit_operator"
+      "operations_audit_operator",
+      "read_only_operator",
+      "admin"
     ]);
     expect(MINIMAL_MVP_ROLE_LABELS).toEqual({
       intake_operator: "Intake-Operator",
       offer_operator: "Angebots-Operator",
       production_operator: "Produktions-Operator",
-      operations_audit_operator: "Betriebs-/Audit-Operator"
+      operations_audit_operator: "Betriebs-/Audit-Operator",
+      read_only_operator: "Read-only-Operator",
+      admin: "Administrator"
     });
   });
 
@@ -32,6 +37,8 @@ describe("minimal MVP roles convention", () => {
     expect(resolveMinimalMvpRoleFromActorName("Angebots-Mitarbeiter")).toBe("offer_operator");
     expect(resolveMinimalMvpRoleFromActorName("Produktions-Mitarbeiter")).toBe("production_operator");
     expect(resolveMinimalMvpRoleFromActorName("Betriebs-/Audit-Operator")).toBe("operations_audit_operator");
+    expect(resolveMinimalMvpRoleFromActorName("Read-only-Mitarbeiter")).toBe("read_only_operator");
+    expect(resolveMinimalMvpRoleFromActorName("Administrator")).toBe("admin");
     expect(resolveMinimalMvpRoleFromActorName("Mitarbeiter")).toBeUndefined();
   });
 
@@ -40,6 +47,7 @@ describe("minimal MVP roles convention", () => {
     expect(resolveMinimalMvpRoleFromActorName("  angebots-mitarbeiter  ")).toBe("offer_operator");
     expect(resolveMinimalMvpRoleFromActorName("  produktions-mitarbeiter  ")).toBe("production_operator");
     expect(resolveMinimalMvpRoleFromActorName("  betriebs-/audit-operator  ")).toBe("operations_audit_operator");
+    expect(resolveMinimalMvpRoleFromActorName("  read-only-mitarbeiter  ")).toBe("read_only_operator");
   });
 
   it("marks the sensitive MVP paths as protected", () => {
@@ -95,8 +103,77 @@ describe("minimal MVP roles convention", () => {
 
   it("keeps role validation explicit", () => {
     expect(isMinimalMvpRole("intake_operator")).toBe(true);
-    expect(isMinimalMvpRole("admin")).toBe(false);
+    expect(isMinimalMvpRole("admin")).toBe(true);
     expect(MINIMAL_MVP_ROLE_DEFAULT_ACTOR_NAMES.offer_operator).toBe("Angebots-Mitarbeiter");
+  });
+
+  it("gives the trusted Administrator every existing product capability", () => {
+    const administrator = trustedActorFromHeaders(
+      {
+        "x-catering-actor-name": "Administrator",
+        "x-catering-trusted-secret": "shared-secret"
+      },
+      {
+        fallbackActorName: "Produktions-Mitarbeiter",
+        fallbackBusinessId: "local",
+        trustedActorSecret: "shared-secret"
+      }
+    );
+
+    expect(resolveMinimalMvpRoleFromTrustedActor(administrator)).toBe("admin");
+    expect(hasMinimalMvpCapability(administrator, "intake")).toBe(true);
+    expect(hasMinimalMvpCapability(administrator, "offer")).toBe(true);
+    expect(hasMinimalMvpCapability(administrator, "production")).toBe(true);
+    expect(hasMinimalMvpCapability(administrator, "production_read")).toBe(true);
+    expect(hasMinimalMvpCapability(administrator, "operations_audit")).toBe(true);
+    expect(hasMinimalMvpCapability(administrator, "commercial")).toBe(true);
+
+    const productionOperator = trustedActorFromHeaders(
+      {
+        "x-catering-actor-name": "Produktions-Mitarbeiter",
+        "x-catering-trusted-secret": "shared-secret"
+      },
+      {
+        fallbackActorName: "Produktions-Mitarbeiter",
+        fallbackBusinessId: "local",
+        trustedActorSecret: "shared-secret"
+      }
+    );
+    expect(hasMinimalMvpCapability(productionOperator, "production")).toBe(true);
+    expect(hasMinimalMvpCapability(productionOperator, "production_read")).toBe(true);
+    expect(hasMinimalMvpCapability(productionOperator, "commercial")).toBe(false);
+
+    const readOnlyOperator = trustedActorFromHeaders(
+      {
+        "x-catering-actor-name": "Read-only-Mitarbeiter",
+        "x-catering-trusted-secret": "shared-secret"
+      },
+      {
+        fallbackActorName: "Produktions-Mitarbeiter",
+        fallbackBusinessId: "local",
+        trustedActorSecret: "shared-secret"
+      }
+    );
+    expect(resolveMinimalMvpRoleFromTrustedActor(readOnlyOperator)).toBe("read_only_operator");
+    expect(hasMinimalMvpCapability(readOnlyOperator, "production_read")).toBe(true);
+    expect(hasMinimalMvpCapability(readOnlyOperator, "production")).toBe(false);
+    expect(hasMinimalMvpCapability(readOnlyOperator, "commercial")).toBe(false);
+    expect(hasMinimalMvpCapability(readOnlyOperator, "intake")).toBe(false);
+    expect(hasMinimalMvpCapability(readOnlyOperator, "offer")).toBe(false);
+    expect(hasMinimalMvpCapability(readOnlyOperator, "operations_audit")).toBe(false);
+
+    const offerOperator = trustedActorFromHeaders(
+      {
+        "x-catering-actor-name": "Angebots-Mitarbeiter",
+        "x-catering-trusted-secret": "shared-secret"
+      },
+      {
+        fallbackActorName: "Produktions-Mitarbeiter",
+        fallbackBusinessId: "local",
+        trustedActorSecret: "shared-secret"
+      }
+    );
+    expect(hasMinimalMvpCapability(offerOperator, "commercial")).toBe(true);
   });
 
   it("ignores freely set x-actor-name when a trusted actor secret is required", () => {

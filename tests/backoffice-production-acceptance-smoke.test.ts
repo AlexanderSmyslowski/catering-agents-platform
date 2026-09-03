@@ -318,6 +318,13 @@ function installProductionAcceptanceMocks(
   const productionCaseDetail = (caseId: string, caseSpecId: string, displayName: string) => {
     const plan = caseSpecId === specId ? currentPlan : undefined;
     const purchaseList = caseSpecId === specId ? currentPurchaseList : undefined;
+    const productionDraftId = `draft-${caseId}`;
+    const sourceAddedAt = caseSpecId === searchSpecId
+      ? "2026-05-26T08:29:00.000Z"
+      : "2026-05-21T08:01:00.000Z";
+    const sourceReceivedAt = caseSpecId === searchSpecId
+      ? "2026-05-26T08:30:00.000Z"
+      : "2026-05-21T08:02:00.000Z";
     const caseRecord = {
       schemaVersion: "1.0",
       businessId: "demo-business",
@@ -348,15 +355,40 @@ function installProductionAcceptanceMocks(
         eventId: `event-${caseId}-source`,
         caseId,
         sequence: 2,
-        at: "2026-05-21T08:01:00.000Z",
+        at: sourceAddedAt,
         role: "system",
         kind: "source_added",
         text: "Quelle verknüpft.",
         sourceRef: {
           sourceId: `source-${caseId}`,
           requestId: caseSpecId === searchSpecId ? searchRequestId : requestId,
+          ...(caseSpecId === specId
+            ? {
+                documentId: "document-production-fallback-1",
+                filename: "produktion-angebot.pdf",
+                mimeType: "application/pdf",
+                sha256: "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+              }
+            : {}),
           dataClass: "synthetic_demo",
-          addedAt: "2026-05-21T08:01:00.000Z"
+          addedAt: sourceAddedAt
+        }
+      },
+      {
+        businessId: "demo-business",
+        eventId: `event-${caseId}-revision`,
+        caseId,
+        sequence: 3,
+        at: sourceReceivedAt,
+        role: "assistant",
+        kind: "revision_created",
+        text: "Produktionsentwurf erstellt.",
+        artifactId: productionDraftId,
+        revisionRef: {
+          artifactType: "ProductionDraft",
+          artifactId: productionDraftId,
+          revision: 1,
+          createdAt: sourceReceivedAt
         }
       },
       ...(options.withAuditEvent && caseSpecId === specId
@@ -365,7 +397,7 @@ function installProductionAcceptanceMocks(
               businessId: "demo-business",
               eventId: `event-${caseId}-plan`,
               caseId,
-              sequence: 3,
+              sequence: 4,
               at: "2026-05-21T09:15:00.000Z",
               role: "Küche",
               kind: "production.plan.created",
@@ -645,8 +677,40 @@ function installProductionAcceptanceMocks(
         });
       }
 
-      if (url.endsWith("/api/production/v1/production/drafts")) {
-        return new Response(JSON.stringify({ items: [], approvedProductionSpecs: [] }), {
+      if (requestPath.endsWith("/api/production/v1/production/drafts")) {
+        const requestedCaseId = new URL(url, "http://localhost").searchParams.get("caseId");
+        const draftSpec = requestedCaseId === productionCaseId && !archivedSpecIds.has(specId)
+          ? focusedSpec
+          : requestedCaseId === searchCaseId && options.withSearchTargetSpec
+            ? searchTargetSpec
+            : undefined;
+        return new Response(JSON.stringify({
+          items: draftSpec && requestedCaseId
+            ? [
+                {
+                  businessId: "demo-business",
+                  draftId: `draft-${requestedCaseId}`,
+                  revision: 1,
+                  status: "approved",
+                  createdAt: requestedCaseId === searchCaseId
+                    ? "2026-05-26T08:30:00.000Z"
+                    : "2026-05-21T08:02:00.000Z",
+                  source: {
+                    kind: "manual_import",
+                    receivedAt: requestedCaseId === searchCaseId
+                      ? "2026-05-26T08:30:00.000Z"
+                      : "2026-05-21T08:02:00.000Z",
+                    sourceRef: `accepted-event-spec:${String(draftSpec.specId)}`
+                  },
+                  reviewCards: [],
+                  draftArtifacts: {
+                    eventSpec: draftSpec
+                  }
+                }
+              ]
+            : [],
+          approvedProductionSpecs: []
+        }), {
           status: 200,
           headers: { "content-type": "application/json" }
         });
@@ -655,6 +719,7 @@ function installProductionAcceptanceMocks(
       if (url.endsWith("/api/production/v1/production/plans")) {
         return new Response(
           JSON.stringify({
+            access: { canOperateProduction: true },
             items: options.withoutPlans
               ? []
               : [
@@ -1103,7 +1168,9 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Session-Grundlage");
     expect(content).toContain("Strukturierte Veranstaltungsdaten bleiben führend");
     expect(content).toContain("Quellenanker");
-    expect(content).toContain("produktion-angebot.pdf · application/pdf · 24.2 KB · sha256:fedcba987654 · intake");
+    expect(content).toContain(
+      "produktion-angebot.pdf · application/pdf · sha256:fedcba987654 · production · 2026-05-21T08:01:00.000Z"
+    );
     expect(content).toContain("Produktionsoutput / Downloadanker");
     expect(content).toContain("Vorhandene Produktionspläne, Einkaufslisten und Exportanker bleiben prüfbare Ergebnisobjekte.");
     expect(content).toContain("Klärbereich");
@@ -1121,9 +1188,11 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Glutenfrei-Konflikt bleibt ungelöst.");
     expect(content).toContain("Klassifikation für Brot-Baguette fehlt.");
     expect(content).toContain("Ursprüngliche Intake-Anfrage");
-    expect(content).toContain("Intake-Ursprung: manuelle Eingabe · erhalten 2026-04-18T10:30:00.000Z");
+    expect(content).toContain("Intake-Ursprung: manuelle Eingabe · erhalten 2026-05-21T08:02:00.000Z");
     expect(content).not.toContain("requestId: request-production-fallback-1");
-    expect(content).toContain("Quellenmetadaten (gekürzt): produktion-angebot.pdf · application/pdf · 24.2 KB · sha256:fedcba987654 · intake");
+    expect(content).toContain(
+      "Quellenmetadaten (gekürzt): produktion-angebot.pdf · application/pdf · sha256:fedcba987654 · production · 2026-05-21T08:01:00.000Z"
+    );
     expect(content).not.toContain("sha256:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210");
     expect(content).not.toContain("Konferenz am 2026-07-13 fuer 36 Teilnehmer");
     expect(content).not.toContain("Offene Punkte: keine");
@@ -1532,7 +1601,7 @@ describe("backoffice production acceptance smoke", () => {
 
     expect(content).toContain("Herkunft und Übergabe");
     expect(content).toContain("Intake-Ursprung");
-    expect(content).toContain("manuelle Eingabe · 2026-04-18T10:30:00.000Z · Intake-Anfrage verknüpft");
+    expect(content).toContain("manuelle Eingabe · 2026-05-21T08:02:00.000Z · Intake-Anfrage verknüpft");
     expect(content).toContain("Audit-Spur");
     expect(content).toContain("Produktionsplan erstellt · Küche · production.plan.created · 2026-05-21T09:15:00.000Z");
     expect(content).toContain("Übergabe-/Exportartefakte");
