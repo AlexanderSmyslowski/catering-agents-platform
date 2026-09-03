@@ -1,16 +1,13 @@
 async () => {
-  const actorName = "Angebots-Mitarbeiter";
-  const intakeActorName = "Intake-Mitarbeiter";
   const requestId = "browser-rehearsal-offer-case";
   const text = "Besprechung am 2026-11-06 fuer 35 Teilnehmer mit Kaffeepause, Croissants und Wasserservice.";
   const expectedEventSummary = "Besprechung für 35 Teilnehmer als Kaffeepause.";
 
-  const postJson = async (path, body, requestActorName = actorName) => {
+  const postJson = async (path, body) => {
     const response = await fetch(path, {
       method: "POST",
       headers: {
-        "content-type": "application/json",
-        "x-actor-name": requestActorName
+        "content-type": "application/json"
       },
       body: JSON.stringify(body)
     });
@@ -29,8 +26,7 @@ async () => {
 
   const intake = await postJson(
     "/api/intake/v1/intake/normalize",
-    { requestId, text },
-    intakeActorName
+    { requestId, text }
   );
   const acceptedEventSpec = intake?.acceptedEventSpec;
   if (acceptedEventSpec?.specId !== `spec-${requestId}`) {

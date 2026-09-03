@@ -24,6 +24,7 @@ import {
   renderPurchaseListCsv
 } from "@catering/print-export";
 import { App } from "../backoffice-ui/src/App.js";
+import { adminSessionResponse } from "./support/catering-session-ui-fixture.js";
 
 class EmptyWebProvider implements WebRecipeSearchProvider {
   async searchRecipes() {
@@ -276,6 +277,10 @@ describe("UI critical path rehearsal", () => {
         ).toUpperCase();
         fetchCalls.push({ method, url });
 
+        if (method === "GET" && url.endsWith("/api/intake/v1/auth/session")) {
+          return adminSessionResponse();
+        }
+
         if (method === "GET" && url.endsWith("/api/offers/v1/offers/cases")) {
           return Response.json({
             items: [
@@ -413,7 +418,10 @@ describe("UI critical path rehearsal", () => {
         }
 
         if (method === "GET" && url.endsWith("/api/production/v1/production/plans")) {
-          return Response.json({ items: [artifacts.productionPlan] });
+          return Response.json({
+            access: { canOperateProduction: true },
+            items: [artifacts.productionPlan]
+          });
         }
 
         if (method === "GET" && url.endsWith("/api/production/v1/production/purchase-lists")) {

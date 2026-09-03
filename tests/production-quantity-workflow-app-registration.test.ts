@@ -107,7 +107,7 @@ function buildApp() {
   vi.spyOn(store, "getApprovedProductionSpec").mockResolvedValue(approvedSpec());
   return buildProductionApp({
     store,
-    env: { CATERING_DEFAULT_BUSINESS_ID: "local", CATERING_DEV_AUTH: "true" }
+    env: { CATERING_DEFAULT_BUSINESS_ID: "local", CATERING_DEV_AUTH: "1" }
   });
 }
 

@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { normalizeEventRequestToSpec, SCHEMA_VERSION, type EventRequest } from "@catering/shared-core";
 import { App } from "../backoffice-ui/src/App.js";
+import { adminSessionResponse } from "./support/catering-session-ui-fixture.js";
 
 function buildEventRequest(): EventRequest {
   return {
@@ -28,17 +29,18 @@ afterEach(() => {
 });
 
 describe("backoffice intake request detail", () => {
-  it("shows the original intake request in the production context", async () => {
+  it("keeps the raw Intake request outside the production context", async () => {
     const spec = normalizeEventRequestToSpec(buildEventRequest(), {
       sourceType: "manual_input",
       reference: "request-detail-1",
       commercialState: "manual"
     });
 
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
+        if (url.endsWith("/api/intake/v1/auth/session")) {
+          return adminSessionResponse();
+        }
         if (url.endsWith("/api/production/v1/production/cases")) {
           return new Response(
             JSON.stringify({
@@ -87,6 +89,23 @@ describe("backoffice intake request detail", () => {
                     dataClass: "synthetic_demo",
                     addedAt: "2026-04-10T09:30:00.000Z"
                   }
+                },
+                {
+                  businessId: "demo-business",
+                  eventId: "production-case-request-detail-1-draft",
+                  caseId: "production-case-request-detail-1",
+                  sequence: 2,
+                  at: "2026-04-10T09:32:00.000Z",
+                  role: "assistant",
+                  kind: "draft_created",
+                  text: "Produktionsentwurf erstellt.",
+                  artifactId: "production-draft-request-detail-1",
+                  revisionRef: {
+                    artifactType: "ProductionDraft",
+                    artifactId: "production-draft-request-detail-1",
+                    revision: 1,
+                    createdAt: "2026-04-10T09:32:00.000Z"
+                  }
                 }
               ]
             }),
@@ -95,6 +114,25 @@ describe("backoffice intake request detail", () => {
         }
         if (url.endsWith(`/api/intake/v1/intake/specs/${spec.specId}`)) {
           return new Response(JSON.stringify(spec), {
+            status: 200,
+            headers: { "content-type": "application/json" }
+          });
+        }
+
+        if (url.endsWith("/api/production/v1/production/drafts?caseId=production-case-request-detail-1")) {
+          return new Response(JSON.stringify({
+            items: [{
+              businessId: "demo-business",
+              draftId: "production-draft-request-detail-1",
+              revision: 1,
+              status: "pending_review",
+              createdAt: "2026-04-10T09:32:00.000Z",
+              source: { kind: "handoff", receivedAt: "2026-04-10T09:30:00.000Z" },
+              reviewCards: [],
+              draftArtifacts: { eventSpec: spec }
+            }],
+            approvedProductionSpecs: []
+          }), {
             status: 200,
             headers: { "content-type": "application/json" }
           });
@@ -153,7 +191,7 @@ describe("backoffice intake request detail", () => {
         }
 
         if (url.endsWith("/api/production/v1/production/plans")) {
-          return new Response(JSON.stringify({ items: [] }), {
+          return new Response(JSON.stringify({ access: { canOperateProduction: true }, items: [] }), {
             status: 200,
             headers: { "content-type": "application/json" }
           });
@@ -188,8 +226,8 @@ describe("backoffice intake request detail", () => {
         }
 
         throw new Error(`Unexpected fetch: ${url}`);
-      })
-    );
+      });
+    vi.stubGlobal("fetch", fetchMock);
 
     const storage = new Map<string, string>();
     const localStorageMock = {
@@ -232,20 +270,13 @@ describe("backoffice intake request detail", () => {
     });
 
     expect(document.body.textContent).toContain("Ursprüngliche Intake-Anfrage");
-    expect(document.body.textContent).toContain("Intake-Ursprung: Text · erhalten 2026-04-10T09:30:00.000Z");
     expect(document.body.textContent).not.toContain("requestId: request-detail-1");
     expect(document.body.textContent).not.toContain("channel: text");
-    expect(document.body.textContent).toContain("2026-04-10T09:30:00.000Z");
     expect(document.body.textContent).toContain("Herkunft und Übergabe");
-    expect(document.body.textContent).toContain("Intake-Ursprung");
     expect(document.body.textContent).not.toContain("Konferenz am 2026-04-18 fuer 45 Teilnehmer");
-    expect(document.body.textContent).toContain("Dokumentprüfung");
-    expect(document.body.textContent).toContain(
-      "Quelle prüfen: angebot-detail.pdf · Lesbarkeit: Textextraktion unsicher · Hinweise: PDF-Text nur unsicher extrahiert"
-    );
-    expect(document.body.textContent).toContain(
-      "Dokumentprüfung: Lesbarkeit: Textextraktion unsicher · Hinweise: PDF-Text nur unsicher extrahiert"
-    );
+    expect(fetchMock.mock.calls.map(([input]) => String(input)).some((url) =>
+      url.includes("/api/intake/") && !url.endsWith("/api/intake/v1/auth/session")
+    )).toBe(false);
 
     await act(async () => {
       root.unmount();

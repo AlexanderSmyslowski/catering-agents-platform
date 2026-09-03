@@ -1,6 +1,5 @@
 import type {
   ApprovedOffer,
-  ApprovedProductionSpec,
   AcceptedEventSpec,
   AuditEntry,
   CaseEvent,
@@ -14,6 +13,10 @@ import type {
   PurchaseList,
   Recipe
 } from "@catering/shared-core";
+import {
+  assertCateringSessionBoundResponse,
+  buildCateringBrowserRequestInit
+} from "./session-api.js";
 
 export type { CaseSummary } from "@catering/shared-core";
 
@@ -58,7 +61,7 @@ export interface ProductionWorkspaceState {
   activeEvents: CaseEvent[];
   activeSources: CaseSourceRef[];
   currentDraft?: ProductionDraft;
-  approvedProductionSpec?: ApprovedProductionSpec;
+  approvedProductionSpec?: ApprovedProductionSpecProjection;
   currentPlan?: ProductionPlan;
   currentPurchaseList?: PurchaseList;
   referencedRecipes: Recipe[];
@@ -77,8 +80,8 @@ const emptyProductionWorkspaceState: ProductionWorkspaceState = {
   referencedRecipes: []
 };
 
-export interface IntakeRequestDetail extends Record<string, unknown> {
-  requestId: string;
+export interface ProductionSourceDetail extends Record<string, unknown> {
+  requestId?: string;
   source?: {
     channel?: string;
     receivedAt?: string;
@@ -101,6 +104,10 @@ export interface IntakeRequestDetail extends Record<string, unknown> {
       warnings?: string[];
     };
   }>;
+}
+
+export interface IntakeRequestDetail extends ProductionSourceDetail {
+  requestId: string;
 }
 
 export type RecipeUploadTarget = "offer" | "production";
@@ -160,6 +167,8 @@ export interface ProductionDraft {
   source?: {
     kind?: string;
     receivedAt?: string;
+    sourceRef?: string;
+    inputHash?: string;
     providerId?: string;
     modelId?: string;
   };
@@ -231,53 +240,19 @@ export interface ProductionProductData {
   serviceHealth: ServiceHealthState;
 }
 
+export interface ProductionRouteAccessData {
+  access: {
+    canOperateProduction: boolean;
+  };
+  productionPlans: ProductionPlan[];
+  purchaseLists: PurchaseList[];
+}
+
 export interface WorkspaceRefreshOptions {
   focusedSpecId?: string;
 }
 
-const OPERATOR_NAME_STORAGE_KEY = "catering.operatorName";
 const MINI_PILOT_RESULT_STORAGE_KEY = "catering.miniPilotRawResult";
-const AUDIT_OPERATOR_NAME = "Betriebs-/Audit-Operator";
-const GENERIC_OPERATOR_NAME = "Mitarbeiter";
-const DEFAULT_MUTATION_ACTOR_NAMES = {
-  intake: "Intake-Mitarbeiter",
-  offer: "Angebots-Mitarbeiter",
-  production: "Produktions-Mitarbeiter",
-  audit: AUDIT_OPERATOR_NAME
-} as const;
-
-function getStoredOperatorName(): string | undefined {
-  if (typeof window === "undefined") {
-    return undefined;
-  }
-
-  const stored = window.localStorage.getItem(OPERATOR_NAME_STORAGE_KEY)?.trim();
-  return stored || undefined;
-}
-
-function getRequestActorName(defaultActorName?: string): string {
-  const storedOperatorName = getStoredOperatorName();
-  if (storedOperatorName && storedOperatorName !== GENERIC_OPERATOR_NAME) {
-    return storedOperatorName;
-  }
-
-  return defaultActorName ?? storedOperatorName ?? GENERIC_OPERATOR_NAME;
-}
-
-function buildHeaders(
-  initHeaders?: HeadersInit,
-  includeJsonContentType = true,
-  defaultActorName?: string
-): Headers {
-  const headers = new Headers(initHeaders);
-  if (includeJsonContentType && !headers.has("content-type")) {
-    headers.set("content-type", "application/json");
-  }
-  if (!headers.has("x-actor-name")) {
-    headers.set("x-actor-name", getRequestActorName(defaultActorName));
-  }
-  return headers;
-}
 
 async function responseErrorMessage(response: Response): Promise<string> {
   try {
@@ -292,17 +267,65 @@ async function responseErrorMessage(response: Response): Promise<string> {
   return `${response.status} ${response.statusText}`.trim();
 }
 
-async function fetchJson<T>(input: string, init?: RequestInit, defaultActorName?: string): Promise<T> {
-  const response = await fetch(input, {
-    ...init,
-    headers: buildHeaders(init?.headers, true, defaultActorName)
+async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
+  const requestInit = buildCateringBrowserRequestInit(init, {
+    includeJsonContentType: true,
+    sessionBound: true
   });
+  const response = await fetch(input, requestInit);
+  assertCateringSessionBoundResponse(response, requestInit.signal);
 
   if (!response.ok) {
     throw new Error(await responseErrorMessage(response));
   }
 
   return (await response.json()) as T;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Resolve the server-authoritative production capability before mounting any
+ * interactive workspace. Read-only access intentionally receives only the two
+ * projected operational collections that it is allowed to display.
+ */
+export async function loadProductionRouteAccessData(): Promise<ProductionRouteAccessData> {
+  const planResponse = await fetchJson<unknown>(
+    "/api/production/v1/production/plans",
+    undefined
+  );
+  if (
+    !isRecord(planResponse) ||
+    !isRecord(planResponse.access) ||
+    typeof planResponse.access.canOperateProduction !== "boolean" ||
+    !Array.isArray(planResponse.items)
+  ) {
+    throw new Error("Der Produktionszugriff konnte nicht eindeutig bestimmt werden.");
+  }
+
+  const access = {
+    canOperateProduction: planResponse.access.canOperateProduction
+  };
+  const productionPlans = planResponse.items as ProductionPlan[];
+  if (access.canOperateProduction) {
+    return { access, productionPlans, purchaseLists: [] };
+  }
+
+  const purchaseListResponse = await fetchJson<unknown>(
+    "/api/production/v1/production/purchase-lists",
+    undefined
+  );
+  if (!isRecord(purchaseListResponse) || !Array.isArray(purchaseListResponse.items)) {
+    throw new Error("Die freigegebene Produktionsleseansicht konnte nicht geladen werden.");
+  }
+
+  return {
+    access,
+    productionPlans,
+    purchaseLists: purchaseListResponse.items as PurchaseList[]
+  };
 }
 
 function sourcesFromCaseEvents(events: CaseEvent[]): CaseSourceRef[] {
@@ -320,6 +343,17 @@ function artifactIdFromCaseEvents(events: CaseEvent[], artifactType: "OfferDraft
     .sort((left, right) => right.sequence - left.sequence)
     .map((event) => event.revisionRef)
     .find((reference) => reference?.artifactType === artifactType)?.artifactId;
+}
+
+function productionDraftRevisionFromCaseEvents(events: CaseEvent[]) {
+  return [...events]
+    .sort((left, right) => right.sequence - left.sequence)
+    .map((event) => event.revisionRef)
+    .find((reference) => reference?.artifactType === "ProductionDraft");
+}
+
+function productionSnapshotError(detail: string): Error {
+  return new Error(`Produktionssnapshot ist nicht vertrauenswürdig gebunden: ${detail}`);
 }
 
 function unknownServiceHealth(service: string): ServiceHealth {
@@ -356,8 +390,7 @@ function auditEntriesFromCaseEvents(events: CaseEvent[]): AuditEntry[] {
 export async function loadOfferWorkspaceState(activeCaseId?: string): Promise<OfferWorkspaceState> {
   const { items: cases } = await fetchJson<{ items: CaseSummary[] }>(
     "/api/offers/v1/offers/cases",
-    undefined,
-    DEFAULT_MUTATION_ACTOR_NAMES.offer
+    undefined
   );
 
   if (!activeCaseId) {
@@ -372,8 +405,7 @@ export async function loadOfferWorkspaceState(activeCaseId?: string): Promise<Of
     handoff?: ProductionHandoff;
   }>(
     `/api/offers/v1/offers/cases/${encodeURIComponent(activeCaseId)}`,
-    undefined,
-    DEFAULT_MUTATION_ACTOR_NAMES.offer
+    undefined
   );
   if (detail.case.caseId !== activeCaseId || detail.case.product !== "offer") {
     return { ...emptyOfferWorkspaceState, cases };
@@ -385,16 +417,14 @@ export async function loadOfferWorkspaceState(activeCaseId?: string): Promise<Of
     : draftId
       ? await fetchJson<OfferDraft>(
           `/api/offers/v1/offers/drafts/${encodeURIComponent(draftId)}`,
-          undefined,
-          DEFAULT_MUTATION_ACTOR_NAMES.offer
+          undefined
         ).then((draft) => (draft.draftId === draftId ? draft : undefined))
       : undefined;
   const handoff = detail.handoff
     ?? (detail.case.productionHandoffId
       ? await fetchJson<{ handoff: ProductionHandoff }>(
           `/api/offers/v1/offers/handoffs/${encodeURIComponent(detail.case.productionHandoffId)}`,
-          undefined,
-          DEFAULT_MUTATION_ACTOR_NAMES.offer
+          undefined
         ).then((result) => result.handoff)
       : undefined);
   return {
@@ -411,52 +441,95 @@ export async function loadOfferWorkspaceState(activeCaseId?: string): Promise<Of
 export async function loadProductionWorkspaceState(activeCaseId?: string): Promise<ProductionWorkspaceState> {
   const { items: cases } = await fetchJson<{ items: CaseSummary[] }>(
     "/api/production/v1/production/cases",
-    undefined,
-    DEFAULT_MUTATION_ACTOR_NAMES.production
+    undefined
   );
   const base: ProductionWorkspaceState = { cases, activeEvents: [], activeSources: [], referencedRecipes: [] };
   if (!activeCaseId) return base;
 
-  const detail = await fetchJson<{
-    case: ProductionCase;
-    events: CaseEvent[];
-    currentDraft?: ProductionDraft;
-    approvedProductionSpec?: ApprovedProductionSpec;
-  }>(
+  const detail = await fetchJson<{ case: ProductionCase; events: CaseEvent[] }>(
     `/api/production/v1/production/cases/${encodeURIComponent(activeCaseId)}`,
-    undefined,
-    DEFAULT_MUTATION_ACTOR_NAMES.production
+    undefined
   );
   if (detail.case.caseId !== activeCaseId || detail.case.product !== "production") {
     return { ...emptyProductionWorkspaceState, cases };
   }
   const activeEvents = detail.events.filter((event) => event.caseId === activeCaseId);
-  const [currentPlan, currentPurchaseList] = await Promise.all([
+  const draftReference = productionDraftRevisionFromCaseEvents(activeEvents);
+  const [draftListResponse, currentPlan, currentPurchaseList] = await Promise.all([
+    draftReference
+      ? fetchJson<ProductionDraftListResponse>(
+          `/api/production/v1/production/drafts?caseId=${encodeURIComponent(activeCaseId)}`,
+          undefined
+        )
+      : Promise.resolve(undefined),
     detail.case.currentPlanId
       ? fetchJson<ProductionPlan>(
           `/api/production/v1/production/plans/${encodeURIComponent(detail.case.currentPlanId)}`,
-          undefined,
-          DEFAULT_MUTATION_ACTOR_NAMES.production
-        ).then((plan) => (
-          plan.planId !== detail.case.currentPlanId ||
-          (detail.case.sourceSpecId && plan.eventSpecId !== detail.case.sourceSpecId)
-            ? undefined
-            : plan
-        ))
+          undefined
+        )
       : Promise.resolve(undefined),
     detail.case.currentPurchaseListId
       ? fetchJson<PurchaseList>(
           `/api/production/v1/production/purchase-lists/${encodeURIComponent(detail.case.currentPurchaseListId)}`,
-          undefined,
-          DEFAULT_MUTATION_ACTOR_NAMES.production
-        ).then((purchaseList) => (
-          purchaseList.purchaseListId !== detail.case.currentPurchaseListId ||
-          (detail.case.sourceSpecId && purchaseList.eventSpecId !== detail.case.sourceSpecId)
-            ? undefined
-            : purchaseList
-        ))
+          undefined
+        )
       : Promise.resolve(undefined)
   ]);
+
+  const currentDraft = draftReference
+    ? draftListResponse?.items.find((draft) => (
+        draft.draftId === draftReference.artifactId &&
+        draft.revision === draftReference.revision
+      ))
+    : undefined;
+  if (draftReference && !currentDraft) {
+    throw productionSnapshotError("aktuelle Draft-ID oder Revision weicht von der Fallhistorie ab");
+  }
+  if (currentDraft?.businessId && currentDraft.businessId !== detail.case.businessId) {
+    throw productionSnapshotError("Draft und ProductionCase gehören nicht zum selben Betrieb");
+  }
+
+  const approvedProductionSpec = detail.case.approvedProductionSpecId
+    ? draftListResponse?.approvedProductionSpecs?.find((approved) => (
+        approved.approvedProductionSpecId === detail.case.approvedProductionSpecId
+      ))
+    : undefined;
+  if (detail.case.approvedProductionSpecId) {
+    if (!draftReference || !approvedProductionSpec) {
+      throw productionSnapshotError("die freigegebene Produktionsversion fehlt");
+    }
+    if (
+      approvedProductionSpec.sourceDraft.draftId !== draftReference.artifactId ||
+      approvedProductionSpec.sourceDraft.revision !== draftReference.revision
+    ) {
+      throw productionSnapshotError("Freigabe und aktuelle Draft-Revision stimmen nicht überein");
+    }
+  }
+
+  const eventSpecSnapshot = currentDraft?.draftArtifacts?.eventSpec;
+  const snapshotSpecId = isRecord(eventSpecSnapshot) && typeof eventSpecSnapshot.specId === "string"
+    ? eventSpecSnapshot.specId
+    : undefined;
+  if (currentDraft && (!snapshotSpecId || !detail.case.sourceSpecId || snapshotSpecId !== detail.case.sourceSpecId)) {
+    throw productionSnapshotError("AcceptedEventSpec und ProductionCase stimmen nicht überein");
+  }
+  if (
+    detail.case.currentPlanId &&
+    (!currentPlan || currentPlan.planId !== detail.case.currentPlanId || currentPlan.eventSpecId !== snapshotSpecId)
+  ) {
+    throw productionSnapshotError("Produktionsartefakt Plan weicht vom freigegebenen Spec-Snapshot ab");
+  }
+  if (
+    detail.case.currentPurchaseListId &&
+    (
+      !currentPurchaseList ||
+      currentPurchaseList.purchaseListId !== detail.case.currentPurchaseListId ||
+      currentPurchaseList.eventSpecId !== snapshotSpecId
+    )
+  ) {
+    throw productionSnapshotError("Produktionsartefakt Einkauf weicht vom freigegebenen Spec-Snapshot ab");
+  }
+
   const recipeIds = (currentPlan?.recipeSelections ?? [])
     .map((selection) => selection.recipeId)
     .filter((recipeId): recipeId is string => Boolean(recipeId));
@@ -464,8 +537,7 @@ export async function loadProductionWorkspaceState(activeCaseId?: string): Promi
     [...new Set(recipeIds)].map((recipeId) =>
       fetchJson<Recipe>(
         `/api/production/v1/production/recipes/${encodeURIComponent(recipeId)}`,
-        undefined,
-        DEFAULT_MUTATION_ACTOR_NAMES.production
+        undefined
       )
     )
   );
@@ -475,8 +547,8 @@ export async function loadProductionWorkspaceState(activeCaseId?: string): Promi
     activeEvents,
     activeSources: sourcesFromCaseEvents(activeEvents),
     referencedRecipes,
-    ...(detail.currentDraft ? { currentDraft: detail.currentDraft } : {}),
-    ...(detail.approvedProductionSpec ? { approvedProductionSpec: detail.approvedProductionSpec } : {}),
+    ...(currentDraft ? { currentDraft } : {}),
+    ...(approvedProductionSpec ? { approvedProductionSpec } : {}),
     ...(currentPlan ? { currentPlan } : {}),
     ...(currentPurchaseList ? { currentPurchaseList } : {})
   };
@@ -518,8 +590,7 @@ export async function loadOfferProductData(activeCaseId?: string): Promise<Offer
       try {
         return await fetchJson<IntakeRequestDetail>(
           `/api/intake/v1/intake/requests/${encodeURIComponent(requestId)}`,
-          undefined,
-          DEFAULT_MUTATION_ACTOR_NAMES.intake
+          undefined
         );
       } catch {
         return undefined;
@@ -529,8 +600,7 @@ export async function loadOfferProductData(activeCaseId?: string): Promise<Offer
       try {
         return await fetchJson<AcceptedEventSpec>(
           `/api/intake/v1/intake/specs/${encodeURIComponent(specId)}`,
-          undefined,
-          DEFAULT_MUTATION_ACTOR_NAMES.intake
+          undefined
         );
       } catch {
         return undefined;
@@ -549,57 +619,22 @@ export async function loadOfferProductData(activeCaseId?: string): Promise<Offer
 
 export async function loadProductionProductData(
   activeCaseId?: string,
-  focusedSpecId?: string
+  _focusedSpecId?: string
 ): Promise<ProductionProductData> {
   const [workspace, health] = await Promise.all([
     loadProductionWorkspaceState(activeCaseId),
     loadProductionWorkspaceHealth()
   ]);
 
-  const activeRequestIds = new Set(
-    [
-      ...workspace.activeSources.map((source) => source.requestId?.trim()),
-      ...workspace.activeEvents.map((event) => event.sourceRef?.requestId?.trim())
-    ]
-      .filter((requestId): requestId is string => Boolean(requestId))
-  );
-  const activeSpecIds = new Set(
-    [
-      workspace.activeCase?.sourceSpecId,
-      workspace.currentPlan?.eventSpecId,
-      workspace.currentPurchaseList?.eventSpecId
-    ].filter((specId): specId is string => Boolean(specId?.trim()))
-  );
-  if (focusedSpecId) activeSpecIds.add(focusedSpecId);
-  const [intakeRequests, acceptedSpecs] = await Promise.all([
-    Promise.all([...activeRequestIds].map(async (requestId) => {
-      try {
-        return await fetchJson<IntakeRequestDetail>(
-          `/api/intake/v1/intake/requests/${encodeURIComponent(requestId)}`,
-          undefined,
-          DEFAULT_MUTATION_ACTOR_NAMES.intake
-        );
-      } catch {
-        return undefined;
-      }
-    })).then((items) => items.filter((item): item is IntakeRequestDetail => item !== undefined)),
-    Promise.all([...activeSpecIds].map(async (specId) => {
-      try {
-        return await fetchJson<AcceptedEventSpec>(
-          `/api/intake/v1/intake/specs/${encodeURIComponent(specId)}`,
-          undefined,
-          DEFAULT_MUTATION_ACTOR_NAMES.intake
-        );
-      } catch {
-        return undefined;
-      }
-    })).then((items) => items.filter((item): item is AcceptedEventSpec => item !== undefined))
-  ]);
+  const eventSpecSnapshot = workspace.currentDraft?.draftArtifacts?.eventSpec;
+  const acceptedSpecs = activeCaseId && eventSpecSnapshot
+    ? [eventSpecSnapshot as unknown as AcceptedEventSpec]
+    : [];
 
   return {
     workspace,
-    intakeRequests: activeCaseId ? intakeRequests : [],
-    acceptedSpecs: activeCaseId || focusedSpecId ? acceptedSpecs : [],
+    intakeRequests: [],
+    acceptedSpecs,
     productionPlans: workspace.currentPlan ? [workspace.currentPlan] : [],
     purchaseLists: workspace.currentPurchaseList ? [workspace.currentPurchaseList] : [],
     recipes: workspace.referencedRecipes,
@@ -613,21 +648,18 @@ export type DashboardScope = "home" | "offer" | "production";
 export async function loadDashboardState(scope: DashboardScope = "home"): Promise<DashboardState> {
   const intakeRequestsPromise = fetchJson<{ items: Array<Record<string, unknown>> }>(
     "/api/intake/v1/intake/requests",
-    undefined,
-    DEFAULT_MUTATION_ACTOR_NAMES.intake
+    undefined
   );
   const acceptedSpecsPromise = fetchJson<{ items: Array<Record<string, unknown>> }>(
     "/api/intake/v1/intake/specs",
-    undefined,
-    DEFAULT_MUTATION_ACTOR_NAMES.intake
+    undefined
   );
 
   const offerDraftsPromise = scope === "production"
     ? Promise.resolve({ items: [] as Array<Record<string, unknown>> })
     : fetchJson<{ items: Array<Record<string, unknown>> }>(
         "/api/offers/v1/offers/drafts",
-        undefined,
-        DEFAULT_MUTATION_ACTOR_NAMES.offer
+        undefined
       );
   const productionPromises = scope === "offer"
     ? {
@@ -639,24 +671,19 @@ export async function loadDashboardState(scope: DashboardScope = "home"): Promis
     : {
         plans: fetchJson<{ items: Array<Record<string, unknown>> }>(
           "/api/production/v1/production/plans",
-          undefined,
-          DEFAULT_MUTATION_ACTOR_NAMES.production
+          undefined
         ),
         purchaseLists: fetchJson<{ items: Array<Record<string, unknown>> }>(
           "/api/production/v1/production/purchase-lists",
-          undefined,
-          DEFAULT_MUTATION_ACTOR_NAMES.production
+          undefined
         ),
         recipes: fetchJson<{ items: Array<Record<string, unknown>> }>(
           "/api/production/v1/production/recipes",
-          undefined,
-          DEFAULT_MUTATION_ACTOR_NAMES.production
+          undefined
         ),
-        auditEvents: fetchJson<{ items: Array<Record<string, unknown>> }>("/api/production/v1/production/audit/events?limit=30", {
-          headers: {
-            "x-actor-name": AUDIT_OPERATOR_NAME
-          }
-        })
+        auditEvents: fetchJson<{ items: Array<Record<string, unknown>> }>(
+          "/api/production/v1/production/audit/events?limit=30"
+        )
       };
 
   const [intakeRequests, acceptedSpecs, offerDrafts, productionPlans, purchaseLists, recipes, auditEvents] = await Promise.all([
@@ -683,8 +710,7 @@ export async function loadDashboardState(scope: DashboardScope = "home"): Promis
 export async function loadIntakeRequestDetail(requestId: string): Promise<IntakeRequestDetail> {
   return fetchJson<IntakeRequestDetail>(
     `/api/intake/v1/intake/requests/${requestId}`,
-    undefined,
-    DEFAULT_MUTATION_ACTOR_NAMES.intake
+    undefined
   );
 }
 
@@ -697,8 +723,7 @@ export async function archiveIntakeRequest(
     {
       method: "POST",
       body: JSON.stringify({ reasonCode })
-    },
-    DEFAULT_MUTATION_ACTOR_NAMES.intake
+    }
   );
 }
 
@@ -730,7 +755,7 @@ export async function createAcceptedSpecFromText(text: string) {
   return fetchJson<Record<string, unknown>>("/api/intake/v1/intake/normalize", {
     method: "POST",
     body: JSON.stringify({ text })
-  }, DEFAULT_MUTATION_ACTOR_NAMES.intake);
+  });
 }
 
 export async function createAcceptedSpecFromDocument(
@@ -741,11 +766,12 @@ export async function createAcceptedSpecFromDocument(
   formData.append("channel", channel);
   formData.append("file", file, file.name);
 
-  const response = await fetch("/api/intake/v1/intake/documents/upload", {
+  const requestInit = buildCateringBrowserRequestInit({
     method: "POST",
-    body: formData,
-    headers: buildHeaders(undefined, false, DEFAULT_MUTATION_ACTOR_NAMES.intake)
-  });
+    body: formData
+  }, { sessionBound: true });
+  const response = await fetch("/api/intake/v1/intake/documents/upload", requestInit);
+  assertCateringSessionBoundResponse(response, requestInit.signal);
 
   if (!response.ok) {
     throw new Error(await responseErrorMessage(response));
@@ -768,8 +794,7 @@ function caseSearchQuery(search: string): string {
 export async function loadOfferCaseSummaries(search = ""): Promise<CaseSummary[]> {
   const response = await fetchJson<{ items: CaseSummary[] }>(
     `/api/offers/v1/offers/cases${caseSearchQuery(search)}`,
-    undefined,
-    DEFAULT_MUTATION_ACTOR_NAMES.offer
+    undefined
   );
   return response.items;
 }
@@ -777,8 +802,7 @@ export async function loadOfferCaseSummaries(search = ""): Promise<CaseSummary[]
 export async function loadProductionCaseSummaries(search = ""): Promise<CaseSummary[]> {
   const response = await fetchJson<{ items: CaseSummary[] }>(
     `/api/production/v1/production/cases${caseSearchQuery(search)}`,
-    undefined,
-    DEFAULT_MUTATION_ACTOR_NAMES.production
+    undefined
   );
   return response.items;
 }
@@ -786,16 +810,14 @@ export async function loadProductionCaseSummaries(search = ""): Promise<CaseSumm
 export async function copyOfferCase(caseId: string): Promise<{ case: CaseSummary; events: CaseEvent[] }> {
   return fetchJson<{ case: CaseSummary; events: CaseEvent[] }>(
     `/api/offers/v1/offers/cases/${encodeURIComponent(caseId)}/copies`,
-    { method: "POST", body: "{}" },
-    DEFAULT_MUTATION_ACTOR_NAMES.offer
+    { method: "POST", body: "{}" }
   );
 }
 
 export async function copyProductionCase(caseId: string): Promise<{ case: CaseSummary; events: CaseEvent[] }> {
   return fetchJson<{ case: CaseSummary; events: CaseEvent[] }>(
     `/api/production/v1/production/cases/${encodeURIComponent(caseId)}/copies`,
-    { method: "POST", body: "{}" },
-    DEFAULT_MUTATION_ACTOR_NAMES.production
+    { method: "POST", body: "{}" }
   );
 }
 
@@ -813,11 +835,12 @@ export async function uploadSourceDocument(file: File): Promise<StoredSourceDocu
   const formData = new FormData();
   formData.append("file", file, file.name);
 
-  const response = await fetch("/api/intake/v1/intake/source-documents", {
+  const requestInit = buildCateringBrowserRequestInit({
     method: "POST",
-    body: formData,
-    headers: buildHeaders(undefined, false, DEFAULT_MUTATION_ACTOR_NAMES.intake)
-  });
+    body: formData
+  }, { sessionBound: true });
+  const response = await fetch("/api/intake/v1/intake/source-documents", requestInit);
+  assertCateringSessionBoundResponse(response, requestInit.signal);
 
   if (!response.ok) {
     throw new Error(await responseErrorMessage(response));
@@ -835,7 +858,7 @@ export async function createProductionCase(input: {
   return fetchJson<{ case: ProductCaseSummary }>("/api/production/v1/production/cases", {
     method: "POST",
     body: JSON.stringify(input)
-  }, DEFAULT_MUTATION_ACTOR_NAMES.production);
+  });
 }
 
 export async function createProductionDraftFromDocument(caseId: string, documentId: string) {
@@ -844,8 +867,7 @@ export async function createProductionDraftFromDocument(caseId: string, document
     {
       method: "POST",
       body: JSON.stringify({ caseId, documentId })
-    },
-    DEFAULT_MUTATION_ACTOR_NAMES.production
+    }
   );
 }
 
@@ -873,8 +895,7 @@ export async function updateAcceptedSpec(
     {
       method: "PATCH",
       body: JSON.stringify(input)
-    },
-    DEFAULT_MUTATION_ACTOR_NAMES.intake
+    }
   );
 }
 
@@ -891,7 +912,7 @@ export async function createAcceptedSpecFromManualForm(input: {
   return fetchJson<Record<string, unknown>>("/api/intake/v1/intake/specs/manual", {
     method: "POST",
     body: JSON.stringify(input)
-  }, DEFAULT_MUTATION_ACTOR_NAMES.intake);
+  });
 }
 
 export async function createOfferCase(input: {
@@ -903,14 +924,14 @@ export async function createOfferCase(input: {
   return fetchJson<{ case: ProductCaseSummary }>("/api/offers/v1/offers/cases", {
     method: "POST",
     body: JSON.stringify(input)
-  }, DEFAULT_MUTATION_ACTOR_NAMES.offer);
+  });
 }
 
 export async function createOfferFromText(caseId: string, text: string, requestId: string) {
   return fetchJson<Record<string, unknown>>("/api/offers/v1/offers/from-text", {
     method: "POST",
     body: JSON.stringify({ caseId, text, requestId })
-  }, DEFAULT_MUTATION_ACTOR_NAMES.offer);
+  });
 }
 
 export async function createOfferDraftFromRequest(
@@ -920,20 +941,20 @@ export async function createOfferDraftFromRequest(
   return fetchJson<Record<string, unknown>>("/api/offers/v1/offers/drafts", {
     method: "POST",
     body: JSON.stringify({ ...eventRequest, caseId })
-  }, DEFAULT_MUTATION_ACTOR_NAMES.offer);
+  });
 }
 
 export async function decideOfferDraft(draftId: string, revision: number, variantId: string) {
   return fetchJson<{ approval: Record<string, unknown>; approvedOffer?: { approvedOfferId: string } }>(`/api/offers/v1/offers/drafts/${draftId}/decision`, {
     method: "POST",
     body: JSON.stringify({ decision: "approved", revision, variantId })
-  }, DEFAULT_MUTATION_ACTOR_NAMES.offer);
+  });
 }
 
 export async function createProductionHandoff(approvedOfferId: string) {
   return fetchJson<{ handoff?: { handoffId: string } }>(`/api/offers/v1/offers/approved/${approvedOfferId}/handoffs`, {
     method: "POST", body: "{}"
-  }, DEFAULT_MUTATION_ACTOR_NAMES.offer);
+  });
 }
 
 export async function createProductionCaseFromHandoff(handoffId: string) {
@@ -942,8 +963,7 @@ export async function createProductionCaseFromHandoff(handoffId: string) {
     {
       method: "POST",
       body: "{}"
-    },
-    DEFAULT_MUTATION_ACTOR_NAMES.production
+    }
   );
 }
 
@@ -951,7 +971,7 @@ export async function createProductionDraftFromHandoff(caseId: string, handoffId
   return fetchJson<{ draft?: { draftId: string } }>(`/api/production/v1/production/drafts/from-handoff/${encodeURIComponent(handoffId)}`, {
     method: "POST",
     body: JSON.stringify({ caseId })
-  }, DEFAULT_MUTATION_ACTOR_NAMES.production);
+  });
 }
 
 export async function createProductionDraftFromAcceptedEventSpec(
@@ -968,16 +988,14 @@ export async function createProductionDraftFromAcceptedEventSpec(
     {
       method: "POST",
       body: JSON.stringify({ caseId, specId })
-    },
-    DEFAULT_MUTATION_ACTOR_NAMES.production
+    }
   );
 }
 
 export async function loadClarificationDrafts(specId: string) {
   return fetchJson<{ items: ClarificationDraft[] }>(
     `/api/production/v1/production/specs/${encodeURIComponent(specId)}/clarification-drafts`,
-    undefined,
-    DEFAULT_MUTATION_ACTOR_NAMES.production
+    undefined
   );
 }
 
@@ -987,8 +1005,7 @@ export async function createClarificationDraft(specId: string) {
     {
       method: "POST",
       body: "{}"
-    },
-    DEFAULT_MUTATION_ACTOR_NAMES.production
+    }
   );
 }
 
@@ -998,8 +1015,7 @@ export async function decideClarificationDraft(draftId: string, approve: boolean
     {
       method: "POST",
       body: JSON.stringify({ approve })
-    },
-    DEFAULT_MUTATION_ACTOR_NAMES.production
+    }
   );
 }
 
@@ -1007,8 +1023,7 @@ export async function loadProductionDrafts(caseId?: string) {
   const query = caseId ? `?caseId=${encodeURIComponent(caseId)}` : "";
   return fetchJson<ProductionDraftListResponse>(
     `/api/production/v1/production/drafts${query}`,
-    undefined,
-    DEFAULT_MUTATION_ACTOR_NAMES.production
+    undefined
   );
 }
 
@@ -1026,8 +1041,7 @@ export async function decideProductionDraftReviewCard(
         decision,
         ...(operatorComment ? { operatorComment } : {})
       })
-    },
-    DEFAULT_MUTATION_ACTOR_NAMES.production
+    }
   );
 }
 
@@ -1037,8 +1051,7 @@ export async function reviseProductionDraft(draftId: string) {
     {
       method: "POST",
       body: "{}"
-    },
-    DEFAULT_MUTATION_ACTOR_NAMES.production
+    }
   );
 }
 
@@ -1055,8 +1068,7 @@ export async function decideProductionDraft(
     {
       method: "POST",
       body: JSON.stringify({ decision, ...(comment?.trim() ? { comment: comment.trim() } : {}) })
-    },
-    DEFAULT_MUTATION_ACTOR_NAMES.production
+    }
   );
 }
 
@@ -1071,16 +1083,14 @@ export async function applyApprovedProductionSpec(approvedProductionSpecId: stri
     {
       method: "POST",
       body: "{}"
-    },
-    DEFAULT_MUTATION_ACTOR_NAMES.production
+    }
   );
 }
 
 export async function prepareProductionDraft(draftId: string) {
   return fetchJson<{ draft: ProductionDraft }>(
     `/api/production/v1/production/drafts/${encodeURIComponent(draftId)}/prepare`,
-    { method: "POST", body: "{}" },
-    DEFAULT_MUTATION_ACTOR_NAMES.production
+    { method: "POST", body: "{}" }
   );
 }
 
@@ -1100,33 +1110,18 @@ export async function uploadRecipeFile(
       ? "/api/offers/v1/offers/recipes/upload"
       : "/api/production/v1/production/recipes/upload";
 
-  const response = await fetch(endpoint, {
+  const requestInit = buildCateringBrowserRequestInit({
     method: "POST",
-    body: formData,
-    headers: buildHeaders(
-      undefined,
-      false,
-      target === "offer" ? DEFAULT_MUTATION_ACTOR_NAMES.offer : DEFAULT_MUTATION_ACTOR_NAMES.production
-    )
-  });
+    body: formData
+  }, { sessionBound: true });
+  const response = await fetch(endpoint, requestInit);
+  assertCateringSessionBoundResponse(response, requestInit.signal);
 
   if (!response.ok) {
     throw new Error(await responseErrorMessage(response));
   }
 
   return (await response.json()) as { recipe: Record<string, unknown> };
-}
-
-export function readOperatorName(): string {
-  return getStoredOperatorName() ?? GENERIC_OPERATOR_NAME;
-}
-
-export function persistOperatorName(name: string): string {
-  const trimmed = name.trim() || GENERIC_OPERATOR_NAME;
-  if (typeof window !== "undefined") {
-    window.localStorage.setItem(OPERATOR_NAME_STORAGE_KEY, trimmed);
-  }
-  return trimmed;
 }
 
 export function readMiniPilotRawResult(): string {
@@ -1205,7 +1200,7 @@ export async function reviewRecipe(
   return fetchJson<{ recipe: Record<string, unknown> }>(endpoint, {
     method: "PATCH",
     body: JSON.stringify({ decision })
-  }, target === "offer" ? DEFAULT_MUTATION_ACTOR_NAMES.offer : DEFAULT_MUTATION_ACTOR_NAMES.production);
+  });
 }
 
 export async function seedDemoData() {
@@ -1213,15 +1208,15 @@ export async function seedDemoData() {
     fetchJson<Record<string, unknown>>("/api/intake/v1/intake/seed-demo", {
       method: "POST",
       body: "{}"
-    }, DEFAULT_MUTATION_ACTOR_NAMES.audit),
+    }),
     fetchJson<Record<string, unknown>>("/api/offers/v1/offers/seed-demo", {
       method: "POST",
       body: "{}"
-    }, DEFAULT_MUTATION_ACTOR_NAMES.audit),
+    }),
     fetchJson<Record<string, unknown>>("/api/production/v1/production/seed-demo", {
       method: "POST",
       body: "{}"
-    }, DEFAULT_MUTATION_ACTOR_NAMES.audit)
+    })
   ]);
 
   return {

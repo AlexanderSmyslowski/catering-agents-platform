@@ -250,8 +250,53 @@ describe("global action integration contracts", () => {
             productionHandoffId: handoff.handoffId,
             sourceSpecId: "spec-1"
           },
-          events: [],
-          currentDraft: { draftId: productionDraftId, revision: 1, status: "pending_review", reviewCards: [] }
+          events: [{
+            businessId: "local",
+            eventId: "production-case-1-draft",
+            caseId: "production-case-1",
+            sequence: 1,
+            at: "2026-08-27T12:00:00.000Z",
+            role: "assistant",
+            kind: "draft_created",
+            text: "Produktionsentwurf erstellt.",
+            artifactId: productionDraftId,
+            revisionRef: {
+              artifactType: "ProductionDraft",
+              artifactId: productionDraftId,
+              revision: 1,
+              createdAt: "2026-08-27T12:00:00.000Z"
+            }
+          }]
+        });
+      }
+      if (url.endsWith("/api/production/v1/production/drafts?caseId=production-case-1")) {
+        return Response.json({
+          items: [{
+            businessId: "local",
+            draftId: productionDraftId,
+            revision: 1,
+            status: "pending_review",
+            createdAt: "2026-08-27T12:00:00.000Z",
+            source: {
+              kind: "handoff",
+              receivedAt: "2026-08-27T12:00:00.000Z"
+            },
+            reviewCards: [],
+            draftArtifacts: {
+              eventSpec: {
+                schemaVersion: "1.0",
+                specId: "spec-1",
+                lifecycle: { commercialState: "accepted" },
+                readiness: { status: "complete", reasons: [] },
+                sourceLineage: [{ sourceType: "manual_input", reference: "request-1" }],
+                event: { title: "Business Lunch" },
+                attendees: { expected: 20 },
+                servicePlan: { eventType: "Lunch", serviceForm: "Buffet", modules: [] },
+                menuPlan: []
+              }
+            }
+          }],
+          approvedProductionSpecs: []
         });
       }
       throw new Error(`unerwarteter Reload-Aufruf: ${url}`);
@@ -281,6 +326,10 @@ describe("global action integration contracts", () => {
     expect(reloaded.activeCase?.caseId).toBe("production-case-1");
     expect(reloaded.currentDraft?.draftId).toBe(productionDraftId);
     expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/production/cases/production-case-1"), expect.anything());
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/production/drafts?caseId=production-case-1"),
+      expect.anything()
+    );
     vi.unstubAllGlobals();
   });
 

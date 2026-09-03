@@ -4,12 +4,15 @@ import {
   validateApprovalRequestRecord,
   validateApprovedProductionSpec,
   validateProductionDraft,
+  validateCaseEvent,
   type ApprovedProductionSpec,
   type ApprovalRequestRecord,
   type BusinessContext,
   type BusinessScopedPersistentCollection,
   type CollectionStorageOptions,
-  type ProductionDraft
+  type CaseEvent,
+  type ProductionDraft,
+  type Queryable
 } from "@catering/shared-core";
 import {
   validateProductionDecisionAggregate,
@@ -20,6 +23,7 @@ const decisionRepositories = new WeakMap<object, InternalProductionDecisionRepos
 
 export interface ProductionDecisionCollections {
   drafts: BusinessScopedPersistentCollection<ProductionDraft>;
+  caseEvents: BusinessScopedPersistentCollection<CaseEvent>;
   decisionAggregates: BusinessScopedPersistentCollection<ProductionDecisionAggregate>;
   approvals: BusinessScopedPersistentCollection<ApprovalRequestRecord>;
   approvedProductionSpecs: BusinessScopedPersistentCollection<ApprovedProductionSpec>;
@@ -27,9 +31,14 @@ export interface ProductionDecisionCollections {
 
 export interface ProductionDecisionTargetScope {
   getDraft: (draftId: string) => Promise<ProductionDraft | undefined>;
+  getCaseEvent: (eventId: string) => Promise<CaseEvent | undefined>;
+  listCaseEvents: (caseId: string) => Promise<CaseEvent[]>;
   setDraft: (draft: ProductionDraft) => Promise<void>;
   insertDraft: (draft: ProductionDraft) => Promise<"created" | "exists">;
   insertDecisionAggregate: (aggregate: ProductionDecisionAggregate) => Promise<"created" | "exists">;
+  deleteDecisionAggregateIfExact: (
+    aggregate: ProductionDecisionAggregate
+  ) => Promise<"deleted" | "conflict" | "missing">;
   getDecisionAggregate: (approvalRequestId: string) => Promise<ProductionDecisionAggregate | undefined>;
   getApproval: (approvalRequestId: string) => Promise<ApprovalRequestRecord | undefined>;
   listApprovalsForTarget: () => Promise<ApprovalRequestRecord[]>;
@@ -54,7 +63,8 @@ export interface ProductionDecisionRepository {
   withTargetCriticalSection: <T>(
     context: BusinessContext,
     target: ApprovalRequestRecord["target"],
-    operation: (scope: ProductionDecisionTargetScope) => Promise<T>
+    operation: (scope: ProductionDecisionTargetScope, transactionalQueryable?: Queryable) => Promise<T>,
+    caseId?: string
   ) => Promise<T>;
 }
 
@@ -67,6 +77,12 @@ export function createProductionDecisionCollections(
     pgPool: options.pgPool
   };
   return {
+    caseEvents: createBusinessScopedPersistentCollection({
+      collectionName: "production/case-events",
+      getId: (event: CaseEvent) => event.eventId,
+      validate: validateCaseEvent,
+      ...storage
+    }),
     drafts: createBusinessScopedPersistentCollection({
       collectionName: "production/drafts",
       getId: (draft: ProductionDraft) => draft.draftId,
@@ -102,9 +118,18 @@ export function productionDecisionTargetScopeFor(
 ): ProductionDecisionTargetScope {
   return {
     getDraft: (draftId) => collections.drafts.get(context, draftId),
+    getCaseEvent: (eventId) => collections.caseEvents.get(context, eventId),
+    listCaseEvents: async (caseId) => (await collections.caseEvents.list(context))
+      .filter((event) => event.caseId === caseId)
+      .sort((left, right) => left.sequence - right.sequence || left.eventId.localeCompare(right.eventId)),
     setDraft: (draft) => collections.drafts.set(context, draft),
     insertDraft: (draft) => collections.drafts.insert(context, draft),
     insertDecisionAggregate: (aggregate) => collections.decisionAggregates.insert(context, aggregate),
+    deleteDecisionAggregateIfExact: (aggregate) => collections.decisionAggregates.deleteIfExact(
+      context,
+      aggregate.approval.approvalRequestId,
+      aggregate
+    ),
     getDecisionAggregate: (approvalRequestId) => collections.decisionAggregates.get(context, approvalRequestId),
     getApproval: (approvalRequestId) => collections.approvals.get(context, approvalRequestId),
     listApprovalsForTarget: async () => (await collections.approvals.list(context)).filter(
@@ -141,17 +166,25 @@ class InternalProductionDecisionRepository implements ProductionDecisionReposito
   async withTargetCriticalSection<T>(
     context: BusinessContext,
     target: ApprovalRequestRecord["target"],
-    operation: (scope: ProductionDecisionTargetScope) => Promise<T>
+    operation: (scope: ProductionDecisionTargetScope, transactionalQueryable?: Queryable) => Promise<T>,
+    caseId?: string
   ): Promise<T> {
+    const lockTarget = caseId
+      ? { kind: "production_case", artifactId: caseId, revision: 0 }
+      : { ...target, revision: 0 };
     return withBusinessTargetCriticalSection({
       storage: this.options,
       context,
-      // Revision remains part of the evidence scope below, while every revision of one draft ID shares one lock.
-      target: { ...target, revision: 0 },
+      target: lockTarget,
       // During the Stage-A protocol transition, new writers also honor the revision-specific key used by
       // the previous build. The supported local launcher still requires all old writers to be quiescent.
-      compatibilityTargets: [target],
-      collectionNamespace: "production",
+      compatibilityTargets: caseId
+        ? [
+          { kind: "production_draft", artifactId: target.artifactId, revision: 0 },
+          target
+        ]
+        : [target],
+      collectionNamespace: caseId ? "production/case-events" : "production",
       queueFullMessage: "Die Produktionsentscheidungs-Warteschlange benötigt eine betriebliche Bereinigung.",
       timeoutMessage: "Die zielbezogene Produktionsentscheidung konnte nicht rechtzeitig gesperrt werden.",
       legacyTimeoutMessage: "Die alte zielbezogene Produktionsentscheidung konnte nicht rechtzeitig entsperrt werden.",
@@ -160,7 +193,7 @@ class InternalProductionDecisionRepository implements ProductionDecisionReposito
         const collections = transactionalQueryable
           ? createProductionDecisionCollections({ pgPool: transactionalQueryable })
           : this.collections;
-        return operation(productionDecisionTargetScopeFor(collections, context, target));
+        return operation(productionDecisionTargetScopeFor(collections, context, target), transactionalQueryable);
       }
     });
   }

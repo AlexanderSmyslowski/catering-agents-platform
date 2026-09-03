@@ -42,6 +42,8 @@ export interface PersistentCollectionOptions<T> extends CollectionStorageOptions
   getVersion?: (item: T) => number | undefined;
   validate?: (value: T) => T;
   seed?: T[];
+  fileDirectoryMode?: number;
+  fileRecordMode?: number;
   fileFaultInjector?: (phase:
     | "before_record_publish"
     | "after_record_publish"
@@ -55,6 +57,17 @@ export interface PersistentCollection<T> {
   get(id: string): Promise<T | undefined>;
   set(item: T): Promise<void>;
   insert(item: T): Promise<"created" | "exists">;
+}
+
+/**
+ * An insert result can carry a post-publication exception without losing the
+ * ownership decision made by the atomic writer.  Callers may therefore
+ * compensate the exact record instead of inferring ownership from a later
+ * read-back.
+ */
+export interface PersistentInsertResult {
+  status: "created" | "exists";
+  error?: unknown;
 }
 
 /**
@@ -464,14 +477,15 @@ class FileBackedCollection<T> implements PersistentCollection<T> {
 
   private readonly fileFaultInjector?: PersistentCollectionOptions<T>["fileFaultInjector"];
 
+  private readonly fileRecordMode?: number;
+
   constructor(options: PersistentCollectionOptions<T>) {
     this.getId = options.getId;
     this.validate = options.validate;
     this.fileFaultInjector = options.fileFaultInjector;
+    this.fileRecordMode = options.fileRecordMode;
     this.directory = path.join(resolveDataRoot(options.rootDir), options.collectionName);
-    mkdirSync(this.directory, {
-      recursive: true
-    });
+    ensureCollectionDirectory(this.directory, options.fileDirectoryMode);
     this.syncFromDisk();
     if (options.seed && options.seed.length > 0) {
       this.ensureSeed(options.seed);
@@ -503,7 +517,8 @@ class FileBackedCollection<T> implements PersistentCollection<T> {
           filePath,
           JSON.stringify(normalized, null, 2),
           () => this.fileFaultInjector?.("before_record_replace"),
-          () => this.fileFaultInjector?.("after_record_replace")
+          () => this.fileFaultInjector?.("after_record_replace"),
+          this.fileRecordMode
         );
         this.items.set(id, normalized);
       } finally {
@@ -527,7 +542,8 @@ class FileBackedCollection<T> implements PersistentCollection<T> {
           filePath,
           JSON.stringify(normalized, null, 2),
           () => this.fileFaultInjector?.("before_record_publish"),
-          () => this.fileFaultInjector?.("after_record_publish")
+          () => this.fileFaultInjector?.("after_record_publish"),
+          this.fileRecordMode
         );
         if (inserted === "created") this.items.set(id, normalized);
         return inserted;
@@ -591,7 +607,7 @@ class FileBackedCollection<T> implements PersistentCollection<T> {
       const filePath = path.join(this.directory, `${sanitizeKey(id)}.json`);
       const releaseRecordLock = acquireFileLock(filePath);
       try {
-        atomicWrite(filePath, JSON.stringify(item, null, 2));
+        atomicWrite(filePath, JSON.stringify(item, null, 2), undefined, undefined, this.fileRecordMode);
       } finally {
         releaseRecordLock();
       }
@@ -799,6 +815,7 @@ export interface BusinessScopedPersistentCollection<T> {
   get(context: BusinessContext, id: string): Promise<T | undefined>;
   set(context: BusinessContext, item: T): Promise<void>;
   insert(context: BusinessContext, item: T): Promise<"created" | "exists">;
+  insertWithResult(context: BusinessContext, item: T): Promise<PersistentInsertResult>;
   compareAndSet(
     context: BusinessContext,
     id: string,
@@ -811,6 +828,11 @@ export interface BusinessScopedPersistentCollection<T> {
     expected: T,
     item: T
   ): Promise<"updated" | "conflict" | "missing">;
+  deleteIfExact(
+    context: BusinessContext,
+    id: string,
+    expected: T
+  ): Promise<"deleted" | "conflict" | "missing">;
 }
 
 function assertScopedPayload<T>(context: BusinessContext, item: T): T {
@@ -830,6 +852,27 @@ function fsyncDirectory(directory: string): void {
     fsyncSync(fd);
   } finally {
     closeSync(fd);
+  }
+}
+
+function ensureCollectionDirectory(directory: string, mode?: number): void {
+  if (mode === undefined) {
+    mkdirSync(directory, { recursive: true });
+    return;
+  }
+
+  // Only the collection leaf is hardened; shared parent directories retain the generic persistence behavior.
+  mkdirSync(path.dirname(directory), { recursive: true });
+  try {
+    mkdirSync(directory, { mode });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+  }
+  const directoryFd = openSync(directory, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+  try {
+    fchmodSync(directoryFd, mode);
+  } finally {
+    closeSync(directoryFd);
   }
 }
 
@@ -979,10 +1022,25 @@ function acquireFileLock(filePath: string): () => void {
   return () => releaseFileLock(lockPath, token);
 }
 
-function atomicWrite(filePath: string, payload: string, beforePublish?: () => void, afterPublish?: () => void): void {
+function openNewFileForWrite(filePath: string, mode?: number): number {
+  const fd = mode === undefined ? openSync(filePath, "wx") : openSync(filePath, "wx", mode);
+  if (mode !== undefined) {
+    // Creation mode prevents permissive-umask exposure; chmod makes it exact before the first payload write.
+    fchmodSync(fd, mode);
+  }
+  return fd;
+}
+
+function atomicWrite(
+  filePath: string,
+  payload: string,
+  beforePublish?: () => void,
+  afterPublish?: () => void,
+  fileMode?: number
+): void {
   const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
   try {
-    const fd = openSync(temporaryPath, "wx");
+    const fd = openNewFileForWrite(temporaryPath, fileMode);
     try {
       writeFileSync(fd, payload);
       fsyncSync(fd);
@@ -999,10 +1057,20 @@ function atomicWrite(filePath: string, payload: string, beforePublish?: () => vo
   }
 }
 
-function atomicInsert(filePath: string, payload: string, beforePublish?: () => void, afterPublish?: () => void): "created" | "exists" {
+interface AtomicInsertResult extends PersistentInsertResult {}
+
+function atomicInsertWithResult(
+  filePath: string,
+  payload: string,
+  beforePublish?: () => void,
+  afterPublish?: () => void,
+  fileMode?: number
+): AtomicInsertResult {
   const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  let published = false;
+  let outcome: AtomicInsertResult | undefined;
   try {
-    const fd = openSync(temporaryPath, "wx");
+    const fd = openNewFileForWrite(temporaryPath, fileMode);
     try {
       writeFileSync(fd, payload);
       fsyncSync(fd);
@@ -1013,15 +1081,44 @@ function atomicInsert(filePath: string, payload: string, beforePublish?: () => v
     try {
       linkSync(temporaryPath, filePath);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "EEXIST") return "exists";
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+        outcome = { status: "exists" };
+        return outcome;
+      }
       throw error;
     }
-    cleanupTemporaryFile(temporaryPath);
-    afterPublish?.();
-    return "created";
+    published = true;
+    outcome = { status: "created" };
+    try {
+      cleanupTemporaryFile(temporaryPath);
+      afterPublish?.();
+    } catch (error) {
+      // The hard link is already authoritative.  Preserve the exact
+      // ownership result while returning the post-publication failure to the
+      // caller for deterministic compensation.
+      outcome.error = error;
+    }
+    return outcome;
   } finally {
-    cleanupTemporaryFile(temporaryPath);
+    try {
+      cleanupTemporaryFile(temporaryPath);
+    } catch (error) {
+      if (!published || !outcome) throw error;
+      outcome.error ??= error;
+    }
   }
+}
+
+function atomicInsert(
+  filePath: string,
+  payload: string,
+  beforePublish?: () => void,
+  afterPublish?: () => void,
+  fileMode?: number
+): "created" | "exists" {
+  const outcome = atomicInsertWithResult(filePath, payload, beforePublish, afterPublish, fileMode);
+  if (outcome.error) throw outcome.error;
+  return outcome.status;
 }
 
 function versionOf(value: unknown): number | undefined {
@@ -1072,14 +1169,15 @@ class FileBackedBusinessScopedCollection<T> implements BusinessScopedPersistentC
     const normalized = this.normalizeForContext(context, item);
     assertIncomingVersion(normalized, this.options.getVersion);
     const filePath = this.filePathFor(context, this.options.getId(normalized));
-    mkdirSync(path.dirname(filePath), { recursive: true });
+    ensureCollectionDirectory(path.dirname(filePath), this.options.fileDirectoryMode);
     const releaseLock = acquireFileLock(filePath);
     try {
       atomicWrite(
         filePath,
         JSON.stringify(normalized, null, 2),
         () => this.options.fileFaultInjector?.("before_record_replace"),
-        () => this.options.fileFaultInjector?.("after_record_replace")
+        () => this.options.fileFaultInjector?.("after_record_replace"),
+        this.options.fileRecordMode
       );
     } finally {
       releaseLock();
@@ -1087,15 +1185,22 @@ class FileBackedBusinessScopedCollection<T> implements BusinessScopedPersistentC
   }
 
   async insert(context: BusinessContext, item: T): Promise<"created" | "exists"> {
+    const result = await this.insertWithResult(context, item);
+    if (result.error) throw result.error;
+    return result.status;
+  }
+
+  async insertWithResult(context: BusinessContext, item: T): Promise<PersistentInsertResult> {
     const normalized = this.normalizeForContext(context, item);
     assertIncomingVersion(normalized, this.options.getVersion);
     const filePath = this.filePathFor(context, this.options.getId(normalized));
-    mkdirSync(path.dirname(filePath), { recursive: true });
-    return atomicInsert(
+    ensureCollectionDirectory(path.dirname(filePath), this.options.fileDirectoryMode);
+    return atomicInsertWithResult(
       filePath,
       JSON.stringify(normalized, null, 2),
       () => this.options.fileFaultInjector?.("before_record_publish"),
-      () => this.options.fileFaultInjector?.("after_record_publish")
+      () => this.options.fileFaultInjector?.("after_record_publish"),
+      this.options.fileRecordMode
     );
   }
 
@@ -1105,7 +1210,7 @@ class FileBackedBusinessScopedCollection<T> implements BusinessScopedPersistentC
     assertIncomingVersion(normalized, this.options.getVersion);
     if (this.options.getId(normalized) !== id) throw new Error("Payload-ID passt nicht zum angeforderten Record.");
     const filePath = this.filePathFor(context, id);
-    mkdirSync(path.dirname(filePath), { recursive: true });
+    ensureCollectionDirectory(path.dirname(filePath), this.options.fileDirectoryMode);
     const releaseLock = acquireFileLock(filePath);
     try {
       if (!existsSync(filePath)) return "missing";
@@ -1115,7 +1220,8 @@ class FileBackedBusinessScopedCollection<T> implements BusinessScopedPersistentC
         filePath,
         JSON.stringify(normalized, null, 2),
         () => this.options.fileFaultInjector?.("before_record_replace"),
-        () => this.options.fileFaultInjector?.("after_record_replace")
+        () => this.options.fileFaultInjector?.("after_record_replace"),
+        this.options.fileRecordMode
       );
       return "updated";
     } finally {
@@ -1137,7 +1243,7 @@ class FileBackedBusinessScopedCollection<T> implements BusinessScopedPersistentC
       throw new Error("Payload-ID passt nicht zum angeforderten Record.");
     }
     const filePath = this.filePathFor(context, id);
-    mkdirSync(path.dirname(filePath), { recursive: true });
+    ensureCollectionDirectory(path.dirname(filePath), this.options.fileDirectoryMode);
     const releaseLock = acquireFileLock(filePath);
     try {
       if (!existsSync(filePath)) return "missing";
@@ -1151,9 +1257,34 @@ class FileBackedBusinessScopedCollection<T> implements BusinessScopedPersistentC
         filePath,
         JSON.stringify(normalized, null, 2),
         () => this.options.fileFaultInjector?.("before_record_replace"),
-        () => this.options.fileFaultInjector?.("after_record_replace")
+        () => this.options.fileFaultInjector?.("after_record_replace"),
+        this.options.fileRecordMode
       );
       return "updated";
+    } finally {
+      releaseLock();
+    }
+  }
+
+  async deleteIfExact(
+    context: BusinessContext,
+    id: string,
+    expected: T
+  ): Promise<"deleted" | "conflict" | "missing"> {
+    const normalizedExpected = this.normalizeForContext(context, expected, id);
+    const filePath = this.filePathFor(context, id);
+    if (!existsSync(filePath)) return "missing";
+    const releaseLock = acquireFileLock(filePath);
+    try {
+      if (!existsSync(filePath)) return "missing";
+      const existing = this.normalizeForContext(
+        context,
+        JSON.parse(readFileSync(filePath, "utf8")) as T,
+        id
+      );
+      if (!areJsonValuesEqual(existing, normalizedExpected)) return "conflict";
+      unlinkSync(filePath);
+      return "deleted";
     } finally {
       releaseLock();
     }
@@ -1211,6 +1342,12 @@ class PostgresBackedBusinessScopedCollection<T> implements BusinessScopedPersist
   }
 
   async insert(context: BusinessContext, item: T): Promise<"created" | "exists"> {
+    const result = await this.insertWithResult(context, item);
+    if (result.error) throw result.error;
+    return result.status;
+  }
+
+  async insertWithResult(context: BusinessContext, item: T): Promise<PersistentInsertResult> {
     const normalized = this.normalizeForContext(context, item);
     assertIncomingVersion(normalized, this.options.getVersion);
     await this.ensureInitialized();
@@ -1218,7 +1355,7 @@ class PostgresBackedBusinessScopedCollection<T> implements BusinessScopedPersist
       "INSERT INTO catering_business_records (business_id, collection_name, record_id, payload, version_number, updated_at) VALUES ($1, $2, $3, $4::jsonb, $5, NOW()) ON CONFLICT DO NOTHING RETURNING record_id",
       [assertBusinessId(context.businessId), this.options.collectionName, this.options.getId(normalized), JSON.stringify(normalized), collectionVersion(normalized, this.options.getVersion) ?? null]
     );
-    return result.rows.length === 1 ? "created" : "exists";
+    return { status: result.rows.length === 1 ? "created" : "exists" };
   }
 
   async compareAndSet(context: BusinessContext, id: string, expectedVersion: number, item: T): Promise<"updated" | "conflict" | "missing"> {
@@ -1263,6 +1400,22 @@ class PostgresBackedBusinessScopedCollection<T> implements BusinessScopedPersist
       ]
     );
     if (result.rows.length === 1) return "updated";
+    return (await this.get(context, id)) ? "conflict" : "missing";
+  }
+
+  async deleteIfExact(
+    context: BusinessContext,
+    id: string,
+    expected: T
+  ): Promise<"deleted" | "conflict" | "missing"> {
+    const normalizedExpected = this.normalizeForContext(context, expected, id);
+    const businessId = assertBusinessId(context.businessId);
+    await this.ensureInitialized();
+    const result = await this.queryable.query(
+      "DELETE FROM catering_business_records WHERE business_id = $1 AND collection_name = $2 AND record_id = $3 AND payload = $4::jsonb RETURNING record_id",
+      [businessId, this.options.collectionName, id, JSON.stringify(normalizedExpected)]
+    );
+    if (result.rows.length === 1) return "deleted";
     return (await this.get(context, id)) ? "conflict" : "missing";
   }
 

@@ -8,6 +8,7 @@ import {
   createOfferDraft,
   internalRecipes,
   type ProductionHandoff,
+  type ProductionDraft,
   validateOfferDraft
 } from "@catering/shared-core";
 import { buildOfferApp } from "@catering/offer-service";
@@ -83,7 +84,7 @@ describe("Stage A trusted offer-to-production chain", () => {
       store: offerStore,
       auditLog: new AuditLogStore({ rootDir: dataRoot }),
       trustedActorSecret: secret,
-      env: { CATERING_DEFAULT_BUSINESS_ID: "alpha", CATERING_TRUSTED_ACTOR_SECRET: secret }
+      env: { CATERING_DEFAULT_BUSINESS_ID: "alpha", CATERING_TRUSTED_ACTOR_SECRET: secret, CATERING_DEV_AUTH: "1" }
     });
 
     const createdCase = ok<{ case: { caseId: string } }>(await offerApp.inject({
@@ -148,25 +149,27 @@ describe("Stage A trusted offer-to-production chain", () => {
       trustedServiceSecret: secret,
       fetch: offerServiceFetch(offerApp, handoffReaderCalls)
     });
+    const intakeRecords = new InMemoryIntakeRecordsPort();
+    const productionStore = new ProductionStore({ rootDir: dataRoot });
     const productionApp = buildProductionApp({
       dataRoot,
       repository,
-      store: new ProductionStore({ rootDir: dataRoot }),
-      intakeRecords: new InMemoryIntakeRecordsPort(),
+      store: productionStore,
+      intakeRecords,
       handoffReader,
       trustedActorSecret: secret,
-      env: { CATERING_DEFAULT_BUSINESS_ID: "alpha", CATERING_TRUSTED_ACTOR_SECRET: secret }
+      env: { CATERING_DEFAULT_BUSINESS_ID: "alpha", CATERING_TRUSTED_ACTOR_SECRET: secret, CATERING_DEV_AUTH: "1" }
     });
     const intakeApp = buildIntakeApp({
       rootDir: dataRoot,
       store: new IntakeStore({ rootDir: dataRoot }),
       trustedActorSecret: secret,
-      env: { CATERING_DEFAULT_BUSINESS_ID: "alpha", CATERING_TRUSTED_ACTOR_SECRET: secret }
+      env: { CATERING_DEFAULT_BUSINESS_ID: "alpha", CATERING_TRUSTED_ACTOR_SECRET: secret, CATERING_DEV_AUTH: "1" }
     });
     const exportApp = buildPrintExportApp({
       rootDir: dataRoot,
       trustedActorSecret: secret,
-      env: { CATERING_DEFAULT_BUSINESS_ID: "alpha", CATERING_TRUSTED_ACTOR_SECRET: secret }
+      env: { CATERING_DEFAULT_BUSINESS_ID: "alpha", CATERING_TRUSTED_ACTOR_SECRET: secret, CATERING_DEV_AUTH: "1" }
     });
 
     try {
@@ -189,6 +192,56 @@ describe("Stage A trusted offer-to-production chain", () => {
       expect(handoffReaderCalls.filter((call) => call === `GET /v1/offers/handoffs/${handoff.handoffId}`)).toHaveLength(2);
       expect((await new AuditLogStore({ rootDir: dataRoot }).listRecentFor({ businessId: "alpha" }))
         .some((entry) => entry.action === "production.draft_created_from_handoff" && entry.entityId === imported.draft.draftId)).toBe(true);
+      const importedDraft = await productionStore.getProductionDraft({ businessId: "alpha" }, imported.draft.draftId) as ProductionDraft | undefined;
+      expect(importedDraft).toBeDefined();
+      if (!importedDraft) throw new Error("Stage-A draft disappeared before planning evidence.");
+      const importedSpec = importedDraft.draftArtifacts.eventSpec;
+      expect(importedSpec).toBeDefined();
+      await intakeRecords.insertSpec({ businessId: "alpha" }, importedSpec!);
+      for (const component of importedSpec!.menuPlan) {
+        const guestCount = component.servings ?? importedSpec!.attendees.expected ?? 0;
+        const evidence = await productionApp.inject({
+          method: "POST",
+          url: `/v1/production/cases/${productionCase.caseId}/planning-evidence`,
+          headers: productionHeaders,
+          payload: {
+            draftId: imported.draft.draftId,
+            draftRevision: importedDraft.revision,
+            componentId: component.componentId,
+            recipeId: internalRecipes[1]!.recipeId,
+            quantityDecision: {
+              decisionId: `stage-a-quantity-${imported.draft.draftId}-${component.componentId}`,
+              eventSpecId: importedSpec!.specId,
+              componentId: component.componentId,
+              guestCount,
+              serviceFormat: component.serviceStyle ?? "buffet",
+              dishRole: "other",
+              basis: "servings_per_person",
+              perUnitAmount: 1,
+              perUnitUnit: "servings",
+              targetAmount: guestCount,
+              targetUnit: "servings",
+              rationale: "Explizite menschliche Mengenentscheidung für die Stage-A-Vertragskette.",
+              evidence: { kind: "operator_instruction", reference: "stage-a-contract-chain" },
+              reviewStatus: "approved"
+            },
+            recipeEventUseReview: {
+              eventSpecId: importedSpec!.specId,
+              recipeId: internalRecipes[1]!.recipeId,
+              reviewedBy: "Produktions-Mitarbeiter",
+              reviewedAt: "2026-08-30T12:00:00.000Z",
+              decision: "accepted_for_event",
+              confirmations: {
+                quantitiesAndYield: true,
+                methodAndEquipment: true,
+                allergensAndDiet: true,
+                holdingAndRegeneration: true
+              }
+            }
+          }
+        });
+        expect(evidence.statusCode, evidence.body).toBe(201);
+      }
       const prepared = ok<{ draft: { draftId: string; reviewCards: Array<{ cardId: string }> } }>(await productionApp.inject({
         method: "POST",
         url: `/v1/production/drafts/${imported.draft.draftId}/prepare`,

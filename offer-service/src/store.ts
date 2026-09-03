@@ -14,9 +14,11 @@ import {
   type CaseSourceRef,
   type CollectionStorageOptions,
   type CaseEvent,
+  type CriticalSectionTarget,
   type OfferCase,
   type OfferDraft,
   type ProductionHandoff,
+  type Queryable,
   validateApprovalRequestRecord,
   validateApprovedOffer,
   validateCaseEvent,
@@ -37,6 +39,7 @@ interface OfferDecisionCollections {
   decisionAggregates: BusinessScopedPersistentCollection<OfferDecisionAggregate>;
   approvals: BusinessScopedPersistentCollection<ApprovalRequestRecord>;
   approvedOffers: BusinessScopedPersistentCollection<ApprovedOffer>;
+  handoffs: BusinessScopedPersistentCollection<ProductionHandoff>;
 }
 
 interface OfferCaseCollections {
@@ -45,6 +48,56 @@ interface OfferCaseCollections {
 }
 
 type CaseEventInput = Omit<CaseEvent, "businessId" | "eventId" | "caseId" | "sequence">;
+
+/**
+ * Append a deterministic case event while the caller already owns the case
+ * critical section.  Keeping this primitive lock-free prevents a decision or
+ * continuation from acquiring a second namespace-specific lock mid-flight.
+ */
+async function appendOfferCaseEventInCollections(
+  collections: OfferCaseCollections,
+  context: BusinessContext,
+  caseId: string,
+  input: CaseEventInput,
+  eventIdentity?: string
+): Promise<CaseEvent> {
+  if (!await collections.cases.get(context, caseId)) {
+    throw new Error("OfferCase wurde nicht gefunden.");
+  }
+  const eventId = eventIdentity
+    ? `offer-case-event-${createHash("sha256")
+      .update(`${context.businessId}\0${caseId}\0${input.kind}\0${eventIdentity}`)
+      .digest("hex")}`
+    : `offer-case-event-${randomUUID()}`;
+  const existing = await collections.events.get(context, eventId);
+  if (existing) {
+    const expected = validateCaseEventForProduct({
+      ...input,
+      businessId: context.businessId,
+      eventId,
+      caseId,
+      sequence: existing.sequence
+    }, "offer");
+    if (!areJsonValuesEqual(existing, expected)) {
+      throw new Error("Bestehendes Angebotsereignis stimmt nicht mit dem Auftrag überein.");
+    }
+    return existing;
+  }
+  const sequence = (await collections.events.list(context))
+    .filter((event) => event.caseId === caseId)
+    .reduce((maximum, event) => Math.max(maximum, event.sequence), 0) + 1;
+  const event = validateCaseEventForProduct({
+    ...input,
+    businessId: context.businessId,
+    eventId,
+    caseId,
+    sequence
+  }, "offer");
+  if (await collections.events.insert(context, event) === "created") return event;
+  const raced = await collections.events.get(context, eventId);
+  if (raced && areJsonValuesEqual(raced, event)) return raced;
+  throw new Error("Der Angebotsverlauf konnte nicht eindeutig fortgeschrieben werden.");
+}
 
 async function saveOfferDraftInCollection(
   drafts: BusinessScopedPersistentCollection<OfferDraft>,
@@ -149,6 +202,24 @@ function assertOfferCaseUpdate(existing: OfferCase, next: OfferCase, expectedVer
 
 export interface OfferDecisionTargetScope {
   getDraft: (draftId: string) => Promise<OfferDraft | undefined>;
+  getCase: (caseId: string) => Promise<OfferCase | undefined>;
+  listCaseEvents: (caseId: string) => Promise<CaseEvent[]>;
+  appendCaseEvent: (
+    caseId: string,
+    input: CaseEventInput,
+    eventIdentity?: string
+  ) => Promise<CaseEvent>;
+  /** Remove only a case event that this locked publication created. */
+  deleteCaseEventIfExact: (event: CaseEvent) => Promise<"deleted" | "conflict" | "missing">;
+  compareAndSetCase: (
+    caseId: string,
+    expectedVersion: number,
+    next: OfferCase
+  ) => Promise<"updated" | "conflict" | "missing">;
+  getHandoff: (handoffId: string) => Promise<ProductionHandoff | undefined>;
+  insertHandoff: (handoff: ProductionHandoff) => Promise<"created" | "exists">;
+  /** Remove only a Handoff that this locked publication created. */
+  deleteHandoffIfExact: (handoff: ProductionHandoff) => Promise<"deleted" | "conflict" | "missing">;
   insertDecisionAggregate: (aggregate: OfferDecisionAggregate) => Promise<"created" | "exists">;
   getDecisionAggregate: (approvalRequestId: string) => Promise<OfferDecisionAggregate | undefined>;
   getApproval: (approvalRequestId: string) => Promise<ApprovalRequestRecord | undefined>;
@@ -165,8 +236,28 @@ export interface OfferDecisionRepository {
   withTargetCriticalSection: <T>(
     context: BusinessContext,
     target: ApprovalRequestRecord["target"],
-    operation: (scope: OfferDecisionTargetScope) => Promise<T>
+    operation: (scope: OfferDecisionTargetScope, transactionalQueryable?: Queryable) => Promise<T>,
+    compatibilityTargets?: readonly CriticalSectionTarget[]
   ) => Promise<T>;
+}
+
+export function offerDraftTimelineError(
+  events: readonly CaseEvent[],
+  draftId: string,
+  revision: number
+): string | undefined {
+  const draftEvents = events
+    .filter((event) => event.kind === "draft_created"
+      && event.revisionRef?.artifactType === "OfferDraft")
+    .sort((left, right) => left.sequence - right.sequence || left.eventId.localeCompare(right.eventId));
+  const exact = draftEvents.find((event) => event.revisionRef?.artifactId === draftId
+    && event.revisionRef.revision === revision
+    && event.artifactId === draftId);
+  if (!exact) return "Der Angebotsentwurf besitzt keine exakt passende Case-Timeline-Projektion.";
+  if (draftEvents.some((event) => event.sequence > exact.sequence)) {
+    return "Der Angebotsentwurf ist nicht mehr der aktuelle Case-Timeline-Zustand.";
+  }
+  return undefined;
 }
 
 function createOfferDecisionCollections(options: CollectionStorageOptions): OfferDecisionCollections {
@@ -175,7 +266,8 @@ function createOfferDecisionCollections(options: CollectionStorageOptions): Offe
     drafts: createBusinessScopedPersistentCollection({ collectionName: "offers/drafts", getId: (draft: OfferDraft) => draft.draftId, getVersion: (draft: OfferDraft) => draft.revision, validate: validateOfferDraft, ...storage }),
     decisionAggregates: createBusinessScopedPersistentCollection({ collectionName: "offers/decision-aggregates", getId: (aggregate: OfferDecisionAggregate) => aggregate.approval.approvalRequestId, validate: validateOfferDecisionAggregate, ...storage }),
     approvals: createBusinessScopedPersistentCollection({ collectionName: "offers/approvals", getId: (approval: ApprovalRequestRecord) => approval.approvalRequestId, validate: validateApprovalRequestRecord, ...storage }),
-    approvedOffers: createBusinessScopedPersistentCollection({ collectionName: "offers/approved", getId: (offer: ApprovedOffer) => offer.approvedOfferId, validate: validateApprovedOffer, ...storage })
+    approvedOffers: createBusinessScopedPersistentCollection({ collectionName: "offers/approved", getId: (offer: ApprovedOffer) => offer.approvedOfferId, validate: validateApprovedOffer, ...storage }),
+    handoffs: createBusinessScopedPersistentCollection({ collectionName: "offers/handoffs", getId: (handoff: ProductionHandoff) => handoff.handoffId, validate: validateProductionHandoff, ...storage })
   };
 }
 
@@ -203,13 +295,24 @@ class InternalOfferDecisionRepository implements OfferDecisionRepository {
   async withTargetCriticalSection<T>(
     context: BusinessContext,
     target: ApprovalRequestRecord["target"],
-    operation: (scope: OfferDecisionTargetScope) => Promise<T>
+    operation: (scope: OfferDecisionTargetScope, transactionalQueryable?: Queryable) => Promise<T>,
+    compatibilityTargets: readonly CriticalSectionTarget[] = []
   ): Promise<T> {
+    const caseBound = compatibilityTargets.some((candidate) => candidate.kind === "offer_case");
     return withBusinessTargetCriticalSection({
       storage: this.options,
       context,
       target,
-      collectionNamespace: "offers",
+      compatibilityTargets,
+      compatibilityNamespaceTargets: caseBound && target.kind === "offer_draft"
+        ? [{ collectionNamespace: "offers", target }]
+        : [],
+      // Offer decisions linked to a case must share the case-events namespace
+      // used by continuation and handoff writers.  Otherwise File locks with
+      // the same case target are independent despite carrying the same ID.
+      collectionNamespace: caseBound
+        ? "offers/case-events"
+        : "offers",
       queueFullMessage: "Die Dateisperren-Warteschlange benötigt eine betriebliche Bereinigung.",
       queueExhaustedMessage: "Die Dateisperren-Warteschlange ist ausgeschöpft.",
       timeoutMessage: "Die zielbezogene Angebotsentscheidung konnte nicht rechtzeitig gesperrt werden.",
@@ -221,7 +324,16 @@ class InternalOfferDecisionRepository implements OfferDecisionRepository {
           rootDir: this.options.rootDir,
           pgPool: transactionalQueryable
         });
-        return operation(this.scopeForCollections(transactionalCollections, context, target));
+        const transactionalCaseCollections = createOfferCaseCollections({
+          rootDir: this.options.rootDir,
+          pgPool: transactionalQueryable
+        });
+        return operation(this.scopeForCollections(
+          transactionalCollections,
+          transactionalCaseCollections,
+          context,
+          target
+        ), transactionalQueryable);
       }
     });
   }
@@ -229,6 +341,24 @@ class InternalOfferDecisionRepository implements OfferDecisionRepository {
   private scopeForOwner(context: BusinessContext, target: ApprovalRequestRecord["target"]): OfferDecisionTargetScope {
     return {
       getDraft: (draftId) => this.owner.getDraft(context, draftId),
+      getCase: (caseId) => this.owner.getCase(context, caseId),
+      listCaseEvents: (caseId) => this.owner.listEvents(context, caseId),
+      appendCaseEvent: (caseId, input, eventIdentity) => this.owner.appendEventInCaseScope(
+        context,
+        caseId,
+        input,
+        eventIdentity
+      ),
+      deleteCaseEventIfExact: (event) => this.owner.deleteEventInCaseScope(context, event),
+      compareAndSetCase: async (caseId, expectedVersion, next) => this.owner.compareAndSetCaseInScope(
+        context,
+        caseId,
+        expectedVersion,
+        next
+      ),
+      getHandoff: (handoffId) => this.owner.getHandoff(context, handoffId),
+      insertHandoff: (handoff) => this.owner.insertHandoffInScope(context, handoff),
+      deleteHandoffIfExact: (handoff) => this.owner.deleteHandoffInScope(context, handoff),
       insertDecisionAggregate: (aggregate) => this.insertDecisionAggregate(context, aggregate),
       getDecisionAggregate: (approvalRequestId) => this.getDecisionAggregate(context, approvalRequestId),
       getApproval: (approvalRequestId) => this.owner.getApproval(context, approvalRequestId),
@@ -241,11 +371,33 @@ class InternalOfferDecisionRepository implements OfferDecisionRepository {
 
   private scopeForCollections(
     collections: OfferDecisionCollections,
+    caseCollections: OfferCaseCollections,
     context: BusinessContext,
     target: ApprovalRequestRecord["target"]
   ): OfferDecisionTargetScope {
     return {
       getDraft: (draftId) => collections.drafts.get(context, draftId),
+      getCase: (caseId) => caseCollections.cases.get(context, caseId),
+      listCaseEvents: async (caseId) => (await caseCollections.events.list(context))
+        .filter((event) => event.caseId === caseId)
+        .sort((left, right) => left.sequence - right.sequence || left.eventId.localeCompare(right.eventId)),
+      appendCaseEvent: (caseId, input, eventIdentity) => appendOfferCaseEventInCollections(
+        caseCollections,
+        context,
+        caseId,
+        input,
+        eventIdentity
+      ),
+      deleteCaseEventIfExact: (event) => caseCollections.events.deleteIfExact(context, event.eventId, event),
+      compareAndSetCase: async (caseId, expectedVersion, next) => {
+        const existing = await caseCollections.cases.get(context, caseId);
+        if (!existing) return "missing";
+        assertOfferCaseUpdate(existing, next, expectedVersion);
+        return caseCollections.cases.compareAndSet(context, caseId, expectedVersion, next);
+      },
+      getHandoff: (handoffId) => collections.handoffs.get(context, handoffId),
+      insertHandoff: (handoff) => collections.handoffs.insert(context, handoff),
+      deleteHandoffIfExact: (handoff) => collections.handoffs.deleteIfExact(context, handoff.handoffId, handoff),
       insertDecisionAggregate: (aggregate) => collections.decisionAggregates.insert(context, aggregate),
       getDecisionAggregate: (approvalRequestId) => collections.decisionAggregates.get(context, approvalRequestId),
       getApproval: (approvalRequestId) => collections.approvals.get(context, approvalRequestId),
@@ -341,6 +493,32 @@ export class OfferStore {
   async listApprovedOffers(context: BusinessContext): Promise<ApprovedOffer[]> { return this.approvedOffers.list(context); }
   async insertHandoff(context: BusinessContext, handoff: ProductionHandoff): Promise<"created" | "exists"> { return this.handoffs.insert(context, handoff); }
   async getHandoff(context: BusinessContext, id: string): Promise<ProductionHandoff | undefined> { return this.handoffs.get(context, id); }
+
+  // Called only by a scope that already owns the OfferCase lock. Keeping this
+  // indirection lets fault-injection tests exercise the same writer without
+  // reacquiring a nested lock.
+  async insertHandoffInScope(
+    context: BusinessContext,
+    handoff: ProductionHandoff
+  ): Promise<"created" | "exists"> {
+    return this.insertHandoff(context, handoff);
+  }
+
+  /** Internal lock-bound Handoff compensation; callers already own the OfferCase lock. */
+  async deleteHandoffInScope(
+    context: BusinessContext,
+    handoff: ProductionHandoff
+  ): Promise<"deleted" | "conflict" | "missing"> {
+    return this.handoffs.deleteIfExact(context, handoff.handoffId, handoff);
+  }
+
+  /** Internal lock-bound event compensation; callers already own the OfferCase lock. */
+  async deleteEventInCaseScope(
+    context: BusinessContext,
+    event: CaseEvent
+  ): Promise<"deleted" | "conflict" | "missing"> {
+    return this.caseEvents.deleteIfExact(context, event.eventId, event);
+  }
 
   async saveDraftForCase(
     context: BusinessContext,
@@ -515,6 +693,62 @@ export class OfferStore {
 
   async getCase(context: BusinessContext, caseId: string): Promise<OfferCase | undefined> {
     return this.cases.get(context, caseId);
+  }
+
+  /** Internal lock-bound primitives used by the Decision projection scope. */
+  async appendEventInCaseScope(
+    context: BusinessContext,
+    caseId: string,
+    input: CaseEventInput,
+    eventIdentity?: string
+  ): Promise<CaseEvent> {
+    return appendOfferCaseEventInCollections(
+      { cases: this.cases, events: this.caseEvents },
+      context,
+      caseId,
+      input,
+      eventIdentity
+    );
+  }
+
+  /** Internal lock-bound compare-and-set; callers already hold the OfferCase lock. */
+  async compareAndSetCaseInScope(
+    context: BusinessContext,
+    caseId: string,
+    expectedVersion: number,
+    next: OfferCase
+  ): Promise<"updated" | "conflict" | "missing"> {
+    const existing = await this.cases.get(context, caseId);
+    if (!existing) return "missing";
+    assertOfferCaseUpdate(existing, next, expectedVersion);
+    return this.cases.compareAndSet(context, caseId, expectedVersion, next);
+  }
+
+  async findCaseIdForDraft(
+    context: BusinessContext,
+    draftId: string,
+    revision: number
+  ): Promise<string | undefined> {
+    const caseIds = [...new Set((await this.caseEvents.list(context))
+      .filter((event) => event.kind === "draft_created"
+        && event.artifactId === draftId
+        && event.revisionRef?.artifactType === "OfferDraft"
+        && event.revisionRef.artifactId === draftId
+        && event.revisionRef.revision === revision)
+      .map((event) => event.caseId))];
+    return caseIds.length === 1 ? caseIds[0] : undefined;
+  }
+
+  async currentDraftTimelineError(
+    context: BusinessContext,
+    caseId: string,
+    draftId: string,
+    revision: number
+  ): Promise<string | undefined> {
+    const events = (await this.caseEvents.list(context))
+      .filter((event) => event.caseId === caseId)
+      .sort((left, right) => left.sequence - right.sequence || left.eventId.localeCompare(right.eventId));
+    return offerDraftTimelineError(events, draftId, revision);
   }
 
   async listCases(context: BusinessContext): Promise<OfferCase[]> {

@@ -26,7 +26,8 @@ const productionHeaders = {
 async function seedProductionCase(
   store: ProductionStore,
   businessId: string,
-  handoffId: string
+  handoffId: string,
+  sourceSpecId: string
 ): Promise<string> {
   const now = new Date().toISOString();
   const caseId = `production-case-${handoffId}`;
@@ -40,7 +41,8 @@ async function seedProductionCase(
     version: 1,
     createdAt: now,
     updatedAt: now,
-    productionHandoffId: handoffId
+    productionHandoffId: handoffId,
+    sourceSpecId
   });
   return caseId;
 }
@@ -239,7 +241,7 @@ describe("production handoff port", () => {
       dataRoot: rootDir,
       store,
       trustedActorSecret: sharedSecret,
-      env: { CATERING_DEFAULT_BUSINESS_ID: "alpha" },
+      env: { CATERING_DEFAULT_BUSINESS_ID: "alpha", CATERING_DEV_AUTH: "1" },
       handoffReader: { async get() { return handoff; } }
     });
     const headersFor = (businessId: string) => ({
@@ -247,7 +249,7 @@ describe("production handoff port", () => {
       "x-catering-actor-name": "Produktions-Mitarbeiter",
       "x-catering-business-id": businessId
     });
-    const caseId = await seedProductionCase(store, "alpha", handoff.handoffId);
+    const caseId = await seedProductionCase(store, "alpha", handoff.handoffId, handoff.eventSpecSnapshot.specId);
 
     const created = await app.inject({
       method: "POST",
@@ -302,7 +304,15 @@ describe("production handoff port", () => {
     });
     expect(alphaList.json<{ items: unknown[] }>().items).toHaveLength(1);
     expect(betaList.statusCode).toBe(403);
-    expect(await store.getProductionDraft({ businessId: "alpha" }, draft.draftId)).toEqual(draft);
+    expect(draft.draftArtifacts.eventSpec?.budgetContext).toBeUndefined();
+    expect(draft.draftArtifacts.eventSpec?.servicePlan.modules.every((module) => module.pricing === undefined)).toBe(true);
+    expect(await store.getProductionDraft({ businessId: "alpha" }, draft.draftId)).toEqual({
+      ...draft,
+      draftArtifacts: {
+        ...draft.draftArtifacts,
+        eventSpec: handoff.eventSpecSnapshot
+      }
+    });
     expect(await store.getProductionDraft({ businessId: "beta" }, draft.draftId)).toBeUndefined();
     expect([betaReview.statusCode, betaRevision.statusCode, betaDecision.statusCode, betaApply.statusCode])
       .toEqual([403, 403, 403, 403]);
@@ -317,7 +327,7 @@ describe("production handoff port", () => {
     const handoff = buildHandoff();
     const poison = buildPoisonedProductionDraft(handoff);
     await store.saveProductionDraft(localBusiness, poison);
-    const caseId = await seedProductionCase(store, "local", handoff.handoffId);
+    const caseId = await seedProductionCase(store, "local", handoff.handoffId, handoff.eventSpecSnapshot.specId);
     const app = buildProductionApp({
       dataRoot: rootDir, store, trustedActorSecret: sharedSecret,
       handoffReader: { async get() { return handoff; } }
@@ -339,7 +349,7 @@ describe("production handoff port", () => {
     const store = new ProductionStore({ rootDir });
     const handoff = buildHandoff();
     const poison = buildPoisonedProductionDraft(handoff);
-    const caseId = await seedProductionCase(store, "local", handoff.handoffId);
+    const caseId = await seedProductionCase(store, "local", handoff.handoffId, handoff.eventSpecSnapshot.specId);
     const app = buildProductionApp({
       dataRoot: rootDir, store, trustedActorSecret: sharedSecret,
       handoffReader: { async get() { return handoff; } }
@@ -376,7 +386,7 @@ describe("production handoff port", () => {
       await readerBarrier;
       return handoff;
     } };
-    const caseId = await seedProductionCase(store, "local", handoff.handoffId);
+    const caseId = await seedProductionCase(store, "local", handoff.handoffId, handoff.eventSpecSnapshot.specId);
     const app = buildProductionApp({
       dataRoot: rootDir, store, auditLog, trustedActorSecret: sharedSecret,
       handoffReader
@@ -401,7 +411,7 @@ describe("production handoff port", () => {
     const store = new ProductionStore({ rootDir });
     const auditLog = new AuditLogStore({ rootDir });
     const handoff = buildHandoff();
-    const caseId = await seedProductionCase(store, "local", handoff.handoffId);
+    const caseId = await seedProductionCase(store, "local", handoff.handoffId, handoff.eventSpecSnapshot.specId);
     const logFor = auditLog.logFor.bind(auditLog);
     let injectFailure = true;
     auditLog.logFor = async (...args) => {

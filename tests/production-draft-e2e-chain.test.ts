@@ -1,4 +1,5 @@
 import { mkdtempSync, rmSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -16,7 +17,9 @@ import {
   MINIMAL_MVP_ROLE_DEFAULT_ACTOR_NAMES,
   normalizeEventRequestToSpec,
   SCHEMA_VERSION,
+  approvalRequestIdForTarget,
   type AcceptedEventSpec,
+  type ProductionHandoff,
   type ProductionDraft,
   type ProductionDraftStatus,
   type ProductionPlan,
@@ -212,6 +215,36 @@ async function buildDraft(draftId = "production-draft-e2e-chain-1"): Promise<Pro
   }
 }
 
+function handoffForDraft(draft: ProductionDraft): ProductionHandoff {
+  const spec = draft.draftArtifacts.eventSpec!;
+  const pricingSnapshot = spec.budgetContext?.pricingSummary ?? {
+    subtotal: { amount: 100, currency: "EUR" },
+    perPerson: { amount: 2.22, currency: "EUR" }
+  };
+  const approvalRequestId = approvalRequestIdForTarget({
+    businessId: "local",
+    target: { kind: "production_draft", artifactId: draft.draftId, revision: draft.revision }
+  });
+  const approvedOfferId = `approved-offer-${createHash("sha256").update(approvalRequestId).digest("hex")}`;
+  const handoffId = `handoff-${createHash("sha256").update(approvedOfferId).digest("hex")}`;
+  const eventSpecSnapshot = structuredClone({
+    ...spec,
+    lifecycle: { commercialState: "accepted" as const },
+    budgetContext: { ...(spec.budgetContext ?? {}), pricingSummary: pricingSnapshot }
+  });
+  return {
+    schemaVersion: "1.0",
+    businessId: "local",
+    handoffId,
+    approvedOfferId,
+    approvalRequestId,
+    createdAt: draft.createdAt,
+    eventSpecSnapshot,
+    pricingSnapshot: structuredClone(pricingSnapshot),
+    source: { draftId: draft.draftId, revision: draft.revision, selectedVariantId: "variant-e2e-chain" }
+  };
+}
+
 async function productCounts(
   intakeApp: ReturnType<typeof buildIntakeApp>,
   productionApp: ReturnType<typeof buildProductionApp>
@@ -281,13 +314,19 @@ describe("ProductionDraft E2E chain", () => {
     const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
     const store = new ProductionStore({ rootDir: dataRoot });
     const intakeRecords = new InMemoryIntakeRecordsPort();
+    const draft = await buildDraft();
+    const approvedHandoff = handoffForDraft(draft);
     const productionApp = buildProductionApp({
       dataRoot,
       repository,
       store,
       intakeRecords,
+      handoffReader: {
+        get: async (_context, handoffId) => handoffId === approvedHandoff.handoffId ? approvedHandoff : undefined
+      },
       trustedActorSecret: TRUSTED_SECRET,
       env: {
+        CATERING_DEV_AUTH: "1",
         CATERING_ENABLE_WEB_RECIPE_SEARCH: "0"
       }
     });
@@ -296,15 +335,13 @@ describe("ProductionDraft E2E chain", () => {
       rootDir: dataRoot,
       store: intakeStore,
       trustedActorSecret: TRUSTED_SECRET,
-      env: {}
+      env: { CATERING_DEV_AUTH: "1" }
     });
     const exportApp = buildPrintExportApp({
       rootDir: dataRoot,
       trustedActorSecret: TRUSTED_SECRET,
-      env: {}
+      env: { CATERING_DEV_AUTH: "1" }
     });
-    const draft = await buildDraft();
-
     try {
       await expect(productCounts(intakeApp, productionApp)).resolves.toEqual({
         specs: 0,
@@ -312,11 +349,45 @@ describe("ProductionDraft E2E chain", () => {
         purchaseLists: 0
       });
 
-      const importedDraft = await importDraft(store, draft);
+      const caseResponse = await productionApp.inject({
+        method: "POST",
+        url: `/v1/production/cases/from-handoff/${approvedHandoff.handoffId}`,
+        headers: trustedHeaders("production_operator"),
+        payload: {}
+      });
+      expect(caseResponse.statusCode, caseResponse.body).toBe(201);
+      const caseId = caseResponse.json<{ case: { caseId: string } }>().case.caseId;
+      const importedDraft = await importDraft(store, {
+        ...draft,
+        source: {
+          ...draft.source,
+          kind: "manual_import",
+          sourceRef: `offer-handoff:${approvedHandoff.handoffId}`
+        },
+        draftArtifacts: {
+          ...draft.draftArtifacts,
+          eventSpec: approvedHandoff.eventSpecSnapshot
+        }
+      });
+      await store.appendEvent(localBusiness, caseId, {
+        at: importedDraft.createdAt,
+        role: "system",
+        kind: "draft_created",
+        text: "Synthetische Produktionsakte angelegt.",
+        artifactId: importedDraft.draftId,
+        revisionRef: {
+          artifactType: "ProductionDraft",
+          artifactId: importedDraft.draftId,
+          revision: importedDraft.revision,
+          createdAt: importedDraft.createdAt
+        }
+      });
       expect(importedDraft.status).toBe("pending_review");
+      await intakeRecords.insertSpec(localBusiness, approvedHandoff.eventSpecSnapshot);
+      await intakeStore.saveSpec(localBusiness, approvedHandoff.eventSpecSnapshot);
       await expect(repository.get(localBusiness, "recipe-draft-tomato-soup")).resolves.toBeUndefined();
       await expect(productCounts(intakeApp, productionApp)).resolves.toEqual({
-        specs: 0,
+        specs: 1,
         plans: 0,
         purchaseLists: 0
       });
@@ -333,7 +404,7 @@ describe("ProductionDraft E2E chain", () => {
         approvedProductionSpec: { approvedProductionSpecId: string };
       }>().approvedProductionSpec.approvedProductionSpecId;
       await expect(productCounts(intakeApp, productionApp)).resolves.toEqual({
-        specs: 0,
+        specs: 1,
         plans: 0,
         purchaseLists: 0
       });
@@ -354,9 +425,6 @@ describe("ProductionDraft E2E chain", () => {
       expect(applied.plan.planId).toBe(draft.draftArtifacts.productionPlan?.planId);
       expect(applied.purchaseList.purchaseListId).toBe(draft.draftArtifacts.purchaseList?.purchaseListId);
       expect(applied.recipes.map((recipe) => recipe.recipeId)).toEqual(["recipe-draft-tomato-soup"]);
-      for (const spec of await intakeRecords.listSpecs(localBusiness)) {
-        await intakeStore.saveSpec(localBusiness, spec);
-      }
       await expect(productCounts(intakeApp, productionApp)).resolves.toEqual({
         specs: 1,
         plans: 1,
@@ -426,13 +494,14 @@ describe("ProductionDraft E2E chain", () => {
         store,
         trustedActorSecret: TRUSTED_SECRET,
         env: {
+          CATERING_DEV_AUTH: "1",
           CATERING_ENABLE_WEB_RECIPE_SEARCH: "0"
         }
       });
       const intakeApp = buildIntakeApp({
         rootDir: dataRoot,
         trustedActorSecret: TRUSTED_SECRET,
-        env: {}
+        env: { CATERING_DEV_AUTH: "1" }
       });
       const draft = await buildDraft(`production-draft-e2e-${status}`);
 

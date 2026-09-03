@@ -117,6 +117,7 @@ describe("intake shadow mode", () => {
       llmProviderDescriptor: externalProviderDescriptor,
       trustedActorSecret: TRUSTED_SECRET,
       env: {
+        CATERING_DEV_AUTH: "1",
         CATERING_SYNTHETIC_LLM_SLICE: "1",
         CATERING_LLM_PROCESSING_APPROVAL_FILE: writeExternalProcessingApproval(dataRoot)
       }
@@ -200,6 +201,7 @@ describe("intake shadow mode", () => {
       llmProviderDescriptor: externalProviderDescriptor,
       trustedActorSecret: TRUSTED_SECRET,
       env: {
+        CATERING_DEV_AUTH: "1",
         CATERING_SYNTHETIC_LLM_SLICE: "1",
         CATERING_LLM_PROCESSING_APPROVAL_FILE: writeExternalProcessingApproval(dataRoot)
       }

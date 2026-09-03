@@ -1,4 +1,10 @@
-import { type AcceptedEventSpec, type ProductionDraft } from "@catering/shared-core";
+import {
+  type AcceptedEventSpec,
+  type ProductionDraft,
+  type QuantityDecisionInput,
+  type RecipeEventUseReview,
+  type RecipeOutputMapping
+} from "@catering/shared-core";
 import { buildProductionApp } from "@catering/production-service";
 import { testIntakeRecordsPortFor } from "../support/in-memory-intake-records-port.js";
 
@@ -13,9 +19,24 @@ type InjectResponse = {
   statusCode: number;
   body: string;
   json: () => any;
+  caseId?: string;
+  draftId?: string;
 };
 
 type InjectableApp = ReturnType<typeof buildProductionApp>;
+
+/**
+ * Evidence is deliberately supplied by the scenario.  The helper only transports
+ * an explicit human decision through the production endpoint; it must not invent
+ * a recipe or silently bridge a canonical scratch component.
+ */
+export type PlanningEvidenceSubmission = {
+  componentId: string;
+  recipeId: string;
+  quantityDecision: QuantityDecisionInput;
+  recipeEventUseReview?: RecipeEventUseReview;
+  outputMapping?: RecipeOutputMapping;
+};
 
 export const APPROVED_PRODUCTION_TEST_SECRET = "approved-production-workflow-test-secret";
 
@@ -23,7 +44,9 @@ export async function runApprovedProductionWorkflow(
   app: InjectableApp,
   input: {
     headers?: Record<string, string>;
+    handoffId?: string;
     payload?: { eventSpec?: AcceptedEventSpec; sourceReviewConfirmed?: boolean };
+    planningEvidence?: readonly PlanningEvidenceSubmission[];
   }
 ): Promise<InjectResponse> {
   const eventSpec = input.payload?.eventSpec;
@@ -51,31 +74,55 @@ export async function runApprovedProductionWorkflow(
     await testIntakeRecordsPortFor(app).insertSpec({ businessId }, eventSpec);
     const caseResponse = await app.inject({
       method: "POST",
-      url: "/v1/production/cases",
+      url: input.handoffId
+        ? `/v1/production/cases/from-handoff/${input.handoffId}`
+        : "/v1/production/cases",
       headers,
-      payload: {
-        eventTypeLabel: eventSpec.servicePlan.eventType,
-        attendeeCount: eventSpec.attendees.expected
-      }
+      payload: input.handoffId
+        ? {}
+        : {
+            eventTypeLabel: eventSpec.servicePlan.eventType,
+            attendeeCount: eventSpec.attendees.expected
+          }
     });
     if (caseResponse.statusCode !== 201) return caseResponse;
     const caseId = caseResponse.json().case.caseId as string;
     const imported = await app.inject({
       method: "POST",
-      url: "/v1/production/drafts",
+      url: input.handoffId
+        ? `/v1/production/drafts/from-handoff/${input.handoffId}`
+        : "/v1/production/drafts",
       headers,
-      payload: { caseId, specId: eventSpec.specId }
+      payload: input.handoffId ? { caseId } : { caseId, specId: eventSpec.specId }
     });
     if (imported.statusCode !== 201) return imported;
 
     const sourceDraft = imported.json().draft as ProductionDraft;
+    const withWorkflowContext = (response: InjectResponse): InjectResponse => ({
+      ...response,
+      caseId,
+      draftId: sourceDraft.draftId
+    });
+    for (const evidence of input.planningEvidence ?? []) {
+      const evidenceResponse = await app.inject({
+        method: "POST",
+        url: `/v1/production/cases/${caseId}/planning-evidence`,
+        headers,
+        payload: {
+          draftId: sourceDraft.draftId,
+          draftRevision: sourceDraft.revision,
+          ...evidence
+        }
+      });
+      if (evidenceResponse.statusCode !== 201) return withWorkflowContext(evidenceResponse);
+    }
     const preparedResponse = await app.inject({
       method: "POST",
       url: `/v1/production/drafts/${sourceDraft.draftId}/prepare`,
       headers,
       payload: {}
     });
-    if (preparedResponse.statusCode !== 201) return preparedResponse;
+    if (preparedResponse.statusCode !== 201) return withWorkflowContext(preparedResponse);
     const prepared = preparedResponse.json().draft as ProductionDraft;
 
     for (const card of prepared.reviewCards) {
@@ -85,7 +132,7 @@ export async function runApprovedProductionWorkflow(
         headers,
         payload: { decision: "fits" }
       });
-      if (reviewed.statusCode !== 200) return reviewed;
+      if (reviewed.statusCode !== 200) return withWorkflowContext(reviewed);
     }
 
     const decision = await app.inject({
@@ -94,7 +141,7 @@ export async function runApprovedProductionWorkflow(
       headers,
       payload: { decision: "approved" }
     });
-    if (decision.statusCode !== 201) return decision;
+    if (decision.statusCode !== 201) return withWorkflowContext(decision);
     const approvedProductionSpecId = decision.json().approvedProductionSpec.approvedProductionSpecId as string;
     const applied = await app.inject({
       method: "POST",
@@ -102,7 +149,7 @@ export async function runApprovedProductionWorkflow(
       headers,
       payload: {}
     });
-    if (applied.statusCode !== 200) return applied;
+    if (applied.statusCode !== 200) return withWorkflowContext(applied);
 
     const canonical = applied.json();
     const legacyTestView = {
@@ -113,6 +160,7 @@ export async function runApprovedProductionWorkflow(
     };
     return {
       ...applied,
+      ...withWorkflowContext(applied),
       statusCode: 201,
       body: JSON.stringify(legacyTestView),
       json: () => legacyTestView

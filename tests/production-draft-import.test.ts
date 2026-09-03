@@ -124,7 +124,7 @@ describe("ProductionDraft import", () => {
       intakeRecords,
       auditLog,
       trustedActorSecret: TRUSTED_SECRET,
-      env: {}
+      env: { CATERING_DEV_AUTH: "1" }
     });
     const spec = productionDraft().draftArtifacts.eventSpec!;
 
@@ -169,7 +169,7 @@ describe("ProductionDraft import", () => {
       dataRoot,
       store,
       trustedActorSecret: TRUSTED_SECRET,
-      env: {}
+      env: { CATERING_DEV_AUTH: "1" }
     });
     const invalidDraft = {
       ...productionDraft(),
@@ -203,7 +203,7 @@ describe("ProductionDraft import", () => {
       store,
       intakeRecords,
       trustedActorSecret: TRUSTED_SECRET,
-      env: {}
+      env: { CATERING_DEV_AUTH: "1" }
     });
     const spec = productionDraft().draftArtifacts.eventSpec!;
 
@@ -235,7 +235,7 @@ describe("ProductionDraft import", () => {
       store,
       intakeRecords,
       trustedActorSecret: TRUSTED_SECRET,
-      env: {}
+      env: { CATERING_DEV_AUTH: "1" }
     });
     const spec = productionDraft().draftArtifacts.eventSpec!;
 
@@ -266,7 +266,7 @@ describe("ProductionDraft import", () => {
       store,
       intakeRecords,
       trustedActorSecret: TRUSTED_SECRET,
-      env: {}
+      env: { CATERING_DEV_AUTH: "1" }
     });
     try {
       const productionCase = await createProductionCase(app);

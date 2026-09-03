@@ -1,9 +1,15 @@
 export * from "./access-control.js";
+export * from "./accepted-event-spec-projection.js";
 export * from "./approval-request.js";
 export * from "./audit-log.js";
 export * from "./byo-llm-boundary.js";
 export * from "./byo-llm-provider-data-policy.js";
 export * from "./business-context.js";
+export * from "./catering-login-service.js";
+export * from "./catering-pin-crypto.js";
+export * from "./catering-request-auth.js";
+export * from "./catering-session-auth.js";
+export * from "./catering-user-store.js";
 // Applications receive a boundary-guarded adapter from the public surface.
 // The raw transport factory stays module-private to low-level transport tests.
 export {
@@ -51,6 +57,7 @@ export {
 export type {
   BusinessScopedPersistentCollection,
   CollectionStorageOptions,
+  PersistentInsertResult,
   PersistentCollectionOptions,
   Queryable
 } from "./persistence.js";

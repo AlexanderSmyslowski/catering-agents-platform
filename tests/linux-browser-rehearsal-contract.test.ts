@@ -31,6 +31,10 @@ const createOfferCase = readFileSync(
   resolve(root, "scripts/browser-rehearsal/create-offer-case.js"),
   "utf8",
 );
+const confirmProductionHandoff = readFileSync(
+  resolve(root, "scripts/browser-rehearsal/confirm-production-handoff.js"),
+  "utf8",
+);
 const openOfferHistoryItem = readFileSync(
   resolve(root, "scripts/browser-rehearsal/open-offer-history-item.js"),
   "utf8",
@@ -39,6 +43,14 @@ const fullFreshRehearsal = readFileSync(
   resolve(root, "scripts/check-browser-rehearsal-full-fresh.sh"),
   "utf8",
 );
+
+const browserIdentityHeaders = (init?: RequestInit) =>
+  [...new Headers(init?.headers).keys()].filter((name) =>
+    name === "authorization" ||
+    name === "x-actor-name" ||
+    name.startsWith("x-catering-") ||
+    /(?:actor|subject|role|business|identity)/u.test(name)
+  );
 
 const runMarkerContract = (mode: "eventual" | "permanent") =>
   spawnSync(
@@ -675,7 +687,7 @@ describe("Linux browser rehearsal governance", () => {
     let handoffCreated = false;
     let productionCaseCreated = false;
     let caseSelected = false;
-    const calls: string[] = [];
+    const calls: Array<{ path: string; init?: RequestInit }> = [];
     const selectedCaseButton = {
       textContent: "Browser-Rehearsal - Besprechung - 06.11.2026 - 35 Personen",
       getAttribute: (name: string) => name === "aria-pressed" ? String(caseSelected) : null,
@@ -724,8 +736,8 @@ describe("Linux browser rehearsal governance", () => {
     };
     const session = new Map([["catering.browser-rehearsal.offer-case-id", "offer-case-browser-rehearsal"]]);
     const sessionStorage = { getItem: (key: string) => session.get(key) ?? null, setItem: (key: string, value: string) => session.set(key, value) };
-    const fetch = async (path: string, _init?: unknown) => {
-      calls.push(path);
+    const fetch = async (path: string, init?: RequestInit) => {
+      calls.push({ path, init });
       if (path.endsWith("/decision")) approved = true;
       if (path.includes("/handoffs") && path.includes("approved")) handoffCreated = true;
       if (path.includes("/production/cases/from-handoff")) productionCaseCreated = true;
@@ -768,7 +780,8 @@ describe("Linux browser rehearsal governance", () => {
       approvedOfferId: "approved-offer-browser-rehearsal",
     });
     expect(productionCaseCreated).toBe(false);
-    expect(calls.some((path) => path.includes("/offers/approved/approved-offer-browser-rehearsal/handoffs"))).toBe(false);
+    expect(calls.some(({ path }) => path.includes("/offers/approved/approved-offer-browser-rehearsal/handoffs"))).toBe(false);
+    expect(calls.every(({ init }) => browserIdentityHeaders(init).length === 0)).toBe(true);
   });
 
   it("uses an explicit handoff action as the route transition to production", async () => {
@@ -1372,8 +1385,8 @@ describe("Linux browser rehearsal governance", () => {
   });
 
   it("creates the rehearsal case and draft through the existing scoped offer endpoints", async () => {
-    const calls: Array<{ path: string; init: { body?: string; headers?: Record<string, string> } }> = [];
-    const fakeFetch = async (path: string, init: { body?: string; headers?: Record<string, string> }) => {
+    const calls: Array<{ path: string; init: RequestInit }> = [];
+    const fakeFetch = async (path: string, init: RequestInit) => {
       calls.push({ path, init });
       if (path.endsWith("/intake/normalize")) {
         return {
@@ -1413,21 +1426,106 @@ describe("Linux browser rehearsal governance", () => {
       "/api/offers/v1/offers/cases",
       "/api/offers/v1/offers/from-text"
     ]);
-    expect(JSON.parse(calls[0]?.init.body ?? "{}" as string)).toMatchObject({
+    expect(JSON.parse(String(calls[0]?.init.body ?? "{}"))).toMatchObject({
       requestId: "browser-rehearsal-offer-case",
       text: "Besprechung am 2026-11-06 fuer 35 Teilnehmer mit Kaffeepause, Croissants und Wasserservice."
     });
-    expect(calls[0]?.init.headers?.["x-actor-name"]).toBe("Intake-Mitarbeiter");
-    expect(JSON.parse(calls[1]?.init.body ?? "{}" as string)).toMatchObject({
+    expect(calls.every((call) => browserIdentityHeaders(call.init).length === 0)).toBe(true);
+    expect(JSON.parse(String(calls[1]?.init.body ?? "{}"))).toMatchObject({
       customerName: "Browser-Rehearsal",
       eventTypeLabel: "Besprechung",
       attendeeCount: 35
     });
-    expect(JSON.parse(calls[2]?.init.body ?? "{}" as string)).toMatchObject({
+    expect(JSON.parse(String(calls[2]?.init.body ?? "{}"))).toMatchObject({
       caseId: "offer-case-browser-rehearsal",
       requestId: "browser-rehearsal-offer-case"
     });
-    expect(calls.slice(1).every((call) => call.init.headers?.["x-actor-name"] === "Angebots-Mitarbeiter")).toBe(true);
+    expect(calls.every((call) => new Headers(call.init.headers).get("content-type") === "application/json")).toBe(true);
+  });
+
+  it("confirms the server-bound production handoff without browser identity headers", async () => {
+    const offerCaseId = "offer-case-browser-rehearsal";
+    const offerDraftId = "draft-browser-rehearsal";
+    const approvedOfferId = "approved-offer-browser-rehearsal";
+    const handoffId = "handoff-browser-rehearsal";
+    const productionCaseId = "production-case-browser-rehearsal";
+    const sourceSpecId = "spec-browser-rehearsal-offer-case";
+    const calls: Array<{ path: string; init?: RequestInit }> = [];
+    const payloadFor = (path: string) => {
+      if (path === `/api/offers/v1/offers/cases/${offerCaseId}`) {
+        return {
+          case: { caseId: offerCaseId, product: "offer", productionHandoffId: handoffId },
+          events: [{ kind: "result", artifactId: handoffId }]
+        };
+      }
+      if (path === `/api/offers/v1/offers/handoffs/${handoffId}`) {
+        return {
+          handoff: {
+            handoffId,
+            approvedOfferId,
+            source: { draftId: offerDraftId },
+            eventSpecSnapshot: { specId: sourceSpecId }
+          }
+        };
+      }
+      if (path === "/api/production/v1/production/cases") {
+        return { items: [{ caseId: productionCaseId, product: "production" }] };
+      }
+      if (path === `/api/production/v1/production/cases/${productionCaseId}`) {
+        return {
+          case: {
+            caseId: productionCaseId,
+            product: "production",
+            productionHandoffId: handoffId,
+            sourceSpecId
+          }
+        };
+      }
+      throw new Error(`Unerwarteter Handoff-Abruf: ${path}`);
+    };
+    const fetch = async (path: string, init?: RequestInit) => {
+      calls.push({ path, init });
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify(payloadFor(path))
+      };
+    };
+    const storage = new Map<string, string>([
+      ["catering.browser-rehearsal.offer-spec-id", sourceSpecId],
+      ["catering.browser-rehearsal.offer-case-id", offerCaseId],
+      ["catering.browser-rehearsal.offer-draft-id", offerDraftId],
+      ["catering.browser-rehearsal.offer-approved-offer-id", approvedOfferId]
+    ]);
+    const sessionStorage = {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value)
+    };
+    const confirmHandoff = new Function(
+      "fetch",
+      "sessionStorage",
+      "location",
+      `return (${confirmProductionHandoff});`,
+    )(fetch, sessionStorage, { pathname: "/produktion" }) as () => Promise<{
+      route: string;
+      caseId: string;
+      handoffId: string;
+      sourceSpecId: string;
+    }>;
+
+    await expect(confirmHandoff()).resolves.toEqual({
+      route: "/produktion",
+      caseId: productionCaseId,
+      handoffId,
+      sourceSpecId
+    });
+    expect(calls.map(({ path }) => path)).toEqual([
+      `/api/offers/v1/offers/cases/${offerCaseId}`,
+      `/api/offers/v1/offers/handoffs/${handoffId}`,
+      "/api/production/v1/production/cases",
+      `/api/production/v1/production/cases/${productionCaseId}`
+    ]);
+    expect(calls.every(({ init }) => browserIdentityHeaders(init).length === 0)).toBe(true);
   });
 
   it("rejects a legacy offer draft list without an explicit case action", async () => {
@@ -1612,9 +1710,9 @@ describe("Linux browser rehearsal governance", () => {
       },
       querySelectorAll: (selector: string) => selector === "details" ? [historyDetails] : [],
     };
-    const calls: string[] = [];
-    const fetch = async (path: string) => {
-      calls.push(path);
+    const calls: Array<{ path: string; init?: RequestInit }> = [];
+    const fetch = async (path: string, init?: RequestInit) => {
+      calls.push({ path, init });
       if (path.endsWith("/production/cases")) {
         return {
           ok: true,
@@ -1664,10 +1762,11 @@ describe("Linux browser rehearsal governance", () => {
       sourceSpecId,
     });
     expect(clicks).toBe(1);
-    expect(calls).toEqual([
+    expect(calls.map(({ path }) => path)).toEqual([
       `/api/production/v1/production/cases/${caseId}`,
       "/api/production/v1/production/cases",
     ]);
+    expect(calls.every(({ init }) => browserIdentityHeaders(init).length === 0)).toBe(true);
   });
 
   it("rejects a missing browser CLI before opening a stack or session", () => {

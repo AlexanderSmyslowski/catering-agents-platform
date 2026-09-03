@@ -227,6 +227,47 @@ describe("ApprovalRequestRecord contract", () => {
     })).toThrow();
   });
 
+  it("accepts only a role-bound authenticated session as the additional human approval source", () => {
+    // This fails if a session lacks an explicit server role or a caller can persist a different approval role.
+    const actor = {
+      name: "user-offer-42",
+      businessId: "alpha",
+      source: "authenticated-session" as const,
+      trusted: true,
+      role: "offer_operator" as const
+    };
+
+    expect(createApprovalRequestRecord({
+      actor,
+      role: "offer_operator",
+      target,
+      decision: "approved"
+    } as never)).toMatchObject({
+      decidedBy: { name: "user-offer-42", role: "offer_operator", source: "authenticated-session" }
+    });
+    expect(() => createApprovalRequestRecord({
+      actor,
+      role: "admin",
+      target,
+      decision: "approved"
+    } as never)).toThrow();
+    expect(() => createApprovalRequestRecord({
+      actor: { ...actor, role: undefined },
+      role: "offer_operator",
+      target,
+      decision: "approved"
+    } as never)).toThrow();
+  });
+
+  it("accepts authenticated-session provenance only with a valid persisted approval role", () => {
+    // This fails if persisted session approvals are rejected wholesale or records can carry an invalid role.
+    const record = validApproval({ decidedBy: { source: "authenticated-session" } });
+    expect(validateApprovalRequestRecord(record)).toEqual(record);
+    expect(() => validateApprovalRequestRecord(validApproval({
+      decidedBy: { source: "authenticated-session", role: "read_only_operator" as never }
+    }))).toThrow();
+  });
+
   it.each(actorSources.flatMap((source) => [true, false].map((trusted) => [source, trusted] as const)))(
     "accepts only the resolver-trusted %s actor source when trusted is %s",
     (source, trusted) => {

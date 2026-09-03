@@ -5,13 +5,18 @@ import {
   assertBusinessId,
   BoundaryGuardedLlmAdapter,
   buildBoundaryGuardedLlmAdapterFromEnv,
+  CateringUserStore,
+  classifyCateringRouteAuth,
   loadByoLlmExternalProcessingApprovalFromEnv,
   createTrustedActorResolver,
+  deriveCateringAuthKeys,
+  hasMinimalMvpCapability,
   getDemoProductionSpecs,
   hostedMultiBusinessReady,
   internalRecipes,
+  isCateringSessionMode,
   isDevAuthEnabled,
-  resolveMinimalMvpRoleFromTrustedActor,
+  registerCateringRequestAuth,
   type ByoLlmProviderDescriptor,
   type LlmReadinessProviderAdapter,
   type LlmReadinessDataMode,
@@ -56,6 +61,7 @@ export interface ProductionAppOptions {
   intakeRecords?: IntakeRecordsPort;
   sourceDocumentReader?: SourceDocumentReader;
   auditLog?: AuditLogStore;
+  userStore?: CateringUserStore;
   llmAdapter?: LlmReadinessProviderAdapter;
   buildLlmAdapter?: () => LlmReadinessProviderAdapter;
   llmProviderDescriptor?: ByoLlmProviderDescriptor;
@@ -122,13 +128,14 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
   }
   const productionDraftDataMode = productionDraftDataModeFromEnv(env);
   const trustedActorSecret = options.trustedActorSecret ?? env.CATERING_TRUSTED_ACTOR_SECRET;
+  const sessionMode = isCateringSessionMode(env);
   const allowDevActorHeader = isDevAuthEnabled(env);
   const resolveActor = createTrustedActorResolver({
     fallbackActorName: "Produktions-Mitarbeiter", fallbackBusinessId: defaultBusinessContext.businessId, requireTrustedBusinessId: hosted, trustedActorSecret, allowDevActorHeader
   });
-  const actorForRequest = (request: { headers: Record<string, string | string[] | undefined> }, ..._ignored: unknown[]) => resolveActor(request);
+  let actorForRequest = (request: { headers: Record<string, string | string[] | undefined> }, ..._ignored: unknown[]) => resolveActor(request);
   const isProductionOperator = (request: { headers: Record<string, string | string[] | undefined> }, ..._ignored: unknown[]) =>
-    resolveMinimalMvpRoleFromTrustedActor(actorForRequest(request)) === "production_operator";
+    hasMinimalMvpCapability(actorForRequest(request), "production");
   const requireProductionOperator = (
     request: { headers: Record<string, string | string[] | undefined> },
     reply: { code: (statusCode: number) => { send: (payload: unknown) => unknown } },
@@ -136,8 +143,17 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
   ): unknown | undefined => isProductionOperator(request)
     ? undefined
     : reply.code(403).send({ message: "Produktions-Operator erforderlich." });
+  const isProductionReader = (request: { headers: Record<string, string | string[] | undefined> }, ..._ignored: unknown[]) =>
+    hasMinimalMvpCapability(actorForRequest(request), "production_read");
+  const requireProductionReader = (
+    request: { headers: Record<string, string | string[] | undefined> },
+    reply: { code: (statusCode: number) => { send: (payload: unknown) => unknown } },
+    ..._ignored: unknown[]
+  ): unknown | undefined => isProductionReader(request)
+    ? undefined
+    : reply.code(403).send({ message: "Produktions-Leserecht erforderlich." });
   const isOperationsAuditOperator = (request: { headers: Record<string, string | string[] | undefined> }, ..._ignored: unknown[]) =>
-    resolveMinimalMvpRoleFromTrustedActor(actorForRequest(request)) === "operations_audit_operator";
+    hasMinimalMvpCapability(actorForRequest(request), "operations_audit");
   const repository =
     options.repository ??
     new InMemoryRecipeRepository({
@@ -179,6 +195,11 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
       databaseUrl: options.databaseUrl,
       pgPool: options.pgPool
     });
+  const userStore = options.userStore ?? new CateringUserStore({
+    rootDir: options.dataRoot,
+    databaseUrl: options.databaseUrl,
+    pgPool: options.pgPool
+  });
   const injectedAdapter = options.buildLlmAdapter ?? (options.llmAdapter ? () => options.llmAdapter as LlmReadinessProviderAdapter : undefined);
   if (injectedAdapter && !options.llmProviderDescriptor) {
     throw new Error("Injected BYO LLM adapters require an explicit server-owned llmProviderDescriptor.");
@@ -196,6 +217,23 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
     : undefined);
 
   const app = Fastify({ logger: false });
+  const authKeys = sessionMode ? deriveCateringAuthKeys(trustedActorSecret ?? "") : undefined;
+  const requestAuth = sessionMode
+    ? registerCateringRequestAuth({
+        app,
+        sessionMode,
+        userStore,
+        businessContext: defaultBusinessContext,
+        authKeys: authKeys!,
+        isPublicRequest: (request) => classifyCateringRouteAuth({
+          targetService: "production-service",
+          method: request.method,
+          pathname: request.url.split("?", 1)[0]
+        }) === "public-health"
+      })
+    : undefined;
+  actorForRequest = (request: { headers: Record<string, string | string[] | undefined> }, ..._ignored: unknown[]) =>
+    sessionMode ? requestAuth!.actorForRequest(request) : resolveActor(request);
   const appWithBridgeResolver = app as typeof app & {
     setQuantityRecipeBridgeResolver: (resolver: QuantityRecipeBridgeResolver | undefined) => void;
   };
@@ -213,7 +251,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
 
   app.register(multipart);
 
-  registerProductionCaseRoutes(app, { store, handoffReader, trustedActorSecret, allowDevActorHeader, requireProductionOperator, actorForRequest });
+  registerProductionCaseRoutes(app, { repository, store, handoffReader, trustedActorSecret, allowDevActorHeader, requireProductionOperator, actorForRequest });
 
   registerProductionQuantityWorkflowRoutes(app, {
     auditLog,
@@ -289,6 +327,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
 
   registerProductionArtifactRoutes(app, {
     store,
+    repository,
     intakeRecords,
     sourceDocumentReader,
     discoveryService,
@@ -300,12 +339,14 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
     allowDevActorHeader,
     isProductionOperator,
     requireProductionOperator,
+    requireProductionReader,
     actorForRequest
   });
 
   registerProductionApprovalRoutes(app, {
     store,
     intakeRecords,
+    handoffReader,
     repository,
     auditLog,
     trustedActorSecret,
@@ -356,7 +397,14 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
 
     const limit = Number(request.query.limit ?? "50");
     const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.min(200, Math.trunc(limit))) : 50;
-    return reply.send({ items: await auditLog.listRecentFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), safeLimit) });
+    const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+    const items = await auditLog.listRecentFor(actor, safeLimit);
+    // Summary and details are open text/record fields, so they stay server-side without commercial access.
+    return reply.send({
+      items: hasMinimalMvpCapability(actor, "commercial")
+        ? items
+        : items.map(({ summary: _summary, details: _details, ...entry }) => entry)
+    });
   });
 
   registerProductionRecipeRoutes(app, {

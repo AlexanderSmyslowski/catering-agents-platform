@@ -189,6 +189,7 @@ export const productionDraftSchema = {
           },
           requiredApproval: { type: "boolean" },
           operatorComment: { type: "string", maxLength: 1000 },
+          operatorCommentVisibility: { enum: ["operational", "commercial"] },
           decidedBy: { type: "string", maxLength: 160 },
           decidedAt: { type: "string", maxLength: 80 }
         }

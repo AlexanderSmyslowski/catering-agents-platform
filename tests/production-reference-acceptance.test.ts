@@ -179,9 +179,13 @@ async function createPersistedFullCostEvidence() {
   const draft = draftResponse.json<{ draftId: string; variantSet: Array<{ variantId: string }> }>();
   const persistedDraft = await store.getDraft({ businessId: "local" }, draft.draftId);
   if (!persistedDraft) throw new Error("OfferDraft wurde nicht persistiert.");
+  // Keep the first case-bound draft immutable. A reviewed continuation is a
+  // new canonical draft identity, so saveDraftForCase can publish its own
+  // draft_created event instead of rewriting the revision behind rev1.
   const reviewedDraft = {
     ...persistedDraft,
-    revision: persistedDraft.revision + 1,
+    draftId: `${persistedDraft.draftId}-reviewed`,
+    revision: 1,
     reviewStatus: {
       priceReviewStatus: "verified" as const,
       taxReviewStatus: "verified" as const,
@@ -191,12 +195,14 @@ async function createPersistedFullCostEvidence() {
       publishApproved: true
     }
   };
-  await store.saveDraft({ businessId: "local" }, reviewedDraft);
+  expect(await store.saveDraftForCase({ businessId: "local" }, caseId, reviewedDraft)).toBe("saved");
+  const persistedReviewedDraft = await store.getDraft({ businessId: "local" }, reviewedDraft.draftId);
+  expect(persistedReviewedDraft).toEqual(reviewedDraft);
   const decisionResponse = await app.inject({
     method: "POST",
-    url: `/v1/offers/drafts/${draft.draftId}/decision`,
+    url: `/v1/offers/drafts/${reviewedDraft.draftId}/decision`,
     headers,
-    payload: { decision: "approved", revision: reviewedDraft.revision, variantId: draft.variantSet[0]!.variantId }
+    payload: { decision: "approved", revision: reviewedDraft.revision, variantId: reviewedDraft.variantSet[0]!.variantId }
   });
   expect(decisionResponse.statusCode).toBe(201);
   const approvedOfferId = decisionResponse.json<{ approvedOffer: { approvedOfferId: string } }>().approvedOffer.approvedOfferId;

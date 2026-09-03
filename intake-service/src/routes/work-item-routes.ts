@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import {
   areJsonValuesEqual,
+  projectAcceptedEventSpecForActor,
   validateAcceptedEventSpec,
   validateEventRequest,
   type AcceptedEventSpec,
@@ -114,6 +115,15 @@ export function registerIntakeWorkItemRoutes(
       : undefined;
   };
 
+  const internalSpecReaderActor = (
+    request: { headers: Record<string, string | string[] | undefined> }
+  ): TrustedActor | undefined => {
+    const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+    return actor.trusted && (actor.name === "Production-Service" || actor.name === "Offer-Service")
+      ? actor
+      : undefined;
+  };
+
   app.get<{ Params: { requestId: string } }>(
     "/v1/intake/internal/requests/:requestId",
     async (request, reply) => {
@@ -128,8 +138,8 @@ export function registerIntakeWorkItemRoutes(
   app.get<{ Params: { specId: string } }>(
     "/v1/intake/internal/specs/:specId",
     async (request, reply) => {
-      const actor = productionServiceActor(request);
-      if (!actor) return reply.code(403).send({ message: "Production-Service erforderlich." });
+      const actor = internalSpecReaderActor(request);
+      if (!actor) return reply.code(403).send({ message: "Interner Spec-Leser erforderlich." });
       const acceptedEventSpec = await store.getSpec(actor, request.params.specId);
       if (!acceptedEventSpec) {
         return reply.code(404).send({ message: "AcceptedEventSpec nicht gefunden." });
@@ -307,9 +317,11 @@ export function registerIntakeWorkItemRoutes(
 
     const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
     return reply.send({
-      items: await store.listSpecs(actor, {
+      items: (await store.listSpecs(actor, {
         includeArchived: includeArchivedFromQuery(request.query)
-      })
+      })).map((spec) => projectAcceptedEventSpecForActor(actor, spec, {
+        includeTargetBudgetForNonCommercial: true
+      }))
     });
   });
 
@@ -325,7 +337,9 @@ export function registerIntakeWorkItemRoutes(
       return reply.code(404).send({ message: "AcceptedEventSpec nicht gefunden." });
     }
 
-    return reply.send(spec);
+    return reply.send(projectAcceptedEventSpecForActor(actor, spec, {
+      includeTargetBudgetForNonCommercial: true
+    }));
   });
 
   app.patch<{ Params: { specId: string }; Body: SpecUpdateBody }>(
@@ -360,7 +374,9 @@ export function registerIntakeWorkItemRoutes(
       });
 
       return reply.send({
-        acceptedEventSpec: updatedSpec
+        acceptedEventSpec: projectAcceptedEventSpecForActor(actor, updatedSpec, {
+          includeTargetBudgetForNonCommercial: true
+        })
       });
     }
   );

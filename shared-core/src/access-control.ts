@@ -2,14 +2,29 @@ export const MINIMAL_MVP_ROLES = [
   "intake_operator",
   "offer_operator",
   "production_operator",
-  "operations_audit_operator"
+  "operations_audit_operator",
+  "read_only_operator",
+  "admin"
 ] as const;
 
 export type MinimalMvpRole = (typeof MINIMAL_MVP_ROLES)[number];
 
+/** Product capabilities are deliberately coarse; route-level guards remain the policy boundary. */
+export const MINIMAL_MVP_CAPABILITIES = [
+  "intake",
+  "offer",
+  "production",
+  "production_read",
+  "operations_audit",
+  "commercial"
+] as const;
+
+export type MinimalMvpCapability = (typeof MINIMAL_MVP_CAPABILITIES)[number];
+
 import { assertBusinessId, type BusinessId } from "./business-context.js";
 
 export type TrustedActorSource =
+  | "authenticated-session"
   | "trusted-proxy:x-catering-actor-name"
   | "dev-header:x-actor-name"
   | "dev-default"
@@ -17,31 +32,42 @@ export type TrustedActorSource =
   | "untrusted";
 
 export const TRUSTED_FINAL_APPROVAL_ACTOR_SOURCE = "trusted-proxy:x-catering-actor-name";
+export const AUTHENTICATED_SESSION_APPROVAL_ACTOR_SOURCE = "authenticated-session";
 
-export type TrustedFinalApprovalActorSource = typeof TRUSTED_FINAL_APPROVAL_ACTOR_SOURCE;
+export type TrustedFinalApprovalActorSource =
+  | typeof TRUSTED_FINAL_APPROVAL_ACTOR_SOURCE
+  | typeof AUTHENTICATED_SESSION_APPROVAL_ACTOR_SOURCE;
 
 export interface TrustedActor {
   name: string;
   businessId: BusinessId;
   source: TrustedActorSource;
   trusted: boolean;
+  // Diese Rolle wird ausschließlich nach einer Cookie-/JWT-Prüfung serverseitig gesetzt.
+  role?: MinimalMvpRole;
 }
 
 export function isTrustedFinalApprovalSource(source: string): source is TrustedFinalApprovalActorSource {
-  return source === TRUSTED_FINAL_APPROVAL_ACTOR_SOURCE;
+  return source === TRUSTED_FINAL_APPROVAL_ACTOR_SOURCE || source === AUTHENTICATED_SESSION_APPROVAL_ACTOR_SOURCE;
 }
 
 export function assertTrustedFinalApprovalActor(
   actor: TrustedActor
-): asserts actor is TrustedActor & { source: TrustedFinalApprovalActorSource; trusted: true } {
+): asserts actor is TrustedActor & (
+  | { source: typeof TRUSTED_FINAL_APPROVAL_ACTOR_SOURCE; trusted: true }
+  | { source: typeof AUTHENTICATED_SESSION_APPROVAL_ACTOR_SOURCE; trusted: true; role: MinimalMvpRole }
+) {
   // The resolver alone authenticates proxy headers; this guard only preserves its trusted provenance invariant.
-  const allowedActorKeys = ["name", "businessId", "source", "trusted"];
+  const allowedActorKeys = actor.source === AUTHENTICATED_SESSION_APPROVAL_ACTOR_SOURCE
+    ? ["name", "businessId", "source", "trusted", "role"]
+    : ["name", "businessId", "source", "trusted"];
   if (
     Object.keys(actor).some((key) => !allowedActorKeys.includes(key)) ||
     !actor.trusted ||
-    !isTrustedFinalApprovalSource(actor.source)
+    !isTrustedFinalApprovalSource(actor.source) ||
+    (actor.source === AUTHENTICATED_SESSION_APPROVAL_ACTOR_SOURCE && !isMinimalMvpRole(actor.role ?? ""))
   ) {
-    throw new Error("Vertrauenswürdiger Proxy-Actor für finale Freigaben erforderlich.");
+    throw new Error("Vertrauenswürdiger menschlicher Actor für finale Freigaben erforderlich.");
   }
 }
 
@@ -77,14 +103,27 @@ export const MINIMAL_MVP_ROLE_LABELS: Record<MinimalMvpRole, string> = {
   intake_operator: "Intake-Operator",
   offer_operator: "Angebots-Operator",
   production_operator: "Produktions-Operator",
-  operations_audit_operator: "Betriebs-/Audit-Operator"
+  operations_audit_operator: "Betriebs-/Audit-Operator",
+  read_only_operator: "Read-only-Operator",
+  admin: "Administrator"
 };
 
 export const MINIMAL_MVP_ROLE_DEFAULT_ACTOR_NAMES: Record<MinimalMvpRole, string> = {
   intake_operator: "Intake-Mitarbeiter",
   offer_operator: "Angebots-Mitarbeiter",
   production_operator: "Produktions-Mitarbeiter",
-  operations_audit_operator: "Betriebs-/Audit-Operator"
+  operations_audit_operator: "Betriebs-/Audit-Operator",
+  read_only_operator: "Read-only-Mitarbeiter",
+  admin: "Administrator"
+};
+
+export const MINIMAL_MVP_ROLE_CAPABILITIES: Readonly<Record<MinimalMvpRole, readonly MinimalMvpCapability[]>> = {
+  intake_operator: ["intake"],
+  offer_operator: ["offer", "commercial"],
+  production_operator: ["production", "production_read"],
+  operations_audit_operator: ["operations_audit"],
+  read_only_operator: ["production_read"],
+  admin: ["intake", "offer", "production", "production_read", "operations_audit", "commercial"]
 };
 
 export const MINIMAL_MVP_PROTECTED_PATHS = [
@@ -333,11 +372,22 @@ export function createTrustedActorResolver<TRequest extends TrustedActorRequest>
 }
 
 export function resolveMinimalMvpRoleFromTrustedActor(actor: TrustedActor): MinimalMvpRole | undefined {
+  if (actor.source === AUTHENTICATED_SESSION_APPROVAL_ACTOR_SOURCE) {
+    return actor.trusted && isMinimalMvpRole(actor.role ?? "") ? actor.role : undefined;
+  }
   if (!actor.trusted && actor.source !== "dev-header:x-actor-name" && actor.source !== "dev-default") {
     return undefined;
   }
 
   return resolveMinimalMvpRoleFromActorName(actor.name);
+}
+
+export function hasMinimalMvpCapability(
+  actor: TrustedActor,
+  capability: MinimalMvpCapability
+): boolean {
+  const role = resolveMinimalMvpRoleFromTrustedActor(actor);
+  return role !== undefined && MINIMAL_MVP_ROLE_CAPABILITIES[role].includes(capability);
 }
 
 export function isDevAuthEnabled(env: Record<string, string | undefined>): boolean {
