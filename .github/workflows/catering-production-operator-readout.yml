@@ -482,7 +482,8 @@ jobs:
                       break
                       ;;
                   esac
-                done <<<"$timers"
+                done
+              done <<<"$timers"
             fi
             if ! units="$(systemctl list-unit-files --type=service --no-legend --no-pager 2>/dev/null)"; then
               printf 'READOUT systemd_units status=unavailable\n'
