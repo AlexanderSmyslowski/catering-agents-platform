@@ -59,6 +59,7 @@ export async function buildRecipeComponentPlanningArtifacts({
   servings,
   bridgeResult,
   recipeEventUseReview,
+  allowQuantityRecipeBridgeResolver = true,
   discoveryService,
   context,
   persistDiscoveredRecipes = true
@@ -68,6 +69,7 @@ export async function buildRecipeComponentPlanningArtifacts({
   servings: number;
   bridgeResult?: QuantityRecipeProductionBridgeResult;
   recipeEventUseReview?: RecipeEventUseReview;
+  allowQuantityRecipeBridgeResolver?: boolean;
   discoveryService: RecipeDiscoveryService;
   context: BusinessContext;
   persistDiscoveredRecipes?: boolean;
@@ -179,13 +181,17 @@ export async function buildRecipeComponentPlanningArtifacts({
     };
   }
 
-  const effectiveBridgeResult = bridgeResult ?? await discoveryService.resolveQuantityRecipeBridge?.({
-    eventSpec,
-    component,
-    recipe: resolvedRecipe,
-    servings,
-    context
-  });
+  const effectiveBridgeResult = bridgeResult ?? (
+    allowQuantityRecipeBridgeResolver
+      ? await discoveryService.resolveQuantityRecipeBridge?.({
+        eventSpec,
+        component,
+        recipe: resolvedRecipe,
+        servings,
+        context
+      })
+      : undefined
+  );
 
   if (!effectiveBridgeResult || effectiveBridgeResult.status !== "ready_for_scaling") {
     const reason = "Freigegebener Mengen-Rezept-Nachweis für die Produktionsskalierung fehlt.";

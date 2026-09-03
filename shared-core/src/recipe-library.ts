@@ -805,6 +805,14 @@ export class RecipeLibrary {
     return this.recipes.get(context, recipeId);
   }
 
+  async deleteIfExact(
+    context: BusinessContext,
+    recipe: Recipe
+  ): Promise<"deleted" | "conflict" | "missing"> {
+    assertRecipeBusinessContext(context);
+    return this.recipes.deleteIfExact(context, recipe.recipeId, recipe);
+  }
+
   async reviewRecipe(
     context: BusinessContext,
     recipeId: string,

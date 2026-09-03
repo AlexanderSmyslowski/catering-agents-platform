@@ -9,6 +9,7 @@ import {
   type ApprovedOffer,
   type AuditLogStore,
   type OfferDraft,
+  type ProductionHandoff,
   type TrustedActor
 } from "@catering/shared-core";
 import {
@@ -116,6 +117,28 @@ export function registerOfferApprovalRoutes(app: FastifyInstance, deps: OfferApp
     await logApprovedOfferAudit(actor, aggregate.approval, approvedOffer);
     return "ok" as const;
   };
+  const handoffForApprovedOffer = (actor: TrustedActor, approvedOffer: ApprovedOffer): ProductionHandoff =>
+    validateProductionHandoff({
+      schemaVersion: "1.0",
+      businessId: actor.businessId,
+      handoffId: deterministicId("handoff", {
+        businessId: actor.businessId,
+        approvedOfferId: approvedOffer.approvedOfferId
+      }),
+      approvedOfferId: approvedOffer.approvedOfferId,
+      approvalRequestId: approvedOffer.approvalRequestId,
+      createdAt: approvedOffer.approvedAt,
+      eventSpecSnapshot: {
+        ...structuredClone(approvedOffer.selectedVariant.proposedEventSpec),
+        lifecycle: { commercialState: "accepted" }
+      },
+      pricingSnapshot: structuredClone(approvedOffer.selectedVariant.proposedEventSpec.budgetContext!.pricingSummary!),
+      source: {
+        draftId: approvedOffer.sourceDraft.draftId,
+        revision: approvedOffer.sourceDraft.revision,
+        selectedVariantId: approvedOffer.selectedVariantId
+      }
+    });
   const appendDecisionEvents = async (actor: TrustedActor, aggregate: OfferDecisionAggregate) => {
     const approval = aggregate.approval;
     const decisionEvent = await store.appendEventForArtifactCase(actor, approval.target.artifactId, {
@@ -433,14 +456,7 @@ export function registerOfferApprovalRoutes(app: FastifyInstance, deps: OfferApp
       return reply.code(409).send({ message: "Freigegebenes Angebot stimmt nicht mit der autoritativen Entscheidung überein." });
     }
     const approvedOffer = aggregate.approvedOffer!;
-    const handoff = validateProductionHandoff({
-      schemaVersion: "1.0", businessId: actor.businessId,
-      handoffId: deterministicId("handoff", { businessId: actor.businessId, approvedOfferId: approvedOffer.approvedOfferId }),
-      approvedOfferId: approvedOffer.approvedOfferId, approvalRequestId: approvedOffer.approvalRequestId, createdAt: approvedOffer.approvedAt,
-      eventSpecSnapshot: { ...structuredClone(approvedOffer.selectedVariant.proposedEventSpec), lifecycle: { commercialState: "accepted" } },
-      pricingSnapshot: structuredClone(approvedOffer.selectedVariant.proposedEventSpec.budgetContext!.pricingSummary!),
-      source: { draftId: approvedOffer.sourceDraft.draftId, revision: approvedOffer.sourceDraft.revision, selectedVariantId: approvedOffer.selectedVariantId }
-    });
+    const handoff = handoffForApprovedOffer(actor, approvedOffer);
     const inserted = await store.insertHandoff(actor, handoff);
     if (inserted === "exists") {
       const existing = await store.getHandoff(actor, handoff.handoffId);
@@ -472,7 +488,21 @@ export function registerOfferApprovalRoutes(app: FastifyInstance, deps: OfferApp
   app.get<{ Params: { handoffId: string } }>("/v1/offers/handoffs/:handoffId", async (request, reply) => {
     const forbidden = requireHandoffReader(request, reply);
     if (forbidden) return forbidden;
-    const handoff = await store.getHandoff(actorForRequest(request), request.params.handoffId);
-    return handoff ? reply.send({ handoff }) : reply.code(404).send({ message: "Produktionsübergabe nicht gefunden." });
+    const actor = actorForRequest(request);
+    const handoff = await store.getHandoff(actor, request.params.handoffId);
+    if (!handoff) return reply.code(404).send({ message: "Produktionsübergabe nicht gefunden." });
+    const aggregates = await decisionRepository.listDecisionAggregatesForApprovedOffer(actor, handoff.approvedOfferId);
+    if (aggregates.length !== 1 || !aggregates[0]?.approvedOffer) {
+      return reply.code(409).send({ message: "Produktionsübergabe stimmt nicht mit der autoritativen Freigabeevidenz überein." });
+    }
+    const aggregate = aggregates[0]!;
+    if (await projectDecisionAggregate(actor, aggregate) !== "ok") {
+      return reply.code(409).send({ message: "Produktionsübergabe stimmt nicht mit der autoritativen Freigabeevidenz überein." });
+    }
+    const expected = handoffForApprovedOffer(actor, aggregate.approvedOffer!);
+    if (!areJsonValuesEqual(expected, handoff)) {
+      return reply.code(409).send({ message: "Produktionsübergabe stimmt nicht mit der autoritativen Freigabeevidenz überein." });
+    }
+    return reply.send({ handoff: expected });
   });
 }
