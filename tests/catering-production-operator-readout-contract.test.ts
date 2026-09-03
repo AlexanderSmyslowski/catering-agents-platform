@@ -37,17 +37,27 @@ function fakeDockerSource(): string {
     "  ps)",
     "    case \"$scenario\" in",
     "      storage-postgres|storage-database-url|storage-default-file|storage-default-unmounted|storage-precedence) printf 'fixture-app\\n' ;;",
+    "      storage-service-filter) printf 'fixture-postgres\\nfixture-web\\nfixture-app\\n' ;;",
     "      *) printf 'fixture-container\\tfixture-short\\trunning\\tUp 5 minutes\\tfixture-image\\n' ;;",
     "    esac",
     "    ;;",
     "  inspect)",
     "    template=\"${3-}\"",
+    "    target=\"${4-}\"",
     "    if [[ \"$template\" == *'.RestartCount'* ]]; then",
     "      [[ \"$scenario\" != container-unavailable ]] || exit 55",
     "      if [[ \"$scenario\" == container-no-health && \"$template\" == *'.State.Health'* ]]; then exit 42; fi",
     "      if [[ \"$template\" == *'%d'* ]]; then restart='%!d(json.Number=0)'; else restart=0; fi",
     "      if [[ \"$scenario\" == container-healthy ]]; then health=healthy; else health=absent; fi",
     "      printf 'fixture-container-id\\trunning\\ttrue\\t2026-09-03T12:00:00Z\\t%s\\tsha256:fixture-image-id\\tplatform-infra\\tintake\\t%s\\n' \"$restart\" \"$health\"",
+    "      exit 0",
+    "    fi",
+    "    if [[ \"$template\" == *'com.docker.compose.service'* ]]; then",
+    "      case \"$scenario:$target\" in",
+    "        storage-service-filter:fixture-postgres) printf 'postgres\\n' ;;",
+    "        storage-service-filter:fixture-web) printf 'web\\n' ;;",
+    "        *) printf 'intake\\n' ;;",
+    "      esac",
     "      exit 0",
     "    fi",
     "    if [[ \"$template\" == *'NetworkSettings.Networks'* ]]; then",
@@ -62,6 +72,10 @@ function fakeDockerSource(): string {
     "    fi",
     "    if [[ \"$template\" == *'.Config.WorkingDir'* ]]; then",
     "      printf '\"/srv/catering\"\\n'",
+    "      exit 0",
+    "    fi",
+    "    if [[ \"$scenario\" == storage-service-filter && \"$target\" == fixture-app && \"$template\" == *'.Config.Env'* ]]; then",
+    "      [[ \"$template\" == *'\"CATERING_DATABASE_URL\"'* ]] && printf 'CATERING_DATABASE_URL\\n'",
     "      exit 0",
     "    fi",
     "    if [[ \"$template\" == *'.Config.Env'* ]]; then",
@@ -228,6 +242,27 @@ describe("Catering production operator readout contract", () => {
     expect(result.stdout).toContain("READOUT data_root status=not_applicable backend=postgres");
     expect(result.stdout).toContain("READOUT collection=complete");
     expect(result.stdout).not.toContain("mode=hybrid");
+    expect(result.stdout).not.toContain("critical_unavailable area=storage_backend");
+  });
+
+  test("skips infrastructure-only containers when classifying Catering storage", () => {
+    const result = runRemote(
+      "data_root_readout; collection_status_readout",
+      "storage-service-filter",
+    );
+
+    expect(result.status, String(result.stderr)).toBe(0);
+    expect(result.stdout).toContain(
+      "READOUT storage_backend container=fixture-postgres mode=not_applicable service=postgres",
+    );
+    expect(result.stdout).toContain(
+      "READOUT storage_backend container=fixture-web mode=not_applicable service=web",
+    );
+    expect(result.stdout).toContain("READOUT storage_backend container=fixture-app mode=postgres");
+    expect(result.stdout).toContain("READOUT data_root status=not_applicable backend=postgres");
+    expect(result.stdout).toContain("READOUT collection=complete");
+    expect(result.stdout).not.toContain("READOUT data_root container=fixture-postgres");
+    expect(result.stdout).not.toContain("READOUT data_root container=fixture-web");
     expect(result.stdout).not.toContain("critical_unavailable area=storage_backend");
   });
 
