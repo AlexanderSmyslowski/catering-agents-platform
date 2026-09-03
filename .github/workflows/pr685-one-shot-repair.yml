@@ -1,0 +1,248 @@
+name: PR 685 one-shot repair
+
+on:
+  push:
+    branches:
+      - codex/operator-readout-container-fix-20260903
+    paths:
+      - ".github/workflows/pr685-one-shot-repair.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pr685-one-shot-repair
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    if: github.ref == 'refs/heads/codex/operator-readout-container-fix-20260903'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout exact branch head
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Apply bounded readout correction
+        run: |
+          set -euo pipefail
+          patch_file="$RUNNER_TEMP/pr685-readout.patch"
+          cat >"$patch_file" <<'PATCH'
+          --- a/.github/workflows/catering-production-operator-readout.yml
+          +++ b/.github/workflows/catering-production-operator-readout.yml
+          @@ -104,8 +104,10 @@
+                       if ((critical_unavailable_count > 0)); then
+                         printf 'READOUT collection_status=partial critical_unavailable_count=%s\n' \
+                           "$critical_unavailable_count"
+          +              printf 'READOUT collection=partial\n'
+                       else
+                         printf 'READOUT collection_status=complete critical_unavailable_count=0\n'
+          +              printf 'READOUT collection=complete\n'
+                       fi
+                     }
+           
+          @@ -141,6 +143,7 @@
+                       if metadata="$(stat -c '%F:%u:%a:%s:%Y' -- "$path" 2>/dev/null)"; then
+                         if [[ -L "$path" ]]; then
+                           printf 'READOUT path=%s status=symlink\n' "$(safe_scalar "$label")"
+          +                critical_unavailable path "$label"
+                           return 0
+                         fi
+                         printf 'READOUT path=%s status=present metadata=%s\n' \
+          @@ -149,6 +152,7 @@
+                         printf 'READOUT path=%s status=absent\n' "$(safe_scalar "$label")"
+                       else
+                         printf 'READOUT path=%s status=unavailable\n' "$(safe_scalar "$label")"
+          +              critical_unavailable path "$label"
+                       fi
+                     }
+           
+          @@ -156,6 +160,7 @@
+                       local network="$1" names name_found=false metadata name id driver scope internal ipv6
+                       if ! names="$(docker network ls --format '{{.Name}}' 2>/dev/null)"; then
+                         printf 'READOUT network=%s status=unavailable\n' "$(safe_scalar "$network")"
+          +              critical_unavailable network "$network"
+                         return 0
+                       fi
+                       while IFS= read -r name; do
+          @@ -167,6 +172,7 @@
+                       fi
+                       if ! metadata="$(docker network inspect --format '{{printf "%s\t%s\t%s\t%s\t%t\t%t" .Name .Id .Driver .Scope .Internal .EnableIPv6}}' "$network" 2>/dev/null)"; then
+                         printf 'READOUT network=%s status=unavailable\n' "$(safe_scalar "$network")"
+          +              critical_unavailable network "$network"
+                         return 0
+                       fi
+                       IFS=$'\t' read -r name id driver scope internal ipv6 <<<"$metadata"
+          @@ -315,6 +321,7 @@
+                       local project="$1" volumes volume metadata name driver mountpoint filesystem
+                       if ! volumes="$(docker volume ls --filter "label=com.docker.compose.project=$project" --format '{{.Name}}' 2>/dev/null)"; then
+                         printf 'READOUT volumes_project=%s status=unavailable\n' "$(safe_scalar "$project")"
+          +              critical_unavailable volume_inventory "$project"
+                         return 0
+                       fi
+                       if [[ -z "$volumes" ]]; then
+          @@ -325,6 +332,7 @@
+                         [[ -n "$volume" ]] || continue
+                         if ! metadata="$(docker volume inspect --format '{{printf "%s\t%s\t%s" .Name .Driver .Mountpoint}}' "$volume" 2>/dev/null)"; then
+                           printf 'READOUT volume=%s status=unavailable\n' "$(safe_scalar "$volume")"
+          +                critical_unavailable volume_identity "$volume"
+                           continue
+                         fi
+                         IFS=$'\t' read -r name driver mountpoint <<<"$metadata"
+          @@ -334,6 +342,7 @@
+                           printf 'READOUT volume_mount volume=%s filesystem=%s\n' "$(safe_scalar "$volume")" "$(safe_scalar "$filesystem")"
+                         else
+                           printf 'READOUT volume_mount volume=%s status=unavailable\n' "$(safe_scalar "$volume")"
+          +                critical_unavailable volume_mount "$volume"
+                         fi
+                       done <<<"$volumes"
+                     }
+          @@ -473,6 +482,7 @@
+                       local timers units line token unit show_line key value
+                       if ! timers="$(systemctl list-timers --all --no-legend --no-pager 2>/dev/null)"; then
+                         printf 'READOUT systemd_timers status=unavailable\n'
+          +              critical_unavailable systemd_timers host
+                       else
+                         while IFS= read -r line; do
+                           for token in $line; do
+          @@ -487,6 +497,7 @@
+                       fi
+                       if ! units="$(systemctl list-unit-files --type=service --no-legend --no-pager 2>/dev/null)"; then
+                         printf 'READOUT systemd_units status=unavailable\n'
+          +              critical_unavailable systemd_units host
+                       else
+                         while IFS= read -r line; do
+                           unit="${line%% *}"
+          @@ -504,6 +515,7 @@
+                                 done <<<"$show_line"
+                               else
+                                 printf 'READOUT service_state unit=%s status=unavailable\n' "$(safe_scalar "$unit")"
+          +                      critical_unavailable systemd_service "$unit"
+                               fi
+                               ;;
+                           esac
+          @@ -519,6 +531,7 @@
+                         IFS=$'\t' read -r device inode file_type owner mode size mtime <<<"$initial_stat"
+                         if [[ "$file_type" == 'symbolic link' ]]; then
+                           printf 'READOUT backup_file=%s status=unavailable\n' "$(safe_scalar "$label")"
+          +                critical_unavailable backup_file "$label"
+                           return 0
+                         fi
+                       elif path_absence_is_authoritative "$path"; then
+          @@ -526,31 +539,37 @@
+                         return 0
+                       else
+                         printf 'READOUT backup_file=%s status=unavailable\n' "$(safe_scalar "$label")"
+          +              critical_unavailable backup_file "$label"
+                         return 0
+                       fi
+                       if [[ "$file_type" != 'regular file' || "$owner" != 0 || ! "$mode" =~ ^[0-7]{3,4}$ || "${mode: -1}" =~ [2367] || "${mode: -2:1}" =~ [2367] ]]; then
+                         printf 'READOUT backup_file=%s status=unsafe\n' "$(safe_scalar "$label")"
+          +              critical_unavailable backup_file "$label"
+                         return 0
+                       fi
+                       identity="$device:$inode:$file_type:$owner:$mode"
+                       if ! exec 9<"$path"; then
+                         printf 'READOUT backup_file=%s status=unavailable\n' "$(safe_scalar "$label")"
+          +              critical_unavailable backup_file "$label"
+                         return 0
+                       fi
+                       if ! opened_fd_stat="$(stat -Lc $'%d\t%i\t%F\t%u\t%a\t%s\t%Y' -- /proc/self/fd/9 2>/dev/null)"; then
+                         exec 9<&-
+                         printf 'READOUT backup_file=%s status=unavailable\n' "$(safe_scalar "$label")"
+          +              critical_unavailable backup_file "$label"
+                         return 0
+                       fi
+                       IFS=$'\t' read -r device inode file_type owner mode size mtime <<<"$opened_fd_stat"
+                       if [[ "$device:$inode:$file_type:$owner:$mode" != "$identity" ]]; then
+                         exec 9<&-
+                         printf 'READOUT backup_file=%s status=unavailable\n' "$(safe_scalar "$label")"
+          +              critical_unavailable backup_file "$label"
+                         return 0
+                       fi
+                       if ! evidence_content="$(cat <&9)"; then
+                         exec 9<&-
+                         printf 'READOUT backup_file=%s status=unavailable\n' "$(safe_scalar "$label")"
+          +              critical_unavailable backup_file "$label"
+                         return 0
+                       fi
+                       if ! post_fd_stat="$(stat -Lc $'%d\t%i\t%F\t%u\t%a\t%s\t%Y' -- /proc/self/fd/9 2>/dev/null)" ||
+          @@ -558,6 +577,7 @@
+                          [[ "$post_fd_stat" != "$opened_fd_stat" || "$post_path_stat" != "$initial_stat" ]]; then
+                         exec 9<&-
+                         printf 'READOUT backup_file=%s status=unavailable\n' "$(safe_scalar "$label")"
+          +              critical_unavailable backup_file "$label"
+                         return 0
+                       fi
+                       exec 9<&-
+          @@ -605,7 +625,6 @@
+                     backup_file_readout catering_backup_evidence /var/lib/catering-backup/catering-backup-evidence
+                     backup_file_readout catering_backup_repository_status /var/lib/catering-backup/catering-backup-repository-status
+                     collection_status_readout
+          -          printf 'READOUT collection=complete\n'
+                     REMOTE_READOUT
+                     remote_rc=$?
+                     set -e
+          PATCH
+
+          git apply --check "$patch_file"
+          git apply "$patch_file"
+          rm -f -- \
+            platform-infra/scripts/operator-readout/00-core.sh \
+            platform-infra/scripts/operator-readout/10-network-mounts.sh \
+            .github/workflows/pr685-one-shot-repair.yml
+          git diff --check
+
+          actual="$(git diff --name-only | LC_ALL=C sort)"
+          expected="$(printf '%s\n' \
+            .github/workflows/catering-production-operator-readout.yml \
+            .github/workflows/pr685-one-shot-repair.yml \
+            platform-infra/scripts/operator-readout/00-core.sh \
+            platform-infra/scripts/operator-readout/10-network-mounts.sh \
+            | LC_ALL=C sort)"
+          test "$actual" = "$expected"
+
+      - name: Verify remote script syntax
+        run: |
+          set -euo pipefail
+          python3 - <<'PYTHON'
+          from pathlib import Path
+
+          workflow = Path('.github/workflows/catering-production-operator-readout.yml').read_text()
+          marker = "<<'REMOTE_READOUT'\n"
+          start = workflow.index(marker) + len(marker)
+          end = workflow.index("\n          REMOTE_READOUT", start)
+          Path('/tmp/pr685-remote-readout.sh').write_text(workflow[start:end] + "\n")
+          PYTHON
+          bash -n /tmp/pr685-remote-readout.sh
+
+      - name: Run focused contract
+        run: npx vitest run tests/catering-production-operator-readout-contract.test.ts --maxWorkers=1
+
+      - name: Build
+        run: npm run build
+
+      - name: Run full test suite
+        run: npm test
+
+      - name: Commit verified correction
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(infra): make operator readout status authoritative"
+          git push origin "HEAD:refs/heads/$GITHUB_REF_NAME"
