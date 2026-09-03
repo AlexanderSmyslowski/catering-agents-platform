@@ -91,7 +91,7 @@ describe("Catering production operator readout contract", () => {
   test("reports a running container that has no Docker healthcheck", () => {
     const result = runRemote("container_readout platform-infra", "container-no-health");
 
-    expect(result.status, result.stderr).toBe(0);
+    expect(result.status, String(result.stderr)).toBe(0);
     expect(result.stdout).toContain("READOUT container=fixture-container");
     expect(result.stdout).toContain("state=running running=true health=absent");
     expect(result.stdout).not.toContain("container=fixture-container project=platform-infra status=unavailable");
@@ -100,7 +100,7 @@ describe("Catering production operator readout contract", () => {
   test("formats Docker restart counts as plain decimal scalars", () => {
     const result = runRemote("container_readout platform-infra", "container-healthy");
 
-    expect(result.status, result.stderr).toBe(0);
+    expect(result.status, String(result.stderr)).toBe(0);
     expect(result.stdout).toContain("restart_count=0");
     expect(result.stdout).not.toContain("%!d(json.Number=");
   });
@@ -108,7 +108,7 @@ describe("Catering production operator readout contract", () => {
   test("classifies PostgreSQL-backed Catering storage without exposing its URL", () => {
     const result = runRemote("data_root_readout", "storage-postgres");
 
-    expect(result.status, result.stderr).toBe(0);
+    expect(result.status, String(result.stderr)).toBe(0);
     expect(result.stdout).toContain("READOUT storage_backend container=fixture-app mode=postgres");
     expect(result.stdout).toContain("READOUT data_root status=not_applicable backend=postgres");
     expect(result.stdout).not.toContain("postgres://");
@@ -120,7 +120,7 @@ describe("Catering production operator readout contract", () => {
       "container-unavailable",
     );
 
-    expect(result.status, result.stderr).toBe(0);
+    expect(result.status, String(result.stderr)).toBe(0);
     expect(result.stdout).toContain("READOUT critical_unavailable area=container_identity subject=fixture-container");
     expect(result.stdout).toContain("READOUT collection_status=partial critical_unavailable_count=1");
   });
