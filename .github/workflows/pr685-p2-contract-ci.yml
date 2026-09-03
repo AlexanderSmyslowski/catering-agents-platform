@@ -1,0 +1,37 @@
+name: PR 685 P2 contract CI
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/catering-production-operator-readout.yml"
+      - ".github/workflows/pr685-p2-contract-ci.yml"
+      - "tests/catering-production-operator-readout-contract.test.ts"
+
+permissions:
+  contents: read
+
+jobs:
+  operator-readout-p2-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout exact pull-request head
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Run focused operator-readout contract
+        run: npx vitest run tests/catering-production-operator-readout-contract.test.ts --maxWorkers=1
