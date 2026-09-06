@@ -442,8 +442,60 @@ class Resources:
         info['interfaces'] = ['lo']
         self.inspections.append(info)
 
-    def absent(self, name):
-        return not command(['docker', 'ps', '-aq', '--filter', 'name=^/' + name + '$']).stdout.strip()
+    def absent(self, name, expected_id=None):
+        ids = self.container_ids('name=^/' + name + '$')
+        require(expected_id is None or ids in ([], [expected_id]), 'CLEANUP_CONTAINER_ID')
+        return not ids
+
+    def container_ids(self, criterion):
+        output = command(['docker', 'ps', '-aq', '--no-trunc', '--filter', criterion]).stdout
+        require(re.fullmatch(rb'(?:[0-9a-f]{64}\n)?', output) is not None, 'CLEANUP_QUERY_INVALID')
+        return output.decode().splitlines()
+
+    def cleanup_container(self, role):
+        name, cid = self.names[role], self.ids.get(role)
+        self.cleanup_operation = 'query-name-before'
+        name_absent = self.absent(name, cid)
+        id_absent = True
+        if cid:
+            self.cleanup_operation = 'query-id-before'
+            ids = self.container_ids('id=' + cid)
+            require(ids in ([], [cid]), 'CLEANUP_CONTAINER_ID')
+            id_absent = not ids
+        if not name_absent or not id_absent:
+            self.cleanup_operation = 'inspect'
+            identity = cid or name
+            result = command(['docker', 'inspect', '--format', INSPECT_FORMAT, identity], check=False)
+            # Docker's untyped inspect flushes an empty template line when the
+            # owned --rm container disappears. Only this exact missing result
+            # can defer to the functional final absence queries below.
+            missing = (result.returncode == 1 and result.stdout == b'\n'
+                       and result.stderr == ('Error: No such object: ' + identity + '\n').encode())
+            if not missing:
+                require(result.returncode == 0, 'CLEANUP_TOOL_EXIT')
+                info = json.loads(result.stdout)
+                self.cleanup_operation = 'identity'
+                require(info['name'] == '/' + name and info['label'] == self.token
+                        and re.fullmatch('[0-9a-f]{64}', info['id']) is not None
+                        and (cid is None or info['id'] == cid)
+                        and not any(known_id == info['id'] and known_role != role
+                                    for known_role, known_id in self.ids.items()), 'CLEANUP_CONTAINER_ID')
+                cid = info['id']
+                self.ids[role] = cid
+                self.cleanup_operation = 'register-volumes'
+                self.register_volumes(info)
+                self.cleanup_operation = 'remove'
+                command(['docker', 'rm', '--force', '--volumes', cid])
+        self.cleanup_operation = 'query-name-final'
+        name_absent = self.absent(name, cid)
+        id_absent = True
+        if cid:
+            self.cleanup_operation = 'query-id-final'
+            ids = self.container_ids('id=' + cid)
+            require(ids in ([], [cid]), 'CLEANUP_CONTAINER_ID')
+            id_absent = not ids
+        self.cleanup_operation = 'absence'
+        require(name_absent and id_absent, 'CLEANUP_CONTAINER_REMAINS')
 
     def cleanup(self):
         global CLEANUP_DEADLINE
@@ -464,32 +516,63 @@ class Resources:
 
     def _cleanup(self):
         failures = []
+        self.cleanup_outcomes = []
+        def outcome(category, error=None):
+            value = {'category': category, 'status': 'failed' if error is not None else 'passed'}
+            if error is not None:
+                failure_class = 'unexpected'
+                if isinstance(error, subprocess.TimeoutExpired):
+                    failure_class = 'timeout'
+                elif isinstance(error, (json.JSONDecodeError, UnicodeDecodeError, KeyError, TypeError)):
+                    failure_class = 'invalid-response'
+                elif isinstance(error, OSError):
+                    failure_class = 'os-error'
+                elif isinstance(error, GateError):
+                    code = str(error)
+                    failure_class = {'CLEANUP_DEADLINE': 'deadline', 'CLEANUP_CONTAINER_ID': 'identity',
+                        'CLEANUP_CONTAINER_OWNER': 'ownership', 'CLEANUP_VOLUME_OWNER': 'ownership',
+                        'CLEANUP_CONTAINER_REMAINS': 'remains', 'CLEANUP_VOLUME_REMAINS': 'remains',
+                        'CLEANUP_QUERY_INVALID': 'invalid-response', 'CLEANUP_TOOL_EXIT': 'tool-exit',
+                        'CLEANUP_ACTIVE_PROCESS': 'process-active', 'PROCESS_GROUP_REMAINS': 'process-active',
+                        'CLEANUP_BOUNDARY': 'boundary', 'CLEANUP_OWNERSHIP': 'ownership',
+                        'CLEANUP_TOKEN': 'ownership', 'CLEANUP_PARENT': 'boundary',
+                        'CLEANUP_REMAINS': 'remains'}.get(code, 'unexpected')
+                    if re.fullmatch(r'TOOL_EXIT_-?\d+', code):
+                        failure_class = 'tool-exit'
+                value.update(operation=self.cleanup_operation, failure_class=failure_class)
+                failures.append(category)
+            self.cleanup_outcomes.append(value)
         for process in list(self.processes):
+            self.cleanup_operation = 'stop'
             try:
                 stop_process_group(process, CLEANUP_DEADLINE)
-            except Exception:
-                failures.append('process-group')
+                outcome('process-group')
+            except Exception as error:
+                outcome('process-group', error)
         for role, name in self.names.items():
             try:
-                if not self.absent(name):
-                    info = self.inspect(name)
-                    self.register_volumes(info)
-                    require(role not in self.ids or self.ids[role] == info['id'], 'CLEANUP_CONTAINER_ID')
-                    command(['docker', 'rm', '--force', '--volumes', info['id']])
-                require(self.absent(name), 'CLEANUP_CONTAINER_REMAINS')
-            except Exception:
-                failures.append('container-' + role)
+                self.cleanup_container(role)
+                outcome('container-' + role)
+            except Exception as error:
+                outcome('container-' + role, error)
         for volume in self.volumes:
             try:
+                self.cleanup_operation = 'query-before'
                 remaining = command(['docker', 'volume', 'ls', '--format', '{{.Name}}', '--filter', 'name=^' + volume + '$']).stdout.decode().splitlines()
                 if volume in remaining:
+                    self.cleanup_operation = 'remove'
                     command(['docker', 'volume', 'rm', volume])
+                self.cleanup_operation = 'query-final'
                 remaining = command(['docker', 'volume', 'ls', '--format', '{{.Name}}', '--filter', 'name=^' + volume + '$']).stdout.decode().splitlines()
+                self.cleanup_operation = 'absence'
                 require(volume not in remaining, 'CLEANUP_VOLUME_REMAINS')
-            except Exception:
-                failures.append('anonymous-volume')
+                outcome('anonymous-volume')
+            except Exception as error:
+                outcome('anonymous-volume', error)
         try:
+            self.cleanup_operation = 'process-absence'
             require(not any(group_exists(p) for p in self.processes), 'CLEANUP_ACTIVE_PROCESS')
+            self.cleanup_operation = 'deadline'
             remaining = self.cleanup_end - time.monotonic()
             require(remaining > 0 and signal.getitimer(signal.ITIMER_REAL) == (0.0, 0.0), 'CLEANUP_DEADLINE')
             old_alarm = signal.getsignal(signal.SIGALRM)
@@ -498,15 +581,17 @@ class Resources:
             signal.signal(signal.SIGALRM, expired)
             signal.setitimer(signal.ITIMER_REAL, remaining)
             try:
+                self.cleanup_operation = 'remove-owned-root'
                 remove_owned_root(self.root, self.parent, self.token)
             finally:
                 signal.setitimer(signal.ITIMER_REAL, 0)
                 signal.signal(signal.SIGALRM, old_alarm)
-        except Exception:
-            failures.append('temporary-root')
+            outcome('temporary-root')
+        except Exception as error:
+            outcome('temporary-root', error)
         require(not failures, 'CLEANUP_FAILED_' + '_'.join(failures))
         return {'containers_absent': list(self.names.values()), 'anonymous_volumes_absent': sorted(self.volumes), 'temporary_root_absent': True, 'process_groups_absent': True,
-                'budget_seconds': CLEANUP_BUDGET_SECONDS}
+                'budget_seconds': CLEANUP_BUDGET_SECONDS, 'outcomes': self.cleanup_outcomes}
 
 
 def psql(cid, sql):
@@ -554,11 +639,34 @@ def restore_case(resources, role, image, image_id, dump, body, expected=None):
                 require(bool(chunk), 'RESTORE_EARLY_EXIT')
                 output.extend(chunk)
                 require(len(output) < 1048576, 'RESTORE_OUTPUT_LIMIT')
-    lines = output.decode().splitlines()
-    require(len(lines) == 2 and lines[1] == 'INTEGRATION_READY', 'RESTORE_ORACLE_OUTPUT')
-    assert_projection(json.loads(lines[0]), expected)
+    marker = b'\nINTEGRATION_READY\n'
+    require(output.count(marker) == 1 and output.endswith(marker), 'RESTORE_ORACLE_OUTPUT')
+    try:
+        projection = json.loads(output[:-len(marker)].decode('utf-8'))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise GateError('RESTORE_ORACLE_OUTPUT') from None
+    assert_projection(projection, expected)
     resources.observe(cid, image, image_id, str(dump))
-    process.communicate(input=b'release\n', timeout=30)
+    # Keep the release/exit window bounded without communicate buffering an
+    # unlimited tail. The unchanged producer emits nothing after its marker.
+    release_deadline = time.monotonic() + 30
+    process.stdin.write(b'release\n')
+    process.stdin.flush()
+    process.stdin.close()
+    with selectors.DefaultSelector() as selector:
+        selector.register(process.stdout, selectors.EVENT_READ)
+        eof = False
+        while not eof:
+            remaining = release_deadline - time.monotonic()
+            require(remaining > 0, 'RESTORE_RELEASE_TIMEOUT')
+            for key, _ in selector.select(timeout=min(0.5, remaining)):
+                chunk = os.read(key.fileobj.fileno(), 65536)
+                require(len(output) + len(chunk) < 1048576, 'RESTORE_OUTPUT_LIMIT')
+                require(not chunk, 'RESTORE_ORACLE_OUTPUT')
+                eof = True
+    remaining = release_deadline - time.monotonic()
+    require(remaining > 0, 'RESTORE_RELEASE_TIMEOUT')
+    process.wait(timeout=remaining)
     require(process.returncode == 0, 'RESTORE_EXIT_NONZERO')
     stop_process_group(process)
     require(resources.absent(resources.names[role]), 'RESTORE_CONTAINER_REMAINS')
@@ -716,7 +824,10 @@ def execute(root, parent, identity):
             evidence['cleanup'] = resources.cleanup()
         except Exception as error:
             evidence['status'] = 'failed'
-            evidence['cleanup'] = {'error': str(error) if isinstance(error, GateError) else type(error).__name__}
+            evidence['cleanup'] = {'error': 'CLEANUP_FAILED',
+                'outcomes': getattr(resources, 'cleanup_outcomes', []),
+                'failure_class': 'interrupted' if isinstance(error, GateError)
+                and str(error) == 'CLEANUP_INTERRUPTED' else 'category-failure'}
         evidence['inspections'] = resources.inspections
     print(json.dumps(evidence, sort_keys=True), flush=True)
     return 0 if evidence['status'] == 'passed' else 1

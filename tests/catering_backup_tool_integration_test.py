@@ -230,7 +230,7 @@ sys.exit(result.returncode)
         for failed_query in (None, ('docker', '--version'), ('restic', 'version')):
             with self.subTest(failed_query=failed_query), tempfile.TemporaryDirectory() as temp:
                 resources = m.Resources(Path(temp).resolve())
-                cleanup_queries = [('docker', 'ps', '-aq', '--filter', 'name=^/' + name + '$')
+                cleanup_queries = [('docker', 'ps', '-aq', '--no-trunc', '--filter', 'name=^/' + name + '$')
                                    for name in resources.names.values() for _ in range(2)]
                 responses = {query: (17 if query == failed_query else 0, output)
                              for query, output in zip(version_queries, version_output)}
@@ -492,6 +492,327 @@ sys.exit(result.returncode)
                 with self.assertRaises(m.GateError):
                     resources.cleanup()
             self.assertLess(time.monotonic() - started, 0.8)
+
+
+    def reader_case(self, chunks, *, expected=None, tail=b'', exit_code=0,
+                    observation_error=False, absence_error=False, timeout=False, release_timeout=False):
+        """Exercise restore_case; only process, readiness IO and Docker are synthetic."""
+        m = self.implementation()
+        expected = m.synthetic_fixture()[1] if expected is None else expected
+        events = []
+        with tempfile.TemporaryDirectory() as temp:
+            resources = m.Resources(Path(temp).resolve())
+            resources.root.mkdir(mode=0o700); (resources.root / '.owned').write_text(resources.token)
+            process = mock.Mock(returncode=exit_code)
+            process.stdout.fileno.return_value = 42
+            process.communicate.side_effect = lambda **kw: (events.append('release') or (tail, b''))
+            process.stdin.write.side_effect = lambda data: events.append(('release', data))
+            process.wait.return_value = exit_code
+            selector = mock.MagicMock()
+            selector.__enter__.return_value = selector
+            selector.select.return_value = [(mock.Mock(fileobj=process.stdout), 1)]
+            reads = iter([*chunks, tail, b''] if tail else [*chunks, b''])
+            def read(*args):
+                events.append('read')
+                return next(reads, b'')
+            def start(*args, **kwargs):
+                resources.processes.append(process)
+                events.append('start')
+                return process
+            def stop(p, deadline=None):
+                events.append('stop')
+                if p in resources.processes:
+                    resources.processes.remove(p)
+            def observe(*args):
+                events.append('observe')
+                if observation_error:
+                    raise m.GateError('CONTAINER_ISOLATION')
+            in_reader = [True]
+            def absent(*args):
+                events.append('absence')
+                return not (in_reader[0] and absence_error)
+            with mock.patch.object(resources, 'create', return_value='a' * 64), mock.patch.object(
+                    resources, 'observe', side_effect=observe), mock.patch.object(
+                    resources, 'absent', side_effect=absent), mock.patch.object(
+                    m, 'start_process', side_effect=start), mock.patch.object(
+                    m, 'stop_process_group', side_effect=stop), mock.patch.object(
+                    m.selectors, 'DefaultSelector', return_value=selector), mock.patch.object(
+                    m.os, 'read', side_effect=read):
+                try:
+                    if timeout:
+                        with mock.patch.object(m.time, 'monotonic', side_effect=[0, 91]):
+                            return m.restore_case(resources, 'restore', 'image', 'id', Path(temp)/'dump', 'body', expected), events
+                    if release_timeout:
+                        with mock.patch.object(m.time, 'monotonic', side_effect=[0, 0, 100, 131]):
+                            return m.restore_case(resources, 'restore', 'image', 'id', Path(temp)/'dump', 'body', expected), events
+                    return m.restore_case(resources, 'restore', 'image', 'id', Path(temp)/'dump', 'body', expected), events
+                finally:
+                    in_reader[0] = False
+                    resources.cleanup()
+                    self.assertFalse(resources.root.exists())
+                    self.assertEqual(resources.processes, [])
+
+    def postgres_projection(self, value):
+        # PostgreSQL json_agg adds a newline before subsequent composite rows.
+        return ('{' + ', '.join(json.dumps(key) + ' : [' + ', \n '.join(
+            json.dumps(row, ensure_ascii=False) for row in rows) + ']'
+            for key, rows in value.items()) + '}\n').encode()
+
+    def test_restore_reader_accepts_actual_multiline_projection(self):
+        expected = self.implementation().synthetic_fixture()[1]
+        result, events = self.reader_case([self.postgres_projection(expected) + b'INTEGRATION_READY\n'])
+        self.assertTrue(result['data_schema_equal'])
+        self.assertLess(events.index('observe'), next(i for i, event in enumerate(events)
+                                                    if event == 'release' or isinstance(event, tuple)))
+        self.assertLess(events.index('stop'), events.index('absence'))
+
+    def test_restore_reader_compact_and_fragmented_projection(self):
+        expected = self.implementation().synthetic_fixture()[1]
+        data = json.dumps(expected).encode() + b'\nINTEGRATION_READY\n'
+        for chunks in ([data], [data[:83], data[83:-9], data[-9:-2], data[-2:]]):
+            with self.subTest(chunks=len(chunks)):
+                result, _ = self.reader_case(chunks)
+                self.assertTrue(result['data_schema_equal'])
+
+    def test_restore_reader_rejects_invalid_full_documents_and_framing(self):
+        m = self.implementation()
+        data = json.dumps(m.synthetic_fixture()[1]).encode()
+        marker = b'\nINTEGRATION_READY\n'
+        invalid = [b'', b'{', b'\xff', b'log\n'+data, data+b'\nlog', data+b'\n{}',
+                   data+marker, data+b'\nINTEGRATION_READY']
+        for prefix in invalid:
+            with self.subTest(prefix_length=len(prefix)), self.assertRaises(m.GateError):
+                self.reader_case([prefix+marker])
+        for chunks in ([data], [], [data+marker, b'INTEGRATION_READY\n']):
+            with self.subTest(chunks=len(chunks)), self.assertRaises(m.GateError):
+                self.reader_case(chunks)
+        for tail in (b'INTEGRATION_READY\n', b'foreign\n', b'x'*1048576):
+            with self.subTest(tail_length=len(tail)), self.assertRaises(m.GateError):
+                self.reader_case([data+marker], tail=tail)
+
+    def test_restore_reader_checks_every_projection_section(self):
+        m = self.implementation()
+        expected = m.synthetic_fixture()[1]
+        wrong = []
+        for key in expected:
+            value = copy.deepcopy(expected); value[key] = []; wrong.append(value)
+        value = copy.deepcopy(expected); value['documents'][0]['content_sha256'] = '0'*64; wrong.append(value)
+        for value in wrong:
+            with self.subTest(value=list(value)), self.assertRaisesRegex(m.GateError, 'DATA_OR_SCHEMA_MISMATCH'):
+                self.reader_case([json.dumps(value).encode()+b'\nINTEGRATION_READY\n'])
+
+    def test_restore_reader_preserves_limits_observation_exit_and_absence_gates(self):
+        m = self.implementation()
+        data = json.dumps(m.synthetic_fixture()[1]).encode()+b'\nINTEGRATION_READY\n'
+        for chunks, options, code in [([b'x'*1048576], {}, 'RESTORE_OUTPUT_LIMIT'),
+                ([data], {'timeout': True}, 'RESTORE_ASSERT_TIMEOUT'),
+                ([data], {'release_timeout': True}, 'RESTORE_RELEASE_TIMEOUT'),
+                ([data], {'observation_error': True}, 'CONTAINER_ISOLATION'),
+                ([data], {'exit_code': 5}, 'RESTORE_EXIT_NONZERO'),
+                ([data], {'absence_error': True}, 'RESTORE_CONTAINER_REMAINS')]:
+            with self.subTest(code=code), self.assertRaisesRegex(m.GateError, code):
+                self.reader_case(chunks, **options)
+
+    def cleanup_case(self, scenario, *, failure_operation=None, failure_kind=None):
+        m = self.implementation()
+        with tempfile.TemporaryDirectory() as temp:
+            resources = m.Resources(Path(temp).resolve())
+            resources.root.mkdir(mode=0o700); (resources.root / '.owned').write_text(resources.token)
+            cid, volume, foreign_volume = 'a'*64, 'b'*64, 'f'*64
+            resources.ids['restore'] = cid
+            if scenario == 'unknown-id': resources.ids.clear()
+            resources.volumes.add(volume)
+            info = {'id': cid, 'name': '/'+resources.names['restore'], 'label': resources.token,
+                    'mounts': [{'Type': 'volume', 'Name': volume}]}
+            if scenario == 'renamed': info['name'] = '/renamed'
+            if scenario == 'owner': info['label'] = 'foreign'; info['mounts'][0]['Name'] = foreign_volume
+            if scenario == 'role': info['name'] = '/'+resources.names['source']; info['mounts'][0]['Name'] = foreign_volume
+            if scenario == 'id': info['id'] = 'c'*64; info['mounts'][0]['Name'] = foreign_volume
+            if scenario == 'replacement':
+                info['id'] = 'c'*64; info['label'] = 'foreign'; info['mounts'][0]['Name'] = foreign_volume
+            containers = {info['id']: info}
+            volumes = {volume, foreign_volume}
+            events, removals = [], []
+            process = mock.Mock()
+            resources.processes.append(process)
+            armed = [False]
+            injected = [False]
+            query_counts = {}
+            def stop(p, deadline=None):
+                events.append('process-stop')
+                resources.processes.remove(p)
+                armed[0] = True
+                if scenario == 'before-query': containers.clear()
+                if scenario == 'process-failure': raise OSError('synthetic-sensitive-token')
+            def boundary(args, **kwargs):
+                events.append(tuple(args))
+                operation = ('inspect' if args[1] == 'inspect' else 'remove' if args[1] == 'rm'
+                             else 'query' if args[1] == 'ps' else 'volume')
+                if operation == failure_operation and not injected[0]:
+                    injected[0] = True
+                    containers.clear()
+                    if failure_kind == 'timeout': raise subprocess.TimeoutExpired(['synthetic-sensitive-token'], 1)
+                    if failure_kind == 'exception': raise OSError('synthetic-sensitive-token')
+                    return subprocess.CompletedProcess(args, 1, b'', {
+                        'permission': b'permission denied synthetic-sensitive-token',
+                        'offline': b'Cannot connect to the Docker daemon synthetic-sensitive-token',
+                        'unknown': b'not found synthetic-sensitive-token'}[failure_kind]) if kwargs.get('check') is False else m.require(False, 'TOOL_EXIT_1')
+                if args[1] == 'ps':
+                    criterion = args[-1]
+                    query_counts[criterion] = query_counts.get(criterion, 0) + 1
+                    is_restore = criterion == 'name=^/'+resources.names['restore']+'$'
+                    if is_restore and scenario in ('malformed-query', 'multiple-query'):
+                        return subprocess.CompletedProcess(args, 0, b'unexpected\n' if scenario == 'malformed-query'
+                                                           else ((cid+'\n')*2).encode(), b'')
+                    if is_restore and scenario == 'failed-final-query' and query_counts[criterion] == 2:
+                        raise m.GateError('TOOL_EXIT_1')
+                    if criterion.startswith('name='):
+                        name = criterion[len('name=^/'): -1]
+                        matches = [key for key, value in containers.items() if value['name'] == '/'+name]
+                    else:
+                        matches = [key for key in containers if key == criterion.removeprefix('id=')]
+                    output = ('\n'.join(matches)+ ('\n' if matches else '')).encode()
+                    if scenario == 'query-inspect' and cid in matches and armed[0]:
+                        containers.clear(); armed[0] = False
+                    return subprocess.CompletedProcess(args, 0, output, b'')
+                if args[1] == 'inspect':
+                    identity = args[-1]
+                    found = containers.get(identity) or next((value for value in containers.values()
+                                                              if value['name'] == '/'+identity), None)
+                    if found is None:
+                        result = subprocess.CompletedProcess(args, 1, b'\n', ('Error: No such object: '+identity+'\n').encode())
+                        if kwargs.get('check') is False: return result
+                        raise m.GateError('TOOL_EXIT_1')
+                    if scenario.startswith('false-missing-'):
+                        containers.clear()
+                        suffix = scenario.removeprefix('false-missing-')
+                        result = subprocess.CompletedProcess(args, 1, b'\n', {
+                            'prefix': ('permission denied\nError: No such object: '+identity+'\n').encode(),
+                            'foreign-ref': b'Error: No such object: unrelated\n',
+                            'suffix': ('Error: No such object: '+identity+'\nprivate-tail').encode()}[suffix])
+                        return result
+                    output = json.dumps(found).encode()
+                    if scenario == 'inspect-remove': containers.clear()
+                    return subprocess.CompletedProcess(args, 0, output, b'')
+                if args[1] == 'rm':
+                    identity = args[-1]; removals.append(identity)
+                    self.assertEqual(identity, cid, 'foreign or mutable identity reached removal')
+                    if scenario != 'remains': containers.pop(identity, None)
+                    # Docker rm --force is successful even if --rm already removed it.
+                    return subprocess.CompletedProcess(args, 0, b'', b'')
+                if args[1:3] == ['volume', 'ls']:
+                    name = args[-1][len('name=^'):-1]
+                    return subprocess.CompletedProcess(args, 0, (name+'\n').encode() if name in volumes else b'', b'')
+                if args[1:3] == ['volume', 'rm']:
+                    self.assertNotEqual(args[-1], foreign_volume)
+                    volumes.discard(args[-1])
+                    return subprocess.CompletedProcess(args, 0, b'', b'')
+                raise AssertionError('unexpected synthetic cleanup command')
+            error = None
+            result = None
+            with mock.patch.object(m, 'command', side_effect=boundary), mock.patch.object(
+                    m, 'stop_process_group', side_effect=stop):
+                try:
+                    result = resources.cleanup()
+                except m.GateError as caught:
+                    error = caught
+            self.assertFalse(resources.root.exists(), 'cleanup failure skipped temporary root')
+            self.assertNotIn(volume, volumes, 'cleanup failure skipped known volume')
+            self.assertNotIn(foreign_volume, resources.volumes)
+            self.assertIn(foreign_volume, volumes)
+            self.assertEqual(resources.processes, [])
+            self.assertTrue(any(isinstance(event, tuple) and event[-1] == 'name=^/'+resources.names['corrupt']+'$'
+                                for event in events), 'cleanup skipped another container')
+            return result, error, events, removals, getattr(resources, 'cleanup_outcomes', [])
+
+    def test_cleanup_owned_auto_removal_query_inspect_race(self):
+        result, error, events, _, _ = self.cleanup_case('query-inspect')
+        self.assertIsNone(error, 'owned --rm disappearance after successful query must be verified absent')
+        self.assertTrue(result['temporary_root_absent'])
+        self.assertEqual(events[0], 'process-stop')
+
+    def test_cleanup_owned_disappearance_and_removal_stages(self):
+        for scenario in ('before-query', 'inspect-remove', 'normal', 'unknown-id'):
+            with self.subTest(scenario=scenario):
+                result, error, _, _, _ = self.cleanup_case(scenario)
+                self.assertIsNone(error)
+                self.assertTrue(result['process_groups_absent'])
+
+    def test_cleanup_identity_conflicts_remains_and_process_failure_are_closed(self):
+        for scenario in ('renamed', 'replacement', 'owner', 'role', 'id', 'remains', 'process-failure',
+                         'malformed-query', 'multiple-query', 'failed-final-query',
+                         'false-missing-prefix', 'false-missing-foreign-ref', 'false-missing-suffix'):
+            with self.subTest(scenario=scenario):
+                _, error, _, removals, _ = self.cleanup_case(scenario)
+                self.assertIsNotNone(error)
+                if scenario not in ('remains', 'process-failure', 'failed-final-query'):
+                    self.assertEqual(removals, [])
+                self.assertNotIn('synthetic-sensitive-token', str(error))
+
+    def test_cleanup_tool_failures_never_become_absence_and_have_safe_operations(self):
+        for operation in ('query', 'inspect', 'remove'):
+            for kind in ('permission', 'offline', 'unknown', 'timeout', 'exception'):
+                with self.subTest(operation=operation, kind=kind):
+                    _, error, _, _, outcomes = self.cleanup_case('normal', failure_operation=operation, failure_kind=kind)
+                    self.assertIsNotNone(error)
+                    self.assertNotIn('synthetic-sensitive-token', str(error)+json.dumps(outcomes))
+                    failures = [item for item in outcomes if item['status'] == 'failed']
+                    self.assertTrue(failures, 'cleanup must expose separately evaluated category failures')
+                    self.assertTrue(all(set(item) == {'category', 'operation', 'failure_class', 'status'} for item in failures))
+
+    def test_execute_keeps_primary_and_cleanup_failures_separate_without_private_text(self):
+        m = self.implementation()
+        for primary in (m.GateError('RESTORE_ORACLE_OUTPUT'), OSError('synthetic-sensitive-token')):
+            with self.subTest(primary=type(primary).__name__), tempfile.TemporaryDirectory() as temp:
+                resources = m.Resources(Path(temp).resolve())
+                output = io.StringIO()
+                def boundary(args, **kwargs):
+                    if args[1] == 'version': raise primary
+                    if args[1] == 'ps': raise OSError('synthetic-sensitive-token')
+                    raise AssertionError('unexpected synthetic execute command')
+                with mock.patch.object(m.os, 'geteuid', return_value=0), mock.patch.object(
+                        m, 'Resources', return_value=resources), mock.patch.dict(m.MINIMAL_ENV), mock.patch.object(
+                        m, 'command', side_effect=boundary), mock.patch.object(sys, 'stdout', output):
+                    self.assertEqual(m.execute(ROOT, resources.parent, {'kind': 'synthetic-errors'}), 1)
+                self.assertNotIn('synthetic-sensitive-token', output.getvalue())
+                evidence = json.loads(output.getvalue())
+                self.assertEqual(evidence['error'], 'RESTORE_ORACLE_OUTPUT' if isinstance(primary, m.GateError) else 'OSError')
+                self.assertEqual(evidence['cleanup']['error'], 'CLEANUP_FAILED')
+                failures = [item for item in evidence['cleanup']['outcomes'] if item['status'] == 'failed']
+                self.assertEqual([item['category'] for item in failures], ['container-source', 'container-restore', 'container-corrupt'])
+                self.assertTrue(all(item['operation'] == 'query-name-before' and item['failure_class'] == 'os-error'
+                                    for item in failures))
+                self.assertFalse(resources.root.exists())
+
+    def test_restore_reader_real_synthetic_pipe_rejects_delayed_tail_and_cleans_process(self):
+        m = self.implementation()
+        expected = m.synthetic_fixture()[1]
+        payload = self.postgres_projection(expected)+b'INTEGRATION_READY\n'
+        for tail in (b'', b'INTEGRATION_READY\n', b'foreign\n', b'x'*1048576):
+            with self.subTest(tail_length=len(tail)), tempfile.TemporaryDirectory() as temp:
+                resources = m.Resources(Path(temp).resolve())
+                resources.root.mkdir(mode=0o700); (resources.root/'.owned').write_text(resources.token)
+                script = ('import os,sys,time\n' + f'payload={payload!r}\n' +
+                          'os.write(1,payload[:-4]);time.sleep(0.01);os.write(1,payload[-4:])\n' +
+                          'assert sys.stdin.buffer.readline()==b"release\\n"\ntime.sleep(0.01)\n' +
+                          f'tail={tail!r}\n' + 'sys.stdout.buffer.write(tail);sys.stdout.buffer.flush()\n')
+                program = Path(temp)/'synthetic-reader.py'; program.write_text(script)
+                original_start = m.start_process
+                def synthetic_start(args, **kwargs):
+                    return original_start([sys.executable, '-B', str(program)], **kwargs)
+                with mock.patch.object(resources, 'create', return_value='a'*64), mock.patch.object(
+                        resources, 'observe'), mock.patch.object(resources, 'absent', return_value=True), mock.patch.object(
+                        m, 'start_process', side_effect=synthetic_start):
+                    try:
+                        if tail:
+                            with self.assertRaises(m.GateError):
+                                m.restore_case(resources, 'restore', 'image', 'id', Path(temp)/'dump', 'body', expected)
+                        else:
+                            self.assertTrue(m.restore_case(resources, 'restore', 'image', 'id', Path(temp)/'dump', 'body', expected)['data_schema_equal'])
+                    finally:
+                        resources.cleanup()
+                self.assertEqual(resources.processes, [])
+                self.assertFalse(resources.root.exists())
 
 
 if __name__ == '__main__':
