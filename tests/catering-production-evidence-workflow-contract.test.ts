@@ -393,6 +393,62 @@ describe("Catering production evidence workflow contract", () => {
     expect(run.stdout).toContain("CLASSIFICATION\tbackup_channel\tBELEGT");
   }, 120000);
 
+  test.each(["missing", "nonexecutable", "unusable", "relative-target", "missing-target", "unusable-target"] as const)("collector interpreter setup rejects %s before a negative fixture can hide it", (failure) => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-interpreter-setup-"));
+    const python = path.join(root, "python3");
+    const target = path.join(root, "target");
+    try {
+      if (failure !== "missing") {
+        const reported = failure === "relative-target" ? "python3" : target;
+        writeFileSync(python, failure.endsWith("target")
+          ? `#!/bin/sh\nprintf '%s\\n' '${reported}'\n`
+          : "#!/bin/sh\nexit 19\n", { mode: failure === "nonexecutable" ? 0o600 : 0o755 });
+      }
+      if (failure === "unusable-target") writeFileSync(target, "#!/bin/sh\nexit 23\n", { mode: 0o755 });
+      expect(() => runHelperWithActualRemote("missing", undefined, { pythonSearchPath: root })).toThrow(/collector fixture setup.*Python 3/i);
+    } finally {
+      spawnSync("/usr/bin/trash", [root], { stdio: "ignore" });
+    }
+  });
+
+  test("collector interpreter preflight preserves a specific business rejection after a healthy control", () => {
+    const complete = runHelperWithActualRemote("complete");
+    expect(complete.status, String(complete.stdout) + String(complete.stderr)).toBe(0);
+    expect(complete.stdout).toContain("CLASSIFICATION\tbackup_channel\tBELEGT");
+    const rejected = runHelperWithActualRemote("complete", undefined, { webMount: "bind::/srv/sites:/etc/caddy/sites:" });
+    expect(rejected.status).toBe(1);
+    expect(rejected.stdout).toContain("REMOTE_PROBE_FAILED:persistence");
+    expect(rejected.stdout).not.toContain("REMOTE_PROBE_FAILED:backup_channel");
+  }, 120000);
+
+  test("collector interpreter setup rejects missing ISO timestamp support", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-python-date-api-"));
+    const target = path.join(root, "incomplete-python");
+    const discovered = spawnSync("python3", ["-c", "import sys; print(sys.executable)"], { encoding: "utf8" });
+    const quote = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'";
+    try {
+      expect(discovered.status, String(discovered.stderr)).toBe(0);
+      writeFileSync(path.join(root, "python3"), `#!/bin/sh\nexec ${quote(discovered.stdout.trim())} -c 'import sys; code=sys.argv[1]; sys.executable=sys.argv[2]; exec(code)' "$2" ${quote(target)}\n`, { mode: 0o755 });
+      // Keep Python execution real while removing only the date API required
+      // by supplied restore fixtures, before any collector result can hide it.
+      const bootstrap = [
+        "import datetime,sys",
+        'datetime.datetime=type("DateTimeWithoutIsoSupport", (), {})',
+        "args=sys.argv[1:]",
+        'if args[0] == "-c":',
+        '    sys.argv=["-c", *args[2:]]',
+        "    exec(args[1])",
+        "else:",
+        "    sys.argv=args",
+        "    exec(sys.stdin.read())",
+      ].join("\n");
+      writeFileSync(target, `#!/bin/sh\nexec ${quote(discovered.stdout.trim())} -c ${quote(bootstrap)} "$@"\n`, { mode: 0o755 });
+      expect(() => runHelperWithActualRemote("missing", undefined, { pythonSearchPath: root })).toThrow(/collector fixture setup.*Python 3/i);
+    } finally {
+      spawnSync("/usr/bin/trash", [root], { stdio: "ignore" });
+    }
+  });
+
   test("collector reads network aliases from the member container endpoint", () => {
     const run = runHelperWithActualRemote("complete");
     expect(run.status, String(run.stdout) + String(run.stderr)).toBe(0);

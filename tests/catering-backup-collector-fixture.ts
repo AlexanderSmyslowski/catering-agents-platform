@@ -7,7 +7,15 @@ import { tmpdir } from "node:os";
 const helperPath = path.resolve(import.meta.dirname, "../platform-infra/scripts/catering-production-evidence.sh");
 function sha256(value: string | Buffer): string { return createHash("sha256").update(value).digest("hex"); }
 
-export function runHelperWithActualRemote(mode: "complete" | "missing" | "contradictory" | "malformed" | "generation-swapped", supplied?: { root: string; nowEpoch?: number; repositoryId?: string }, options: { webMount?: string; edgeDataLabel?: string; timerCalendar?: string; aliases?: string; endpointNetworkId?: string } = {}): ReturnType<typeof spawnSync> {
+export function runHelperWithActualRemote(mode: "complete" | "missing" | "contradictory" | "malformed" | "generation-swapped", supplied?: { root: string; nowEpoch?: number; repositoryId?: string }, options: { webMount?: string; edgeDataLabel?: string; timerCalendar?: string; aliases?: string; endpointNetworkId?: string; pythonSearchPath?: string } = {}): ReturnType<typeof spawnSync> {
+  // Bind before fake PATH shadows python3. Setup failures must throw, since a
+  // returned UNKNOWN could incorrectly satisfy a negative collector test.
+  const pythonEnvironment = { ...process.env, PATH: options.pythonSearchPath ?? process.env.PATH ?? "" };
+  const discover = spawnSync("python3", ["-c", "import sys; print(sys.executable)"], { encoding: "utf8", timeout: 10000, env: pythonEnvironment });
+  const python = discover.status === 0 ? discover.stdout.trim() : "";
+  if (!path.isAbsolute(python)) throw new Error("Collector fixture setup requires a usable Python 3 interpreter");
+  const probe = spawnSync(python, ["-c", 'import datetime, os, stat, sys; assert sys.version_info.major == 3; assert callable(os.pread); datetime.datetime.fromisoformat("2026-09-04T00:00:00+00:00").timestamp(); print("catering-python3-ready")'], { encoding: "utf8", timeout: 10000, env: pythonEnvironment });
+  if (probe.status !== 0 || probe.stdout.trim() !== "catering-python3-ready") throw new Error("Collector fixture setup requires a usable Python 3 interpreter");
   const fixtureRoot = mkdtempSync(path.join(tmpdir(), "catering-production-evidence-real-"));
   const bin = path.join(fixtureRoot, "bin");
   const stateRoot = supplied?.root ?? fixtureRoot;
@@ -92,7 +100,7 @@ set -euo pipefail
 case "$*" in
   *"-d "*"+%s")
     if [[ "$FAKE_READER_SUPPLIED" != 1 ]]; then printf '1788476400\\n'; exit 0; fi
-    /opt/homebrew/bin/python3 -c 'import datetime,sys; print(int(datetime.datetime.fromisoformat(sys.argv[1].replace("Z","+00:00")).timestamp()))' "$3" ;;
+    "$FAKE_READER_PYTHON" -c 'import datetime,sys; print(int(datetime.datetime.fromisoformat(sys.argv[1].replace("Z","+00:00")).timestamp()))' "$3" ;;
   *+%s) printf '%s\\n' "$FAKE_READER_NOW" ;;
   *+%Y%m%dT%H%M%SZ) printf '20260904T000000Z\\n' ;;
   *) printf '2026-09-04T00:00:00Z\\n' ;;
@@ -101,7 +109,7 @@ esac`);
 set -euo pipefail
 if [[ "$1" == -L ]]; then shift; fi
 [[ "$1" == --format ]] || exit 1
-/opt/homebrew/bin/python3 - "$2" "$3" <<'PY'
+"$FAKE_READER_PYTHON" - "$2" "$3" <<'PY'
 import os, stat, sys
 fmt, pathname = sys.argv[1:]
 if pathname.startswith("/dev/fd/"):
@@ -134,9 +142,9 @@ if [[ "$1" == - ]]; then
     [[ "$FAKE_RESOLVE_MODE" == private ]] && exit 1
     exit 0
   fi
-  printf '%s' "$script" | /opt/homebrew/bin/python3 "$@"
+  printf '%s' "$script" | "$FAKE_READER_PYTHON" "$@"
 else
-  exec /opt/homebrew/bin/python3 "$@"
+  exec "$FAKE_READER_PYTHON" "$@"
 fi`);
   install("restic", `#!/usr/bin/env bash
 set -euo pipefail
@@ -150,8 +158,8 @@ done
 [[ -e "/proc/self/fd/$repo_fd" || -e "/dev/fd/$repo_fd" ]] || exit 33
 # Read through the inherited descriptors without advancing their shared offset;
 # every Restic invocation must observe the same preflight-bound file generation.
-repo_value="$(/opt/homebrew/bin/python3 -c 'import os,sys; sys.stdout.write(os.pread(int(sys.argv[1]), 65536, 0).decode())' "$repo_fd")"
-pass_value="$(/opt/homebrew/bin/python3 -c 'import os,sys; sys.stdout.write(os.pread(int(sys.argv[1]), 65536, 0).decode())' "$pass_fd")"
+repo_value="$("$FAKE_READER_PYTHON" -c 'import os,sys; sys.stdout.write(os.pread(int(sys.argv[1]), 65536, 0).decode())' "$repo_fd")"
+pass_value="$("$FAKE_READER_PYTHON" -c 'import os,sys; sys.stdout.write(os.pread(int(sys.argv[1]), 65536, 0).decode())' "$pass_fd")"
 [[ "$repo_value" == s3:s3.example/catering ]] || exit 34
 [[ -n "$pass_value" ]] || exit 35
 case "$1" in
@@ -310,6 +318,7 @@ esac`);
       FAKE_TIMER_CALENDAR: options.timerCalendar ?? "{ OnCalendar=*-*-* 00,06,12,18:00:00 UTC ; next_elapse=Fri 2026-09-04 06:00:00 UTC }",
       FAKE_WEB_MOUNT: options.webMount ?? "bind::/opt/catering-agents-platform/platform-infra/sites:/etc/caddy/sites",
       FAKE_READER_SUPPLIED: supplied ? "1" : "0",
+      FAKE_READER_PYTHON: python,
       FAKE_READER_NOW: String(supplied?.nowEpoch ?? 1788480000),
       FAKE_READER_REPOSITORY_ID: supplied?.repositoryId ?? repositoryId,
       FAKE_SSH_OUTPUT: sshOutput,
@@ -318,4 +327,3 @@ esac`);
   spawnSync("/usr/bin/trash", [fixtureRoot], { stdio: "ignore" });
   return run;
 }
-

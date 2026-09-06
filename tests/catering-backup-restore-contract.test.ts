@@ -975,6 +975,50 @@ after="$(capture_source_generation ${sources.map((value) => JSON.stringify(value
     }
   });
 
+  test("collector interpreter binds an atypical Python path before fake PATH for a produced restore", () => {
+    const fixture = createRestoreEntrypointFixture();
+    const interpreterBin = path.join(fixture.root, "python space'$(literal)");
+    mkdirSync(interpreterBin);
+    const discovered = spawnSync("python3", ["-c", "import sys; print(sys.executable)"], { encoding: "utf8" });
+    try {
+      expect(discovered.status, String(discovered.stderr)).toBe(0);
+      const quote = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'";
+      const interpreter = path.join(interpreterBin, "bound-python");
+      const trace = path.join(fixture.root, "interpreter-calls");
+      // Discovery reports a controlled target; every target invocation still
+      // executes real Python with its original arguments, stdin and descriptors.
+      writeFileSync(path.join(interpreterBin, "python3"), `#!/bin/sh\nexec ${quote(discovered.stdout.trim())} -c 'import sys; code=sys.argv[1]; sys.executable=sys.argv[2]; exec(code)' "$2" ${quote(interpreter)}\n`, { mode: 0o755 });
+      writeFileSync(interpreter, `#!/bin/bash
+case "$1:$2" in
+  -c:*sys.stdout.write*os.pread*) site=restic ;;
+  -c:*datetime.fromisoformat*sys.argv*) site=date ;;
+  -c:*json.load*) site=python-exec ;;
+  -:%*) site=stat ;;
+  -:*) site=python-stdin ;;
+  *) site=setup ;;
+esac
+printf '%s\\n' "$site" >> ${quote(trace)}
+exec ${quote(discovered.stdout.trim())} "$@"
+`, { mode: 0o755 });
+      const produced = fixture.invoke();
+      expect(produced.status, String(produced.stderr)).toBe(0);
+      const options = { pythonSearchPath: interpreterBin + path.delimiter + (process.env.PATH ?? "") };
+      const accepted = runHelperWithActualRemote("complete", { root: fixture.root }, options);
+      expect(accepted.status, String(accepted.stdout) + String(accepted.stderr)).toBe(0);
+      expect(accepted.stdout).toContain("CLASSIFICATION\tbackup_channel\tBELEGT");
+      expect(existsSync(trace), "collector bypassed the selected interpreter").toBe(true);
+      const calls = readFileSync(trace, "utf8").trim().split("\n");
+      for (const site of ["date", "stat", "python-stdin", "python-exec", "restic"]) expect(calls).toContain(site);
+      expect(calls.filter(site => site === "restic").length).toBeGreaterThanOrEqual(4);
+      const drifted = runHelperWithActualRemote("complete", { root: fixture.root, repositoryId: "c".repeat(64) }, options);
+      expect(drifted.status).toBe(1);
+      expect(drifted.stdout).toContain("EVIDENCE_ERROR\tREMOTE_OUTPUT_INVALID");
+      expect(drifted.stdout).not.toContain("CLASSIFICATION\tbackup_channel\tBELEGT");
+    } finally {
+      removeFixture(fixture.root);
+    }
+  }, 120000);
+
   for (const prior of [false, true]) {
     for (const mode of ["id", "generation", "generation-password", "attestation", "stale", "rto", "rpo-boundary", "rto-boundary"] as const) {
       test(`late publication ${mode} with prior=${prior} uses the actual collector authority`, () => {
