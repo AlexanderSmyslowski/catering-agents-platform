@@ -2,6 +2,7 @@
 import importlib.util
 import copy
 import hashlib
+import io
 import json
 from pathlib import Path
 import tempfile
@@ -63,6 +64,79 @@ class IntegrationContracts(unittest.TestCase):
         bad = copy.deepcopy(event); bad['number'] = 688
         with self.assertRaises(m.GateError):
             m.runtime_guard(env, bad, 'Linux')
+
+    def test_execute_uses_tool_specific_versions_and_stops_on_version_failure(self):
+        m = self.implementation()
+        version_queries = [
+            ('docker', 'version', '--format', '{{.Server.Version}}'),
+            ('dpkg-query', '-W', '-f=${Version}', 'restic'),
+            ('docker', '--version'),
+            ('restic', 'version'),
+        ]
+        version_output = [b'27.5.1\n', b'0.16.4-2\n', b'Docker version 27.5.1\n',
+                          b'restic 0.16.4 compiled with go1.22.2 on linux/amd64\n']
+        pull = ('docker', 'pull', 'postgres:17')
+        for failed_query in (None, ('docker', '--version'), ('restic', 'version')):
+            with self.subTest(failed_query=failed_query), tempfile.TemporaryDirectory() as temp:
+                resources = m.Resources(Path(temp).resolve())
+                cleanup_queries = [('docker', 'ps', '-aq', '--filter', 'name=^/' + name + '$')
+                                   for name in resources.names.values() for _ in range(2)]
+                responses = {query: (17 if query == failed_query else 0, output)
+                             for query, output in zip(version_queries, version_output)}
+                # Model the CLI's rejection of the historical argv, and stop at
+                # image acquisition even when all version queries succeed.
+                responses[('restic', '--version')] = (1, b'')
+                responses[pull] = (78, b'')
+                responses.update({query: (0, b'') for query in cleanup_queries})
+                calls, unexpected, processes = [], [], []
+
+                def synthetic_process(args, **kwargs):
+                    query = tuple(args)
+                    calls.append(query)
+                    if query not in responses:
+                        unexpected.append(query)
+                        raise AssertionError('unexpected command at controlled process boundary')
+                    code, output = responses[query]
+                    process = mock.Mock(returncode=code)
+                    process.communicate.return_value = (output, b'')
+                    processes.append(process)
+                    return process
+
+                def stop_synthetic_process(process, deadline=None):
+                    self.assertIn(process, processes)
+                    m.PROCESS_GROUPS.remove(process)
+
+                output = io.StringIO()
+                # Only execute's UID precondition is simulated. Every process
+                # is intercepted; command's exit gate and execute's cleanup run.
+                with mock.patch.object(m.os, 'geteuid', return_value=0), mock.patch.object(
+                        m, 'Resources', return_value=resources), mock.patch.dict(m.MINIMAL_ENV), mock.patch.object(
+                        m, 'PROCESS_GROUPS', resources.processes), mock.patch.object(
+                        m.subprocess, 'Popen', side_effect=synthetic_process), mock.patch.object(
+                        m, 'stop_process_group', side_effect=stop_synthetic_process), mock.patch.object(
+                        sys, 'stdout', output):
+                    result = m.execute(ROOT, resources.parent, {'kind': 'synthetic-version-contract'})
+                evidence = json.loads(output.getvalue())
+                self.assertEqual(result, 1)
+                self.assertEqual(evidence['status'], 'failed')
+                self.assertEqual(evidence['stage'], 'setup' if failed_query else 'image-acquisition')
+                self.assertEqual(evidence['error'], 'TOOL_EXIT_17' if failed_query else 'TOOL_EXIT_78')
+                expected_forward = (version_queries[:version_queries.index(failed_query) + 1]
+                                    if failed_query else version_queries + [pull])
+                self.assertEqual(calls, expected_forward + cleanup_queries)
+                self.assertEqual(unexpected, [])
+                if failed_query is None:
+                    self.assertEqual(evidence['versions']['docker'], version_output[2].decode().strip())
+                    self.assertEqual(evidence['versions']['restic'], version_output[3].decode().strip())
+                self.assertNotIn('image', evidence)
+                self.assertNotIn('source', evidence)
+                self.assertEqual(evidence['inspections'], [])
+                self.assertEqual(evidence['cleanup']['containers_absent'], list(resources.names.values()))
+                self.assertEqual(evidence['cleanup']['anonymous_volumes_absent'], [])
+                self.assertTrue(evidence['cleanup']['temporary_root_absent'])
+                self.assertTrue(evidence['cleanup']['process_groups_absent'])
+                self.assertFalse(resources.root.exists())
+                self.assertEqual(resources.processes, [])
 
     def test_ambiguous_missing_and_drifted_components_are_rejected(self):
         m = self.implementation()

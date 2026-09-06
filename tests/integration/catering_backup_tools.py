@@ -535,8 +535,8 @@ def execute(root, parent, identity):
         evidence['versions'] = {'python': sys.version.split()[0]}
         evidence['versions']['docker_engine'] = command(['docker', 'version', '--format', '{{.Server.Version}}']).stdout.decode().strip()
         evidence['versions']['restic_package'] = command(['dpkg-query', '-W', '-f=${Version}', 'restic']).stdout.decode().strip()
-        for tool in ['docker', 'restic']:
-            evidence['versions'][tool] = command([tool, '--version']).stdout.decode().strip()
+        evidence['versions']['docker'] = command(['docker', '--version']).stdout.decode().strip()
+        evidence['versions']['restic'] = command(['restic', 'version']).stdout.decode().strip()
         evidence['stage'] = 'image-acquisition'
         command(['docker', 'pull', 'postgres:17'], timeout=180)
         image_info = json.loads(command(['docker', 'image', 'inspect', '--format', '{"id":{{json .Id}},"digests":{{json .RepoDigests}}}', 'postgres:17']).stdout)
