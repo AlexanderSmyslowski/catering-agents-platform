@@ -1,4 +1,5 @@
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { runHelperWithActualRemote } from "./catering-backup-collector-fixture.js";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
@@ -29,8 +30,12 @@ function extractFunction(value: string, name: string): string {
   return match[0];
 }
 
-function runFixture(functionSource: string, environment: Record<string, string>): ReturnType<typeof spawnSync> {
-  return spawnSync("bash", ["-c", `set -euo pipefail\n${functionSource}\nclassify_backup_evidence`], {
+function runFixture(
+  functionSource: string,
+  environment: Record<string, string>,
+  entrypoint = "classify_backup_evidence",
+): ReturnType<typeof spawnSync> {
+  return spawnSync("bash", ["-c", `set -euo pipefail\n${functionSource}\n${entrypoint}`], {
     encoding: "utf8",
     env: { ...process.env, ...environment },
   });
@@ -63,6 +68,7 @@ function syntheticRemoteEvidence(options: EvidenceFixtureOptions = {}): string {
     "command_date",
     "command_base64",
     "command_tr",
+    "command_python3",
     "command_restic",
   ].map((key) => ["FACT", key, "available"] as const);
   const facts = [
@@ -72,6 +78,7 @@ function syntheticRemoteEvidence(options: EvidenceFixtureOptions = {}): string {
     ["FACT", "platform_expected_volume_count", "3"],
     ["FACT", "data_root_status", dataRootStatus],
     ["FACT", "edge_volume_count", "1"],
+    ["FACT", "caddy_matrix_bound", "true"],
     ["FACT", "backup_timer_active", "true"],
     ["FACT", "backup_success", "true"],
     ["FACT", "backup_scope_ok", "true"],
@@ -159,6 +166,7 @@ function runHelperWithSyntheticRemote(remoteEvidence: string): ReturnType<typeof
   return runHelperWithSshFixture(remoteEvidence);
 }
 
+
 function runRemoteBackupSuccessFragment(): ReturnType<typeof spawnSync> {
   const helper = source(helperRelativePath);
   const remoteScript = helper.split("<<'REMOTE_EVIDENCE'\n")[1]?.split("\nREMOTE_EVIDENCE")[0] ?? "";
@@ -244,7 +252,8 @@ describe("Catering production evidence workflow contract", () => {
     expect(helper).toContain("docker network inspect");
     expect(helper).toContain("docker volume inspect");
     expect(helper).toContain("systemctl show");
-    expect(helper).toContain("systemctl list-timers");
+    expect(helper).toContain("systemctl is-active");
+    expect(helper).toContain("TimersCalendar");
     expect(helper).toContain("findmnt");
     expect(helper).toContain("stat");
     expect(helper).toContain("realpath");
@@ -302,6 +311,215 @@ describe("Catering production evidence workflow contract", () => {
     });
     expect(complete.status).toBe(0);
     expect(complete.stdout).toContain("BELEGT");
+  });
+
+  test("backup evidence uses the exact six-hour RPO boundary", () => {
+    const helper = source(helperRelativePath);
+    expect(helper).toContain("BACKUP_RPO_SECONDS");
+    expect(helper).toContain('readonly BACKUP_RPO_SECONDS="21600"');
+    expect(helper).toContain("backup_age_allowed");
+    expect(helper).not.toContain("backup_age <= 86400");
+    expect(helper).not.toContain("backup_age < 86400");
+    const ageCheck = extractFunction(helper, "backup_age_allowed");
+    const accepted = runFixture(
+      ageCheck,
+      { BACKUP_RPO_SECONDS: "21600", BACKUP_AGE_SECONDS: "21600" },
+      "backup_age_allowed",
+    );
+    expect(accepted.status).toBe(0);
+    const rejected = runFixture(
+      ageCheck,
+      { BACKUP_RPO_SECONDS: "21600", BACKUP_AGE_SECONDS: "21601" },
+      "backup_age_allowed",
+    );
+    expect(rejected.status).not.toBe(0);
+  });
+
+  test("accepts the remote command probe records emitted by the quoted probe", () => {
+    const commandKeys = [
+      "docker", "systemctl", "findmnt", "mount", "ss", "stat", "realpath",
+      "readlink", "find", "sha256sum", "hostname", "date", "base64", "tr",
+      "python3",
+    ];
+    const commandProbes = commandKeys
+      .map((key) => encodedRecord("PROBE_STATUS", `command_${key}`, "success"))
+      .join("\n");
+    const run = runHelperWithSyntheticRemote(`${syntheticRemoteEvidence()}\n${commandProbes}`);
+    expect(run.status, String(run.stderr)).toBe(0);
+    expect(run.stdout).toContain("EVIDENCE_STATUS\tSAFE_REDACTED");
+  });
+
+  test("collector rejects trailing empty MOUNT field at remote boundary", () => {
+    const run = runHelperWithActualRemote("complete", undefined, {
+      webMount: "bind::/srv/sites:/etc/caddy/sites:",
+    });
+    expect(run.status, String(run.stdout) + String(run.stderr)).not.toBe(0);
+    expect(run.stdout).toContain("REMOTE_PROBE_FAILED:persistence");
+    expect(run.stdout).toContain("EVIDENCE_STATUS\tUNKNOWN");
+  }, 120000);
+
+  test("collector rejects trailing empty MOUNT field at local boundary", () => {
+    const run = runHelperWithSyntheticRemote(`${syntheticRemoteEvidence()}\n${encodedRecord("MOUNT", "web", "bind::/srv/sites:/etc/caddy/sites:")}`);
+    expect(run.status, String(run.stdout) + String(run.stderr)).not.toBe(0);
+    expect(run.stdout).toContain("REMOTE_OUTPUT_INVALID");
+    expect(run.stdout).toContain("EVIDENCE_STATUS\tUNKNOWN");
+  });
+
+  test.each([
+    ["wrong edge volume role", { edgeDataLabel: "caddy_data" }],
+    ["unnamed volume", { webMount: "volume::/srv/caddy:/data" }],
+    ["bind without source", { webMount: "bind:::/etc/caddy/sites" }],
+    ["bind extra field", { webMount: "bind::/srv/sites:/etc/caddy/sites:unexpected" }],
+    ["empty aliases", { aliases: "" }],
+    ["unsafe aliases", { aliases: "web;unexpected" }],
+    ["wrong endpoint network", { endpointNetworkId: "5".repeat(64) }],
+    ["bare calendar", { timerCalendar: "*-*-* 00,06,12,18:00:00 UTC" }],
+    ["wrong calendar", { timerCalendar: "{ OnCalendar=*-*-* 01,07,13,19:00:00 UTC ; next_elapse=n/a }" }],
+    ["malformed calendar", { timerCalendar: "{ OnCalendar=*-*-* 00,06,12,18:00:00 UTC ; next_elapse=n/a" }],
+    ["multiple calendars", { timerCalendar: "{ OnCalendar=*-*-* 00,06,12,18:00:00 UTC ; next_elapse=n/a } { OnCalendar=*-*-* 00,06,12,18:00:00 UTC ; next_elapse=n/a }" }],
+    ["duplicate calendar property", { timerCalendar: "{ OnCalendar=*-*-* 00,06,12,18:00:00 UTC ; next_elapse=n/a }\nTimersCalendar={ OnCalendar=*-*-* 00,06,12,18:00:00 UTC ; next_elapse=n/a }" }],
+  ] as const)("collector rejects incompatible live shape: %s", (_name, options) => {
+    const run = runHelperWithActualRemote("complete", undefined, options);
+    expect(run.status, String(run.stdout) + String(run.stderr)).not.toBe(0);
+    expect(run.stdout).toContain("EVIDENCE_STATUS\tUNKNOWN");
+    expect(run.stdout).not.toContain("CLASSIFICATION\tbackup_channel\tBELEGT");
+  }, 120000);
+
+  test("collector accepts exact calendar with unavailable next elapse", () => {
+    const run = runHelperWithActualRemote("complete", undefined, {
+      timerCalendar: "{ OnCalendar=*-*-* 00,06,12,18:00:00 UTC ; next_elapse=n/a }",
+    });
+    expect(run.status, String(run.stdout) + String(run.stderr)).toBe(0);
+    expect(run.stdout).toContain("CLASSIFICATION\tbackup_channel\tBELEGT");
+  }, 120000);
+
+  test.each(["missing", "nonexecutable", "unusable", "relative-target", "missing-target", "unusable-target"] as const)("collector interpreter setup rejects %s before a negative fixture can hide it", (failure) => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-interpreter-setup-"));
+    const python = path.join(root, "python3");
+    const target = path.join(root, "target");
+    try {
+      if (failure !== "missing") {
+        const reported = failure === "relative-target" ? "python3" : target;
+        writeFileSync(python, failure.endsWith("target")
+          ? `#!/bin/sh\nprintf '%s\\n' '${reported}'\n`
+          : "#!/bin/sh\nexit 19\n", { mode: failure === "nonexecutable" ? 0o600 : 0o755 });
+      }
+      if (failure === "unusable-target") writeFileSync(target, "#!/bin/sh\nexit 23\n", { mode: 0o755 });
+      expect(() => runHelperWithActualRemote("missing", undefined, { pythonSearchPath: root })).toThrow(/collector fixture setup.*Python 3/i);
+    } finally {
+      spawnSync("/usr/bin/trash", [root], { stdio: "ignore" });
+    }
+  });
+
+  test("collector interpreter preflight preserves a specific business rejection after a healthy control", () => {
+    const complete = runHelperWithActualRemote("complete");
+    expect(complete.status, String(complete.stdout) + String(complete.stderr)).toBe(0);
+    expect(complete.stdout).toContain("CLASSIFICATION\tbackup_channel\tBELEGT");
+    const rejected = runHelperWithActualRemote("complete", undefined, { webMount: "bind::/srv/sites:/etc/caddy/sites:" });
+    expect(rejected.status).toBe(1);
+    expect(rejected.stdout).toContain("REMOTE_PROBE_FAILED:persistence");
+    expect(rejected.stdout).not.toContain("REMOTE_PROBE_FAILED:backup_channel");
+  }, 120000);
+
+  test("collector interpreter setup rejects missing ISO timestamp support", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "catering-python-date-api-"));
+    const target = path.join(root, "incomplete-python");
+    const discovered = spawnSync("python3", ["-c", "import sys; print(sys.executable)"], { encoding: "utf8" });
+    const quote = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'";
+    try {
+      expect(discovered.status, String(discovered.stderr)).toBe(0);
+      writeFileSync(path.join(root, "python3"), `#!/bin/sh\nexec ${quote(discovered.stdout.trim())} -c 'import sys; code=sys.argv[1]; sys.executable=sys.argv[2]; exec(code)' "$2" ${quote(target)}\n`, { mode: 0o755 });
+      // Keep Python execution real while removing only the date API required
+      // by supplied restore fixtures, before any collector result can hide it.
+      const bootstrap = [
+        "import datetime,sys",
+        'datetime.datetime=type("DateTimeWithoutIsoSupport", (), {})',
+        "args=sys.argv[1:]",
+        'if args[0] == "-c":',
+        '    sys.argv=["-c", *args[2:]]',
+        "    exec(args[1])",
+        "else:",
+        "    sys.argv=args",
+        "    exec(sys.stdin.read())",
+      ].join("\n");
+      writeFileSync(target, `#!/bin/sh\nexec ${quote(discovered.stdout.trim())} -c ${quote(bootstrap)} "$@"\n`, { mode: 0o755 });
+      expect(() => runHelperWithActualRemote("missing", undefined, { pythonSearchPath: root })).toThrow(/collector fixture setup.*Python 3/i);
+    } finally {
+      spawnSync("/usr/bin/trash", [root], { stdio: "ignore" });
+    }
+  });
+
+  test("collector reads network aliases from the member container endpoint", () => {
+    const run = runHelperWithActualRemote("complete");
+    expect(run.status, String(run.stdout) + String(run.stderr)).toBe(0);
+    expect(run.stdout).toContain("CLASSIFICATION\tbackup_channel\tBELEGT");
+    expect(run.stdout).toContain("web,platform-infra-web-1");
+  }, 120000);
+
+  test("collector uses supported exact-key Docker environment selection", () => {
+    const run = runHelperWithActualRemote("complete");
+    expect(run.status, String(run.stdout) + String(run.stderr)).toBe(0);
+    expect(run.stdout).toContain("CLASSIFICATION\tbackup_channel\tBELEGT");
+    expect(run.stdout).not.toContain("fixture-secret");
+  }, 120000);
+
+  test("collector accepts the structured systemctl calendar property", () => {
+    const run = runHelperWithActualRemote("complete");
+    expect(run.status, String(run.stdout) + String(run.stderr)).toBe(0);
+    expect(run.stdout).toContain("CLASSIFICATION\tbackup_channel\tBELEGT");
+  }, 120000);
+
+  test("collector accepts actual web bind mounts with an empty Docker Name", () => {
+    const run = runHelperWithActualRemote("complete");
+    expect(run.status, String(run.stdout) + String(run.stderr)).toBe(0);
+    expect(run.stdout).toContain("CLASSIFICATION\tbackup_channel\tBELEGT");
+  }, 120000);
+
+  test("collector accepts repository-realistic edge volume labels", () => {
+    const run = runHelperWithActualRemote("complete");
+    expect(run.status, String(run.stdout) + String(run.stderr)).toBe(0);
+    expect(run.stdout).toContain("CLASSIFICATION\tbackup_channel\tBELEGT");
+  }, 120000);
+
+  test("executes the quoted collector heredoc against complete and failure fixtures", () => {
+    const complete = runHelperWithActualRemote("complete");
+    expect(complete.status, `stdout=${String(complete.stdout)} stderr=${String(complete.stderr)}`).toBe(0);
+    expect(complete.stdout).toContain("EVIDENCE_STATUS\tSAFE_REDACTED");
+    expect(complete.stdout).toContain("CLASSIFICATION\tbackup_channel\tBELEGT");
+
+    for (const mode of ["missing", "contradictory", "malformed", "generation-swapped"] as const) {
+      const run = runHelperWithActualRemote(mode);
+      expect(run.status, `${mode}: ${String(run.stderr)}`).not.toBe(0);
+      expect(run.stdout).toContain("EVIDENCE_STATUS\tUNKNOWN");
+      expect(run.stdout).not.toMatch(/fixture-secret|PRIVATE_KEY|CATERING_BASIC_AUTH_PASSWORD/);
+    }
+  }, 300000);
+
+  test("collector requires a versioned restore receipt and snapshot-independent repository status", () => {
+    const helper = source(helperRelativePath);
+    const remoteScript = helper.split("<<'REMOTE_EVIDENCE'\n")[1]?.split("\nREMOTE_EVIDENCE")[0] ?? "";
+    expect(remoteScript).toContain("BACKUP_REPOSITORY_FILE");
+    expect(remoteScript).toContain("BACKUP_PASSWORD_FILE");
+    expect(remoteScript).toContain('restic --repository-file "/proc/self/fd/$repository_file_fd"');
+    expect(remoteScript).toContain('--password-file "/proc/self/fd/$password_file_fd"');
+    expect(remoteScript).toContain('env -u RESTIC_REPOSITORY -u RESTIC_PASSWORD -u RESTIC_PASSWORD_COMMAND');
+    expect(remoteScript).toContain("receipt_path");
+    expect(remoteScript).toContain("receipt_checksum");
+    expect(remoteScript).toContain("restore-receipt");
+    expect(remoteScript).toContain('backup_snapshot" =~ ^[0-9a-f]{64}$');
+    expect(remoteScript).toContain('receipt_secret_reference" =~ ^[0-9a-f]{64}$');
+    expect(remoteScript).toContain("status|identity|host_binding|scope|verified_at");
+    expect(remoteScript).not.toContain("status|identity|snapshot_id|checksum|host_binding|scope|verified_at");
+    for (const field of [
+      "component_sites_checksum",
+      "component_platform_caddy_data_checksum",
+      "component_platform_caddy_config_checksum",
+      "component_shared_edge_caddyfile_checksum",
+      "component_shared_edge_caddy_data_checksum",
+      "component_shared_edge_caddy_config_checksum",
+    ]) {
+      expect(remoteScript).toContain(field);
+    }
   });
 
   test("helper emits only redacted classifications and safe identity fields", () => {
@@ -463,6 +681,7 @@ describe("Catering production evidence workflow contract", () => {
     expect(unbound.status).toBe(0);
     expect(unbound.stdout).toContain("NICHT BELEGT");
     const bound = runFixture(classify, {
+      BACKUP_TIMER_ACTIVE: "true",
       BACKUP_EVIDENCE_SUCCESS: "true",
       BACKUP_SCOPE_OK: "true",
       BACKUP_HOST_BOUND: "true",
@@ -498,13 +717,14 @@ describe("Catering production evidence workflow contract", () => {
     expect(remoteScript).toContain("bind_readonly_source()");
     expect(remoteScript).toContain("/dev/fd/");
     expect(remoteScript).toContain("BACKUP_REPOSITORY_READONLY_STATUS_PATH");
-    expect(remoteScript).toContain("restic snapshots --json");
-    expect(remoteScript).toContain("restic cat config --json");
+    expect(remoteScript).toContain("restic --repository-file");
+    expect(remoteScript).toContain(" snapshots --json");
+    expect(remoteScript).toContain(" cat config --json");
     expect(remoteScript).toContain("restic_repository_match");
     expect(remoteScript).toContain("restic_snapshot_match");
     expect(remoteScript).toContain('"$repository_identity" =~ ^[0-9a-f]{64}$');
     expect(remoteScript).toContain("sha256sum");
-    expect(remoteScript).toContain('done <&"$evidence_fd"');
+    expect(remoteScript).toContain('done <<< "$evidence_text"');
     expect(remoteScript).not.toContain('done < "$BACKUP_EVIDENCE_PATH"');
     expect(remoteScript).not.toContain('done < "$BACKUP_REPOSITORY_READONLY_STATUS_PATH"');
     expect(remoteScript).toContain('path_before');

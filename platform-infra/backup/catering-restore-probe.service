@@ -1,0 +1,15 @@
+[Unit]
+Description=Isolated Catering restore probe
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/catering-restore-probe.sh
+EnvironmentFile=/etc/catering-backup/catering-backup.env
+TimeoutStartSec=4h
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+RuntimeDirectory=catering-backup
+RuntimeDirectoryMode=0700
+ReadWritePaths=/var/lib/catering-backup /run/catering-backup
