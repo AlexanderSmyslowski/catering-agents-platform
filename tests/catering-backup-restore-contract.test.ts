@@ -610,9 +610,8 @@ describe("Catering backup and isolated restore repository contract", () => {
     expect(backup).toContain("--strict-names");
     expect(backup).toContain("--table=public.catering_business_records");
     expect(backup).toContain("--table=public.catering_source_documents");
-    for (const variable of ["PGHOST", "PGHOSTADDR", "PGPORT", "PGSERVICE", "PGSERVICEFILE"]) {
-      expect(backup).toContain(`--env ${variable}=`);
-    }
+    expect(backup).toContain('unset PGHOST PGHOSTADDR PGPORT PGSERVICE PGSERVICEFILE && exec "$@"');
+    expect(backup).toContain('catering-pg-dump "$PG_DUMP_CMD"');
     expect(backup).toContain("catering_business_records");
     expect(backup).toContain("catering_source_documents");
     expect(backup).toContain('arcname="components/"');

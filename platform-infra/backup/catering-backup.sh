@@ -284,7 +284,7 @@ on_exit() { local rc=$?; cleanup_work_root "$rc"; local clean=$?; (( rc == 0 && 
 trap on_exit EXIT
 
 postgres_dump="$work_root/postgres_dump"
-if ! "$DOCKER_CMD" exec --env PGHOST= --env PGHOSTADDR= --env PGPORT= --env PGSERVICE= --env PGSERVICEFILE= --user postgres "$postgres_container_id" "$PG_DUMP_CMD" \
+if ! "$DOCKER_CMD" exec --user postgres "$postgres_container_id" /bin/sh -c 'unset PGHOST PGHOSTADDR PGPORT PGSERVICE PGSERVICEFILE && exec "$@"' catering-pg-dump "$PG_DUMP_CMD" \
   --username=catering --dbname=catering_agents --format=custom --no-owner --no-privileges \
   --strict-names --table=public.catering_business_records --table=public.catering_source_documents >"$postgres_dump" 2>/dev/null; then
   fail_state POSTGRES_DUMP_FAILED

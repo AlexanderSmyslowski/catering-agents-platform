@@ -18,19 +18,20 @@ import stat
 import subprocess
 import sys
 import time
+import tempfile
 
 REPOSITORY = 'AlexanderSmyslowski/catering-agents-platform'
 BRANCH = 'codex/catering-backup-restore-slice-20260903'
 PARENT = '34d71daba94ba227146300f69f1f7b2872dce58b'
 PARENT_TREE = 'fb5c57b369c45e4d2168f5586242325d5e3193bd'
 SOURCE_HASHES = {
-    'platform-infra/backup/catering-backup.sh': 'bdcf0f4e3f7173d541c838fd04992c1ff2995c5914c9a2be220854c3bb730de4',
+    'platform-infra/backup/catering-backup.sh': 'e96eb78f29e682b33ba282131f9a3aaf7d92a3b7e27388536ef5e2cd680c4aba',
     'platform-infra/backup/catering-restore-probe.sh': '84f200dbb9b6b764353cec177fb6d2f45f66a404c4d3d6c3a95f6cb94f35ac44',
     'platform-infra/backup/catering-backup-common.sh': 'a86a719e270993049003cfd3d5d01d24df120c83b897d7b68f48f5d6e8fc9638',
     'shared-core/src/persistence.ts': 'fc9c03509db36052a4de0aa04d31e518913877b9736be39925561bfe6f5d547f',
     'intake-service/src/source-document-store.ts': 'b4923e5d1a0bc30ac59cfbbe1adf4a33c98a6e81ce4c257fe235645237f795d0',
 }
-FRAGMENT_HASHES = {'dump': 'f10e73b13c2df029df7000960fb23493c6be14d92d49eba37cd033a431883f4b',
+FRAGMENT_HASHES = {'dump': 'd8feef1b9f54e37673cfe0a95b304d4d5f831070367fa5186fe71bdd45d7622b',
  'stream': '19564f4a25bb2bc4859c0822dd4647cf8a2e5820b5688eaabff6cfecbaab33c2',
  'snapshot': '9af73780445cf1e070407f3e091fdd7511837529d963cf0bd578914eb24f2b22',
  'checksums': 'fefaf52f40586772c6ac005bc06274ec7075d9e45ec015fb1d4a0491ddb0ecc4',
@@ -39,6 +40,9 @@ FRAGMENT_HASHES = {'dump': 'f10e73b13c2df029df7000960fb23493c6be14d92d49eba37cd0
  'migration': '4be8b342a6e5bfdeb1a71a2449fc9405aae5c86011d7f01043043e4aeb83539b',
  'document_template': 'fbe66c402fead5a7fc2e58e25ac7c1921236337dafbdc6e2c180eafeb231c026',
  'document_ddl': '5931c3b92110424a5f7e951967d67a4c368705d1d8e57dffc854dd3f318aa13c'}
+LEGACY_DUMP = 'if ! "$DOCKER_CMD" exec --env PGHOST= --env PGHOSTADDR= --env PGPORT= --env PGSERVICE= --env PGSERVICEFILE= --user postgres "$postgres_container_id" "$PG_DUMP_CMD" \\\n  --username=catering --dbname=catering_agents --format=custom --no-owner --no-privileges \\\n  --strict-names --table=public.catering_business_records --table=public.catering_source_documents >"$postgres_dump" 2>/dev/null; then\n  fail_state POSTGRES_DUMP_FAILED\nfi\n'
+LEGACY_DUMP_SHA256 = 'f10e73b13c2df029df7000960fb23493c6be14d92d49eba37cd033a431883f4b'
+LEGACY_BACKUP_SHA256 = 'bdcf0f4e3f7173d541c838fd04992c1ff2995c5914c9a2be220854c3bb730de4'
 MINIMAL_ENV = {'PATH': '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
                'LANG': 'C.UTF-8', 'LC_ALL': 'C.UTF-8'}
 
@@ -103,8 +107,14 @@ def load_components(root):
     require(set(parts) == set(FRAGMENT_HASHES), 'SOURCE_FRAGMENT_SET')
     for key, value in parts.items():
         check_hash(value.encode(), FRAGMENT_HASHES[key])
+    check_hash(LEGACY_DUMP.encode(), LEGACY_DUMP_SHA256)
     return parts, {'parent_commit': PARENT, 'parent_tree': PARENT_TREE,
-                   'source_sha256': SOURCE_HASHES, 'fragment_sha256': FRAGMENT_HASHES}
+                   'source_sha256': SOURCE_HASHES, 'fragment_sha256': FRAGMENT_HASHES,
+                   'dump_origin': {'legacy': {'commit': PARENT, 'tree': PARENT_TREE,
+                       'backup_sha256': LEGACY_BACKUP_SHA256, 'fragment_sha256': LEGACY_DUMP_SHA256},
+                       'current': {'execution_identity': 'identity.commit/identity.tree',
+                           'backup_sha256': SOURCE_HASHES['platform-infra/backup/catering-backup.sh'],
+                           'fragment_sha256': FRAGMENT_HASHES['dump']}}}
 
 
 def runtime_guard(env, event, operating_system):
@@ -315,6 +325,63 @@ def command(args, *, data=None, env=None, timeout=120, pass_fds=(), check=True):
 
 def shell(script, env, *, pass_fds=()):
     return command(['/bin/bash', '-euo', 'pipefail', '-c', script], env=env, pass_fds=pass_fds)
+
+
+# Only this child sees Docker stderr; diagnostics contain fixed identifiers and
+# exit codes, while stdout remains the original product dump redirection.
+DUMP_OBSERVER = r'''import os, subprocess, sys
+fd = int(sys.argv[1])
+os.write(fd, b'docker-enter 0\n')
+try:
+    result = subprocess.run(sys.argv[2:], stderr=subprocess.PIPE)
+except OSError:
+    os.write(fd, b'docker-launch 127\n')
+    raise SystemExit(127)
+os.write(fd, ('docker-return %d\n' % result.returncode).encode())
+if result.returncode == 1 and result.stderr == b'pg_dump: error: service file "" not found\n':
+    os.write(fd, b'empty-service 1\n')
+raise SystemExit(result.returncode if result.returncode >= 0 else 128 - result.returncode)
+'''
+
+
+def dump_script(common, fragment, fd, docker):
+    observer = shlex.join([sys.executable, '-c', DUMP_OBSERVER, str(fd), docker])
+    # Source/init remain unconditionally evaluated in this same Bash process.
+    # Wrapping either in if/|| would suppress errexit inside sourced functions.
+    return ("dump_stage=source\ntrap 'printf \"%s %s\\n\" \"$dump_stage\" \"$?\" >&"
+            + str(fd) + "' EXIT\nsource " + shlex.quote(str(common)) + '\n'
+            + 'dump_stage=init\nsecure_restic_init_generation "$CATERING_BACKUP_REPOSITORY_FILE" "$CATERING_BACKUP_PASSWORD_FILE"\n'
+            + 'dump_docker() { ' + observer + ' "$@"; }\nDOCKER_CMD=dump_docker\ndump_stage=dump\n'
+            + fragment + '\ndump_stage=complete\n')
+
+
+def run_dump(common, fragment, env):
+    with tempfile.TemporaryFile() as diagnostic:
+        script = dump_script(common, fragment, diagnostic.fileno(), env['DOCKER_CMD'])
+        result = command(['/bin/bash', '-euo', 'pipefail', '-c', script], env=env,
+                         pass_fds=(diagnostic.fileno(),), check=False)
+        diagnostic.seek(0)
+        lines = diagnostic.read(1024).decode('ascii').splitlines()
+    require(bool(lines) and len(lines) <= 4, 'DUMP_DIAGNOSTIC_INVALID')
+    match = re.fullmatch(r'(source|init|dump|complete) ([0-9]{1,3})', lines[-1])
+    require(match is not None and int(match[2]) == result.returncode, 'DUMP_DIAGNOSTIC_INVALID')
+    stage, code = match[1], int(match[2])
+    events = lines[:-1]
+    entered = bool(events) and events[0] == 'docker-enter 0'
+    raw = None
+    rejected = False
+    if events:
+        require(entered and len(events) >= 2, 'DUMP_DIAGNOSTIC_INVALID')
+        returned = re.fullmatch(r'docker-(return|launch) (-?[0-9]{1,3})', events[1])
+        require(returned is not None, 'DUMP_DIAGNOSTIC_INVALID')
+        if returned[1] == 'return':
+            raw = int(returned[2])
+        else:
+            require(returned[2] == '127', 'DUMP_DIAGNOSTIC_INVALID')
+        require(events[2:] in ([], ['empty-service 1']), 'DUMP_DIAGNOSTIC_INVALID')
+        rejected = raw == 1 and events[2:] == ['empty-service 1']
+    return {'stage': stage, 'exit_code': code, 'docker_entered': entered,
+            'docker_exit_code': raw, 'empty_service_rejected': rejected}
 
 
 INSPECT_FORMAT = '{' + ','.join('"' + name + '":{{json ' + expression + '}}' for name, expression in [
@@ -562,8 +629,16 @@ def execute(root, parent, identity):
                               'migration_bookkeeping': 'catering_business_records:3; excluded by exact two-table dump'}
         env.update(work_root=str(work), postgres_dump=str(work / 'postgres_dump'), postgres_container_id=source,
                    DOCKER_CMD='docker', PG_DUMP_CMD='pg_dump', bundle_path='synthetic-component-stream')
+        evidence['stage'] = 'legacy-pg-dump-rejection'
+        evidence['legacy_dump'] = run_dump(common, LEGACY_DUMP, env)
+        require(evidence['legacy_dump'] == {'stage': 'dump', 'exit_code': 1,
+                'docker_entered': True, 'docker_exit_code': 1, 'empty_service_rejected': True},
+                'LEGACY_EMPTY_SERVICE_NOT_REJECTED')
         evidence['stage'] = 'exact-pg-dump'
-        shell(prelude + parts['dump'], env)
+        evidence['dump'] = run_dump(common, parts['dump'], env)
+        require(evidence['dump'] == {'stage': 'complete', 'exit_code': 0,
+                'docker_entered': True, 'docker_exit_code': 0, 'empty_service_rejected': False},
+                'CURRENT_DUMP_FAILED')
         write_private(work / 'manifest', b'version=1\nkind=synthetic-component-only\n')
         component_paths = {}
         for name in ['sites', 'platform_caddy_data', 'platform_caddy_config', 'shared_edge_caddyfile', 'shared_edge_caddy_data', 'shared_edge_caddy_config']:

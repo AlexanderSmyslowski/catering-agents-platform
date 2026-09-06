@@ -31,6 +31,157 @@ class IntegrationContracts(unittest.TestCase):
         self.assertTrue(MODULE.is_file(), 'isolated component harness is missing')
         return self.integration
 
+    def dump_fixture(self, root):
+        # Only the Docker boundary is substituted; it runs the actual supplied
+        # container shell and executable, preserving positional arguments/status.
+        pg = root / 'fake pg_dump'
+        pg.write_text('#!' + sys.executable + "\n" + """import json, os, sys
+from pathlib import Path
+names = ['PGHOST', 'PGHOSTADDR', 'PGPORT', 'PGSERVICE', 'PGSERVICEFILE']
+Path(os.environ['DUMP_OBSERVATION']).write_text(json.dumps({
+    'environment': {name: os.environ.get(name) for name in names},
+    'argv': sys.argv[1:],
+    'generations': [os.environ.get('CATERING_RESTIC_REPOSITORY_GENERATION'),
+                    os.environ.get('CATERING_RESTIC_PASSWORD_GENERATION')]}))
+sys.stdout.buffer.write(b'PGDMP-synthetic')
+sys.exit(int(os.environ.get('DUMP_EXIT', '0')))
+""")
+        docker = root / 'fake-docker'
+        docker.write_text('#!' + sys.executable + "\n" + """import json, os, subprocess, sys
+from pathlib import Path
+args = sys.argv[1:]
+assert args.pop(0) == 'exec'
+env = dict(os.environ)
+for name in ['PGHOST', 'PGHOSTADDR', 'PGPORT', 'PGSERVICE', 'PGSERVICEFILE']:
+    env[name] = 'foreign-inherited-value'
+while args[0] == '--env':
+    args.pop(0)
+    key, value = args.pop(0).split('=', 1)
+    env[key] = value
+assert args[:3] == ['--user', 'postgres', 'a' * 64]
+args = args[3:]
+Path(os.environ['DOCKER_OBSERVATION']).write_text(json.dumps(args))
+result = subprocess.run(args, env=env)
+sys.exit(result.returncode)
+""")
+        for file in (pg, docker):
+            file.chmod(0o700)
+        return dict(os.environ, DOCKER_CMD=str(docker), PG_DUMP_CMD=str(pg),
+                    postgres_container_id='a' * 64, postgres_dump=str(root / 'dump'),
+                    DUMP_OBSERVATION=str(root / 'pg.json'), DOCKER_OBSERVATION=str(root / 'docker.json'))
+
+    def test_current_dump_removes_connection_environment_at_executed_pg_dump(self):
+        m = self.implementation()
+        sources = {path: (ROOT / path).read_text() for path in m.SOURCE_HASHES}
+        fragment = m.extract_components(sources)['dump']
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); env = self.dump_fixture(root)
+            result = subprocess.run(['/bin/bash', '-euo', 'pipefail', '-c',
+                                     'fail_state() { exit 1; }\n' + fragment],
+                                    env=env, capture_output=True)
+            self.assertEqual(result.returncode, 0)
+            actual = json.loads((root / 'pg.json').read_text())
+            self.assertEqual(actual['argv'], ['--username=catering', '--dbname=catering_agents',
+                '--format=custom', '--no-owner', '--no-privileges', '--strict-names',
+                '--table=public.catering_business_records', '--table=public.catering_source_documents'])
+            self.assertEqual((root / 'dump').read_bytes(), b'PGDMP-synthetic')
+            self.assertEqual(actual['environment'], dict.fromkeys(
+                ['PGHOST', 'PGHOSTADDR', 'PGPORT', 'PGSERVICE', 'PGSERVICEFILE']))
+
+    def test_dump_diagnostics_preserve_original_status_and_same_shell_generations(self):
+        m = self.implementation()
+        self.assertTrue(hasattr(m, 'run_dump'), 'dump boundary diagnostics are missing')
+        parts, _ = m.load_components(ROOT)
+        for legacy in (True, False):
+            for code in (0, 17, 125, 126, 127):
+                with self.subTest(legacy=legacy, code=code), tempfile.TemporaryDirectory() as temp:
+                    root = Path(temp); env = self.dump_fixture(root)
+                    generation_values = []
+                    for label in ('repository', 'password'):
+                        path = root / label; path.write_text('synthetic-' + label); path.chmod(0o600)
+                        info = path.stat()
+                        generation_values.append(f'{info.st_dev}:{info.st_ino}:{info.st_size}:'
+                                                 + hashlib.sha256(path.read_bytes()).hexdigest())
+                    env.update(CATERING_BACKUP_REPOSITORY_FILE=str(root / 'repository'),
+                               CATERING_BACKUP_PASSWORD_FILE=str(root / 'password'),
+                               CATERING_BACKUP_EXPECTED_UID=str(os.getuid()), DUMP_EXIT=str(code))
+                    diagnostic = m.run_dump(ROOT / 'platform-infra/backup/catering-backup-common.sh',
+                                            m.LEGACY_DUMP if legacy else parts['dump'], env)
+                    self.assertEqual(diagnostic, {'stage': 'complete' if code == 0 else 'dump',
+                        'exit_code': 0 if code == 0 else 1, 'docker_entered': True,
+                        'docker_exit_code': code, 'empty_service_rejected': False})
+                    actual = json.loads((root / 'pg.json').read_text())
+                    self.assertEqual(actual['generations'], generation_values)
+                    self.assertEqual(actual['environment'], dict.fromkeys(
+                        ['PGHOST', 'PGHOSTADDR', 'PGPORT', 'PGSERVICE', 'PGSERVICEFILE'], '' if legacy else None))
+                    self.assertEqual(actual['argv'], ['--username=catering', '--dbname=catering_agents',
+                        '--format=custom', '--no-owner', '--no-privileges', '--strict-names',
+                        '--table=public.catering_business_records', '--table=public.catering_source_documents'])
+
+    def test_dump_diagnostics_retain_errexit_before_docker(self):
+        m = self.implementation()
+        self.assertTrue(hasattr(m, 'run_dump'), 'dump boundary diagnostics are missing')
+        parts, _ = m.load_components(ROOT)
+        for stage in ('source', 'init'):
+            with self.subTest(stage=stage), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp); env = self.dump_fixture(root)
+                env.update(CATERING_BACKUP_REPOSITORY_FILE='synthetic', CATERING_BACKUP_PASSWORD_FILE='synthetic')
+                common = root / 'common.sh'; escaped = root / 'escaped'
+                failure = 'false\nprintf leaked >' + shlex.quote(str(escaped)) + '\n'
+                common.write_text('set -euo pipefail\n' + (failure if stage == 'source' else
+                                  'secure_restic_init_generation() {\n' + failure + '}\n'))
+                diagnostic = m.run_dump(common, parts['dump'], env)
+                self.assertEqual(diagnostic, {'stage': stage, 'exit_code': 1, 'docker_entered': False,
+                                             'docker_exit_code': None, 'empty_service_rejected': False})
+                self.assertFalse(escaped.exists(), 'diagnostic wrapper suppressed Bash errexit')
+                self.assertFalse((root / 'docker.json').exists())
+
+    def test_empty_service_classification_requires_exact_error_and_pg_dump_exit(self):
+        m = self.implementation()
+        self.assertTrue(hasattr(m, 'run_dump'), 'dump boundary diagnostics are missing')
+        expected = b'pg_dump: error: service file "" not found\n'
+        for code, error, accepted in [(1, expected, True), (0, expected, False),
+                (17, expected, False), (125, expected, False), (126, expected, False),
+                (127, expected, False), (1, b'unrelated failure\n', False),
+                (1, expected + b'extra failure\n', False)]:
+            with self.subTest(code=code, error=error), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp); env = self.dump_fixture(root)
+                pg = Path(env['PG_DUMP_CMD'])
+                pg.write_text('#!' + sys.executable + '\nimport sys\nsys.stderr.buffer.write('
+                              + repr(error) + ')\nsys.exit(' + str(code) + ')\n')
+                common = root / 'common.sh'
+                common.write_text('set -euo pipefail\nsecure_restic_init_generation() { :; }\nfail_state() { return 1; }\n')
+                env.update(CATERING_BACKUP_REPOSITORY_FILE='synthetic', CATERING_BACKUP_PASSWORD_FILE='synthetic')
+                diagnostic = m.run_dump(common, m.LEGACY_DUMP, env)
+                self.assertEqual(diagnostic['docker_exit_code'], code)
+                self.assertEqual(diagnostic['empty_service_rejected'], accepted)
+                self.assertNotIn('error:', json.dumps(diagnostic))
+
+    def test_dump_observer_launch_failure_and_timeout_cannot_be_expected_rejection(self):
+        m = self.implementation()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); env = self.dump_fixture(root)
+            common = root / 'common.sh'
+            common.write_text('set -euo pipefail\nsecure_restic_init_generation() { :; }\nfail_state() { return 1; }\n')
+            env.update(CATERING_BACKUP_REPOSITORY_FILE='synthetic', CATERING_BACKUP_PASSWORD_FILE='synthetic')
+            missing = m.run_dump(common, m.LEGACY_DUMP, dict(env, DOCKER_CMD=str(root / 'missing-tool')))
+            self.assertEqual(missing, {'stage': 'dump', 'exit_code': 1, 'docker_entered': True,
+                                      'docker_exit_code': None, 'empty_service_rejected': False})
+            self.assertFalse((root / 'pg.json').exists())
+            started, late = root / 'started', root / 'late'
+            Path(env['PG_DUMP_CMD']).write_text('#!' + sys.executable + '\nimport time\nfrom pathlib import Path\n'
+                + f'Path({str(started)!r}).touch()\ntime.sleep(2.5)\nPath({str(late)!r}).touch()\n')
+            original_command = m.command
+            def short_command(*args, **kwargs):
+                return original_command(*args, **kwargs, timeout=1.5)
+            with mock.patch.object(m, 'command', side_effect=short_command):
+                with self.assertRaises(subprocess.TimeoutExpired):
+                    m.run_dump(common, m.LEGACY_DUMP, env)
+            self.assertTrue(started.exists(), 'synthetic pg_dump child did not start')
+            time.sleep(2.6)
+            self.assertFalse(late.exists(), 'Docker observer descendant escaped owned process-group cleanup')
+            self.assertEqual(m.PROCESS_GROUPS, [])
+
     def test_local_execution_is_rejected_before_tools(self):
         m = self.implementation()
         with self.assertRaisesRegex(m.GateError, 'RUNTIME'):
