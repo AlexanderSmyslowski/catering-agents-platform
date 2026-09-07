@@ -1605,13 +1605,20 @@ describe("latest independent Phase-3 P1 review reproducers", () => {
   }, 180_000);
 
   test("RED: a complete compatibility baseline makes rolling_back resume a terminal no-op", () => {
+    const timingA = process.hrtime.bigint();
     const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-monotonic-complete-red-"));
     const crashed = runHarness("crash-after-active", root);
+    const timingB = process.hrtime.bigint();
+    console.info("PHASE3_CI_TIMING", JSON.stringify({ phase: "setup", elapsedMs: Number(timingB - timingA) / 1e6, exitCode: crashed.result.status, signal: crashed.result.signal, spawnError: Boolean(crashed.result.error) }));
     expect(crashed.result.status).not.toBe(0);
     const crashShim = installCrashAfterCompatibilityConnect(root, 7);
     const rollback = runExistingRollback(root, crashed.sandbox, crashShim.shimBin);
+    const timingC = process.hrtime.bigint();
+    console.info("PHASE3_CI_TIMING", JSON.stringify({ phase: "rollback", elapsedMs: Number(timingC - timingB) / 1e6, exitCode: rollback.result.status, signal: rollback.result.signal, spawnError: Boolean(rollback.result.error) }));
     expect(rollback.result.status).not.toBe(0);
     const resumed = runExistingResume(root, crashed.sandbox);
+    const timingD = process.hrtime.bigint();
+    console.info("PHASE3_CI_TIMING", JSON.stringify({ phase: "resume_cleanup", elapsedMs: Number(timingD - timingC) / 1e6, exitCode: resumed.result.status, signal: resumed.result.signal, spawnError: Boolean(resumed.result.error) }));
     const output = `${resumed.result.stdout}${resumed.result.stderr}`;
     expect(resumed.result.status).toBe(0);
     expect(output).toContain("PILOT: ROLLED BACK");
