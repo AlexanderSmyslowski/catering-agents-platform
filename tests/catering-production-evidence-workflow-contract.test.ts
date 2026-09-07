@@ -481,6 +481,72 @@ describe("Catering production evidence workflow contract", () => {
     expect(run.stdout).toContain("CLASSIFICATION\tbackup_channel\tBELEGT");
   }, 120000);
 
+  test.each(["s3", "rest"] as const)("collector-auth supplies configured %s credentials to both real collector calls", (authBackend) => {
+    const run = runHelperWithActualRemote("complete", undefined, { authBackend });
+    expect(run.authCalls).toBe("cat:authenticated:0\nsnapshots:authenticated:0\n");
+    expect(run.status).toBe(0);
+    expect(run.stdout).toContain("CLASSIFICATION\tbackup_channel\tBELEGT");
+    expect(String(run.stdout) + String(run.stderr)).not.toMatch(/fixture-access|fixture-secret|fixture-token/);
+  }, 120000);
+
+  test.each(["single", "double"] as const)("collector-auth treats %s quoted credentials as literal data without execution", (authQuoted) => {
+    const run = runHelperWithActualRemote("complete", undefined, { authQuoted, ambientAuth: true });
+    expect(run.authCalls).toBe("cat:authenticated:0\nsnapshots:authenticated:0\n");
+    expect(run.status).toBe(0);
+    expect(run.authExecuted).toBe(false);
+    expect(String(run.stdout) + String(run.stderr)).not.toMatch(/fixture secret|touch|fixture-access/);
+  }, 120000);
+
+  test("collector-auth supports S3 without a session token and ignores foreign config", () => {
+    const run = runHelperWithActualRemote("complete", undefined, { omitSessionToken: true, authConfig: "AWS_ACCESS_KEY_ID=fixture-access\nAWS_SECRET_ACCESS_KEY=fixture-secret\nRESTIC_REST_USERNAME=foreign\nRESTIC_REST_PASSWORD=foreign\nFOREIGN_SENTINEL=$(touch EXECUTION_MARKER)\nPOSTGRES_PASSWORD=foreign\nCATERING_RESTIC_COMMAND=false\nAWS_ENDPOINT=https://foreign.invalid\nPATH=/foreign\n", ambientAuth: true });
+    expect(run.authCalls).toBe("cat:authenticated:0\nsnapshots:authenticated:0\n");
+    expect(run.status).toBe(0);
+    expect(run.authExecuted).toBe(false);
+  }, 120000);
+
+  test.each([
+    ["missing", null],
+    ["partial", "AWS_ACCESS_KEY_ID=fixture-access\n"],
+    ["wrong backend", "RESTIC_REST_USERNAME=fixture-access\nRESTIC_REST_PASSWORD=fixture-secret\n"],
+    ["wrong credentials", "AWS_ACCESS_KEY_ID=wrong\nAWS_SECRET_ACCESS_KEY=wrong\n"],
+    ["empty", "AWS_ACCESS_KEY_ID=\nAWS_SECRET_ACCESS_KEY=fixture-secret\n"],
+    ["duplicate", "AWS_ACCESS_KEY_ID=fixture-access\nAWS_ACCESS_KEY_ID=fixture-access\nAWS_SECRET_ACCESS_KEY=fixture-secret\n"],
+    ["malformed", "export AWS_ACCESS_KEY_ID=fixture-access\nAWS_SECRET_ACCESS_KEY=fixture-secret\n"],
+    ["continuation", "AWS_ACCESS_KEY_ID=fixture-access\\\nAWS_SECRET_ACCESS_KEY=fixture-secret\n"],
+    ["quote mismatch", "AWS_ACCESS_KEY_ID='fixture-access\nAWS_SECRET_ACCESS_KEY=fixture-secret\n"],
+    ["nested auth", "FOREIGN='first line\nAWS_ACCESS_KEY_ID=fixture-access\nAWS_SECRET_ACCESS_KEY=fixture-secret\n'\n"],
+    ["NUL", "AWS_ACCESS_KEY_ID=fixture-access\0\nAWS_SECRET_ACCESS_KEY=fixture-secret\n"],
+  ] as const)("collector-auth rejects %s config despite ambient credentials", (_name, authConfig) => {
+    const run = runHelperWithActualRemote("complete", undefined, { authConfig, ambientAuth: true });
+    expect(run.status).not.toBe(0);
+    expect(run.stdout).toContain("EVIDENCE_STATUS\tUNKNOWN");
+    expect(run.stdout).not.toContain("CLASSIFICATION\tbackup_channel\tBELEGT");
+    expect(run.authCalls).not.toContain(":authenticated:");
+    expect(String(run.stdout) + String(run.stderr)).not.toMatch(/fixture-access|fixture-secret|fixture-token/);
+  }, 120000);
+
+  test.each(["mode", "owner", "owner-after-bind", "symlink", "size", "rewrite", "replace"] as const)("collector-auth rejects unsafe config generation: %s", (authFault) => {
+    const run = runHelperWithActualRemote("complete", undefined, { authFault });
+    expect(run.status).not.toBe(0);
+    expect(run.stdout).toContain("EVIDENCE_STATUS\tUNKNOWN");
+    expect(run.authCalls).toBe(authFault === "rewrite" || authFault === "replace" ? "cat:authenticated:0\n" : "");
+    expect(String(run.stdout) + String(run.stderr)).not.toMatch(/fixture-access|fixture-secret|fixture-token/);
+  }, 120000);
+
+  test("collector-auth preserves unrelated quoted single-line values as inert data", () => {
+    const run = runHelperWithActualRemote("complete", undefined, { authConfig: "AWS_ACCESS_KEY_ID=fixture-access\nAWS_SECRET_ACCESS_KEY=fixture-secret\nAWS_SESSION_TOKEN=fixture-token\nFOREIGN_SENTINEL='$(touch EXECUTION_MARKER)'\nPOSTGRES_PASSWORD=\nCATERING_RESTIC_COMMAND=\"false\"\n" });
+    expect(run.status).toBe(0);
+    expect(run.authCalls).toBe("cat:authenticated:0\nsnapshots:authenticated:0\n");
+    expect(run.authExecuted).toBe(false);
+  }, 120000);
+
+  test("collector-auth recognizes only physical LF assignment boundaries", () => {
+    const run = runHelperWithActualRemote("complete", undefined, { authConfig: "FOREIGN=value\u2028AWS_ACCESS_KEY_ID=fixture-access\nAWS_SECRET_ACCESS_KEY=fixture-secret\nAWS_SESSION_TOKEN=fixture-token\n" });
+    expect(run.status).not.toBe(0);
+    expect(run.authCalls).toBe("");
+    expect(run.stdout).toContain("EVIDENCE_STATUS\tUNKNOWN");
+  }, 120000);
+
   test("executes the quoted collector heredoc against complete and failure fixtures", () => {
     const complete = runHelperWithActualRemote("complete");
     expect(complete.status, `stdout=${String(complete.stdout)} stderr=${String(complete.stderr)}`).toBe(0);
@@ -500,9 +566,9 @@ describe("Catering production evidence workflow contract", () => {
     const remoteScript = helper.split("<<'REMOTE_EVIDENCE'\n")[1]?.split("\nREMOTE_EVIDENCE")[0] ?? "";
     expect(remoteScript).toContain("BACKUP_REPOSITORY_FILE");
     expect(remoteScript).toContain("BACKUP_PASSWORD_FILE");
-    expect(remoteScript).toContain('restic --repository-file "/proc/self/fd/$repository_file_fd"');
-    expect(remoteScript).toContain('--password-file "/proc/self/fd/$password_file_fd"');
-    expect(remoteScript).toContain('env -u RESTIC_REPOSITORY -u RESTIC_PASSWORD -u RESTIC_PASSWORD_COMMAND');
+    expect(remoteScript).toContain('["restic", "--repository-file", f"/proc/self/fd/{repository_fd}"');
+    expect(remoteScript).toContain('"--password-file", f"/proc/self/fd/{password_fd}"');
+    expect(remoteScript).toContain('env=environment, pass_fds=(repository_fd, password_fd)');
     expect(remoteScript).toContain("receipt_path");
     expect(remoteScript).toContain("receipt_checksum");
     expect(remoteScript).toContain("restore-receipt");
@@ -717,9 +783,9 @@ describe("Catering production evidence workflow contract", () => {
     expect(remoteScript).toContain("bind_readonly_source()");
     expect(remoteScript).toContain("/dev/fd/");
     expect(remoteScript).toContain("BACKUP_REPOSITORY_READONLY_STATUS_PATH");
-    expect(remoteScript).toContain("restic --repository-file");
-    expect(remoteScript).toContain(" snapshots --json");
-    expect(remoteScript).toContain(" cat config --json");
+    expect(remoteScript).toContain('["restic", "--repository-file"');
+    expect(remoteScript).toContain('("snapshots",)');
+    expect(remoteScript).toContain('("cat", "config")');
     expect(remoteScript).toContain("restic_repository_match");
     expect(remoteScript).toContain("restic_snapshot_match");
     expect(remoteScript).toContain('"$repository_identity" =~ ^[0-9a-f]{64}$');

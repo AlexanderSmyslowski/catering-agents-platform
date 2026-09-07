@@ -989,7 +989,7 @@ after="$(capture_source_generation ${sources.map((value) => JSON.stringify(value
       writeFileSync(path.join(interpreterBin, "python3"), `#!/bin/sh\nexec ${quote(discovered.stdout.trim())} -c 'import sys; code=sys.argv[1]; sys.executable=sys.argv[2]; exec(code)' "$2" ${quote(interpreter)}\n`, { mode: 0o755 });
       writeFileSync(interpreter, `#!/bin/bash
 case "$1:$2" in
-  -c:*sys.stdout.write*os.pread*) site=restic ;;
+  -:--repository-file) site=restic ;;
   -c:*datetime.fromisoformat*sys.argv*) site=date ;;
   -c:*json.load*) site=python-exec ;;
   -:%*) site=stat ;;
@@ -1005,10 +1005,11 @@ exec ${quote(discovered.stdout.trim())} "$@"
       const accepted = runHelperWithActualRemote("complete", { root: fixture.root }, options);
       expect(accepted.status, String(accepted.stdout) + String(accepted.stderr)).toBe(0);
       expect(accepted.stdout).toContain("CLASSIFICATION\tbackup_channel\tBELEGT");
+      expect(accepted.authCalls).toBe("cat:authenticated:0\nsnapshots:authenticated:0\n");
       expect(existsSync(trace), "collector bypassed the selected interpreter").toBe(true);
       const calls = readFileSync(trace, "utf8").trim().split("\n");
       for (const site of ["date", "stat", "python-stdin", "python-exec", "restic"]) expect(calls).toContain(site);
-      expect(calls.filter(site => site === "restic").length).toBeGreaterThanOrEqual(4);
+      expect(calls.filter(site => site === "restic").length).toBe(2);
       const drifted = runHelperWithActualRemote("complete", { root: fixture.root, repositoryId: "c".repeat(64) }, options);
       expect(drifted.status).toBe(1);
       expect(drifted.stdout).toContain("EVIDENCE_ERROR\tREMOTE_OUTPUT_INVALID");

@@ -11,6 +11,7 @@ readonly BACKUP_SCOPE="postgres,sites,platform-caddy,shared-edge-caddy"
 # repository value and password-file path.
 readonly BACKUP_REPOSITORY_FILE="/etc/catering-backup/repository"
 readonly BACKUP_PASSWORD_FILE="/etc/catering-backup/password"
+readonly BACKUP_AUTH_FILE="/etc/catering-backup/catering-backup.env"
 
 backup_age_allowed() {
   local age="${BACKUP_AGE_SECONDS:-}"
@@ -276,13 +277,14 @@ remote_evidence() {
   ssh -i "$CATERING_EVIDENCE_SSH_KEY" \
     -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes \
     -o UserKnownHostsFile="$CATERING_EVIDENCE_SSH_KNOWN_HOSTS" \
-    -o ConnectTimeout=10 -p 22 -- "$REMOTE" bash -s -- "$EXPECTED_PROJECT" "$BACKUP_EVIDENCE_PATH" "/var/lib/catering-backup/catering-backup-repository-status" "$BACKUP_REPOSITORY_FILE" "$BACKUP_PASSWORD_FILE" <<'REMOTE_EVIDENCE'
+    -o ConnectTimeout=10 -p 22 -- "$REMOTE" bash -s -- "$EXPECTED_PROJECT" "$BACKUP_EVIDENCE_PATH" "/var/lib/catering-backup/catering-backup-repository-status" "$BACKUP_REPOSITORY_FILE" "$BACKUP_PASSWORD_FILE" "$BACKUP_AUTH_FILE" <<'REMOTE_EVIDENCE'
 set -euo pipefail
 readonly EXPECTED_PROJECT="$1"
 readonly BACKUP_EVIDENCE_PATH="$2"
 readonly BACKUP_REPOSITORY_READONLY_STATUS_PATH="$3"
 readonly BACKUP_REPOSITORY_FILE="$4"
 readonly BACKUP_PASSWORD_FILE="$5"
+readonly BACKUP_AUTH_FILE="$6"
 readonly BACKUP_RPO_SECONDS=21600
 readonly BACKUP_SCOPE="postgres,sites,platform-caddy,shared-edge-caddy"
 backup_age_allowed() {
@@ -945,19 +947,87 @@ PY
         validate_repository_locator "$restic_repository" || probe_error backup_repository repository_not_off_host
         bind_readonly_source "$BACKUP_PASSWORD_FILE" 0 600 || { eval "exec ${repository_file_fd}<&-"; probe_error backup_repository password_file_unbound; }
         password_file_fd="$BOUND_SOURCE_FD"
-        restic_bound() {
-          env -u RESTIC_REPOSITORY -u RESTIC_PASSWORD -u RESTIC_PASSWORD_COMMAND \
-            restic --repository-file "/proc/self/fd/$repository_file_fd" \
-            --password-file "/proc/self/fd/$password_file_fd" "$@"
-        }
-        if restic_config_json="$(restic_bound cat config --json --no-lock 2>/dev/null)" && restic_snapshot_json="$(restic_bound snapshots --json --no-lock 2>/dev/null)"; then
-          if restic_repository_id="$(printf '%s' "$restic_config_json" | python3 -c 'import json,sys; value=json.load(sys.stdin).get("id", ""); print(value if isinstance(value, str) else "")' 2>/dev/null)"; then
+        bind_readonly_source "$BACKUP_AUTH_FILE" 0 600 || probe_error backup_repository auth_file_unbound
+        auth_file_fd="$BOUND_SOURCE_FD"
+        # EnvironmentFile is data here: parse one bounded credential generation,
+        # then give only active-backend credentials to both descriptor-bound reads.
+        if restic_queries_json="$(python3 - "$auth_file_fd" "$BACKUP_AUTH_FILE" "$repository_file_fd" "$password_file_fd" "${restic_repository%%:*}" <<'PY_AUTH' 2>/dev/null
+import hashlib, json, os, re, stat, subprocess, sys
+try:
+    fd, pathname, repository_fd, password_fd, backend = sys.argv[1:]
+    fd, repository_fd, password_fd = int(fd), int(repository_fd), int(password_fd)
+    def generation():
+        info, named = os.fstat(fd), os.lstat(pathname)
+        if (not stat.S_ISREG(info.st_mode) or not stat.S_ISREG(named.st_mode) or info.st_uid != 0 or
+            (info.st_dev, info.st_ino) != (named.st_dev, named.st_ino) or
+            stat.S_IMODE(info.st_mode) != 0o600 or not 0 < info.st_size <= 65536):
+            raise ValueError()
+        data = os.pread(fd, info.st_size + 1, 0)
+        if len(data) != info.st_size:
+            raise ValueError()
+        identity = (info.st_dev, info.st_ino, info.st_uid, info.st_gid,
+                    info.st_mode, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+        return identity, hashlib.sha256(data).digest(), data
+    frozen = generation()
+    data = frozen[2]
+    if not data.endswith(b"\n") or any(byte < 32 and byte != 10 for byte in data) or b"\x7f" in data:
+        raise ValueError()
+    names = {"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN",
+             "RESTIC_REST_USERNAME", "RESTIC_REST_PASSWORD"}
+    credentials = {}
+    for line in data.decode("utf-8").split("\n"):
+        line = line.strip(" ")
+        if not line or line.startswith(("#", ";")):
+            continue
+        key, separator, value = line.partition("=")
+        # Require simple one-line assignments throughout so ignored multiline
+        # values cannot smuggle an apparent credential assignment into this view.
+        if not separator or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key):
+            raise ValueError()
+        value = value.strip(" ")
+        if value.startswith(("'", '"')):
+            quote = value[0]
+            if len(value) < 2 or value[-1] != quote or quote in value[1:-1] or "\\" in value:
+                raise ValueError()
+            value = value[1:-1]
+        elif re.search(r"[\\\"']", value):
+            raise ValueError()
+        if key not in names:
+            continue
+        if key in credentials or not value:
+            raise ValueError()
+        credentials[key] = value
+    required = ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY") if backend == "s3" else ("RESTIC_REST_USERNAME", "RESTIC_REST_PASSWORD")
+    if any(not credentials.get(key) for key in required):
+        raise ValueError()
+    environment = {"PATH": os.environ["PATH"], **{key: credentials[key] for key in required}}
+    if backend == "s3" and "AWS_SESSION_TOKEN" in credentials:
+        environment["AWS_SESSION_TOKEN"] = credentials["AWS_SESSION_TOKEN"]
+    results = []
+    for command in (("cat", "config"), ("snapshots",)):
+        if generation() != frozen:
+            raise ValueError()
+        result = subprocess.check_output(["restic", "--repository-file", f"/proc/self/fd/{repository_fd}",
+            "--password-file", f"/proc/self/fd/{password_fd}", *command, "--json", "--no-lock"],
+            env=environment, pass_fds=(repository_fd, password_fd), stderr=subprocess.DEVNULL)
+        if generation() != frozen:
+            raise ValueError()
+        results.append(json.loads(result))
+    print(json.dumps(results))
+except Exception:
+    raise SystemExit(1)
+PY_AUTH
+)"; then
+          if restic_repository_id="$(printf '%s' "$restic_queries_json" | python3 -c 'import json,sys; value=json.load(sys.stdin)[0].get("id", ""); print(value if isinstance(value, str) else "")' 2>/dev/null)"; then
             [[ "$restic_repository_id" == "$repository_identity" ]] && restic_repository_match=true
           fi
-          if restic_snapshot_id="$(printf '%s' "$restic_snapshot_json" | python3 -c 'import json,sys; expected=sys.argv[1]; rows=json.load(sys.stdin); print("true" if any(isinstance(row, dict) and row.get("id") == expected for row in rows) else "false")' "$backup_snapshot" 2>/dev/null)"; then
+          if restic_snapshot_id="$(printf '%s' "$restic_queries_json" | python3 -c 'import json,sys; expected=sys.argv[1]; rows=json.load(sys.stdin)[1]; print("true" if any(isinstance(row, dict) and row.get("id") == expected for row in rows) else "false")' "$backup_snapshot" 2>/dev/null)"; then
             [[ "$restic_snapshot_id" == true ]] && restic_snapshot_match=true
           fi
+        else
+          probe_error backup_repository auth_or_query_failed
         fi
+        eval "exec ${auth_file_fd}<&-"
         eval "exec ${repository_file_fd}<&-"
         eval "exec ${password_file_fd}<&-"
       fi

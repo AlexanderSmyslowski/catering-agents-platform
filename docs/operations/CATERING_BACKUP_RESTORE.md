@@ -89,6 +89,24 @@ verboten.
 
 ## Erforderliche Eingaben und Identitätsbindungen
 
+Für die beiden read-only Restic-Abfragen liest der Collector dieselbe feste,
+root-owned-0600-Datei `/etc/catering-backup/catering-backup.env` als Daten.
+S3 benötigt `AWS_ACCESS_KEY_ID` und `AWS_SECRET_ACCESS_KEY`, optional einen
+nicht leeren `AWS_SESSION_TOKEN`; REST benötigt `RESTIC_REST_USERNAME` und
+`RESTIC_REST_PASSWORD`. Nur die Zugangsdaten des aktiven Backends gelangen
+zusammen mit `PATH` in die Restic-Umgebung. Fehlende Zugangsdaten werden
+nicht aus der SSH-Umgebung ergänzt; andere Konfigurationsnamen bleiben inert.
+Der Collector akzeptiert höchstens 65536 UTF-8-Bytes mit abschließendem LF:
+Leerzeilen, ganze Kommentarzeilen mit `#`/`;` und einzelne `NAME=Wert`-Zeilen.
+Werte dürfen unquoted oder vollständig einfach/doppelt zitiert sein;
+äußere Leerzeichen werden entfernt, innere bleiben erhalten. Backslashes,
+Fortsetzungszeilen, eingebettete passende Quotes und Steuerbytes außer LF
+sind ausgeschlossen. `$` und Backticks bleiben wörtliche Daten. Diese
+Einzeilenregel gilt auch für ignorierte Namen; deren Werte dürfen leer sein.
+Leere oder doppelte Auth-Namen sind ungültig. Beide Abfragen verwenden einen
+einmal geparsten Auth-Satz; jede Änderung an Dateiidentität, Rechten oder
+Inhalt während der Abfragen verwirft den Nachweis.
+
 Die Environment-Datei benennt nur Werte, die der Betreiber separat provisioniert:
 `CATERING_BACKUP_EXPECTED_HOST_SHA256`,
 `CATERING_BACKUP_SOURCE_COMMIT`, `CATERING_BACKUP_SOURCE_TREE`,

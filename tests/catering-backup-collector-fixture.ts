@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, existsSync, symlinkSync, chmodSync } from "node:fs";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 const helperPath = path.resolve(import.meta.dirname, "../platform-infra/scripts/catering-production-evidence.sh");
 function sha256(value: string | Buffer): string { return createHash("sha256").update(value).digest("hex"); }
 
-export function runHelperWithActualRemote(mode: "complete" | "missing" | "contradictory" | "malformed" | "generation-swapped", supplied?: { root: string; nowEpoch?: number; repositoryId?: string }, options: { webMount?: string; edgeDataLabel?: string; timerCalendar?: string; aliases?: string; endpointNetworkId?: string; pythonSearchPath?: string } = {}): ReturnType<typeof spawnSync> {
+export function runHelperWithActualRemote(mode: "complete" | "missing" | "contradictory" | "malformed" | "generation-swapped", supplied?: { root: string; nowEpoch?: number; repositoryId?: string }, options: { webMount?: string; edgeDataLabel?: string; timerCalendar?: string; aliases?: string; endpointNetworkId?: string; pythonSearchPath?: string; authBackend?: "s3" | "rest"; authConfig?: string | null; authFault?: "mode" | "owner" | "owner-after-bind" | "symlink" | "size" | "rewrite" | "replace"; ambientAuth?: boolean; authQuoted?: "single" | "double"; omitSessionToken?: boolean } = {}): ReturnType<typeof spawnSync> & { authCalls: string; authExecuted: boolean } {
   // Bind before fake PATH shadows python3. Setup failures must throw, since a
   // returned UNKNOWN could incorrectly satisfy a negative collector test.
   const pythonEnvironment = { ...process.env, PATH: options.pythonSearchPath ?? process.env.PATH ?? "" };
@@ -25,6 +25,18 @@ export function runHelperWithActualRemote(mode: "complete" | "missing" | "contra
   const status = path.join(stateRoot, "catering-backup-repository-status");
   const repository = path.join(stateRoot, "repository");
   const password = path.join(stateRoot, "password");
+  const authConfig = path.join(fixtureRoot, "catering-backup.env");
+  const authCalls = path.join(fixtureRoot, "auth-calls");
+  const authExecuted = path.join(fixtureRoot, "auth-executed");
+  const backend = options.authBackend ?? "s3";
+  const secret = options.authQuoted ? "fixture secret # $HOME `id` $(touch " + authExecuted + ")" : "fixture-secret";
+  const credentials: Record<string, string> = backend === "s3" ? { AWS_ACCESS_KEY_ID: "fixture-access", AWS_SECRET_ACCESS_KEY: secret, AWS_SESSION_TOKEN: "fixture-token" } : { RESTIC_REST_USERNAME: "fixture-access", RESTIC_REST_PASSWORD: secret };
+  if (options.omitSessionToken) delete credentials.AWS_SESSION_TOKEN;
+  const quote = options.authQuoted === "single" ? "'" : options.authQuoted === "double" ? '"' : "";
+  const config = options.authConfig === undefined ? Object.entries(credentials).map(([key, value]) => key + "=" + quote + value + quote).join("\n") + "\n" : options.authConfig;
+  if (config !== null) writeFileSync(authConfig, options.authFault === "size" ? "#".repeat(65537) : config.replaceAll("EXECUTION_MARKER", authExecuted), { mode: 0o600 });
+  if (options.authFault === "mode") chmodSync(authConfig, 0o644);
+  if (options.authFault === "symlink") { const target = authConfig + ".target"; writeFileSync(target, config!); spawnSync("/usr/bin/trash", [authConfig]); symlinkSync(target, authConfig); }
   const statCount = path.join(fixtureRoot, "stat-count");
   const sshOutput = path.join(fixtureRoot, "ssh-output");
   const host = "fixture-host";
@@ -82,7 +94,7 @@ export function runHelperWithActualRemote(mode: "complete" | "missing" | "contra
     writeFileSync(artifactPath, artifact, { mode: 0o600 });
     writeFileSync(receiptPath, receipt, { mode: 0o600 });
     writeFileSync(status, statusText, { mode: 0o600 });
-    writeFileSync(repository, "s3:s3.example/catering\n", { mode: 0o600 });
+    writeFileSync(repository, (backend === "s3" ? "s3:s3.example/catering\n" : "rest:https://rest.example/catering\n"), { mode: 0o600 });
     writeFileSync(password, "fixture-password\n", { mode: 0o600 });
     if (mode !== "missing") {
       const payload = mode === "contradictory" ? evidenceText.replace("scope=" + scope, "scope=wrong-scope") : mode === "malformed" ? evidenceText + "unknown_field=value\n" : evidenceText;
@@ -92,7 +104,7 @@ export function runHelperWithActualRemote(mode: "complete" | "missing" | "contra
   const install = (name: string, body: string): void => writeFileSync(path.join(bin, name), body + "\n", { mode: 0o755 });
   install("ssh", `#!/usr/bin/env bash
 set -uo pipefail
-if /bin/bash -s -- "$FAKE_EXPECTED_PROJECT" "$FAKE_EVIDENCE_PATH" "$FAKE_STATUS_PATH" "$FAKE_REPOSITORY_FILE" "$FAKE_PASSWORD_FILE" >"$FAKE_SSH_OUTPUT" 2>/dev/null; then cat "$FAKE_SSH_OUTPUT"; exit 0; else rc=$?; cat "$FAKE_SSH_OUTPUT"; exit "$rc"; fi`);
+if /bin/bash -s -- "$FAKE_EXPECTED_PROJECT" "$FAKE_EVIDENCE_PATH" "$FAKE_STATUS_PATH" "$FAKE_REPOSITORY_FILE" "$FAKE_PASSWORD_FILE" "$FAKE_AUTH_CONFIG" >"$FAKE_SSH_OUTPUT" 2>/dev/null; then cat "$FAKE_SSH_OUTPUT"; exit 0; else rc=$?; cat "$FAKE_SSH_OUTPUT"; exit "$rc"; fi`);
   install("hostname", `#!/usr/bin/env bash
 printf '%s\\n' fixture-host`);
   install("date", `#!/usr/bin/env bash
@@ -127,7 +139,10 @@ if count_path:
 device, inode = info.st_dev, info.st_ino
 if os.environ.get("FAKE_STAT_SWAP_PATH") == pathname and count >= 2:
     inode += 1
-values = {"%F": kind, "%a": format(stat.S_IMODE(info.st_mode), "o"), "%u": "0", "%g": "0", "%d": str(device), "%i": str(inode)}
+uid = "0"
+auth_path = os.environ.get("FAKE_AUTH_CONFIG", "")
+if os.path.exists(auth_path) and info.st_ino == os.stat(auth_path).st_ino and os.environ.get("FAKE_AUTH_FAULT") == "owner": uid = "1"
+values = {"%F": kind, "%a": format(stat.S_IMODE(info.st_mode), "o"), "%u": uid, "%g": "0", "%d": str(device), "%i": str(inode)}
 for key, value in values.items(): fmt = fmt.replace(key, value)
 print(fmt)
 PY`);
@@ -142,31 +157,57 @@ if [[ "$1" == - ]]; then
     [[ "$FAKE_RESOLVE_MODE" == private ]] && exit 1
     exit 0
   fi
+  # The host fixture models root-owned metadata without requiring local root.
+  if [[ "$script" == *"def generation():"* ]]; then
+    script="$(cat <<'PY_ROOT'
+import os, types
+actual_fstat, actual_lstat = os.fstat, os.lstat
+def fixture_root_metadata(info):
+    fields = {name: getattr(info, name) for name in dir(info) if name.startswith("st_")}
+    fields["st_uid"] = 1 if os.environ.get("FAKE_AUTH_FAULT") == "owner-after-bind" else 0
+    return types.SimpleNamespace(**fields)
+os.fstat = lambda fd: fixture_root_metadata(actual_fstat(fd))
+os.lstat = lambda name: fixture_root_metadata(actual_lstat(name))
+PY_ROOT
+)"$'\\n'"$script"
+  fi
   printf '%s' "$script" | "$FAKE_READER_PYTHON" "$@"
 else
   exec "$FAKE_READER_PYTHON" "$@"
 fi`);
-  install("restic", `#!/usr/bin/env bash
-set -euo pipefail
-repo_fd= pass_fd=
-while [[ "$1" == --repository-file || "$1" == --password-file ]]; do
-  [[ "$2" == /proc/self/fd/* ]] || exit 31
-  if [[ "$1" == --repository-file ]]; then repo_fd="$(/usr/bin/basename "$2")"; else pass_fd="$(/usr/bin/basename "$2")"; fi
-  shift 2
-done
-[[ -n "$repo_fd" && -n "$pass_fd" ]] || exit 32
-[[ -e "/proc/self/fd/$repo_fd" || -e "/dev/fd/$repo_fd" ]] || exit 33
-# Read through the inherited descriptors without advancing their shared offset;
-# every Restic invocation must observe the same preflight-bound file generation.
-repo_value="$("$FAKE_READER_PYTHON" -c 'import os,sys; sys.stdout.write(os.pread(int(sys.argv[1]), 65536, 0).decode())' "$repo_fd")"
-pass_value="$("$FAKE_READER_PYTHON" -c 'import os,sys; sys.stdout.write(os.pread(int(sys.argv[1]), 65536, 0).decode())' "$pass_fd")"
-[[ "$repo_value" == s3:s3.example/catering ]] || exit 34
-[[ -n "$pass_value" ]] || exit 35
-case "$1" in
-  cat) printf '{"id":"%s"}\\n' "$FAKE_READER_REPOSITORY_ID" ;;
-  snapshots) printf '[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}]\\n' ;;
-  *) exit 36 ;;
-esac`);
+  const quoteShell = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'";
+  install("restic", `#!/bin/sh
+exec ${quoteShell(python)} - "$@" <<'RESTIC_FIXTURE_PY'
+import json, os, sys
+args = sys.argv[1:]
+command = "cat" if "cat" in args else "snapshots" if "snapshots" in args else "other"
+expected = json.loads(${JSON.stringify(JSON.stringify(credentials))})
+valid = all(os.environ.get(key) == value for key, value in expected.items())
+valid = valid and not any(value in argument for value in expected.values() for argument in args)
+valid = valid and not any(key.startswith(("AWS_", "RESTIC_")) and key not in expected for key in os.environ)
+valid = valid and not any(key in os.environ for key in ("POSTGRES_PASSWORD", "CATERING_RESTIC_COMMAND", "FOREIGN_SENTINEL"))
+try:
+    repo = args[args.index("--repository-file") + 1]
+    password = args[args.index("--password-file") + 1]
+    valid = valid and repo.startswith("/proc/self/fd/") and password.startswith("/proc/self/fd/")
+    locator = os.pread(int(repo.rsplit("/", 1)[1]), 65536, 0).decode().strip()
+    valid = valid and locator == ${JSON.stringify(backend === "s3" ? "s3:s3.example/catering" : "rest:https://rest.example/catering")}
+    valid = valid and bool(os.pread(int(password.rsplit("/", 1)[1]), 65536, 0))
+except (ValueError, OSError): valid = False
+with open(${JSON.stringify(authCalls)}, "a") as handle: handle.write(command + (":authenticated:0\\n" if valid else ":denied:37\\n"))
+if not valid: raise SystemExit(37)
+if ${JSON.stringify(options.authFault ?? "")} in ("rewrite", "replace") and command == "cat":
+    target = ${JSON.stringify(authConfig)}
+    if ${JSON.stringify(options.authFault ?? "")} == "replace":
+        with open(target + ".new", "w") as handle: handle.write("AWS_ACCESS_KEY_ID=changed\\nAWS_SECRET_ACCESS_KEY=changed\\n")
+        os.chmod(target + ".new", 0o600)
+        os.replace(target + ".new", target)
+    else:
+        with open(target, "w") as handle: handle.write("AWS_ACCESS_KEY_ID=changed\\nAWS_SECRET_ACCESS_KEY=changed\\n")
+if command == "cat": print(json.dumps({"id": ${JSON.stringify(supplied?.repositoryId ?? repositoryId)}}))
+elif command == "snapshots": print(json.dumps([{"id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}]))
+else: raise SystemExit(36)
+RESTIC_FIXTURE_PY`);
   install("docker", `#!/usr/bin/env bash
 set -euo pipefail
 project_id=1111111111111111111111111111111111111111111111111111111111111111
@@ -309,6 +350,9 @@ esac`);
       FAKE_STATUS_PATH: status,
       FAKE_REPOSITORY_FILE: repository,
       FAKE_PASSWORD_FILE: password,
+      FAKE_AUTH_CONFIG: authConfig,
+      FAKE_AUTH_FAULT: options.authFault ?? "",
+      ...(options.ambientAuth ? { ...credentials, AWS_ENDPOINT: "https://foreign.invalid", RESTIC_REPOSITORY: "foreign", POSTGRES_PASSWORD: "foreign" } : {}),
       FAKE_STAT_COUNT_FILE: statCount,
       FAKE_STAT_SWAP_PATH: mode === "generation-swapped" ? evidence : "",
       FAKE_RESOLVE_MODE: "public",
@@ -324,6 +368,7 @@ esac`);
       FAKE_SSH_OUTPUT: sshOutput,
     },
   });
+  const authentication = { authCalls: existsSync(authCalls) ? readFileSync(authCalls, "utf8") : "", authExecuted: existsSync(authExecuted) };
   spawnSync("/usr/bin/trash", [fixtureRoot], { stdio: "ignore" });
-  return run;
+  return { ...run, ...authentication };
 }
