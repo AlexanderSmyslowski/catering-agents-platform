@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, existsSync, symlinkSync, chmodSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, existsSync, symlinkSync, chmodSync, renameSync } from "node:fs";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -36,7 +36,7 @@ export function runHelperWithActualRemote(mode: "complete" | "missing" | "contra
   const config = options.authConfig === undefined ? Object.entries(credentials).map(([key, value]) => key + "=" + quote + value + quote).join("\n") + "\n" : options.authConfig;
   if (config !== null) writeFileSync(authConfig, options.authFault === "size" ? "#".repeat(65537) : config.replaceAll("EXECUTION_MARKER", authExecuted), { mode: 0o600 });
   if (options.authFault === "mode") chmodSync(authConfig, 0o644);
-  if (options.authFault === "symlink") { const target = authConfig + ".target"; writeFileSync(target, config!); spawnSync("/usr/bin/trash", [authConfig]); symlinkSync(target, authConfig); }
+  if (options.authFault === "symlink") { const target = authConfig + ".target"; renameSync(authConfig, target); symlinkSync(target, authConfig); }
   const statCount = path.join(fixtureRoot, "stat-count");
   const sshOutput = path.join(fixtureRoot, "ssh-output");
   const host = "fixture-host";
