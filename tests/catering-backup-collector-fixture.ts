@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 const helperPath = path.resolve(import.meta.dirname, "../platform-infra/scripts/catering-production-evidence.sh");
 function sha256(value: string | Buffer): string { return createHash("sha256").update(value).digest("hex"); }
 
-export function runHelperWithActualRemote(mode: "complete" | "missing" | "contradictory" | "malformed" | "generation-swapped", supplied?: { root: string; nowEpoch?: number; repositoryId?: string }, options: { webMount?: string; edgeDataLabel?: string; timerCalendar?: string; aliases?: string; endpointNetworkId?: string; pythonSearchPath?: string; authBackend?: "s3" | "rest"; authConfig?: string | null; authFault?: "mode" | "owner" | "owner-after-bind" | "symlink" | "size" | "rewrite" | "replace"; ambientAuth?: boolean; authQuoted?: "single" | "double"; omitSessionToken?: boolean } = {}): ReturnType<typeof spawnSync> & { authCalls: string; authExecuted: boolean } {
+export function runHelperWithActualRemote(mode: "complete" | "missing" | "contradictory" | "malformed" | "generation-swapped", supplied?: { root: string; nowEpoch?: number; repositoryId?: string }, options: { nowEpoch?: number; webMount?: string; edgeDataLabel?: string; timerCalendar?: string; timerAccuracy?: string; timerRandomized?: string; timerPersistent?: string; aliases?: string; endpointNetworkId?: string; pythonSearchPath?: string; authBackend?: "s3" | "rest"; authConfig?: string | null; authFault?: "mode" | "owner" | "owner-after-bind" | "symlink" | "size" | "rewrite" | "replace"; ambientAuth?: boolean; authQuoted?: "single" | "double"; omitSessionToken?: boolean } = {}): ReturnType<typeof spawnSync> & { authCalls: string; authExecuted: boolean } {
   // Bind before fake PATH shadows python3. Setup failures must throw, since a
   // returned UNKNOWN could incorrectly satisfy a negative collector test.
   const pythonEnvironment = { ...process.env, PATH: options.pythonSearchPath ?? process.env.PATH ?? "" };
@@ -324,7 +324,7 @@ esac`);
 set -euo pipefail
 case "$1" in
   show)
-    if [[ "$*" == *TimersCalendar* ]]; then printf 'Id=catering-backup.timer\\nLoadState=loaded\\nActiveState=active\\nUnit=catering-backup.service\\nTimersCalendar=%s\\n' "$FAKE_TIMER_CALENDAR"
+    if [[ "$*" == *TimersCalendar* ]]; then printf 'Id=catering-backup.timer\\nLoadState=loaded\\nActiveState=active\\nUnit=catering-backup.service\\nTimersCalendar=%s\\nAccuracyUSec=%s\\nRandomizedDelayUSec=%s\\nPersistent=%s\\n' "$FAKE_TIMER_CALENDAR" "$FAKE_TIMER_ACCURACY" "$FAKE_TIMER_RANDOMIZED" "$FAKE_TIMER_PERSISTENT"
     else printf 'Id=catering-backup.service\\nLoadState=loaded\\nActiveState=active\\nSubState=running\\nExecMainStatus=0\\n'; fi ;;
   is-active) printf 'active\\n' ;;
   list-unit-files) printf 'catering-backup.service enabled\\n' ;;
@@ -359,11 +359,14 @@ esac`);
       FAKE_EDGE_DATA_LABEL: options.edgeDataLabel ?? "edge_caddy_data",
       FAKE_ENDPOINT_NETWORK_ID: options.endpointNetworkId ?? "4".repeat(64),
       FAKE_MEMBER_ALIASES: options.aliases ?? "web,platform-infra-web-1",
-      FAKE_TIMER_CALENDAR: options.timerCalendar ?? "{ OnCalendar=*-*-* 00,06,12,18:00:00 UTC ; next_elapse=Fri 2026-09-04 06:00:00 UTC }",
+      FAKE_TIMER_ACCURACY: options.timerAccuracy ?? "1min",
+      FAKE_TIMER_RANDOMIZED: options.timerRandomized ?? "0",
+      FAKE_TIMER_PERSISTENT: options.timerPersistent ?? "yes",
+      FAKE_TIMER_CALENDAR: options.timerCalendar ?? "{ OnCalendar=*-*-* 00,03,06,09,12,15,18,21:00:00 UTC ; next_elapse=Fri 2026-09-04 06:00:00 UTC }",
       FAKE_WEB_MOUNT: options.webMount ?? "bind::/opt/catering-agents-platform/platform-infra/sites:/etc/caddy/sites",
-      FAKE_READER_SUPPLIED: supplied ? "1" : "0",
+      FAKE_READER_SUPPLIED: supplied || options.nowEpoch !== undefined ? "1" : "0",
       FAKE_READER_PYTHON: python,
-      FAKE_READER_NOW: String(supplied?.nowEpoch ?? 1788480000),
+      FAKE_READER_NOW: String(supplied?.nowEpoch ?? options.nowEpoch ?? 1788480000),
       FAKE_READER_REPOSITORY_ID: supplied?.repositoryId ?? repositoryId,
       FAKE_SSH_OUTPUT: sshOutput,
     },

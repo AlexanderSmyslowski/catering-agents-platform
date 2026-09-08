@@ -25,18 +25,19 @@ BRANCH = 'codex/catering-backup-restore-slice-20260903'
 PARENT = '34d71daba94ba227146300f69f1f7b2872dce58b'
 PARENT_TREE = 'fb5c57b369c45e4d2168f5586242325d5e3193bd'
 SOURCE_HASHES = {
-    'platform-infra/backup/catering-backup.sh': 'e96eb78f29e682b33ba282131f9a3aaf7d92a3b7e27388536ef5e2cd680c4aba',
-    'platform-infra/backup/catering-restore-probe.sh': '84f200dbb9b6b764353cec177fb6d2f45f66a404c4d3d6c3a95f6cb94f35ac44',
-    'platform-infra/backup/catering-backup-common.sh': 'a86a719e270993049003cfd3d5d01d24df120c83b897d7b68f48f5d6e8fc9638',
+    'platform-infra/backup/catering-backup.sh': '4f9fdce72c3b16edf26679249b2feb132b59a726e207cab5cad8961eab15a937',
+    'platform-infra/backup/catering-restore-probe.sh': 'beb8a9dfb32da262ae932a108e0d32b73af5de6ecda7edc5a4c2b4f2f5cae0f1',
+    'platform-infra/backup/catering-backup-common.sh': '74028a453e749c5b80517ab51dae197e07097e6c2b8b81aee40d1f74d4d47c96',
     'shared-core/src/persistence.ts': 'fc9c03509db36052a4de0aa04d31e518913877b9736be39925561bfe6f5d547f',
     'intake-service/src/source-document-store.ts': 'b4923e5d1a0bc30ac59cfbbe1adf4a33c98a6e81ce4c257fe235645237f795d0',
 }
-FRAGMENT_HASHES = {'dump': 'd8feef1b9f54e37673cfe0a95b304d4d5f831070367fa5186fe71bdd45d7622b',
- 'stream': '19564f4a25bb2bc4859c0822dd4647cf8a2e5820b5688eaabff6cfecbaab33c2',
- 'snapshot': '9af73780445cf1e070407f3e091fdd7511837529d963cf0bd578914eb24f2b22',
- 'checksums': 'fefaf52f40586772c6ac005bc06274ec7075d9e45ec015fb1d4a0491ddb0ecc4',
- 'extractor': '59ff3e67619afe3bd0f12a154372f7bfc6bd5311b954cbb1968f938807d0a2a6',
- 'restore_body': 'df3b873e6348e15c717615fb703b33baaba648a9df07c19a80dd86a9550fd512',
+FRAGMENT_HASHES = {'restore_limits': 'afa4b5829be89c981a8351185d870d5b84651f03fdba2793632d4fad6d62df9b',
+ 'dump': 'fcd47b73b0ba846c45cc66eed3f624c0ccfface7f8e87216c6ade47ed4eba7f7',
+ 'stream': 'eda6b25971ed3568085755afac91661e0294821ba06115ff8238788174b7dc03',
+ 'snapshot': '54a84bd62940cd28b6c17b18b8ad7426a115261b42e3c1f60f25d22a440dbc20',
+ 'checksums': '3f7c65b9cecb8f7a34cd73c149baa60f76d1a9c25037d47eccedf503bf3a91e8',
+ 'extractor': 'c75ea15a66b66f093720baca0c7ead63a63a626be6a5774070abb121901aee19',
+ 'restore_body': '9cf06f0452311f0b4965b5bb501e40fb4dce67a89c53095173b2ad371575b92d',
  'migration': '4be8b342a6e5bfdeb1a71a2449fc9405aae5c86011d7f01043043e4aeb83539b',
  'document_template': 'fbe66c402fead5a7fc2e58e25ac7c1921236337dafbdc6e2c180eafeb231c026',
  'document_ddl': '5931c3b92110424a5f7e951967d67a4c368705d1d8e57dffc854dd3f318aa13c'}
@@ -46,6 +47,13 @@ LEGACY_BACKUP_SHA256 = 'bdcf0f4e3f7173d541c838fd04992c1ff2995c5914c9a2be220854c3
 MINIMAL_ENV = {'PATH': '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
                'LANG': 'C.UTF-8', 'LC_ALL': 'C.UTF-8'}
 
+
+# Deliberately small hosted-fixture limits, not production sizing inputs.
+SYNTHETIC_CAPACITY = {'CATERING_BACKUP_MAX_BYTES': '16777216',
+                      'CATERING_RESTORE_POSTGRES_BYTES': '268435456',
+                      'CATERING_RESTORE_MEMORY_BYTES': '536870912',
+                      'CATERING_BACKUP_RESERVE_BYTES': '16777216',
+                      'CATERING_BACKUP_RESERVE_INODES': '16'}
 
 class GateError(Exception):
     """Contains only controlled diagnostic codes; subprocess output is private."""
@@ -82,6 +90,8 @@ def extract_components(sources):
     snapshot = 'snapshot_json="$(snapshot_stream' + between(backup, 'snapshot_json="$(snapshot_stream', 'assert_caddy_container_mounts platform-infra web platform-infra-web-1 platform-infra_caddy_data platform-infra_caddy_config "$platform_caddy_data_mount" "$platform_caddy_config_mount" /opt/catering-agents-platform/platform-infra/sites /etc/caddy/sites\ncaddy_binding_after=')
     checksums = 'bundle_checksums="$(' + between(backup, 'bundle_checksums="$(', 'repository_identity_after="$(read_repository_identity)"')
     extractor = between(restore, 'python3 - "$restore_root/stream.tar" "$restored_tree" <<\'PY\' || fail_state RESTORE_ARTIFACT_INVALID\n', '\nPY\nrestored_manifest="$restored_tree/manifest"') + '\n'
+    restore_limits = between(restore, '  --memory ', '  --entrypoint /bin/sh --volume')
+    restore_limits = '  --memory ' + restore_limits
     quoted_body = between(restore, '"$CATERING_RESTORE_POSTGRES_IMAGE" -ceu ', ' 2>/dev/null; then\n  fail_state RESTORE_PROBE_FAILED')
     decoded = shlex.split(quoted_body)
     require(len(decoded) == 1, 'SOURCE_RESTORE_BODY_AMBIGUOUS')
@@ -92,7 +102,7 @@ def extract_components(sources):
     require(re.findall(r'\$\{[^}]*\}', ddl) == ['${SOURCE_DOCUMENT_TABLE}'], 'SOURCE_INTERPOLATION')
     require('${' not in migration, 'SOURCE_INTERPOLATION')
     return {'dump': dump, 'stream': stream, 'snapshot': snapshot, 'checksums': checksums,
-            'extractor': extractor, 'restore_body': decoded[0], 'migration': migration,
+            'extractor': extractor, 'restore_body': decoded[0], 'restore_limits': restore_limits, 'migration': migration,
             'document_template': ddl, 'document_ddl': ddl.replace('${SOURCE_DOCUMENT_TABLE}', constant)}
 
 
@@ -613,10 +623,10 @@ def wait_ready(cid):
     raise GateError('SOURCE_START_TIMEOUT')
 
 
-def restore_case(resources, role, image, image_id, dump, body, expected=None):
+def restore_case(resources, role, image, image_id, dump, body, expected=None, *, limits):
     suffix = RESTORE_SUFFIX if expected is not None else ''
     cid = resources.create(role, ['-i', '--user', 'postgres', '--rm', '--network', 'none', '--pull', 'never',
-                                  '--entrypoint', '/bin/sh', '--volume', str(dump) + ':/restore/postgres.dump:ro',
+                                  *limits, '--entrypoint', '/bin/sh', '--volume', str(dump) + ':/restore/postgres.dump:ro',
                                   image, '-ceu', body + suffix])
     process = start_process(['docker', 'start', '-ai', cid], env=MINIMAL_ENV,
                                stdin=subprocess.PIPE, stdout=subprocess.PIPE,
@@ -694,7 +704,7 @@ def execute(root, parent, identity):
         write_private(resources.root / '.owned', resources.token.encode())
         MINIMAL_ENV.update(HOME=str(resources.root), TMPDIR=str(resources.root),
                            DOCKER_CONFIG=str(resources.root / 'docker-config'))
-        env = dict(MINIMAL_ENV)
+        env = {**MINIMAL_ENV, **SYNTHETIC_CAPACITY}
         work = resources.root / 'work'; work.mkdir(mode=0o700)
         locator, password = resources.root / 'repository-location', resources.root / 'restic-password'
         repository = resources.root / 'encrypted-repository'
@@ -742,6 +752,9 @@ def execute(root, parent, identity):
         require(evidence['legacy_dump'] == {'stage': 'dump', 'exit_code': 1,
                 'docker_entered': True, 'docker_exit_code': 1, 'empty_service_rejected': True},
                 'LEGACY_EMPTY_SERVICE_NOT_REJECTED')
+        rejected_dump = Path(env['postgres_dump'])
+        require(rejected_dump.is_file() and rejected_dump.stat().st_size == 0, 'LEGACY_DUMP_RESIDUE')
+        rejected_dump.rename(work / 'legacy-rejected-empty-dump')
         evidence['stage'] = 'exact-pg-dump'
         evidence['dump'] = run_dump(common, parts['dump'], env)
         require(evidence['dump'] == {'stage': 'complete', 'exit_code': 0,
@@ -811,11 +824,15 @@ def execute(root, parent, identity):
         require(json.loads(shell(prelude + 'restic_cmd cat config\n', env).stdout)['id'] == repository_id, 'REPOSITORY_ID_CHANGED')
         evidence['restic'] = {'repository_id': repository_id, 'snapshot_id': snapshot_id, 'whole_stream_sha256': checksums[0],
                               'independent_full_stream_match': True, 'all_component_checksums_match': True, 'per_file_sha256': file_hashes}
+        limits = shell("printf '%s\\0' " + parts['restore_limits'] + '\n', env).stdout.split(b'\0')
+        require(limits[-1] == b'', 'RESTORE_LIMIT_ARGUMENTS')
+        limits = [value.decode() for value in limits[:-1]]
+        evidence['synthetic_capacity'] = SYNTHETIC_CAPACITY
         evidence['stage'] = 'exact-inner-restore'
-        evidence['restore'] = restore_case(resources, 'restore', image, image_id, restored_tree / 'postgres_dump', parts['restore_body'], expected)
+        evidence['restore'] = restore_case(resources, 'restore', image, image_id, restored_tree / 'postgres_dump', parts['restore_body'], expected, limits=limits)
         evidence['stage'] = 'corrupt-dump-failure'
         corrupt = resources.root / 'corrupt.dump'; write_private(corrupt, b'synthetic deliberately invalid custom dump\n', 0o644)
-        evidence['corrupt_dump'] = restore_case(resources, 'corrupt', image, image_id, corrupt, parts['restore_body'])
+        evidence['corrupt_dump'] = restore_case(resources, 'corrupt', image, image_id, corrupt, parts['restore_body'], limits=limits)
         evidence['status'] = 'passed'
     except Exception as error:
         evidence['error'] = str(error) if isinstance(error, GateError) else type(error).__name__

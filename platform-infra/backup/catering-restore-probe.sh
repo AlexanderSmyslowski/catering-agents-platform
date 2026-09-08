@@ -14,6 +14,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly SCRIPT_DIR
 # shellcheck source=platform-infra/backup/catering-backup-common.sh
 source "$SCRIPT_DIR/catering-backup-common.sh"
+capacity_admit config "$BACKUP_ROOT" || fail_state CAPACITY_CONFIG_INVALID
 readonly DOCKER_CMD="${CATERING_DOCKER_COMMAND:-docker}"
 readonly EXPECTED_UID="${CATERING_BACKUP_EXPECTED_UID:-0}"
 readonly RESTORE_RUNTIME_ROOT="${CATERING_RESTORE_RUNTIME_ROOT:-/run/catering-backup}"
@@ -276,13 +277,31 @@ PY
 }
 on_exit() { local rc=$?; if [[ "${cleanup_verified:-false}" != true && -e "${restore_root:-}" ]]; then cleanup_restore_root >/dev/null 2>&1 || rc=1; fi; exit "$rc"; }
 trap on_exit EXIT
+capacity_admit restore "$restore_root" || fail_state CAPACITY_UNAVAILABLE
 
-restic_cmd dump "$snapshot_id" "$bundle_path" >"$restore_root/stream.tar" || fail_state RESTORE_FAILED
+restic_cmd dump "$snapshot_id" "$bundle_path" | bounded_backup_stream "$restore_root/stream.tar" || fail_state RESTORE_FAILED
 verify_record_checksum "$bundle_checksum" "$restore_root/stream.tar"
 restored_tree="$restore_root/tree"
 mkdir -m 700 "$restored_tree"
 python3 - "$restore_root/stream.tar" "$restored_tree" <<'PY' || fail_state RESTORE_ARTIFACT_INVALID
-import os, posixpath, stat, sys, tarfile
+import os, posixpath, re, stat, sys, tarfile
+
+# tarfile parses extension bodies before yielding a member; bound that work too.
+class BoundedTarInfo(tarfile.TarInfo):
+    def _proc_member(self, archive):
+        depth = getattr(archive, "metadata_depth", 0)
+        if self.type == tarfile.XGLTYPE or self.size < 0 or depth >= 8 or (self.type in (
+                tarfile.XHDTYPE, tarfile.XGLTYPE, tarfile.SOLARIS_XHDTYPE,
+                tarfile.GNUTYPE_LONGNAME, tarfile.GNUTYPE_LONGLINK) and self.size > 65536):
+            raise ValueError("tar metadata")
+        archive.metadata_depth = depth + 1
+        try:
+            return super()._proc_member(archive)
+        finally:
+            archive.metadata_depth = depth
+    def _reject_sparse(self, *args):
+        raise ValueError("sparse archive")
+    _proc_sparse = _proc_gnusparse_00 = _proc_gnusparse_01 = _proc_gnusparse_10 = _reject_sparse
 
 archive_path, root = sys.argv[1], os.path.abspath(sys.argv[2])
 directory_roots = {
@@ -297,9 +316,25 @@ required = directory_roots | file_roots
 seen = set()
 members = 0
 total_size = 0
+created = 0
 
 def fail():
     raise SystemExit(1)
+
+raw_limit = os.environ.get("CATERING_BACKUP_MAX_BYTES", "")
+if not re.fullmatch(r"[1-9][0-9]{0,18}", raw_limit) or int(raw_limit) > 9223372036854775807:
+    fail()
+maximum = int(raw_limit)
+
+def admit_inode():
+    global created
+    created += 1
+    if created > 10000:
+        fail()
+    space = os.statvfs(root)
+    if (space.f_favail <= int(os.environ["CATERING_BACKUP_RESERVE_INODES"]) or
+            space.f_bavail * space.f_frsize < int(os.environ["CATERING_BACKUP_RESERVE_BYTES"]) + max(space.f_frsize, os.sysconf("SC_PAGE_SIZE"))):
+        fail()
 
 def allowed(name):
     if not name or "\x00" in name or name.startswith("/"):
@@ -320,11 +355,13 @@ def ensure_parent(path):
             if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
                 fail()
         else:
+            admit_inode()
             os.mkdir(current, 0o700)
 
 try:
-    with tarfile.open(archive_path, "r:") as archive:
+    with tarfile.open(archive_path, "r:", tarinfo=BoundedTarInfo) as archive:
         for member in archive:
+            archive.members.clear()
             members += 1
             if members > 10000 or not allowed(member.name) or member.name in seen:
                 fail()
@@ -333,7 +370,7 @@ try:
                 fail()
             if member.isfile():
                 total_size += member.size
-                if total_size > 1073741824 or member.name in directory_roots:
+                if member.size < 0 or total_size > maximum or member.name in directory_roots:
                     fail()
                 destination = os.path.join(root, *member.name.split("/"))
                 ensure_parent(destination)
@@ -342,12 +379,17 @@ try:
                 source = archive.extractfile(member)
                 if source is None:
                     fail()
+                admit_inode()
                 fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
                 try:
                     while True:
                         chunk = source.read(131072)
                         if not chunk:
                             break
+                        space = os.fstatvfs(fd)
+                        block = max(space.f_frsize, os.sysconf("SC_PAGE_SIZE"))
+                        if space.f_bavail * space.f_frsize < int(os.environ["CATERING_BACKUP_RESERVE_BYTES"]) + ((len(chunk) + block - 1) // block) * block:
+                            fail()
                         view = memoryview(chunk)
                         while view:
                             written = os.write(fd, view)
@@ -371,6 +413,7 @@ try:
                         fail()
                 else:
                     ensure_parent(destination)
+                    admit_inode()
                     os.mkdir(destination, 0o700)
             else:
                 fail()
@@ -485,14 +528,19 @@ PY
 )" || fail_state COMPONENT_CHECKSUM_INVALID
 IFS=$'\t' read -r actual_sites_checksum actual_platform_caddy_data_checksum actual_platform_caddy_config_checksum actual_shared_edge_caddyfile_checksum actual_shared_edge_caddy_data_checksum actual_shared_edge_caddy_config_checksum <<< "$component_checksums"
 [[ "$actual_sites_checksum" == "$(record_field "$artifact_record" component_sites_checksum)" && "$actual_platform_caddy_data_checksum" == "$(record_field "$artifact_record" component_platform_caddy_data_checksum)" && "$actual_platform_caddy_config_checksum" == "$(record_field "$artifact_record" component_platform_caddy_config_checksum)" && "$actual_shared_edge_caddyfile_checksum" == "$(record_field "$artifact_record" component_shared_edge_caddyfile_checksum)" && "$actual_shared_edge_caddy_data_checksum" == "$(record_field "$artifact_record" component_shared_edge_caddy_data_checksum)" && "$actual_shared_edge_caddy_config_checksum" == "$(record_field "$artifact_record" component_shared_edge_caddy_config_checksum)" ]] || fail_state COMPONENT_CHECKSUM_MISMATCH
-restic_cmd dump "$snapshot_id" "$bundle_path" | sha256sum | awk '{print $1}' | { read -r caddy_remote_checksum; [[ "$caddy_remote_checksum" == "$bundle_checksum" ]] || fail_state BUNDLE_READBACK_MISMATCH; }
+restic_cmd dump "$snapshot_id" "$bundle_path" | bounded_backup_stream - | sha256sum | awk '{print $1}' | { read -r caddy_remote_checksum; [[ "$caddy_remote_checksum" == "$bundle_checksum" ]] || fail_state BUNDLE_READBACK_MISMATCH; }
 
 probe_name="catering-restore-probe-$run_id"
 # shellcheck disable=SC2016
 if ! "$DOCKER_CMD" run --name "$probe_name" --user postgres --rm --network none --pull never \
+  --memory "$CATERING_RESTORE_MEMORY_BYTES" --memory-swap "$CATERING_RESTORE_MEMORY_BYTES" \
+  --tmpfs "/tmp:rw,noexec,nosuid,size=$CATERING_RESTORE_POSTGRES_BYTES,nr_inodes=10000" \
+  --env "CATERING_PROBE_MEMORY_BYTES=$CATERING_RESTORE_MEMORY_BYTES" \
   --entrypoint /bin/sh --volume "$restored_postgres_dump:/restore/postgres.dump:ro" \
   "$CATERING_RESTORE_POSTGRES_IMAGE" -ceu '
 set -eu
+test "$(cat /sys/fs/cgroup/memory.max)" = "$CATERING_PROBE_MEMORY_BYTES"
+test "$(cat /sys/fs/cgroup/memory.swap.max)" = 0
 export PGDATA=/tmp/pgdata
 export PGHOST=/tmp/pgsocket
 mkdir -p "$PGHOST"

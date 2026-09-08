@@ -657,10 +657,12 @@ for network_name in platform-infra_default zeiterfassung_default catering_ingres
   done <<< "$members"
 done
 
-if ! timer_state="$(systemctl show --no-pager --property=Id,LoadState,ActiveState,Unit,TimersCalendar catering-backup.timer 2>/dev/null)"; then
+if ! timer_state="$(systemctl show --no-pager --property=Id,LoadState,ActiveState,Unit,TimersCalendar,AccuracyUSec,RandomizedDelayUSec,Persistent catering-backup.timer 2>/dev/null)"; then
   probe_error timers command_failed
 fi
 timer_id= timer_load= timer_active_state= timer_unit= timer_calendar=
+timer_accuracy= timer_randomized= timer_persistent=
+timer_accuracy_count=0; timer_randomized_count=0; timer_persistent_count=0
 timer_id_count=0; timer_load_count=0; timer_active_count=0; timer_unit_count=0; timer_calendar_count=0
 while IFS= read -r timer_field || [[ -n "$timer_field" ]]; do
   timer_key="${timer_field%%=*}"; timer_value="${timer_field#*=}"
@@ -669,6 +671,9 @@ while IFS= read -r timer_field || [[ -n "$timer_field" ]]; do
     LoadState) timer_load="$timer_value"; timer_load_count=$((timer_load_count + 1)) ;;
     ActiveState) timer_active_state="$timer_value"; timer_active_count=$((timer_active_count + 1)) ;;
     Unit) timer_unit="$timer_value"; timer_unit_count=$((timer_unit_count + 1)) ;;
+    AccuracyUSec) timer_accuracy="$timer_value"; timer_accuracy_count=$((timer_accuracy_count + 1)) ;;
+    RandomizedDelayUSec) timer_randomized="$timer_value"; timer_randomized_count=$((timer_randomized_count + 1)) ;;
+    Persistent) timer_persistent="$timer_value"; timer_persistent_count=$((timer_persistent_count + 1)) ;;
     TimersCalendar) timer_calendar="$timer_value"; timer_calendar_count=$((timer_calendar_count + 1)) ;;
     *) probe_error timers unexpected_field ;;
   esac
@@ -676,8 +681,9 @@ done <<< "$timer_state"
 timer_is_active="$(systemctl is-active catering-backup.timer 2>/dev/null)" || probe_error timers inactive
 # systemctl show wraps each calendar in one structured property; keep the
 # schedule exact and reject extra entries or fields rather than substring-match.
-timer_calendar_pattern='^\{ OnCalendar=\*-\*-\* 00,06,12,18:00:00 UTC ; next_elapse=(n/a|[A-Za-z]{3} [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} [^[:space:]{};]+) \}$'
+timer_calendar_pattern='^\{ OnCalendar=\*-\*-\* 00,03,06,09,12,15,18,21:00:00 UTC ; next_elapse=(n/a|[A-Za-z]{3} [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} [^[:space:]{};]+) \}$'
 [[ "$timer_id_count" == 1 && "$timer_load_count" == 1 && "$timer_active_count" == 1 && "$timer_unit_count" == 1 && "$timer_calendar_count" == 1 && "$timer_id" == catering-backup.timer && "$timer_load" == loaded && "$timer_active_state" == active && "$timer_is_active" == active && "$timer_unit" == catering-backup.service && "$timer_calendar" =~ $timer_calendar_pattern ]] || probe_error timers invalid_binding
+[[ "$timer_accuracy_count" == 1 && "$timer_randomized_count" == 1 && "$timer_persistent_count" == 1 && "$timer_accuracy" == 1min && "$timer_randomized" == 0 && "$timer_persistent" == yes ]] || probe_error timers invalid_budget
 emit PROBE_STATUS timers success
 emit UNIT timer catering-backup.timer
 backup_timer_active=true

@@ -373,11 +373,17 @@ describe("Catering production evidence workflow contract", () => {
     ["empty aliases", { aliases: "" }],
     ["unsafe aliases", { aliases: "web;unexpected" }],
     ["wrong endpoint network", { endpointNetworkId: "5".repeat(64) }],
-    ["bare calendar", { timerCalendar: "*-*-* 00,06,12,18:00:00 UTC" }],
+    ["old six-hour calendar", { timerCalendar: "{ OnCalendar=*-*-* 00,06,12,18:00:00 UTC ; next_elapse=n/a }" }],
+    ["wrong accuracy", { timerAccuracy: "5min" }],
+    ["missing accuracy", { timerAccuracy: "" }],
+    ["duplicate accuracy", { timerAccuracy: "1min\nAccuracyUSec=1min" }],
+    ["randomized delay", { timerRandomized: "1min" }],
+    ["nonpersistent timer", { timerPersistent: "no" }],
+    ["bare calendar", { timerCalendar: "*-*-* 00,03,06,09,12,15,18,21:00:00 UTC" }],
     ["wrong calendar", { timerCalendar: "{ OnCalendar=*-*-* 01,07,13,19:00:00 UTC ; next_elapse=n/a }" }],
-    ["malformed calendar", { timerCalendar: "{ OnCalendar=*-*-* 00,06,12,18:00:00 UTC ; next_elapse=n/a" }],
-    ["multiple calendars", { timerCalendar: "{ OnCalendar=*-*-* 00,06,12,18:00:00 UTC ; next_elapse=n/a } { OnCalendar=*-*-* 00,06,12,18:00:00 UTC ; next_elapse=n/a }" }],
-    ["duplicate calendar property", { timerCalendar: "{ OnCalendar=*-*-* 00,06,12,18:00:00 UTC ; next_elapse=n/a }\nTimersCalendar={ OnCalendar=*-*-* 00,06,12,18:00:00 UTC ; next_elapse=n/a }" }],
+    ["malformed calendar", { timerCalendar: "{ OnCalendar=*-*-* 00,03,06,09,12,15,18,21:00:00 UTC ; next_elapse=n/a" }],
+    ["multiple calendars", { timerCalendar: "{ OnCalendar=*-*-* 00,03,06,09,12,15,18,21:00:00 UTC ; next_elapse=n/a } { OnCalendar=*-*-* 00,03,06,09,12,15,18,21:00:00 UTC ; next_elapse=n/a }" }],
+    ["duplicate calendar property", { timerCalendar: "{ OnCalendar=*-*-* 00,03,06,09,12,15,18,21:00:00 UTC ; next_elapse=n/a }\nTimersCalendar={ OnCalendar=*-*-* 00,03,06,09,12,15,18,21:00:00 UTC ; next_elapse=n/a }" }],
   ] as const)("collector rejects incompatible live shape: %s", (_name, options) => {
     const run = runHelperWithActualRemote("complete", undefined, options);
     expect(run.status, String(run.stdout) + String(run.stderr)).not.toBe(0);
@@ -385,9 +391,23 @@ describe("Catering production evidence workflow contract", () => {
     expect(run.stdout).not.toContain("CLASSIFICATION\tbackup_channel\tBELEGT");
   }, 120000);
 
+  test.each([20100, 21600, 21601, 30900])("active timer and running service cannot rejuvenate evidence at age %s", (age) => {
+    const run = runHelperWithActualRemote("complete", undefined, { nowEpoch: 1788480000 + age });
+    if (age <= 21600) {
+      expect(run.status, String(run.stdout) + String(run.stderr)).toBe(0);
+      expect(run.stdout).toContain("CLASSIFICATION\tbackup_channel\tBELEGT");
+      expect(run.stdout).toContain("UTC\tbackup_created_at\t2026-09-04T00:00:00Z");
+    } else {
+      expect(run.status, String(run.stdout) + String(run.stderr)).toBe(0);
+      expect(run.stdout).not.toContain("CLASSIFICATION\tbackup_channel\tBELEGT");
+      expect(run.stdout).toContain("CLASSIFICATION\tbackup_channel\tNICHT BELEGT");
+      expect(run.stdout).toContain("EVIDENCE_STATUS\tSAFE_REDACTED");
+    }
+  }, 120000);
+
   test("collector accepts exact calendar with unavailable next elapse", () => {
     const run = runHelperWithActualRemote("complete", undefined, {
-      timerCalendar: "{ OnCalendar=*-*-* 00,06,12,18:00:00 UTC ; next_elapse=n/a }",
+      timerCalendar: "{ OnCalendar=*-*-* 00,03,06,09,12,15,18,21:00:00 UTC ; next_elapse=n/a }",
     });
     expect(run.status, String(run.stdout) + String(run.stderr)).toBe(0);
     expect(run.stdout).toContain("CLASSIFICATION\tbackup_channel\tBELEGT");

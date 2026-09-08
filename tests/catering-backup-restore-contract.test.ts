@@ -19,6 +19,15 @@ import { describe, expect, test } from "vitest";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 
+// Small synthetic fixture budgets; these are not production sizing defaults.
+const syntheticCapacity = {
+  CATERING_BACKUP_MAX_BYTES: "1048576",
+  CATERING_RESTORE_POSTGRES_BYTES: "8388608",
+  CATERING_RESTORE_MEMORY_BYTES: "16777216",
+  CATERING_BACKUP_RESERVE_BYTES: "4096",
+  CATERING_BACKUP_RESERVE_INODES: "16",
+};
+
 const files = {
   common: "platform-infra/backup/catering-backup-common.sh",
   backup: "platform-infra/backup/catering-backup.sh",
@@ -51,7 +60,7 @@ function syntax(relativePath: string): ReturnType<typeof spawnSync> {
 function runShell(script: string, env: NodeJS.ProcessEnv = {}): ReturnType<typeof spawnSync> {
   return spawnSync("bash", ["-c", script], {
     encoding: "utf8",
-    env: { ...process.env, ...env },
+    env: { ...process.env, ...syntheticCapacity, ...env },
   });
 }
 
@@ -227,6 +236,7 @@ function createBackupEntrypointFixture() {
     ]);
     const backupEnv: NodeJS.ProcessEnv = {
         ...process.env,
+        ...syntheticCapacity,
         PATH: `${fakeBin}:${process.env.PATH ?? ""}`,
         FAKE_LOG: logPath,
         CATERING_REPOSITORY_FILE: repositoryFile,
@@ -345,6 +355,27 @@ function createRestoreEntrypointFixture() {
     writeFileSync(candidatePath, candidate, { mode: 0o600 });
     writeFileSync(path.join(root, "catering-backup-candidate"), `status=pointer\ncandidate_path=${candidatePath}\ncandidate_checksum=${sha256(candidate)}\ncreated_at=2026-09-04T00:00:00Z\n`, { mode: 0o600 });
     const install = (name: string, body: string): void => writeFileSync(path.join(bin, name), `${body}\n`, { mode: 0o755 });
+    const meminfo = path.join(root, "synthetic-meminfo");
+    writeFileSync(meminfo, "MemAvailable: 16777216 kB\n", { mode: 0o600 });
+    install("python3", `#!/usr/bin/env bash
+set -euo pipefail
+if [[ "\${1-}" == - ]]; then
+  source_code="$(/usr/bin/python3 -c 'import sys; print(sys.stdin.read(), end="")')"
+  source_code="\${source_code//\\/proc\\/meminfo/$FAKE_MEMINFO}"
+  printf '%s' "$source_code" | /usr/bin/python3 - "\${@:2}"
+else
+  if [[ "\${1-}" == -c && "\${2-}" == *CAPACITY_STREAM_FAILED* && "\${FAKE_CAPACITY_WRITE_ERROR:-}" == 1 ]]; then
+    exec /usr/bin/python3 -c $'import os\nos.write = lambda *args: (_ for _ in ()).throw(OSError("synthetic write failure"))\n'"$2" "\${@:3}"
+  fi
+  exec /usr/bin/python3 "$@"
+fi`);
+    install("cat", `#!/usr/bin/env bash
+set -euo pipefail
+case "$*" in
+  /sys/fs/cgroup/memory.max) printf '%s\\n' "\${FAKE_MEMORY_LIMIT:-$CATERING_PROBE_MEMORY_BYTES}" ;;
+  /sys/fs/cgroup/memory.swap.max) printf '%s\\n' "\${FAKE_SWAP_LIMIT:-0}" ;;
+  *) exec /bin/cat "$@" ;;
+esac`);
     install("hostname", `#!/usr/bin/env bash\nprintf '%s\\n' ${JSON.stringify(host)}`);
     install("date", `#!/usr/bin/env bash
 set -euo pipefail
@@ -397,7 +428,10 @@ LATE
     if [[ "\${FAKE_RESTIC_MODE:-}" == repo-drift && "$cat_count" -ge "\${FAKE_RESTIC_DRIFT_AT:-2}" ]]; then printf '{"id":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}\\n'; else printf '{"id":"${repositoryId}"}\\n'; fi
     ;;
   snapshots) printf '[{"id":"${snapshotId}"}]\\n' ;;
-  dump) cat "$FAKE_TAR" ;;
+  dump)
+    if [[ "\${FAKE_RESTIC_MODE:-}" == truncated ]]; then /usr/bin/head -c 10 "$FAKE_TAR"; exit 29; fi
+    if [[ "\${FAKE_RESTIC_MODE:-}" == short-success ]]; then /usr/bin/head -c 10 "$FAKE_TAR"; exit 0; fi
+    cat "$FAKE_TAR" ;;
   *) exit 33 ;;
 esac`);
     install("docker", `#!/usr/bin/env bash\nset -euo pipefail\nprintf 'docker %s\\n' \"$*\" >>\"$FAKE_LOG\"\ncase \"$1\" in ps) printf '%s' \"\${FAKE_DOCKER_PS:-}\" ;; run) [[ \"$*\" == *'--user postgres'* && \"$*\" == *'--network none'* && \"$*\" == *'--pull never'* && \"$*\" == *'--rm'* && \"$*\" != *' -p '* ]] || exit 41; [[ \"\${FAKE_DOCKER_MODE:-}\" == restore-fail ]] && exit 42 || true ;; inspect) printf 'stale\\n' ;; *) exit 43 ;; esac`);
@@ -445,7 +479,12 @@ case "\${1-}" in
     [[ "$*" == *"--network none"* ]] || { printf 'bad-network:%s\n' "$*" >>"$FAKE_LOG"; exit 41; }
     [[ "$*" == *"--pull never"* ]] || { printf 'bad-pull:%s\n' "$*" >>"$FAKE_LOG"; exit 41; }
     [[ "$*" == *"--rm"* ]] || { printf 'bad-rm:%s\n' "$*" >>"$FAKE_LOG"; exit 41; }
-    for arg in "$@"; do [[ "$arg" != "-p" && "$arg" != "--publish" ]] || exit 41; done
+    for arg in "$@"; do
+      [[ "$arg" != "-p" && "$arg" != "--publish" ]] || exit 41
+      case "$arg" in CATERING_PROBE_MEMORY_BYTES=*) export "$arg" ;; esac
+    done
+    [[ "$*" == *"--memory $CATERING_RESTORE_MEMORY_BYTES --memory-swap $CATERING_RESTORE_MEMORY_BYTES"* ]] || exit 41
+    [[ "$*" == *"--tmpfs /tmp:rw,noexec,nosuid,size=$CATERING_RESTORE_POSTGRES_BYTES,nr_inodes=10000"* ]] || exit 41
     inner_script="\${@: -1}"
     mkdir() {
       [[ "$*" == '-p /tmp/pgsocket' ]] || return 81
@@ -464,6 +503,8 @@ esac`);
       env: {
         ...process.env,
         PATH: `${bin}:${process.env.PATH ?? ""}`,
+        ...syntheticCapacity,
+        FAKE_MEMINFO: meminfo,
         FAKE_LOG: log,
         FAKE_PG_LOG: pgLog,
         FAKE_TAR: tarPath,
@@ -790,6 +831,7 @@ describe("Catering backup and isolated restore repository contract", () => {
           encoding: "utf8",
           env: {
             ...process.env,
+            ...syntheticCapacity,
             PATH: `${fakeBin}:${process.env.PATH ?? ""}`,
             FAKE_LOG: logPath,
             FAKE_RESTIC_MODE: "repo-drift",
@@ -1091,6 +1133,53 @@ exec ${quote(discovered.stdout.trim())} "$@"
       }, 300000);
     }
   }
+
+  test.each([
+    ["invalid configuration", { CATERING_BACKUP_MAX_BYTES: "0" }, "CAPACITY_CONFIG_INVALID"],
+    ["insufficient admission", { CATERING_BACKUP_RESERVE_BYTES: "1000000000000000" }, "CAPACITY_UNAVAILABLE"],
+    ["bounded download", { CATERING_BACKUP_MAX_BYTES: "10" }, "RESTORE_FAILED"],
+    ["interrupted download", { FAKE_RESTIC_MODE: "truncated" }, "RESTORE_FAILED"],
+    ["truncated successful transport", { FAKE_RESTIC_MODE: "short-success" }, "CHECKSUM_MISMATCH"],
+    ["write failure", { FAKE_CAPACITY_WRITE_ERROR: "1" }, "RESTORE_FAILED"],
+    ["unenforced memory ceiling", { FAKE_MEMORY_LIMIT: "max" }, "RESTORE_PROBE_FAILED"],
+    ["enabled swap", { FAKE_SWAP_LIMIT: "4096" }, "RESTORE_PROBE_FAILED"],
+  ] as const)("restore capacity failure %s preserves authority and cleans temporary data", (_name, fault, stage) => {
+    const fixture = createRestoreEntrypointFixture();
+    try {
+      const first = fixture.invoke(fault);
+      expect(first.status, String(first.stderr)).not.toBe(0);
+      expect(String(first.stderr)).toContain(stage);
+      expect(existsSync(fixture.evidencePath)).toBe(false);
+      expect(readdirSync(fixture.runtime).filter((entry) => entry.startsWith(".restore-"))).toEqual([]);
+      const success = fixture.invoke();
+      expect(success.status, String(success.stderr)).toBe(0);
+      const evidence = readFileSync(fixture.evidencePath);
+      const failed = fixture.invoke(fault);
+      expect(failed.status, String(failed.stderr)).not.toBe(0);
+      expect(String(failed.stderr)).toContain(stage);
+      expect(readFileSync(fixture.evidencePath)).toEqual(evidence);
+      expect(readdirSync(fixture.runtime).filter((entry) => entry.startsWith(".restore-"))).toEqual([]);
+    } finally {
+      removeFixture(fixture.root);
+    }
+  }, 120000);
+
+  test("backup rejects an oversized stream without publishing a candidate or changing evidence", () => {
+    const fixture = createBackupEntrypointFixture();
+    try {
+      const failed = spawnSync("bash", [path.join(repoRoot, files.backup)], {
+        encoding: "utf8", env: { ...fixture.backupEnv, CATERING_BACKUP_MAX_BYTES: "16" },
+      });
+      expect(failed.status, String(failed.stderr)).not.toBe(0);
+      expect(String(failed.stderr)).toContain("RESTIC_BACKUP_FAILED");
+      expect(readFileSync(fixture.logPath, "utf8")).toContain("backup");
+      expect(existsSync(fixture.pointer)).toBe(false);
+      expect(readFileSync(fixture.previousEvidence, "utf8")).toBe(fixture.previousEvidenceBytes);
+      expect(readdirSync(fixture.root).filter((entry) => entry.startsWith(".work-"))).toEqual([]);
+    } finally {
+      removeFixture(fixture.root);
+    }
+  });
 
   test("restore entrypoint fake exercises success, repeat, failure and stale cleanup gates", () => {
     const { root, runtime, pgLog, log, evidencePath, invoke } = createRestoreEntrypointFixture();
@@ -1493,12 +1582,39 @@ rto_elapsed_allowed 14400
     expect(restore).toContain("RECORD_DUPLICATE_FIELD");
   });
 
-  test("the timer defines the exact six-hour UTC schedule and remains inert in Git", () => {
+  test("the timer defines the three-hour UTC schedule with a bounded dispatch allowance", () => {
     const timer = source(files.timer);
-    expect(timer).toContain("OnCalendar=*-*-* 00,06,12,18:00:00 UTC");
+    expect(timer).toContain("OnCalendar=*-*-* 00,03,06,09,12,15,18,21:00:00 UTC");
+    expect(timer).toContain("AccuracySec=1min");
+    expect(timer).toContain("RandomizedDelaySec=0");
     expect(timer).toContain("Persistent=true");
     expect(timer).toContain("Unit=catering-backup.service");
     expect(timer).not.toMatch(/RandomizedDelaySec=(?!0\b)/);
+  });
+
+  test("calendar reserve covers the documented operating envelope without renewing old evidence", () => {
+    const timer = source(files.timer);
+    const hours = /^OnCalendar=\*-\*-\* ([0-9,]+):00:00 UTC$/m.exec(timer)?.[1].split(",").map(Number);
+    expect(hours).toBeDefined();
+    const intervals = hours!.map((hour, index) => (((hours![(index + 1) % hours!.length] - hour) + 24) % 24) * 3600);
+    const interval = Math.max(...intervals);
+    const budgets = Object.fromEntries([...source(files.runbook).matchAll(/^\| (A|D|B|R) \| (\d+) \|/gm)].map((match) => [match[1], Number(match[2])]));
+    expect(budgets).toEqual({ A: 60, D: 240, B: 1800, R: 7200 });
+    const completion = budgets.A + budgets.D + budgets.B + budgets.R;
+    const rpo = Number(/readonly RPO_SECONDS="(\d+)"/.exec(source(files.backup))?.[1]);
+    expect(21600 + completion).toBeGreaterThan(rpo); // Old six-hour cadence leaves a gap.
+    expect(interval - completion).toBe(1500); // Both services inactive before next nominal tick.
+    expect(rpo - (interval + completion)).toBe(1500);
+    const priorCapture = 0;
+    const nextCapture = interval + budgets.A + budgets.D;
+    expect(nextCapture - priorCapture).toBeLessThanOrEqual(11100);
+    expect(nextCapture + budgets.B + budgets.R - priorCapture).toBe(20100);
+    // A delayed/skipped/coalesced activation or failed cycle cannot renew capture time.
+    for (const publication of [interval + completion + 1501, 2 * interval + completion, Infinity]) {
+      expect(publication - priorCapture).toBeGreaterThan(rpo);
+    }
+    expect(rpo - priorCapture <= rpo).toBe(true);
+    expect(rpo + 1 - priorCapture <= rpo).toBe(false);
   });
 
   test("the future oneshot cycle runs backup before restore and has a four-hour ceiling", () => {
@@ -1541,6 +1657,11 @@ rto_elapsed_allowed 14400
       "CATERING_REQUIRED_SECRET_SCHEMA_SHA256",
       "CATERING_RESTORE_RUNTIME_ROOT",
       "CATERING_RESTORE_POSTGRES_IMAGE",
+      "CATERING_BACKUP_MAX_BYTES",
+      "CATERING_RESTORE_POSTGRES_BYTES",
+      "CATERING_RESTORE_MEMORY_BYTES",
+      "CATERING_BACKUP_RESERVE_BYTES",
+      "CATERING_BACKUP_RESERVE_INODES",
       "CATERING_SECRET_RECOVERY_REFERENCE_SHA256",
     ]) {
       expect(env).toContain(`${name}=`);
@@ -2351,7 +2472,7 @@ count=0
     writeFileSync(password, "fixture-password\n", { mode: 0o600 });
     writeFileSync(fakeRestic, "#!/usr/bin/env bash\nprintf 'ok\\n'\n", { mode: 0o755 });
 
-    const secureStart = common.indexOf("python3 -c '");
+    const secureStart = common.indexOf("python3 -c '", common.indexOf("secure_restic()"));
     const secureEnd = common.indexOf("\n' \"$command\"", secureStart);
     const securePython = common.slice(secureStart + "python3 -c '\n".length, secureEnd);
     const readerStart = common.indexOf("read_bound_text() {");

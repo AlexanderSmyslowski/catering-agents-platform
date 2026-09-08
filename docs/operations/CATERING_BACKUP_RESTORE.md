@@ -2,8 +2,9 @@
 
 Dieser Slice beschreibt ausschließlich einen später separat freizugebenden,
 repository-only Backup-Kandidaten und einen isolierten Restore-Probe. Es wurde
-hier **kein Backup ausgeführt; kein Restore ausgeführt**; Produktion, Host, SSH, Docker und
-Restic bleiben außerhalb dieses Fachturns.
+in der Produktion **kein Backup ausgeführt; kein Restore ausgeführt**. Echte
+Werkzeuge werden ausschließlich im isolierten synthetischen Hosted-Komponententest
+geprüft; Produktions-/Host-/SSH-Zugriff bleibt ausgeschlossen.
 
 ## Grenzen
 
@@ -53,7 +54,7 @@ Restic bleiben außerhalb dieses Fachturns.
 Der Backup-Scope ist exakt `postgres,sites,platform-caddy,shared-edge-caddy`. Restic muss ein
 Off-host-Ziel verwenden; Repository-/Passwortdateien sind root-owned und 0600.
 Secrettragende Caddy-Daten werden ausschließlich im verschlüsselten Off-host-
-Restic-Snapshot gesichert; es gibt keine unverschlüsselten lokalen Kopien,
+Restic-Snapshot gesichert; es gibt keine persistenten unverschlüsselten lokalen Kopien,
 Archive oder Logs. Es werden keine Secretwerte außerhalb dieses verschlüsselten
 Snapshots ausgegeben oder geloggt, sondern höchstens stabile Hashes/Referenzen
 aus einer unabhängigen Recovery-Quelle gebunden. Installation,
@@ -86,6 +87,118 @@ Der Restore-Probe-Root ist ausschließlich der systemd-managed flüchtige Pfad
 `/run/catering-backup` (root-only, Modus 0700); darin liegen nur kurzlebige
 Extraction-/Probe-Daten. Persistente Caddy-Archive oder Klartext-Bundles sind
 verboten.
+
+## Kapazität vor Betriebsfreigabe
+
+Alle fünf Werte werden in derselben geschützten Environment-Datei für Backup
+und Restore provisioniert. Die Vorlage bleibt absichtlich leer; es gibt keine
+Produktionsgrößen oder unbegrenzten Defaults:
+
+| Eingabe | Vertrag |
+| --- | --- |
+| `CATERING_BACKUP_MAX_BYTES` | B: Höchstzahl Bytes des vollständigen unkomprimierten Tar-Streams einschließlich Header/Padding; zugleich Obergrenze des Dumps und der summierten regulären Archivdateien. |
+| `CATERING_RESTORE_POSTGRES_BYTES` | P: Byte-Limit des flüchtigen Container-`/tmp`, einschließlich PGDATA und Socket. |
+| `CATERING_RESTORE_MEMORY_BYTES` | M: harter cgroup-v2-Speicherhöchstwert des Probecontainers einschließlich seines tmpfs; Swap ist gesperrt. |
+| `CATERING_BACKUP_RESERVE_BYTES` | R: mindestens beobachteter freier Byte-Spielraum. |
+| `CATERING_BACKUP_RESERVE_INODES` | J: mindestens beobachteter freier Inode-Spielraum (Anzahl, keine Bytes). |
+
+Zulässig sind ausschließlich positive kanonische Dezimalzahlen bis
+9223372036854775807. P und M müssen Vielfache der Host-Seitengröße sein;
+M muss mindestens 6291456 Bytes und strikt größer als P sein.
+`2*B + M + R` muss innerhalb der Zahlengrenze bleiben. Fehlende, ungültige
+oder widersprüchliche Werte stoppen beide Einstiegspunkte geschlossen.
+Ein unter B liegender Nutzdatenbestand kann wegen Tar-Headern/Padding
+bereits die Streamgrenze überschreiten; auch dann entsteht kein gültiger
+Kandidatenzeiger. Ein unter anderer Konfiguration erstellter zu großer
+Snapshot wird durch den enger konfigurierten Restore abgewiesen.
+
+Mit K = Maximum aus Dateisystemblock- und Host-Seitengröße verlangt der
+Backup-Arbeitsroot mindestens `B + 2*K + R` freie Bytes und `2 + J` Inodes.
+Im unveränderten Restore-Root sind mindestens `2*B + 10002*K + R` freie
+Bytes und `10002 + J` Inodes erforderlich: Streamdatei, extrahierter
+Gesamtinhalt, Baumroot und bis zu 10000 tatsächlich erzeugte Knoten,
+einschließlich impliziter Verzeichnisse. Linux `MemAvailable` muss zusätzlich
+M decken, also mindestens `2*B + 10002*K + R + M`; P ist bereits in M
+enthalten und wird nicht doppelt gezählt. PostgreSQL erhält ein tmpfs mit
+P Bytes und 10000 Inodes sowie den überprüften cgroup-v2-Höchstwert M.
+Nicht verfügbare oder nicht wirksame Grenzen verhindern den Probe-Erfolg.
+
+Diese Prüfungen **reservieren keine Ressourcen**. R und J sind beobachteter
+Spielraum; konkurrierender Verbrauch kann auch nach der Zulassung zu einem
+kontrollierten Fehler führen. Datei-/Inodeprüfungen und gerundete
+Schreibgrenzen werden während der Verarbeitung erneut angewandt. Vor
+Betriebsfreigabe muss der Betreiber B für den vollständigen Archivbestand,
+P für die gemessene PostgreSQL-Expansion und M/R/J für Prozess-Overhead,
+Restic/Python, Hostlast und Wachstum dimensionieren sowie Limitdurchsetzung
+und Laufzeiten unter repräsentativer Last nachweisen. Das fehlt weiterhin.
+
+Dump, Snapshotausgabe und beide Restore-Rücklesevorgänge bleiben in
+131072-Byte-Blöcken begrenzt. `stream.tar` wird schon beim Download begrenzt;
+sein Whole-Stream-Hash wird vor der Extraktion geprüft. Auch Tar-Metadaten
+sind vor dem Parser begrenzt (65536 Bytes pro Erweiterungsheader, höchstens
+acht verschachtelte Header; globale PAX-Header und Sparse-Archive ausgeschlossen).
+Bereits verarbeitete Tar-/PAX-Metadaten werden nicht im Parser-Cache gesammelt. Pfad-Allowlist,
+Link-/Spezialdateisperren, Rechte und Snapshotbindung bleiben erhalten.
+Kapazitäts-, Stream- und Schreibfehler bereinigen die eigenen temporären
+Daten und veröffentlichen keinen neuen Erfolg. Vor der finalen Veröffentlichung
+bleibt alte Evidence erhalten; Replace-/Verzeichnis-fsync-Fehler behalten
+unverändert ihre gesonderte Durability-Semantik ohne Auto-Recovery.
+
+Die kleinen Testbudgets und numerischen Header über 1 GiB sind synthetische
+Grenzbelege, kein mehrgigabytegroßer PostgreSQL-End-to-End-Restore.
+
+## Zeitplan und unterstützter Regelbetrieb
+
+Die inaktive Timer-Vorlage ist auf 00, 03, 06, 09, 12, 15, 18 und 21 Uhr UTC
+festgelegt: Intervall I = 10800 Sekunden, `AccuracySec=1min`,
+`RandomizedDelaySec=0`, `Persistent=true`. Der Collector verlangt genau
+diesen Kalender einschließlich Genauigkeit, fehlender Zufallsverzögerung
+und Persistent-Eigenschaft. Ein aktiver Timer allein belegt kein Backup.
+Die Altersgrenze bleibt unverändert 21600 Sekunden; maßgeblich ist der
+gebundene Datenzeitpunkt `created_at`, niemals Receipt-/Evidence-Schreibzeit.
+
+Folgende Budgets sind Voraussetzungen für den unterstützten Regelbetrieb,
+keine bereits gemessenen Produktionsleistungen und keine neuen Timeouts:
+
+| Budget | Sekunden | Enthalten |
+| --- | --- | --- |
+| A | 60 | Timerungenauigkeit pro Fälligkeit. |
+| D | 240 | Gesamte zusätzliche Start-/Dispatch-/Blockierungsverzögerung beider Dienste einschließlich OnSuccess-Übergang. |
+| B | 1800 | Backup ab Prozesseintritt: Aufnahme, Upload, Rücklesen, Kandidatenzeiger, EXIT-Cleanup und Dienstende. |
+| R | 7200 | Restore ab Prozesseintritt: Download, Extraktion, PostgreSQL, Cleanup, Receipt/Status, finale Evidence samt fsync und Dienstende. |
+
+C = A + D + B + R = 9300 Sekunden. Im stationären Betrieb ohne konkurrierende
+manuelle Starts sind beide Dienste spätestens 1500 Sekunden vor der nächsten
+regulären Fälligkeit inaktiv (`I-C`). Der Abstand der gebundenen
+Aufnahmezeitpunkte beträgt höchstens `I+A+D = 11100` Sekunden; Backup setzt
+seinen konservativen Datenzeitpunkt bereits bei Prozesseintritt. Die nächste
+autoritative Evidence liegt spätestens `I+C = 20100` Sekunden nach dem
+frühestmöglichen vorherigen Datenzeitpunkt vor. Zur RPO-Grenze verbleiben
+**1500 Sekunden Reserve**. Beim alten Sechsstundentakt wäre bereits jede
+positive folgende Laufzeit eine Nachweislücke. Die Byte-Kapazität gilt nur
+zusammen mit nachgewiesenem Durchsatz innerhalb dieser Zeitbudgets; B für
+Kapazitätsbytes und B in dieser Zeittabelle bezeichnen verschiedene Größen.
+
+`OnSuccess=catering-restore-probe.service` bleibt die Verbindung der getrennten
+Oneshot-Dienste. Ein bereits laufender Backupdienst erhält keinen parallelen
+Lauf. Ein bereits aktiver/aktivierender Restoredienst erhält durch OnSuccess
+keine automatische spätere Wiederholung für jeden neuen Kandidaten. Timer-
+Fälligkeit und OnSuccess-Anforderung sind deshalb keine Zusage eines weiteren
+vollständigen Zyklus. Es gibt weder parallele Restores noch eine Warteschlange.
+Persistent holt nach Inaktivität eine fällige Aktivierung nach, aber keine
+historischen Datenzeitpunkte oder garantierte Anzahl ausgefallener Läufe;
+eine Nachholung nahe der nächsten Fälligkeit liegt außerhalb der Herleitung.
+
+Ausgefallene, verspätete oder blockierte Folgeläufe lassen alte Evidence
+unverändert altern. Schon ein fehlender Intervallzyklus ergibt im Grenzfall
+`2*I+C = 30900` Sekunden und damit keine RPO-Zusage. Genau an 21600 Sekunden
+ist der Altersvertrag noch erfüllt, danach nicht mehr. Das gilt auch bei
+aktivem Timer oder laufendem Dienst. Ausfälle, überschrittene Betriebsbudgets,
+instabile Uhren und konkurrierende Starts müssen betrieblich erkannt und
+separat behandelt werden. Die vorhandenen Dienst-Timeouts von einer bzw.
+vier Stunden und die RTO-Grenze 14400 Sekunden sind Fehlergrenzen, keine
+zugesicherten normalen Laufzeiten. Keine universelle RPO-Garantie und keine
+Produktionsfreigabe werden daraus abgeleitet.
 
 ## Erforderliche Eingaben und Identitätsbindungen
 

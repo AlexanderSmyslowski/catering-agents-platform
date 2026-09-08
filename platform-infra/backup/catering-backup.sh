@@ -11,6 +11,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly SCRIPT_DIR
 # shellcheck source=platform-infra/backup/catering-backup-common.sh
 source "$SCRIPT_DIR/catering-backup-common.sh"
+capacity_admit config "$BACKUP_ROOT" || fail_state CAPACITY_CONFIG_INVALID
 
 : "${CATERING_BACKUP_EXPECTED_HOST_SHA256:?CATERING_BACKUP_EXPECTED_HOST_SHA256 is required}"
 : "${CATERING_BACKUP_SOURCE_COMMIT:?CATERING_BACKUP_SOURCE_COMMIT is required}"
@@ -282,11 +283,12 @@ PY
 }
 on_exit() { local rc=$?; cleanup_work_root "$rc"; local clean=$?; (( rc == 0 && clean != 0 )) && rc=$clean; exit "$rc"; }
 trap on_exit EXIT
+capacity_admit backup "$work_root" || fail_state CAPACITY_UNAVAILABLE
 
 postgres_dump="$work_root/postgres_dump"
 if ! "$DOCKER_CMD" exec --user postgres "$postgres_container_id" /bin/sh -c 'unset PGHOST PGHOSTADDR PGPORT PGSERVICE PGSERVICEFILE && exec "$@"' catering-pg-dump "$PG_DUMP_CMD" \
   --username=catering --dbname=catering_agents --format=custom --no-owner --no-privileges \
-  --strict-names --table=public.catering_business_records --table=public.catering_source_documents >"$postgres_dump" 2>/dev/null; then
+  --strict-names --table=public.catering_business_records --table=public.catering_source_documents 2>/dev/null | bounded_backup_stream "$postgres_dump"; then
   fail_state POSTGRES_DUMP_FAILED
 fi
 sites_path="/opt/catering-agents-platform/platform-infra/sites"
@@ -336,17 +338,26 @@ snapshot_stream() {
   python3 - "$work_root" "$sites_path" "$platform_caddy_data_mount" "$platform_caddy_config_mount" "$shared_edge_caddyfile_path" "$shared_edge_caddy_data_mount" "$shared_edge_caddy_config_mount" <<'PY'
 import os, sys, tarfile
 work, sites, p_data, p_config, caddyfile, e_data, e_config = sys.argv[1:]
+maximum = int(os.environ["CATERING_BACKUP_MAX_BYTES"])
+members = total = 0
+def admit(member):
+    global members, total
+    members += 1
+    total += member.size if member.isfile() else 0
+    if members > 9999 or total > maximum:
+        raise ValueError()
+    return member
 try:
     with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as archive:
-        archive.add(os.path.join(work, "manifest"), arcname="manifest", recursive=False)
-        archive.add(os.path.join(work, "postgres_dump"), arcname="postgres_dump", recursive=False)
+        archive.add(os.path.join(work, "manifest"), arcname="manifest", recursive=False, filter=admit)
+        archive.add(os.path.join(work, "postgres_dump"), arcname="postgres_dump", recursive=False, filter=admit)
         for name, path in (("sites", sites), ("platform_caddy_data", p_data), ("platform_caddy_config", p_config), ("shared_edge_caddyfile", caddyfile), ("shared_edge_caddy_data", e_data), ("shared_edge_caddy_config", e_config)):
-            archive.add(path, arcname="components/" + name, recursive=True)
+            archive.add(path, arcname="components/" + name, recursive=True, filter=admit)
 except Exception:
     raise SystemExit(1)
 PY
 }
-snapshot_json="$(snapshot_stream 2>/dev/null | restic_cmd backup --json --stdin --stdin-filename "$bundle_path")" || fail_state RESTIC_BACKUP_FAILED
+snapshot_json="$(snapshot_stream 2>/dev/null | bounded_backup_stream - | restic_cmd backup --json --stdin --stdin-filename "$bundle_path")" || fail_state RESTIC_BACKUP_FAILED
 snapshot_id="$(printf '%s' "$snapshot_json" | python3 -c 'import json,sys; rows=[json.loads(x) for x in sys.stdin if x.strip()]; value=rows[-1].get("snapshot_id", "") if rows else ""; print(value)' 2>/dev/null)" || fail_state SNAPSHOT_INVALID
 [[ "$snapshot_id" =~ ^[0-9a-f]{64}$ ]] || fail_state SNAPSHOT_INVALID
 assert_caddy_container_mounts platform-infra web platform-infra-web-1 platform-infra_caddy_data platform-infra_caddy_config "$platform_caddy_data_mount" "$platform_caddy_config_mount" /opt/catering-agents-platform/platform-infra/sites /etc/caddy/sites
@@ -357,12 +368,34 @@ caddy_binding_after="$caddy_binding_after|$CADDY_LAST_BINDING_DIGEST"
 caddy_source_generation_after="$(capture_source_generation "$sites_path" "$platform_caddy_data_mount" "$platform_caddy_config_mount" "$shared_edge_caddyfile_path" "$shared_edge_caddy_data_mount" "$shared_edge_caddy_config_mount")" || fail_state CADDY_CAPTURE_INVALID
 [[ "$caddy_source_generation_after" == "$caddy_source_generation_before" ]] || fail_state CADDY_CAPTURE_DRIFT
 bundle_checksums="$(restic_cmd dump "$snapshot_id" "$bundle_path" | python3 -c '
-import hashlib, sys, tarfile
+import hashlib, os, sys, tarfile
+
+# tarfile parses extension bodies before yielding a member; bound that work too.
+class BoundedTarInfo(tarfile.TarInfo):
+    def _proc_member(self, archive):
+        depth = getattr(archive, "metadata_depth", 0)
+        if self.type == tarfile.XGLTYPE or self.size < 0 or depth >= 8 or (self.type in (
+                tarfile.XHDTYPE, tarfile.XGLTYPE, tarfile.SOLARIS_XHDTYPE,
+                tarfile.GNUTYPE_LONGNAME, tarfile.GNUTYPE_LONGLINK) and self.size > 65536):
+            raise ValueError("tar metadata")
+        archive.metadata_depth = depth + 1
+        try:
+            return super()._proc_member(archive)
+        finally:
+            archive.metadata_depth = depth
+    def _reject_sparse(self, *args):
+        raise ValueError("sparse archive")
+    _proc_sparse = _proc_gnusparse_00 = _proc_gnusparse_01 = _proc_gnusparse_10 = _reject_sparse
 
 class HashingReader:
-    def __init__(self): self.whole = hashlib.sha256()
+    def __init__(self):
+        self.whole = hashlib.sha256()
+        self.total = 0
     def read(self, size=-1):
-        value = sys.stdin.buffer.read(size)
+        value = sys.stdin.buffer.read(min(131072, size) if size >= 0 else 131072)
+        self.total += len(value)
+        if self.total > int(os.environ["CATERING_BACKUP_MAX_BYTES"]):
+            raise ValueError("capacity")
         self.whole.update(value)
         return value
     def readinto(self, target):
@@ -382,9 +415,15 @@ spec = {
 }
 files = {key: [] for key in spec}
 roots = set()
+members = payload = 0
 try:
-    with tarfile.open(fileobj=reader, mode="r|*") as archive:
+    with tarfile.open(fileobj=reader, mode="r|", tarinfo=BoundedTarInfo) as archive:
         for member in archive:
+            archive.members.clear()
+            members += 1
+            payload += member.size if member.isfile() else 0
+            if members > 9999 or payload > int(os.environ["CATERING_BACKUP_MAX_BYTES"]):
+                raise ValueError("capacity")
             name = member.name.rstrip("/")
             for key, (prefix, directory) in spec.items():
                 if name != prefix and not (directory and name.startswith(prefix + "/")):
@@ -402,6 +441,8 @@ try:
                 elif not member.isdir():
                     raise ValueError("member")
                 break
+    while reader.read(131072):
+        pass
 except (OSError, tarfile.TarError, ValueError):
     raise SystemExit(1)
 for key, (_, directory) in spec.items():

@@ -24,6 +24,85 @@ fail_state() {
   return 1
 }
 
+# Capacity inputs are operator-provisioned bytes/counts, never unlimited defaults.
+# Free-space checks are observations; concurrent consumption can still fail I/O.
+capacity_admit() {
+  python3 - "$@" <<'PY_CAPACITY'
+import os, re, sys
+try:
+    names = ("CATERING_BACKUP_MAX_BYTES", "CATERING_RESTORE_POSTGRES_BYTES",
+             "CATERING_RESTORE_MEMORY_BYTES", "CATERING_BACKUP_RESERVE_BYTES",
+             "CATERING_BACKUP_RESERVE_INODES")
+    raw = [os.environ.get(name, "") for name in names]
+    if any(not re.fullmatch(r"[1-9][0-9]{0,18}", value) for value in raw):
+        raise ValueError()
+    maximum, postgres, memory, reserve, inodes = map(int, raw)
+    if (max(map(int, raw)) > 9223372036854775807 or memory < 6291456 or
+            memory <= postgres or memory % os.sysconf("SC_PAGE_SIZE") or
+            postgres % os.sysconf("SC_PAGE_SIZE") or
+            2 * maximum + memory + reserve > 9223372036854775807):
+        raise ValueError()
+    stage, root = sys.argv[1:]
+    if stage == "config":
+        raise SystemExit(0)
+    if stage not in ("backup", "restore"):
+        raise ValueError()
+    space = os.statvfs(root)
+    block = max(space.f_frsize, os.sysconf("SC_PAGE_SIZE"))
+    entries = 10002 if stage == "restore" else 2
+    required = maximum * (2 if stage == "restore" else 1) + entries * block
+    if space.f_bavail * space.f_frsize < required + reserve or space.f_favail < entries + inodes:
+        raise ValueError()
+    if stage == "restore":
+        with open("/proc/meminfo", encoding="ascii") as source:
+            available = [line.split()[1:] for line in source if line.startswith("MemAvailable:")]
+        if (len(available) != 1 or available[0][1:] != ["kB"] or
+                int(available[0][0]) * 1024 < required + memory + reserve):
+            raise ValueError()
+except (OSError, ValueError, KeyError):
+    print("CAPACITY_ADMISSION_FAILED", file=sys.stderr)
+    raise SystemExit(1)
+PY_CAPACITY
+}
+
+# One bounded transport is shared by dump capture, snapshot emission and download.
+# The owning entrypoint's EXIT trap removes any partial file after failure.
+bounded_backup_stream() {
+  python3 -c '
+import os, sys
+fd = None
+try:
+    maximum, reserve = int(os.environ["CATERING_BACKUP_MAX_BYTES"]), int(os.environ["CATERING_BACKUP_RESERVE_BYTES"])
+    target = sys.argv[1]
+    fd = 1 if target == "-" else os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    total = 0
+    while True:
+        chunk = sys.stdin.buffer.read(min(131072, maximum - total + 1))
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > maximum:
+            raise ValueError()
+        if target != "-":
+            space = os.fstatvfs(fd)
+            block = max(space.f_frsize, os.sysconf("SC_PAGE_SIZE"))
+            if space.f_bavail * space.f_frsize < reserve + ((len(chunk) + block - 1) // block) * block:
+                raise ValueError()
+        view = memoryview(chunk)
+        while view:
+            written = os.write(fd, view)
+            if written <= 0:
+                raise ValueError()
+            view = view[written:]
+except (OSError, ValueError, KeyError):
+    print("CAPACITY_STREAM_FAILED", file=sys.stderr)
+    raise SystemExit(1)
+finally:
+    if fd is not None and fd != 1:
+        os.close(fd)
+' "$@"
+}
+
 safe_record_path() {
   local path="${1-}" root cursor parent relative component
   # Keep the configured root as a lexical trust boundary.  Resolving it with
@@ -525,12 +604,18 @@ PY
 capture_source_generation() {
   [[ "$#" == 6 ]] || { fail_state CADDY_CAPTURE_INVALID; return 1; }
   python3 - "$@" <<'PY'
-import hashlib, os, stat, sys
+import hashlib, itertools, os, stat, sys
 labels = ("sites", "platform_caddy_data", "platform_caddy_config",
           "shared_edge_caddyfile", "shared_edge_caddy_data",
           "shared_edge_caddy_config")
 value = hashlib.sha256()
+# Reserve manifest, dump and the implicit components directory within 10000 nodes.
+entries_seen = 0
 def add(label, relative, info):
+    global entries_seen
+    entries_seen += 1
+    if entries_seen > 9997:
+        raise ValueError("CADDY_CAPTURE_INVALID")
     if stat.S_ISLNK(info.st_mode) or not (stat.S_ISREG(info.st_mode) or stat.S_ISDIR(info.st_mode)):
         raise ValueError("CADDY_CAPTURE_INVALID")
     value.update(("%s\0%s\0%s\0%s\0%s\0%s\0%s\n" % (
@@ -544,7 +629,11 @@ def walk(label, root):
     pending = [(root, ".")]
     while pending:
         current, relative = pending.pop()
-        entries = sorted(os.scandir(current), key=lambda entry: entry.name, reverse=True)
+        with os.scandir(current) as iterator:
+            entries = list(itertools.islice(iterator, 9998 - entries_seen))
+        if len(entries) + entries_seen > 9997:
+            raise ValueError("CADDY_CAPTURE_INVALID")
+        entries.sort(key=lambda entry: entry.name, reverse=True)
         for entry in entries:
             child_relative = entry.name if relative == "." else relative + "/" + entry.name
             info = entry.stat(follow_symlinks=False)

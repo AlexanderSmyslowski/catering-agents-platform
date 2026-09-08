@@ -10,6 +10,7 @@ import subprocess
 import sys
 import unittest
 from unittest import mock
+from catering_backup_capacity_test import CapacityContracts
 import os
 import signal
 import shlex
@@ -66,7 +67,7 @@ sys.exit(result.returncode)
 """)
         for file in (pg, docker):
             file.chmod(0o700)
-        return dict(os.environ, DOCKER_CMD=str(docker), PG_DUMP_CMD=str(pg),
+        return dict(os.environ, **self.implementation().SYNTHETIC_CAPACITY, DOCKER_CMD=str(docker), PG_DUMP_CMD=str(pg),
                     postgres_container_id='a' * 64, postgres_dump=str(root / 'dump'),
                     DUMP_OBSERVATION=str(root / 'pg.json'), DOCKER_OBSERVATION=str(root / 'docker.json'))
 
@@ -77,7 +78,7 @@ sys.exit(result.returncode)
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp); env = self.dump_fixture(root)
             result = subprocess.run(['/bin/bash', '-euo', 'pipefail', '-c',
-                                     'fail_state() { exit 1; }\n' + fragment],
+                                     'source ' + shlex.quote(str(ROOT / 'platform-infra/backup/catering-backup-common.sh')) + '\n' + fragment],
                                     env=env, capture_output=True)
             self.assertEqual(result.returncode, 0)
             actual = json.loads((root / 'pg.json').read_text())
@@ -308,6 +309,21 @@ sys.exit(result.returncode)
             target.write_bytes(target.read_bytes() + b'\n')
             with self.assertRaisesRegex(m.GateError, 'SOURCE'):
                 m.load_components(root)
+
+    def test_source_bound_container_capacity_arguments_are_quoted_and_complete(self):
+        m = self.implementation()
+        parts, _ = m.load_components(ROOT)
+        # Expand the same trusted, hash-bound fragment used by the hosted job.
+        result = subprocess.run(['/bin/bash', '-euo', 'pipefail', '-c',
+                                 "printf '%s\\0' " + parts['restore_limits'] + '\n'],
+                                env={**os.environ, **m.SYNTHETIC_CAPACITY}, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.split(b'\0'), [b'--memory', b'536870912',
+            b'--memory-swap', b'536870912', b'--tmpfs',
+            b'/tmp:rw,noexec,nosuid,size=268435456,nr_inodes=10000',
+            b'--env', b'CATERING_PROBE_MEMORY_BYTES=536870912', b''])
+        self.assertIn('cat /sys/fs/cgroup/memory.max', parts['restore_body'])
+        self.assertIn('cat /sys/fs/cgroup/memory.swap.max', parts['restore_body'])
 
     def test_synthetic_oracle_is_exact_and_catches_corruption(self):
         m = self.implementation()
@@ -541,11 +557,11 @@ sys.exit(result.returncode)
                 try:
                     if timeout:
                         with mock.patch.object(m.time, 'monotonic', side_effect=[0, 91]):
-                            return m.restore_case(resources, 'restore', 'image', 'id', Path(temp)/'dump', 'body', expected), events
+                            return m.restore_case(resources, 'restore', 'image', 'id', Path(temp)/'dump', 'body', expected, limits=[]), events
                     if release_timeout:
                         with mock.patch.object(m.time, 'monotonic', side_effect=[0, 0, 100, 131]):
-                            return m.restore_case(resources, 'restore', 'image', 'id', Path(temp)/'dump', 'body', expected), events
-                    return m.restore_case(resources, 'restore', 'image', 'id', Path(temp)/'dump', 'body', expected), events
+                            return m.restore_case(resources, 'restore', 'image', 'id', Path(temp)/'dump', 'body', expected, limits=[]), events
+                    return m.restore_case(resources, 'restore', 'image', 'id', Path(temp)/'dump', 'body', expected, limits=[]), events
                 finally:
                     in_reader[0] = False
                     resources.cleanup()
@@ -806,9 +822,9 @@ sys.exit(result.returncode)
                     try:
                         if tail:
                             with self.assertRaises(m.GateError):
-                                m.restore_case(resources, 'restore', 'image', 'id', Path(temp)/'dump', 'body', expected)
+                                m.restore_case(resources, 'restore', 'image', 'id', Path(temp)/'dump', 'body', expected, limits=[])
                         else:
-                            self.assertTrue(m.restore_case(resources, 'restore', 'image', 'id', Path(temp)/'dump', 'body', expected)['data_schema_equal'])
+                            self.assertTrue(m.restore_case(resources, 'restore', 'image', 'id', Path(temp)/'dump', 'body', expected, limits=[])['data_schema_equal'])
                     finally:
                         resources.cleanup()
                 self.assertEqual(resources.processes, [])
