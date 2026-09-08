@@ -1,0 +1,315 @@
+# Catering Backup/Restore – Vertragsnotiz
+
+Dieser Slice beschreibt ausschließlich einen später separat freizugebenden,
+repository-only Backup-Kandidaten und einen isolierten Restore-Probe. Es wurde
+in der Produktion **kein Backup ausgeführt; kein Restore ausgeführt**. Echte
+Werkzeuge werden ausschließlich im isolierten synthetischen Hosted-Komponententest
+geprüft; Produktions-/Host-/SSH-Zugriff bleibt ausgeschlossen.
+
+## Grenzen
+
+- RPO: 6 Stunden (21.600 Sekunden), RTO: 4 Stunden (14.400 Sekunden).
+- Der Backup-Timer erzeugt zuerst einen versionierten Snapshot-Kandidaten und
+  einen atomaren Kandidatenzeiger. Die autoritative Evidence wird dabei niemals
+  geschrieben.
+- Der Snapshot ist genau ein nicht-verboser Restic-`--stdin`-Tar-Stream mit
+  relativen Pfaden (`manifest`, `postgres_dump` und eindeutige
+  `components/*`-Kennungen). PostgreSQL-Dump und nicht geheimes Manifest dürfen
+  nur im kurzlebigen Arbeitsroot liegen; Caddy-Daten, Sites und Caddyfile
+  werden direkt aus den zuvor identitätsgeprüften Mountpoints in das
+  verschlüsselte Off-host-Repository gestreamt. Es gibt keine lokale Caddy-
+  Tar-/Bundle-Kopie.
+- Nach dem Snapshot wird genau dessen `restic dump` streamend gehasht; dieser
+  Whole-Stream-Hash wird in Kandidat und Artifact gebunden. Der Kandidat
+  enthält keine temporären Hostpfade, sondern nur relative interne Tokens.
+- Erst ein vollständig isolierter Restore darf Receipt und
+  snapshotunabhängigen Repository-Status schreiben; die autoritative Evidence
+  wird als letzter atomarer Schritt ersetzt. Bei jedem Fehler davor bleibt ein
+  vorhandener Nachweis bytegleich.
+- Jede Admission erzeugt zu Beginn genau eine unveränderliche
+  Produktionsadress-Generation: live Interfaceadressen, die verpflichtende
+  externe Betreiberangabe (`none` oder kanonische IP-CSV), deren Union und die
+  einmalige Endpoint-Auflösung werden gemeinsam gebunden. Nachgelagerte
+  Prüfungen verwenden ausschließlich diese Generation; eine Überschneidung
+  oder Generationsabweichung stoppt fail-closed.
+- Die Repository-Identität wird vor Snapshot, vor Kandidat/Zeiger und vor jeder
+  Restore-Promotion über dieselben geschützten Deskriptoren frisch gelesen;
+  ein Wechsel stoppt ohne Zeigerpromotion. Die vollständige Restore-Dauer wird
+  unmittelbar vor Evidence einschließlich Receipt-/Status-Schreibzeit erneut
+  gegen 14.400 Sekunden geprüft.
+- Der Restore-Receipt ist versioniert und wird über `receipt_path` und
+  `receipt_checksum` in der finalen Evidence gebunden. Der Repository-Status
+  bleibt auf Status, Identität, Hostbindung, Scope und Verifikationszeitpunkt
+  beschränkt.
+- Restore liest ausschließlich den gebundenen Snapshot in einem root-only
+  isolierten Restore-Root, prüft den Whole-Stream-Hash vor Extraction und
+  bindet alle erwarteten Komponentenpfade. Danach nutzt es einen
+  digestgepinnten PostgreSQL-Container mit `--pull never`,
+  `--network none`, ohne Ports, Produktionsnetze, Produktionsvolumes oder
+  Anwendungsdienste. Die beiden autoritativen Tabellen werden mit
+  `pg_restore --exit-on-error` geprüft.
+
+## Scope und Betreibergrenzen
+
+Der Backup-Scope ist exakt `postgres,sites,platform-caddy,shared-edge-caddy`. Restic muss ein
+Off-host-Ziel verwenden; Repository-/Passwortdateien sind root-owned und 0600.
+Secrettragende Caddy-Daten werden ausschließlich im verschlüsselten Off-host-
+Restic-Snapshot gesichert; es gibt keine persistenten unverschlüsselten lokalen Kopien,
+Archive oder Logs. Es werden keine Secretwerte außerhalb dieses verschlüsselten
+Snapshots ausgegeben oder geloggt, sondern höchstens stabile Hashes/Referenzen
+aus einer unabhängigen Recovery-Quelle gebunden. Installation,
+Timeraktivierung, tatsächlicher Backup/Restore, Ports 80/443 und Phase 3
+benötigen eine separate Freigabe.
+
+## Installations- und Recordpfade (nur Vertrag)
+
+Die vorgesehenen Installationsziele sind `/usr/local/libexec/catering-backup.sh`
+und `/usr/local/libexec/catering-restore-probe.sh`; die gemeinsamen
+Datei-/Record-Primitiven liegen in
+`/usr/local/libexec/catering-backup-common.sh`. Die drei Unit-Dateien gehören
+unter `/etc/systemd/system/`, und die geschützte Konfiguration liegt als
+`/etc/catering-backup/catering-backup.env` vor. Diese Pfade sind hier nur
+dokumentiert; in diesem Slice wurde nichts installiert oder aktiviert.
+
+Der dauerhafte State-Root ist `/var/lib/catering-backup`:
+
+- `snapshots/catering-backup-artifact-<run-id>` – versionierter, nicht geheimer
+  Artifact-Record;
+- `candidates/catering-backup-candidate-<run-id>` – versionierter Candidate;
+- `catering-backup-candidate` – atomarer Candidate-Pointer;
+- `restore-receipts/catering-restore-receipt-<run-id>` – versionierter
+  Restore-Receipt;
+- `catering-backup-repository-status` – snapshotunabhängiger Statusrecord;
+- `catering-backup-evidence` – autoritativer Nachweis, ausschließlich als
+  letzter atomarer Promotionsschritt.
+
+Der Restore-Probe-Root ist ausschließlich der systemd-managed flüchtige Pfad
+`/run/catering-backup` (root-only, Modus 0700); darin liegen nur kurzlebige
+Extraction-/Probe-Daten. Persistente Caddy-Archive oder Klartext-Bundles sind
+verboten.
+
+## Kapazität vor Betriebsfreigabe
+
+Alle fünf Werte werden in derselben geschützten Environment-Datei für Backup
+und Restore provisioniert. Die Vorlage bleibt absichtlich leer; es gibt keine
+Produktionsgrößen oder unbegrenzten Defaults:
+
+| Eingabe | Vertrag |
+| --- | --- |
+| `CATERING_BACKUP_MAX_BYTES` | B: Höchstzahl Bytes des vollständigen unkomprimierten Tar-Streams einschließlich Header/Padding; zugleich Obergrenze des Dumps und der summierten regulären Archivdateien. |
+| `CATERING_RESTORE_POSTGRES_BYTES` | P: Byte-Limit des flüchtigen Container-`/tmp`, einschließlich PGDATA und Socket. |
+| `CATERING_RESTORE_MEMORY_BYTES` | M: harter cgroup-v2-Speicherhöchstwert des Probecontainers einschließlich seines tmpfs; Swap ist gesperrt. |
+| `CATERING_BACKUP_RESERVE_BYTES` | R: mindestens beobachteter freier Byte-Spielraum. |
+| `CATERING_BACKUP_RESERVE_INODES` | J: mindestens beobachteter freier Inode-Spielraum (Anzahl, keine Bytes). |
+
+Zulässig sind ausschließlich positive kanonische Dezimalzahlen bis
+9223372036854775807. P und M müssen Vielfache der Host-Seitengröße sein;
+M muss mindestens 6291456 Bytes und strikt größer als P sein.
+`2*B + M + R` muss innerhalb der Zahlengrenze bleiben. Fehlende, ungültige
+oder widersprüchliche Werte stoppen beide Einstiegspunkte geschlossen.
+Ein unter B liegender Nutzdatenbestand kann wegen Tar-Headern/Padding
+bereits die Streamgrenze überschreiten; auch dann entsteht kein gültiger
+Kandidatenzeiger. Ein unter anderer Konfiguration erstellter zu großer
+Snapshot wird durch den enger konfigurierten Restore abgewiesen.
+
+Mit K = Maximum aus Dateisystemblock- und Host-Seitengröße verlangt der
+Backup-Arbeitsroot mindestens `B + 2*K + R` freie Bytes und `2 + J` Inodes.
+Im unveränderten Restore-Root sind mindestens `2*B + 10002*K + R` freie
+Bytes und `10002 + J` Inodes erforderlich: Streamdatei, extrahierter
+Gesamtinhalt, Baumroot und bis zu 10000 tatsächlich erzeugte Knoten,
+einschließlich impliziter Verzeichnisse. Linux `MemAvailable` muss zusätzlich
+M decken, also mindestens `2*B + 10002*K + R + M`; P ist bereits in M
+enthalten und wird nicht doppelt gezählt. PostgreSQL erhält ein tmpfs mit
+P Bytes und 10000 Inodes sowie den überprüften cgroup-v2-Höchstwert M.
+Nicht verfügbare oder nicht wirksame Grenzen verhindern den Probe-Erfolg.
+
+Diese Prüfungen **reservieren keine Ressourcen**. R und J sind beobachteter
+Spielraum; konkurrierender Verbrauch kann auch nach der Zulassung zu einem
+kontrollierten Fehler führen. Datei-/Inodeprüfungen und gerundete
+Schreibgrenzen werden während der Verarbeitung erneut angewandt. Vor
+Betriebsfreigabe muss der Betreiber B für den vollständigen Archivbestand,
+P für die gemessene PostgreSQL-Expansion und M/R/J für Prozess-Overhead,
+Restic/Python, Hostlast und Wachstum dimensionieren sowie Limitdurchsetzung
+und Laufzeiten unter repräsentativer Last nachweisen. Das fehlt weiterhin.
+
+Dump, Snapshotausgabe und beide Restore-Rücklesevorgänge bleiben in
+131072-Byte-Blöcken begrenzt. `stream.tar` wird schon beim Download begrenzt;
+sein Whole-Stream-Hash wird vor der Extraktion geprüft. Auch Tar-Metadaten
+sind vor dem Parser begrenzt (65536 Bytes pro Erweiterungsheader, höchstens
+acht verschachtelte Header; globale PAX-Header und Sparse-Archive ausgeschlossen).
+Bereits verarbeitete Tar-/PAX-Metadaten werden nicht im Parser-Cache gesammelt. Pfad-Allowlist,
+Link-/Spezialdateisperren, Rechte und Snapshotbindung bleiben erhalten.
+Kapazitäts-, Stream- und Schreibfehler bereinigen die eigenen temporären
+Daten und veröffentlichen keinen neuen Erfolg. Vor der finalen Veröffentlichung
+bleibt alte Evidence erhalten; Replace-/Verzeichnis-fsync-Fehler behalten
+unverändert ihre gesonderte Durability-Semantik ohne Auto-Recovery.
+
+Die kleinen Testbudgets und numerischen Header über 1 GiB sind synthetische
+Grenzbelege, kein mehrgigabytegroßer PostgreSQL-End-to-End-Restore.
+
+## Zeitplan und unterstützter Regelbetrieb
+
+Die inaktive Timer-Vorlage ist auf 00, 03, 06, 09, 12, 15, 18 und 21 Uhr UTC
+festgelegt: Intervall I = 10800 Sekunden, `AccuracySec=1min`,
+`RandomizedDelaySec=0`, `Persistent=true`. Der Collector verlangt genau
+diesen Kalender einschließlich Genauigkeit, fehlender Zufallsverzögerung
+und Persistent-Eigenschaft. Ein aktiver Timer allein belegt kein Backup.
+Die Altersgrenze bleibt unverändert 21600 Sekunden; maßgeblich ist der
+gebundene Datenzeitpunkt `created_at`, niemals Receipt-/Evidence-Schreibzeit.
+
+Folgende Budgets sind Voraussetzungen für den unterstützten Regelbetrieb,
+keine bereits gemessenen Produktionsleistungen und keine neuen Timeouts:
+
+| Budget | Sekunden | Enthalten |
+| --- | --- | --- |
+| A | 60 | Timerungenauigkeit pro Fälligkeit. |
+| D | 240 | Gesamte zusätzliche Start-/Dispatch-/Blockierungsverzögerung beider Dienste einschließlich OnSuccess-Übergang. |
+| B | 1800 | Backup ab Prozesseintritt: Aufnahme, Upload, Rücklesen, Kandidatenzeiger, EXIT-Cleanup und Dienstende. |
+| R | 7200 | Restore ab Prozesseintritt: Download, Extraktion, PostgreSQL, Cleanup, Receipt/Status, finale Evidence samt fsync und Dienstende. |
+
+C = A + D + B + R = 9300 Sekunden. Im stationären Betrieb ohne konkurrierende
+manuelle Starts sind beide Dienste spätestens 1500 Sekunden vor der nächsten
+regulären Fälligkeit inaktiv (`I-C`). Der Abstand der gebundenen
+Aufnahmezeitpunkte beträgt höchstens `I+A+D = 11100` Sekunden; Backup setzt
+seinen konservativen Datenzeitpunkt bereits bei Prozesseintritt. Die nächste
+autoritative Evidence liegt spätestens `I+C = 20100` Sekunden nach dem
+frühestmöglichen vorherigen Datenzeitpunkt vor. Zur RPO-Grenze verbleiben
+**1500 Sekunden Reserve**. Beim alten Sechsstundentakt wäre bereits jede
+positive folgende Laufzeit eine Nachweislücke. Die Byte-Kapazität gilt nur
+zusammen mit nachgewiesenem Durchsatz innerhalb dieser Zeitbudgets; B für
+Kapazitätsbytes und B in dieser Zeittabelle bezeichnen verschiedene Größen.
+
+`OnSuccess=catering-restore-probe.service` bleibt die Verbindung der getrennten
+Oneshot-Dienste. Ein bereits laufender Backupdienst erhält keinen parallelen
+Lauf. Ein bereits aktiver/aktivierender Restoredienst erhält durch OnSuccess
+keine automatische spätere Wiederholung für jeden neuen Kandidaten. Timer-
+Fälligkeit und OnSuccess-Anforderung sind deshalb keine Zusage eines weiteren
+vollständigen Zyklus. Es gibt weder parallele Restores noch eine Warteschlange.
+Persistent holt nach Inaktivität eine fällige Aktivierung nach, aber keine
+historischen Datenzeitpunkte oder garantierte Anzahl ausgefallener Läufe;
+eine Nachholung nahe der nächsten Fälligkeit liegt außerhalb der Herleitung.
+
+Ausgefallene, verspätete oder blockierte Folgeläufe lassen alte Evidence
+unverändert altern. Schon ein fehlender Intervallzyklus ergibt im Grenzfall
+`2*I+C = 30900` Sekunden und damit keine RPO-Zusage. Genau an 21600 Sekunden
+ist der Altersvertrag noch erfüllt, danach nicht mehr. Das gilt auch bei
+aktivem Timer oder laufendem Dienst. Ausfälle, überschrittene Betriebsbudgets,
+instabile Uhren und konkurrierende Starts müssen betrieblich erkannt und
+separat behandelt werden. Die vorhandenen Dienst-Timeouts von einer bzw.
+vier Stunden und die RTO-Grenze 14400 Sekunden sind Fehlergrenzen, keine
+zugesicherten normalen Laufzeiten. Keine universelle RPO-Garantie und keine
+Produktionsfreigabe werden daraus abgeleitet.
+
+## Erforderliche Eingaben und Identitätsbindungen
+
+Für die beiden read-only Restic-Abfragen liest der Collector dieselbe feste,
+root-owned-0600-Datei `/etc/catering-backup/catering-backup.env` als Daten.
+S3 benötigt `AWS_ACCESS_KEY_ID` und `AWS_SECRET_ACCESS_KEY`, optional einen
+nicht leeren `AWS_SESSION_TOKEN`; REST benötigt `RESTIC_REST_USERNAME` und
+`RESTIC_REST_PASSWORD`. Nur die Zugangsdaten des aktiven Backends gelangen
+zusammen mit `PATH` in die Restic-Umgebung. Fehlende Zugangsdaten werden
+nicht aus der SSH-Umgebung ergänzt; andere Konfigurationsnamen bleiben inert.
+Der Collector akzeptiert höchstens 65536 UTF-8-Bytes mit abschließendem LF:
+Leerzeilen, ganze Kommentarzeilen mit `#`/`;` und einzelne `NAME=Wert`-Zeilen.
+Werte dürfen unquoted oder vollständig einfach/doppelt zitiert sein;
+äußere Leerzeichen werden entfernt, innere bleiben erhalten. Backslashes,
+Fortsetzungszeilen, eingebettete passende Quotes und Steuerbytes außer LF
+sind ausgeschlossen. `$` und Backticks bleiben wörtliche Daten. Diese
+Einzeilenregel gilt auch für ignorierte Namen; deren Werte dürfen leer sein.
+Leere oder doppelte Auth-Namen sind ungültig. Beide Abfragen verwenden einen
+einmal geparsten Auth-Satz; jede Änderung an Dateiidentität, Rechten oder
+Inhalt während der Abfragen verwirft den Nachweis.
+
+Die Environment-Datei benennt nur Werte, die der Betreiber separat provisioniert:
+`CATERING_BACKUP_EXPECTED_HOST_SHA256`,
+`CATERING_BACKUP_SOURCE_COMMIT`, `CATERING_BACKUP_SOURCE_TREE`,
+`CATERING_BACKUP_REPOSITORY_FILE`, `CATERING_BACKUP_PASSWORD_FILE`,
+`CATERING_BACKUP_EXPECTED_REPOSITORY_SHA256` (SHA-256 of the canonical
+locator line without its terminal LF),
+`CATERING_BACKUP_EXPECTED_REPOSITORY_ID`,
+`CATERING_BACKUP_PRODUCTION_HOST_SHA256`,
+`CATERING_BACKUP_PRODUCTION_INTERFACE_ADDRESSES`,
+`CATERING_BACKUP_PRODUCTION_EXTERNAL_ADDRESSES` (exakt `none` oder eine
+kommagetrennte Liste gültiger IP-Literale),
+`CATERING_BACKUP_PRODUCTION_ADDRESSES_SHA256`,
+`CATERING_OFFHOST_ATTESTATION_FILE`,
+`CATERING_OFFHOST_ATTESTATION_SHA256`,
+`CATERING_SECRET_RECOVERY_ATTESTATION_FILE`,
+`CATERING_SECRET_RECOVERY_ATTESTATION_SHA256`,
+`CATERING_SECRET_RECOVERY_SOURCE_TYPE`,
+`CATERING_SECRET_RECOVERY_SOURCE_REFERENCE`,
+`CATERING_REQUIRED_SECRET_SCHEMA_SHA256`,
+`CATERING_RESTORE_POSTGRES_IMAGE` und
+`CATERING_SECRET_RECOVERY_REFERENCE_SHA256`. Die beiden Attestationsdateien
+sind nicht geheim und müssen reguläre, root-owned Dateien mit Modus 0600 sein.
+Die Off-host-Datei ist closed-world mit
+`status=operator_attested`, Locator-/Endpointdigest, kanonischem aufgelöstem
+Adresssatzdigest, Produktionsadresssatzdigest, externe Produktionsadressmenge,
+Repository-ID,
+Produktionshostbindung, festem Scope, UTC-`verified_at` und einer 64-Hex-
+Attestations-ID. Die Secret-Recovery-Datei bindet denselben Repository- und
+Hostdigest sowie Scope und UTC-Gültigkeit. Die Secret-Recovery-Datei bindet nur
+die geschlossene Quellenklasse `github_environment` oder `offline_vault`, einen
+operatorbereitgestellten kanonischen nicht geheimen `source_reference`, dessen
+aus dem Locator berechneten SHA-256 und `required_secret_schema_digest`.
+Das Schema umfasst mindestens Restic-Verschlüsselungspasswort,
+Off-host-Repositoryzugang sowie `POSTGRES_PASSWORD`,
+`CATERING_TRUSTED_ACTOR_SECRET` und `CATERING_BASIC_AUTH_PASSWORD_HASH`.
+`verified_at`
+darf nicht in der Zukunft liegen, `valid_until` muss danach liegen und der
+gesamte Operator-Satz darf höchstens 30 Tage umfassen. Für die Backup-Aufnahme
+müssen mindestens 21.600 Sekunden, für die Restore-Aufnahme mindestens 18.000
+Sekunden Restgültigkeit verbleiben; RPO und Attestations-TTL sind getrennte
+Verträge. Beide Werte werden vor jeder Promotion erneut geprüft. `operator_attested`
+bezeichnet nur die abgelegte Betreiberattestation, keine automatisch
+verifizierte externe Wahrheit. Die Produktionsadressmenge wird aus live
+gelesenen globalen Interfaceadressen und separat provisionierten externen
+Adressen kanonisch (IPv4/IPv6) gebildet; `none` bestätigt ausdrücklich das
+Fehlen weiterer NAT-/Floating-Adressen. Endpoint-Überschneidungen sowie
+lokale/reservierte Auflösungen bleiben fail-closed. Der Betreiber erneuert den
+attestierten Satz monatlich atomar vor Ablauf; ab 48 Stunden Restgültigkeit
+ist über den bestehenden Betriebs-/systemd-Status zu warnen. Eine Änderung von
+Repository-ID/Locator, Host-/Adressmenge, Secret-Quelle, Scope oder
+Secret-Schema erfordert sofortige Neuattestation. Automatische Erneuerung ist
+nicht Bestandteil dieses Slices.
+Die optionalen
+`CATERING_BACKUP_ROOT`- und `CATERING_RESTORE_RUNTIME_ROOT`-Namen dürfen den
+gebundenen Pfadvertrag nicht lockern; die drei `*_COMMAND`-Namen sind nur für
+hermetische Test-Fakes vorgesehen. Es werden hier keine Werte oder Secrets
+materialisiert.
+
+Vor Capture und jeder Promotion werden Hostdigest, Source-Commit/Tree,
+Off-host-Repositorydigest, kanonischer Endpoint-/Adresssatz und die
+unabhängige Secret-Recovery-Referenz gebunden. Repository- und Passwortdatei
+werden je Restic-Aufruf einmal no-follow geöffnet; der verifizierte Locator-
+Digest wird über genau das an Restic übergebene Descriptorpaar gebunden und
+nicht über einen Pfad erneut geöffnet.
+Der Backup-Readback bindet die Compose-/Service-/Container-Identität des
+PostgreSQL-Dienstes, dessen laufende Image-ID und das Volume
+`platform-infra_postgres_data` an `/var/lib/postgresql/data`; die DB- und
+Rollenbindung lautet `catering_agents`/`catering`. Die beiden Caddy-Container
+werden jeweils einmal mit ihrer erwarteten Compose-/Service-/Container- und
+Health-Identität sowie der vollständigen Zwei-Volume-Matrix geprüft; die
+zugehörigen Volume-Namen, Owner-/Role-Labels und Mountquellen bleiben an den
+selben Inspect-Objekten gebunden. Der Backup-Scope ist unveränderlich
+`postgres,sites,platform-caddy,shared-edge-caddy`.
+
+## Getrennte Betreiber-Gates
+
+1. **Installations-Gate:** Freigabe nur für das Kopieren der oben genannten
+   Skripte/Units und einer root-owned-0600-Environment-Datei; Pfade, Besitzer,
+   Modi, Digestbindungen und Produktionsausschlüsse read-only prüfen. Noch
+   keine Timeraktivierung und kein Lauf.
+2. **Erstes-Backup-Gate:** Separat freigeben, nachdem Host-, PostgreSQL-, Caddy-,
+   Off-host-Repository- und Secret-Recovery-Bindungen geprüft sind. Der Lauf
+   darf nur den versionierten Candidate und den atomaren Pointer erzeugen;
+   autoritative Evidence bleibt unverändert.
+3. **Erstes-Restore-Gate:** Separat freigeben, nachdem ein konkreter Candidate-
+   Pointer vorliegt und der isolierte `/run/catering-backup`-Probevertrag,
+   `--network none`, `--pull never`, Cleanup-Readback sowie RTO/RPO-Grenzen
+   geprüft wurden. Receipt, Status und Evidence werden erst nach dieser
+   Freigabe erzeugt.
+4. **Evidence-/Phase-3-Gate:** Eine spätere Nutzung des autoritativen
+   Nachweises, Shared-Edge-/Ingress-Änderung oder Phase 3 benötigt eine weitere
+   ausdrückliche Betreiberentscheidung. Kein Gate wird durch eine erfolgreiche
+   Validierung automatisch erteilt.

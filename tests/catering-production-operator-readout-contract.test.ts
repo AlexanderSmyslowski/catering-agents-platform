@@ -142,13 +142,40 @@ function fakeFindmntSource(): string {
   ].join("\n");
 }
 
-function runRemote(command: string, scenario: string): ReturnType<typeof spawnSync> {
+function fakeStatSource(): string {
+  // Preserve Linux stat's metadata contract while using the fixture's real local
+  // identities and modes. Unsupported requests fail instead of consulting host stat.
+  return String.raw`#!/usr/bin/env node
+const fs = require("node:fs");
+const [option, format, separator, target, ...extra] = process.argv.slice(2);
+if (!["-c", "-Lc"].includes(option) || separator !== "--" || !target || extra.length ||
+    !["%F:%u:%a:%s:%Y", "%d\t%i\t%F\t%u\t%a\t%s\t%Y"].includes(format)) process.exit(2);
+try {
+  const descriptor = target.match(/^\/proc\/self\/fd\/(\d+)$/);
+  const stats = option === "-c" ? fs.lstatSync(target) :
+    descriptor ? fs.fstatSync(Number(descriptor[1])) : fs.statSync(target);
+  const kind = stats.isFile() ? (stats.size ? "regular file" : "regular empty file") :
+    stats.isSymbolicLink() ? "symbolic link" : stats.isDirectory() ? "directory" :
+    stats.isFIFO() ? "fifo" : stats.isSocket() ? "socket" :
+    stats.isBlockDevice() ? "block special file" : "character special file";
+  const fields = { "%d": stats.dev, "%i": stats.ino, "%F": kind, "%u": stats.uid,
+    "%a": (stats.mode & 0o7777).toString(8), "%s": stats.size, "%Y": Math.floor(stats.mtimeMs / 1000) };
+  process.stdout.write(format.replace(/%[diFuasY]/g, (field) => String(fields[field])) + "\n");
+} catch (error) {
+  process.stderr.write(String(error.code || "STAT_FAILED") + "\n");
+  process.exit(1);
+}
+`;
+}
+
+function runRemote(command: string, scenario: string): ReturnType<typeof spawnSync> & { fixtureRoot: string } {
   const fixtureRoot = mkdtempSync(path.join(tmpdir(), "operator-readout-contract-"));
   writeFileSync(path.join(fixtureRoot, "docker"), fakeDockerSource(), { mode: 0o755 });
   writeFileSync(path.join(fixtureRoot, "systemctl"), fakeSystemctlSource(), { mode: 0o755 });
   writeFileSync(path.join(fixtureRoot, "findmnt"), fakeFindmntSource(), { mode: 0o755 });
+  writeFileSync(path.join(fixtureRoot, "stat"), fakeStatSource(), { mode: 0o755 });
   try {
-    return spawnSync(
+    const result = spawnSync(
       "bash",
       ["-c", `set -euo pipefail\n${remoteDefinitions()}\n${command}`],
       {
@@ -161,6 +188,7 @@ function runRemote(command: string, scenario: string): ReturnType<typeof spawnSy
         },
       },
     );
+    return { ...result, fixtureRoot };
   } finally {
     rmSync(fixtureRoot, { recursive: true, force: true });
   }
@@ -213,8 +241,8 @@ describe("Catering production operator readout contract", () => {
       "READOUT data_root container=fixture-app status=present path=/srv/catering/data origin=default_workdir",
     );
     expect(result.stdout).toContain("destination=/srv/catering/data writable=true");
-    expect(result.stdout).toMatch(
-      /source=\/tmp\/operator-readout-contract-[^ ]+\/default-data/,
+    expect(result.stdout).toContain(
+      `source=${path.join(result.fixtureRoot, "default-data")} destination=/srv/catering/data`,
     );
     expect(result.stdout).toContain("READOUT collection=complete");
   });
@@ -351,6 +379,37 @@ describe("Catering production operator readout contract", () => {
     expect(result.stdout).toContain("READOUT backup_file=fixture_backup status=unsafe");
     expect(result.stdout).toContain("READOUT critical_unavailable area=backup_file subject=fixture_backup");
     expect(result.stdout).toContain("READOUT collection=partial");
+  });
+
+  test.each(["600", "666"])("preserves actual metadata for mode %s in the stat fixture", (mode) => {
+    const result = runRemote(
+      `printf fixture >"$FIXTURE_ROOT/metadata"; chmod ${mode} "$FIXTURE_ROOT/metadata"; stat -c '%F:%u:%a:%s:%Y' -- "$FIXTURE_ROOT/metadata"`,
+      "stat-metadata",
+    );
+    expect(result.status, String(result.stderr)).toBe(0);
+    const fields = String(result.stdout).trim().split(":");
+    expect(fields.slice(0, 4)).toEqual(["regular file", String(process.getuid!()), mode, "7"]);
+    expect(Number(fields[4])).toBeGreaterThan(0);
+  });
+
+  test("keeps missing and symlink metadata distinct in the stat fixture", () => {
+    const missing = runRemote(
+      'stat -c \'%F:%u:%a:%s:%Y\' -- "$FIXTURE_ROOT/missing"', "stat-missing",
+    );
+    expect(missing.status).toBe(1);
+    expect(missing.stdout).toBe("");
+    expect(missing.stderr).toContain("ENOENT");
+    const link = runRemote(
+      'ln -s missing "$FIXTURE_ROOT/link"; stat -c \'%F:%u:%a:%s:%Y\' -- "$FIXTURE_ROOT/link"', "stat-link",
+    );
+    expect(link.status, String(link.stderr)).toBe(0);
+    expect(String(link.stdout).split(":")[0]).toBe("symbolic link");
+  });
+
+  test("rejects unsupported formats instead of falling back to host stat", () => {
+    const result = runRemote('stat -c \'%n\' -- "$FIXTURE_ROOT"', "stat-unsupported");
+    expect(result.status).toBe(2);
+    expect(result.stdout).toBe("");
   });
 
   test("emits the legacy complete marker only for authoritative collections", () => {

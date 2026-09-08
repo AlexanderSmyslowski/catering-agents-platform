@@ -201,3 +201,33 @@ jobs:
               if platform["services"][service]["environment"].get("CATERING_INTAKE_SERVICE_URL") != "http://intake:3101":
                   raise SystemExit(f"intake service URL parity failed for {service}")
           PYTHON
+
+  synthetic-backup-tool-integration:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.number == 687 &&
+      github.event.pull_request.draft == true &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'codex/catering-backup-restore-slice-20260903'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact synthetic test head
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify hosted runner and source provenance before tool acquisition
+        run: python3 -B tests/integration/catering_backup_tools.py --preflight
+      - name: Acquire Restic through authenticated Ubuntu package metadata
+        run: |
+          set -euo pipefail
+          sudo apt-get -o Acquire::Retries=0 update
+          sudo apt-get -o Acquire::Retries=0 install --no-install-recommends -y restic
+      - name: Check pure integration contracts
+        run: python3 -B tests/catering_backup_tool_integration_test.py
+      - name: Run synthetic component proof and targeted cleanup
+        run: python3 -B tests/integration/catering_backup_tools.py

@@ -1,5 +1,6 @@
 import {
   chmodSync,
+  chownSync,
   existsSync,
   lstatSync,
   linkSync,
@@ -175,6 +176,12 @@ function runBootstrapHeredoc(
   return runWorkflowHeredoc(label, [ownerToken, ...extraArgs], sudoScript, sharedEdgeRoot);
 }
 
+function writeOwnedBootstrapState(statePath: string, content: string) {
+  writeFileSync(statePath, content, { mode: 0o600 });
+  // Match the real bootstrap install even when the temporary parent has another group.
+  chownSync(statePath, process.getuid!(), process.getgid!());
+}
+
 function requireHelper() {
   expect(existsSync(helperPath)).toBe(true);
   return uncommented(sourceAt(helperPath));
@@ -261,14 +268,88 @@ function runWithBash32(scriptPath: string, env: Record<string, string>) {
   });
 }
 
+function runPlatformCallerWithPinnedSsh(failure: "failing" | "missing" | "not-executable" | "broken-interpreter") {
+  const root = mkdtempSync(path.join(tmpdir(), "catering-platform-ssh-isolation-"));
+  const replacement = path.join(root, "intended-ssh");
+  const invocation = path.join(root, "invocation");
+  const input = path.join(root, "stdin");
+  const fallthroughBin = path.join(root, "fallthrough-bin");
+  const fallthroughLog = path.join(root, "fallthrough");
+  const shellQuote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
+  mkdirSync(fallthroughBin);
+  writeFileSync(path.join(fallthroughBin, "ssh"), [
+    "#!/bin/sh",
+    `printf '%s\\n' SSH_PATH_FALLTHROUGH >> ${shellQuote(fallthroughLog)}`,
+    "exit 98",
+    "",
+  ].join("\n"), { mode: 0o700 });
+  if (failure !== "missing") {
+    writeFileSync(replacement, [
+      failure === "broken-interpreter" ? `#!${root}/missing-interpreter` : "#!/bin/sh",
+      `printf '%s\\0' "$0" "$@" >> ${shellQuote(invocation)}`,
+      `/bin/cat > ${shellQuote(input)}`,
+      "printf '%s\\n' SSH_REPLACEMENT_EXIT_86 >&2",
+      "exit 86",
+      "",
+    ].join("\n"), { mode: failure === "not-executable" ? 0o600 : 0o700 });
+  }
+  const bashEnv = path.join(root, "bash-env");
+  // A function pins the absolute replacement even if it disappears or cannot execute;
+  // a PATH prefix alone would let Bash fall through to a real SSH binary.
+  writeFileSync(bashEnv, `ssh() { ${shellQuote(replacement)} "$@"; }\nreadonly -f ssh\n`);
+  const result = runWithBash32(callerPaths[0], {
+    BASH_ENV: bashEnv,
+    PATH: `${fallthroughBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+    DEPLOY_HOST: "phase3.invalid",
+    DEPLOY_USER: "root",
+    DEPLOY_PATH: "/opt/catering-agents-platform",
+    DEPLOY_ROLLBACK_ROOT: "/opt/catering-agents-platform-rollbacks",
+    DEPLOY_COMMIT_SHA: "5b0eaed96dc0f57d091c5ea3b4741e121d0b9d47",
+    EDGE_EXTERNAL: "true",
+  });
+  // spawnSync has reaped the caller before any fixture is inspected or can be cleaned.
+  return { result, replacement, invocation, input, fallthroughLog };
+}
+
 describe("Phase-3 Catering isolation pilot contract", () => {
   test("does not dereference unset BASHPID in the platform caller's Bash 3.2 guard", () => {
-    const result = runWithBash32(callerPaths[0], {
-      DEPLOY_HOST: "phase3.invalid",
-      DEPLOY_COMMIT_SHA: "5b0eaed96dc0f57d091c5ea3b4741e121d0b9d47",
-    });
-    expect(`${result.stdout}${result.stderr}`).not.toContain("BASHPID: unbound variable");
+    const run = runPlatformCallerWithPinnedSsh("failing");
+    expect(run.result.error).toBeUndefined();
+    expect(run.result.status).toBe(1);
+    expect(`${run.result.stdout}${run.result.stderr}`).not.toContain("BASHPID: unbound variable");
+    expect(run.result.stderr).toContain("SSH_REPLACEMENT_EXIT_86");
+    expect(run.result.stdout).toContain("Missing platform-infra/.env on server.");
+    expect(sourceAt(run.invocation).split("\0")).toEqual([
+      run.replacement, "root@phase3.invalid", "bash", "-s", "--", "/opt/catering-agents-platform", "",
+    ]);
+    expect(sourceAt(run.input)).toBe([
+      "set -euo pipefail",
+      'deploy_path="$1"',
+      '[[ "$deploy_path" == /opt/catering-agents-platform ]] || exit 1',
+      '[[ -d "$deploy_path" && ! -L "$deploy_path" ]] || exit 1',
+      '[[ "$(realpath -e -- "$deploy_path")" == "$deploy_path" ]] || exit 1',
+      `[[ "$(stat -c '%a' "$deploy_path")" == 755 ]] || exit 1`,
+      'test -f "${deploy_path}/platform-infra/.env"',
+      "",
+    ].join("\n"));
+    expect(existsSync(run.replacement)).toBe(true);
+    expect(existsSync(run.fallthroughLog)).toBe(false);
   });
+
+  test.each(["missing", "not-executable", "broken-interpreter"] as const)(
+    "keeps platform caller SSH isolation fail-closed with a %s replacement",
+    (failure) => {
+      const run = runPlatformCallerWithPinnedSsh(failure);
+      expect(run.result.error).toBeUndefined();
+      expect(run.result.status).toBe(1);
+      expect(`${run.result.stdout}${run.result.stderr}`).not.toContain("BASHPID: unbound variable");
+      expect(run.result.stderr).toContain(run.replacement);
+      expect(run.result.stderr).not.toContain("SSH_REPLACEMENT_EXIT_86");
+      expect(run.result.stdout).toContain("Missing platform-infra/.env on server.");
+      expect(existsSync(run.invocation)).toBe(false);
+      expect(existsSync(run.fallthroughLog)).toBe(false);
+    },
+  );
 
   test("does not dereference unset BASHPID in the edge caller's Bash 3.2 guard", () => {
     const fakeBin = mkdtempSync(path.join(tmpdir(), "catering-phase3-bash32-bin-"));
@@ -565,10 +646,9 @@ describe("Phase-3 Catering isolation pilot contract", () => {
         chmodSync(path.join(lock, "owner"), 0o600);
       }
       if (failureStage === "bootstrap") {
-        writeFileSync(
+        writeOwnedBootstrapState(
           path.join(stageBootstrapRoot, ".env.bootstrap-state"),
           `schema=1\nowner_token=${token}\nstate=not_started\nstage=bootstrap\n`,
-          { mode: 0o600 },
         );
       }
       const preDeployFailure = runWorkflowHeredoc("REMOTE_PHASE3_PREDEPLOY_RELEASE", [
@@ -602,10 +682,9 @@ describe("Phase-3 Catering isolation pilot contract", () => {
       }
       if (mutation === "env") {
         writeFileSync(path.join(mutatedBootstrapRoot, ".env"), "PARTIAL_BOOTSTRAP=1\n", { mode: 0o600 });
-        writeFileSync(
+        writeOwnedBootstrapState(
           path.join(mutatedBootstrapRoot, ".env.bootstrap-state"),
           `schema=1\nowner_token=${token}\nstate=mutation_started\nstage=bootstrap\n`,
-          { mode: 0o600 },
         );
       } else {
         writeFileSync(path.join(mutatedBootstrapRoot, ".env.pending.4242"), "PARTIAL_BOOTSTRAP=1\n", { mode: 0o600 });
@@ -654,7 +733,7 @@ describe("Phase-3 Catering isolation pilot contract", () => {
         chmodSync(path.join(lock, "owner"), 0o600);
       }
       const state = path.join(bootstrapRoot, ".env.bootstrap-state");
-      writeFileSync(state, stateContent, { mode: 0o600 });
+      writeOwnedBootstrapState(state, stateContent);
       return { root, platformLock, edgeLock, bootstrapRoot, state };
     };
     const argsFor = (caseState: ReturnType<typeof prepare>) => [
@@ -706,9 +785,10 @@ describe("Phase-3 Catering isolation pilot contract", () => {
     expect(existsSync(foreignOwnerState.state), "foreign-owner").toBe(true);
 
     const failedRemovalState = prepare("catering-phase3-failed-state-removal-");
+    const failedRemovalAttempt = path.join(failedRemovalState.root, "refused-state-removal");
     const refusingUnlink = [
       "#!/bin/sh",
-      "if [ \"$1\" = unlink ] && [ \"$2\" = \"" + failedRemovalState.state + "\" ]; then exit 77; fi",
+      "if [ \"$1\" = unlink ] && [ \"$2\" = \"" + failedRemovalState.state + "\" ]; then printf 'refused\\n' > \"" + failedRemovalAttempt + "\"; exit 77; fi",
       "exec \"$@\"",
       "",
     ].join("\n");
@@ -718,6 +798,7 @@ describe("Phase-3 Catering isolation pilot contract", () => {
       refusingUnlink,
     );
     expect(failedRemoval.result.status, "failed-removal").not.toBe(0);
+    expect(sourceAt(failedRemovalAttempt)).toBe("refused\n");
     expect(existsSync(failedRemovalState.platformLock), "failed-removal").toBe(true);
     expect(existsSync(failedRemovalState.edgeLock), "failed-removal").toBe(true);
     expect(existsSync(failedRemovalState.state), "failed-removal").toBe(true);

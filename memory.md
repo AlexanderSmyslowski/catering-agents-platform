@@ -1,7 +1,7 @@
 # memory.md
 
-version: 5.374
-date: 2026-08-31
+version: 5.379
+date: 2026-09-05
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
 
@@ -1839,3 +1839,55 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 ### 5.374 - 2026-08-31
 
 - `.github/workflows/catering-production-operator-readout.yml` definiert einen ausschließlich manuellen, fail-closed und read-only Production Operator Readout über den bestehenden geschützten GitHub-`production`-SSH-Kanal. Er erhebt redigierte Betreiber-Evidenz vor Phase 3 und besitzt ausdrücklich keine Backup-, Restore-, Deployment- oder Pilotautorität.
+
+### 5.375 - 2026-09-04
+
+- Der lokale Catering-Backup-/Restore-Kandidat dokumentiert den Variante-A-Vertrag: Caddy-Secretdaten werden ausschließlich im verschlüsselten Off-host-Restic-Snapshot geführt; der Backupweg erzeugt einen einzigen stdin-Tar-Stream, publiziert nur versionierten Candidate plus Pointer und lässt autoritative Evidence bis zum letzten atomaren Schritt unangetastet. Restore läuft in einem flüchtigen, root-only `/run/catering-backup`-Root mit getrennten systemd-Diensten und einem versionierten Receipt; der Repository-Status bleibt snapshotunabhängig.
+- Der Runbook-Vertrag bindet die vorgesehenen Installations- und Recordpfade, die erforderlichen nicht-sensitiven Eingaben/Identitäten sowie getrennte Gates für Installation, ersten Backup-, ersten Restore- und spätere Evidence-/Phase-3-Nutzung. Der Implementierungsplan führt `platform-infra/backup/catering-backup-common.sh` als gemeinsame Persistenzprimitive und verlangt dafür `bash -n`/ShellCheck zusammen mit den beiden Entry-Points.
+- Dieser Stand ist ein lokaler, ungemergter Kandidat ohne Installation, Backup-/Restore-Lauf, Host-, Docker-, Restic-, SSH-, Deployment-, Commit-, Push- oder PR-Aktion. Keine Secretwerte oder Produktionsdaten wurden dokumentiert.
+
+### 5.376 - 2026-09-04
+
+- Der laufende Attestationsslice bindet zwei getrennte, nicht geheime root-owned-0600 Records descriptor- und dateidigestgebunden. Der Off-host-Record trägt `status=operator_attested`, kanonischen Locator/Endpoint und aufgelösten Adresssatz samt Produktionsadresssatz, Repository-ID, gemeinsamer Produktionshostbindung, Scope, UTC-Freshness und eigener 64-Hex-ID.
+- Der Secret-Recovery-Record erlaubt ausschließlich `source_type=independent-secret-recovery` mit kanonischer nicht geheimer `source_reference=operator-recovery`, deren berechnetem SHA-256 und `required_secret_schema_digest`; Repository/Host/Scope/Freshness werden mitgebunden. `operator_attested` behauptet keine automatisch verifizierte externe Wahrheit. Test-only Clock-/Resolver-Injektionen sind auf den hermetischen Nonroot-Pfad begrenzt.
+- `secure_restic` öffnet Repository und Passwort einmal no-follow, prüft dieselben FDs und bindet den Locatordigest über den tatsächlich an Restic übergebenen `/proc/self/fd/9`; Pfad-Replacement wird dadurch nicht zu einer neuen Generation. Keine Secretwerte wurden gespeichert.
+
+### 5.377 - 2026-09-04
+
+- Die A2-Attestationssemantik bindet eine kanonische Produktionsadressmenge:
+  live gelesene Interfaceadressen und separat provisionierte externe
+  Adressen werden deterministisch für IPv4/IPv6 zusammengeführt; lokale,
+  reservierte und überschneidende Repository-Endpunkte bleiben fail-closed.
+  `verified_at`/`valid_until` werden vor jeder Promotion gegen UTC geprüft;
+  die RPO-Grenze bleibt ein separater Vertrag.
+- Die unabhängige Secret-Recovery-Attestation erlaubt ausschließlich die
+  Quellenklassen `github_environment` oder `offline_vault` mit einem
+  operatorbereitgestellten, nicht geheimen Locator. Dessen Referenzdigest wird
+  aus dem kanonischen Locator berechnet; der Schema-Digest bindet mindestens
+  Restic-Verschlüsselungspasswort, Off-host-Repositoryzugang sowie
+  `POSTGRES_PASSWORD`, `CATERING_TRUSTED_ACTOR_SECRET` und
+  `CATERING_BASIC_AUTH_PASSWORD_HASH`. Records bleiben nicht geheim,
+  root-owned 0600 und descriptor-/Digest-gebunden.
+
+### 5.378 - 2026-09-04
+
+- A3 schließt den Trust-Boundary-Vertrag mit genau einer immutable
+  Adressgeneration je Attestationsvalidierung: live Interfaceadressen,
+  verpflichtende externe Angabe (`none` oder kanonische IP-CSV), Union,
+  Endpoint-Auflösung und die zugehörigen Digests werden einmal erfasst und
+  unverändert an die Leaf-Validatoren weitergereicht. Endpoint-/Produktions-
+  Überschneidung sowie lokale oder reservierte Antworten bleiben fail-closed.
+- Attestations sind vom RPO entkoppelt: `verified_at`/`valid_until` dürfen
+  höchstens 30 Tage auseinanderliegen; Backup verlangt 21600 Sekunden,
+  Restore 18000 Sekunden gemeinsame Restgültigkeit. Die Backup-Revalidation
+  liest die Repository-ID unmittelbar vor dem geheimnistragenden Stream neu;
+  beide Entry-Points verwenden dieselbe Generation je Promotiongrenze.
+- Die Descriptor-Race-Verträge führen sichere Restic-/Record-Öffnung sowie
+  Hash/Parse aus demselben FD gegen lstat/open- und Reopen-Mutanten aus. Keine
+  externen Systeme, keine Git-Metadaten und keine Secretwerte wurden verändert
+  oder gespeichert; A3 bleibt ein lokaler, ungemergter Kandidat.
+
+### 5.379 - 2026-09-05
+
+- Der Backup-/Restore-Scope ist auf die versionierten Namen `postgres,sites,platform-caddy,shared-edge-caddy` vereinheitlicht. Ein einziger Restic-stdin-Tar-Stream verwendet relative, eindeutige Komponentenpfade; der Backup-Readback bindet Whole-Bundle-, PostgreSQL- und sechs Caddy-/Sites-Komponentenchecksummen aus demselben Snapshot-Stream, und Restore verifiziert dieselben Bindungen ausschließlich aus dem isolierten Baum.
+- Der lokale Kandidat bleibt ungemergt und ohne Produktions-, Docker-, Restic-, SSH-, systemd-, Commit-, Push- oder PR-Aktion. Offene P1 für echte PG-/Caddy-/Collector-Ausführung, vollständige Attestations-Revalidierung und Plattformintegration bleiben Folgegates; keine Secretwerte oder sensiblen Pfadinhalte wurden gespeichert.

@@ -1,5 +1,6 @@
 import {
   chmodSync,
+  chownSync,
   existsSync,
   lstatSync,
   mkdtempSync,
@@ -78,6 +79,7 @@ function conflictSudoScript() {
     '      none) ;;',
     '      *) exit 97 ;;',
     '    esac',
+    "    printf '%s\\n' \"${CATERING_CONFLICT_KIND}\" >> \"${CATERING_CONFLICT_LOG:?}\"",
     '  fi',
     'fi',
     'if [[ "${1:-}" == ln ]]; then',
@@ -100,16 +102,20 @@ function runRemoteBootstrap(kind: 'none' | 'regular' | 'symlink' | 'symlink-dir'
   const operatorPath = path.join(root, 'operator.env');
   const bin = path.join(root, 'bin');
   const target = path.join(edgeRoot, '.env');
+  const statePath = path.join(edgeRoot, '.env.bootstrap-state');
+  const conflictLog = path.join(root, 'conflict-injected');
   mkdirSync(edgeRoot, { mode: 0o755 });
   mkdirSync(bin, { recursive: true });
   writeFileSync(stagedPath, stagedContent, { mode: 0o600 });
   if (kind === 'symlink-dir') mkdirSync(operatorPath, { mode: 0o700 });
   else writeFileSync(operatorPath, operatorContent, { mode: 0o600 });
   writeFileSync(
-    path.join(edgeRoot, '.env.bootstrap-state'),
+    statePath,
     'schema=1\nowner_token=phase3-normal-contract-test\nstate=not_started\nstage=bootstrap\n',
     { mode: 0o600 },
   );
+  // Production install assigns the deployer's group; temp directories can inherit another group.
+  chownSync(statePath, process.getuid!(), process.getgid!());
   writeFileSync(path.join(bin, 'sudo'), kind === 'none' ? localSudoScript : conflictSudoScript(), { mode: 0o700 });
   writeFileSync(path.join(bin, 'stat'), localStatScript, { mode: 0o700 });
   chmodSync(path.join(bin, 'sudo'), 0o700);
@@ -123,12 +129,13 @@ function runRemoteBootstrap(kind: 'none' | 'regular' | 'symlink' | 'symlink-dir'
       ...process.env,
       PATH: `${bin}:${process.env.PATH ?? '/usr/bin:/bin'}`,
       CATERING_CONFLICT_KIND: kind,
+      CATERING_CONFLICT_LOG: conflictLog,
       CATERING_CONFLICT_TARGET: target,
       CATERING_OPERATOR_CONTENT: operatorContent,
       CATERING_OPERATOR_FILE: operatorPath,
     },
   });
-  return { edgeRoot, operatorPath, stagedPath, target, result };
+  return { edgeRoot, operatorPath, stagedPath, target, conflictLog, result };
 }
 
 function pendingFiles(edgeRoot: string) {
@@ -162,6 +169,7 @@ describe('edge env bootstrap safety contract', () => {
       expect(existsSync(run.stagedPath)).toBe(false);
       expect(pendingFiles(run.edgeRoot)).toEqual([]);
       expect(`${run.result.stdout}${run.result.stderr}`).not.toContain(operatorContent);
+      expect(readFileSync(run.conflictLog, 'utf8')).toBe(`${kind}\n`);
       const liveStat = lstatSync(run.target);
       if (kind === 'regular') {
         expect(liveStat.isFile()).toBe(true);
@@ -170,6 +178,7 @@ describe('edge env bootstrap safety contract', () => {
         expect(liveStat.isSymbolicLink()).toBe(true);
         expect(readlinkSync(run.target)).toBe(run.operatorPath);
         if (kind === 'symlink-dir') expect(readdirSync(run.operatorPath)).toEqual([]);
+        else expect(readFileSync(run.operatorPath, 'utf8')).toBe(operatorContent);
       } else {
         expect(liveStat.isFIFO()).toBe(true);
       }
