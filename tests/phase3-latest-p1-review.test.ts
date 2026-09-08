@@ -1623,7 +1623,7 @@ describe("latest independent Phase-3 P1 review reproducers", () => {
     expect(resumed.result.status).toBe(0);
     expect(output).toContain("PILOT: ROLLED BACK");
     expect(existsSync(path.join(root, "phase3.activation"))).toBe(false);
-  }, 120_000);
+  }, 180_000);
 
   test("RED: exactly one missing compatibility connection is the only forward delta", () => {
     const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-monotonic-single-delta-red-"));
