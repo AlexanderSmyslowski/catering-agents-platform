@@ -1,4 +1,4 @@
-"""Synthetic component integration, exclusively for PR 687's ephemeral hosted CI.
+"""Synthetic production-image proof, exclusively for the bound Draft PR hosted CI.
 
 No production entrypoint, attestation, off-host admission, or product evidence is
 invoked. Source drift fails closed; the restore's original EXIT trap is retained.
@@ -21,7 +21,10 @@ import time
 import tempfile
 
 REPOSITORY = 'AlexanderSmyslowski/catering-agents-platform'
-BRANCH = 'codex/catering-backup-restore-slice-20260903'
+BRANCH = 'codex/catering-production-postgres-restore-proof-20260909'
+# Fail closed until the new Draft PR exists and its literal number is reviewed.
+PR_NUMBER = 0
+PRODUCTION_IMAGE = 'postgres@sha256:778d0b486d6daa02b77434d0358ec57a1b21fd8b6d22ac2eef56a33e816928f6'
 PARENT = '34d71daba94ba227146300f69f1f7b2872dce58b'
 PARENT_TREE = 'fb5c57b369c45e4d2168f5586242325d5e3193bd'
 SOURCE_HASHES = {
@@ -130,11 +133,11 @@ def load_components(root):
 def runtime_guard(env, event, operating_system):
     expected = {'GITHUB_ACTIONS': 'true', 'RUNNER_ENVIRONMENT': 'github-hosted',
                 'RUNNER_OS': 'Linux', 'GITHUB_REPOSITORY': REPOSITORY,
-                'GITHUB_EVENT_NAME': 'pull_request', 'GITHUB_REF': 'refs/pull/687/merge'}
+                'GITHUB_EVENT_NAME': 'pull_request', 'GITHUB_REF': f'refs/pull/{PR_NUMBER}/merge'}
     require(operating_system == 'Linux' and all(env.get(k) == v for k, v in expected.items()), 'RUNTIME_ISOLATION')
     pr = event.get('pull_request', {})
     head, base = pr.get('head', {}), pr.get('base', {})
-    require(event.get('number') == 687 and pr.get('draft') is True
+    require(PR_NUMBER > 0 and event.get('number') == PR_NUMBER and pr.get('draft') is True
             and head.get('ref') == BRANCH and base.get('ref') == 'main'
             and head.get('repo', {}).get('full_name') == REPOSITORY
             and base.get('repo', {}).get('full_name') == REPOSITORY
@@ -690,6 +693,16 @@ def write_private(path, content, mode=0o600):
     os.chmod(path, mode)
 
 
+def acquire_production_image():
+    # Source and restore must share the operator-bound production digest.
+    command(['docker', 'pull', PRODUCTION_IMAGE], timeout=180)
+    info = json.loads(command(['docker', 'image', 'inspect', '--format',
+                              '{"id":{{json .Id}},"digests":{{json .RepoDigests}}}', PRODUCTION_IMAGE]).stdout)
+    require(info['digests'] == [PRODUCTION_IMAGE]
+            and re.fullmatch(r'sha256:[0-9a-f]{64}', info['id']) is not None, 'IMAGE_DIGEST_INVALID')
+    return PRODUCTION_IMAGE, info['id']
+
+
 def execute(root, parent, identity):
     require(os.geteuid() == 0, 'ROOT_REQUIRED_FOR_UNCHANGED_RESTIC_CONTRACT')
     parts, provenance = load_components(root)
@@ -723,12 +736,8 @@ def execute(root, parent, identity):
         evidence['versions']['docker'] = command(['docker', '--version']).stdout.decode().strip()
         evidence['versions']['restic'] = command(['restic', 'version']).stdout.decode().strip()
         evidence['stage'] = 'image-acquisition'
-        command(['docker', 'pull', 'postgres:17'], timeout=180)
-        image_info = json.loads(command(['docker', 'image', 'inspect', '--format', '{"id":{{json .Id}},"digests":{{json .RepoDigests}}}', 'postgres:17']).stdout)
-        digests = [x for x in image_info['digests'] if re.fullmatch(r'postgres@sha256:[0-9a-f]{64}', x)]
-        require(len(digests) == 1 and re.fullmatch(r'sha256:[0-9a-f]{64}', image_info['id']) is not None, 'IMAGE_DIGEST_INVALID')
-        image, image_id = digests[0], image_info['id']
-        evidence['image'] = {'acquired_tag': 'postgres:17', 'repository_digest': image, 'image_id': image_id}
+        image, image_id = acquire_production_image()
+        evidence['image'] = {'requested_reference': PRODUCTION_IMAGE, 'repository_digest': image, 'image_id': image_id}
         source = resources.create('source', ['--rm', '--network', 'none', '--pull', 'never',
                                            '--env', 'POSTGRES_USER=catering', '--env', 'POSTGRES_DB=catering_agents',
                                            '--env', 'POSTGRES_PASSWORD_FILE=/run/synthetic-db-password',
@@ -879,7 +888,7 @@ def main():
             raise GateError('INTERRUPTED')
         signal.signal(signal.SIGTERM, interrupted)
         signal.signal(signal.SIGINT, interrupted)
-        return execute(root, parent, {'commit': head, 'tree': sys.argv[3], 'runner': 'github-hosted', 'os': 'Linux', 'pr': 687})
+        return execute(root, parent, {'commit': head, 'tree': sys.argv[3], 'runner': 'github-hosted', 'os': 'Linux', 'pr': PR_NUMBER})
     require(os.geteuid() != 0, 'RUNNER_GIT_IDENTITY_REQUIRED')
     def git(*args):
         return command(['git', '-C', str(root), '--no-optional-locks', *args]).stdout.decode().strip()

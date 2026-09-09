@@ -18,6 +18,7 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULE = ROOT / 'tests/integration/catering_backup_tools.py'
+PRODUCTION_IMAGE = 'postgres@sha256:778d0b486d6daa02b77434d0358ec57a1b21fd8b6d22ac2eef56a33e816928f6'
 
 
 class IntegrationContracts(unittest.TestCase):
@@ -198,24 +199,55 @@ sys.exit(result.returncode)
 
     def test_every_required_runtime_binding_fails_closed(self):
         m = self.implementation()
+        self.assertTrue(hasattr(m, 'PR_NUMBER'), 'numbered PR binding is missing')
+        number = m.PR_NUMBER or 999999
         env = {'GITHUB_ACTIONS': 'true', 'RUNNER_ENVIRONMENT': 'github-hosted',
                'RUNNER_OS': 'Linux', 'GITHUB_REPOSITORY': m.REPOSITORY,
-               'GITHUB_EVENT_NAME': 'pull_request', 'GITHUB_REF': 'refs/pull/687/merge'}
-        event = {'number': 687, 'pull_request': {'draft': True, 'head': {
+               'GITHUB_EVENT_NAME': 'pull_request', 'GITHUB_REF': f'refs/pull/{number}/merge'}
+        event = {'number': number, 'pull_request': {'draft': True, 'head': {
             'ref': m.BRANCH, 'sha': 'a' * 40, 'repo': {'full_name': m.REPOSITORY}},
             'base': {'ref': 'main', 'repo': {'full_name': m.REPOSITORY}}}}
-        self.assertEqual(m.runtime_guard(env, event, 'Linux'), 'a' * 40)
-        for key in env:
-            bad = dict(env); bad.pop(key)
-            with self.subTest(key=key), self.assertRaises(m.GateError):
-                m.runtime_guard(bad, event, 'Linux')
-        for field, value in [('draft', False), ('head', {}), ('base', {})]:
-            bad = copy.deepcopy(event); bad['pull_request'][field] = value
-            with self.subTest(field=field), self.assertRaises(m.GateError):
-                m.runtime_guard(env, bad, 'Linux')
-        bad = copy.deepcopy(event); bad['number'] = 688
-        with self.assertRaises(m.GateError):
-            m.runtime_guard(env, bad, 'Linux')
+        # Zero is a closed bootstrap gate until GitHub assigns the new Draft PR.
+        with mock.patch.object(m, 'PR_NUMBER', 0):
+            with self.assertRaises(m.GateError):
+                m.runtime_guard(env, event, 'Linux')
+        with mock.patch.object(m, 'PR_NUMBER', number):
+            self.assertEqual(m.runtime_guard(env, event, 'Linux'), 'a' * 40)
+            for key in env:
+                bad = dict(env); bad.pop(key)
+                with self.subTest(key=key), self.assertRaises(m.GateError):
+                    m.runtime_guard(bad, event, 'Linux')
+            for path, value in [(('draft',), False), (('head',), {}), (('base',), {}),
+                    (('head', 'ref'), 'codex/catering-backup-restore-slice-20260903'),
+                    (('base', 'ref'), 'other'), (('head', 'sha'), 'invalid'),
+                    (('head', 'repo', 'full_name'), 'foreign/fork'),
+                    (('base', 'repo', 'full_name'), 'foreign/base')]:
+                bad = copy.deepcopy(event); target = bad['pull_request']
+                for key in path[:-1]:
+                    target = target[key]
+                target[path[-1]] = value
+                with self.subTest(path=path), self.assertRaises(m.GateError):
+                    m.runtime_guard(env, bad, 'Linux')
+            for wrong_number in (687, number + 1):
+                bad = copy.deepcopy(event); bad['number'] = wrong_number
+                with self.subTest(number=wrong_number), self.assertRaises(m.GateError):
+                    m.runtime_guard(env, bad, 'Linux')
+
+    def test_workflow_keeps_the_numbered_draft_source_guard(self):
+        m = self.implementation()
+        self.assertTrue(hasattr(m, 'PR_NUMBER'), 'numbered PR binding is missing')
+        self.assertEqual(m.BRANCH, 'codex/catering-production-postgres-restore-proof-20260909')
+        workflow = (ROOT / '.github/workflows/ci.yml').read_text()
+        job = workflow.split('  synthetic-backup-tool-integration:\n', 1)[1]
+        for binding in [f'github.event.pull_request.number == {m.PR_NUMBER} &&',
+                "github.event_name == 'pull_request' &&", 'github.event.pull_request.draft == true &&',
+                'github.event.pull_request.head.repo.full_name == github.repository &&',
+                f"github.event.pull_request.head.ref == '{m.BRANCH}'"]:
+            self.assertIn(binding, job)
+        self.assertNotIn('workflow_dispatch', workflow)
+        self.assertIn('ref: ${{ github.event.pull_request.head.sha }}', job)
+        self.assertIn('persist-credentials: false', job)
+        self.assertLess(job.index('catering_backup_tools.py --preflight'), job.index('sudo apt-get'))
 
     def test_execute_uses_tool_specific_versions_and_stops_on_version_failure(self):
         m = self.implementation()
@@ -227,7 +259,7 @@ sys.exit(result.returncode)
         ]
         version_output = [b'27.5.1\n', b'0.16.4-2\n', b'Docker version 27.5.1\n',
                           b'restic 0.16.4 compiled with go1.22.2 on linux/amd64\n']
-        pull = ('docker', 'pull', 'postgres:17')
+        pull = ('docker', 'pull', PRODUCTION_IMAGE)
         for failed_query in (None, ('docker', '--version'), ('restic', 'version')):
             with self.subTest(failed_query=failed_query), tempfile.TemporaryDirectory() as temp:
                 resources = m.Resources(Path(temp).resolve())
@@ -289,6 +321,31 @@ sys.exit(result.returncode)
                 self.assertTrue(evidence['cleanup']['process_groups_absent'])
                 self.assertFalse(resources.root.exists())
                 self.assertEqual(resources.processes, [])
+
+    def test_acquisition_binds_exact_production_digest_and_rejects_other_images(self):
+        m = self.implementation()
+        self.assertTrue(hasattr(m, 'acquire_production_image'), 'exact production image acquisition is missing')
+        expected_id = 'sha256:' + 'a' * 64
+        for digests, image_id, accepted in [
+                ([PRODUCTION_IMAGE], expected_id, True),
+                (['postgres@sha256:67f41722b7a8cbdb868a44a4995c846eddfdc2973bccb291ce937dce88ad5675'], expected_id, False),
+                ([], expected_id, False),
+                ([PRODUCTION_IMAGE, PRODUCTION_IMAGE], expected_id, False),
+                ([PRODUCTION_IMAGE], 'not-an-image-id', False)]:
+            with self.subTest(digests=digests, image_id=image_id):
+                info = json.dumps({'id': image_id, 'digests': digests}).encode()
+                with mock.patch.object(m, 'command', side_effect=[
+                        subprocess.CompletedProcess([], 0, b''),
+                        subprocess.CompletedProcess([], 0, info)]) as run:
+                    if accepted:
+                        self.assertEqual(m.acquire_production_image(), (PRODUCTION_IMAGE, expected_id))
+                    else:
+                        with self.assertRaisesRegex(m.GateError, 'IMAGE_DIGEST_INVALID'):
+                            m.acquire_production_image()
+                self.assertEqual(run.call_args_list, [
+                    mock.call(['docker', 'pull', PRODUCTION_IMAGE], timeout=180),
+                    mock.call(['docker', 'image', 'inspect', '--format',
+                               '{"id":{{json .Id}},"digests":{{json .RepoDigests}}}', PRODUCTION_IMAGE])])
 
     def test_ambiguous_missing_and_drifted_components_are_rejected(self):
         m = self.implementation()
