@@ -219,6 +219,7 @@ sys.exit(result.returncode)
                     m.runtime_guard(bad, event, 'Linux')
             for path, value in [(('draft',), False), (('head',), {}), (('base',), {}),
                     (('head', 'ref'), 'codex/catering-backup-restore-slice-20260903'),
+                    (('head', 'ref'), 'codex/catering-production-postgres-restore-proof-20260909'),
                     (('base', 'ref'), 'other'), (('head', 'sha'), 'invalid'),
                     (('head', 'repo', 'full_name'), 'foreign/fork'),
                     (('base', 'repo', 'full_name'), 'foreign/base')]:
@@ -228,7 +229,7 @@ sys.exit(result.returncode)
                 target[path[-1]] = value
                 with self.subTest(path=path), self.assertRaises(m.GateError):
                     m.runtime_guard(env, bad, 'Linux')
-            for wrong_number in (687, number + 1):
+            for wrong_number in (687, 689, number + 1):
                 bad = copy.deepcopy(event); bad['number'] = wrong_number
                 with self.subTest(number=wrong_number), self.assertRaises(m.GateError):
                     m.runtime_guard(env, bad, 'Linux')
@@ -258,7 +259,7 @@ sys.exit(result.returncode)
     def test_workflow_keeps_the_numbered_draft_source_guard(self):
         m = self.implementation()
         self.assertTrue(hasattr(m, 'PR_NUMBER'), 'numbered PR binding is missing')
-        self.assertEqual(m.BRANCH, 'codex/catering-production-postgres-restore-proof-20260909')
+        self.assertEqual(m.BRANCH, 'codex/catering-caddy-mount-order-fix-20260909')
         workflow = (ROOT / '.github/workflows/ci.yml').read_text()
         job = workflow.split('  synthetic-backup-tool-integration:\n', 1)[1]
         for binding in [f'github.event.pull_request.number == {m.PR_NUMBER} &&',

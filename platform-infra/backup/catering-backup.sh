@@ -213,7 +213,7 @@ assert_caddy_container_mounts() {
   [[ "$state" == running && ( "$health" == healthy || "$health" == none ) ]] || { fail_state CADDY_CONTAINER_INVALID; return 1; }
   mounts="$(inspect_caddy '{{range .Mounts}}{{printf "%s|%s|%s|%s|%t" .Type .Name .Source .Destination .RW}}{{println}}{{end}}')"
   while IFS='|' read -r mount_type mount_name mount_source mount_destination mount_rw || [[ -n "$mount_type$mount_name$mount_source$mount_destination$mount_rw" ]]; do
-    [[ -z "$mount_type" ]] && continue
+    [[ -n "$mount_type" ]] || { fail_state CADDY_CONTAINER_MOUNT_INVALID; return 1; }
     case "$mount_type" in
       volume)
         case "$mount_name|$mount_destination|$mount_rw" in
@@ -230,6 +230,8 @@ assert_caddy_container_mounts() {
     esac
   done <<< "$mounts"
   [[ "$data_count" == 1 && "$config_count" == 1 && "$bind_count" == 1 ]] || { fail_state CADDY_CONTAINER_MOUNT_INVALID; return 1; }
+  # Docker does not promise Mounts order; retain every validated row and field.
+  mounts="$(printf '%s\n' "$mounts" | LC_ALL=C sort)" || { fail_state CADDY_CONTAINER_MOUNT_INVALID; return 1; }
   CADDY_LAST_BINDING_DIGEST="$(printf '%s\0%s\0%s\0%s\0' "$project" "$service" "$id" "$mounts" | sha256sum | awk '{print $1}')"
 }
 
@@ -364,9 +366,9 @@ assert_caddy_container_mounts platform-infra web platform-infra-web-1 platform-i
 caddy_binding_after="$CADDY_LAST_BINDING_DIGEST"
 assert_caddy_container_mounts shared-edge edge shared-edge-edge-1 shared-edge_edge_caddy_data shared-edge_edge_caddy_config "$shared_edge_caddy_data_mount" "$shared_edge_caddy_config_mount" /opt/shared-edge/Caddyfile /etc/caddy/Caddyfile
 caddy_binding_after="$caddy_binding_after|$CADDY_LAST_BINDING_DIGEST"
-[[ "$caddy_binding_after" == "$caddy_binding_before" ]] || fail_state CADDY_CAPTURE_DRIFT
+[[ "$caddy_binding_after" == "$caddy_binding_before" ]] || fail_state CADDY_CAPTURE_BINDING_DRIFT
 caddy_source_generation_after="$(capture_source_generation "$sites_path" "$platform_caddy_data_mount" "$platform_caddy_config_mount" "$shared_edge_caddyfile_path" "$shared_edge_caddy_data_mount" "$shared_edge_caddy_config_mount")" || fail_state CADDY_CAPTURE_INVALID
-[[ "$caddy_source_generation_after" == "$caddy_source_generation_before" ]] || fail_state CADDY_CAPTURE_DRIFT
+[[ "$caddy_source_generation_after" == "$caddy_source_generation_before" ]] || fail_state CADDY_CAPTURE_SOURCE_DRIFT
 bundle_checksums="$(restic_cmd dump "$snapshot_id" "$bundle_path" | python3 -c '
 import hashlib, os, sys, tarfile
 

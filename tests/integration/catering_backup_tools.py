@@ -21,16 +21,16 @@ import time
 import tempfile
 
 REPOSITORY = 'AlexanderSmyslowski/catering-agents-platform'
-BRANCH = 'codex/catering-production-postgres-restore-proof-20260909'
+BRANCH = 'codex/catering-caddy-mount-order-fix-20260909'
 # Only this reviewed Draft PR may acquire the synthetic tools.
-PR_NUMBER = 689
+PR_NUMBER = 690
 PROOF_BASE = 'f757ca44c0ae22bf00bbbbfd5e0f5742aacd9f86'
 PROOF_BASE_TREE = '63451cccb441c0f5403b9fd20660f9e3289e3354'
 PRODUCTION_IMAGE = 'postgres@sha256:778d0b486d6daa02b77434d0358ec57a1b21fd8b6d22ac2eef56a33e816928f6'
 PARENT = '34d71daba94ba227146300f69f1f7b2872dce58b'
 PARENT_TREE = 'fb5c57b369c45e4d2168f5586242325d5e3193bd'
 SOURCE_HASHES = {
-    'platform-infra/backup/catering-backup.sh': '4f9fdce72c3b16edf26679249b2feb132b59a726e207cab5cad8961eab15a937',
+    'platform-infra/backup/catering-backup.sh': 'f08608144a70577d7486bb02002e11f4c2f4426b164b6a47b5baca0e89de45fb',
     'platform-infra/backup/catering-restore-probe.sh': 'beb8a9dfb32da262ae932a108e0d32b73af5de6ecda7edc5a4c2b4f2f5cae0f1',
     'platform-infra/backup/catering-backup-common.sh': '74028a453e749c5b80517ab51dae197e07097e6c2b8b81aee40d1f74d4d47c96',
     'shared-core/src/persistence.ts': 'fc9c03509db36052a4de0aa04d31e518913877b9736be39925561bfe6f5d547f',

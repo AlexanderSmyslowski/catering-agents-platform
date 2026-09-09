@@ -205,10 +205,10 @@ jobs:
   synthetic-backup-tool-integration:
     if: >-
       github.event_name == 'pull_request' &&
-      github.event.pull_request.number == 689 &&
+      github.event.pull_request.number == 690 &&
       github.event.pull_request.draft == true &&
       github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.head.ref == 'codex/catering-production-postgres-restore-proof-20260909'
+      github.event.pull_request.head.ref == 'codex/catering-caddy-mount-order-fix-20260909'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
