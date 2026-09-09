@@ -22,8 +22,10 @@ import tempfile
 
 REPOSITORY = 'AlexanderSmyslowski/catering-agents-platform'
 BRANCH = 'codex/catering-production-postgres-restore-proof-20260909'
-# Fail closed until the new Draft PR exists and its literal number is reviewed.
-PR_NUMBER = 0
+# Only this reviewed Draft PR may acquire the synthetic tools.
+PR_NUMBER = 689
+PROOF_BASE = 'f757ca44c0ae22bf00bbbbfd5e0f5742aacd9f86'
+PROOF_BASE_TREE = '63451cccb441c0f5403b9fd20660f9e3289e3354'
 PRODUCTION_IMAGE = 'postgres@sha256:778d0b486d6daa02b77434d0358ec57a1b21fd8b6d22ac2eef56a33e816928f6'
 PARENT = '34d71daba94ba227146300f69f1f7b2872dce58b'
 PARENT_TREE = 'fb5c57b369c45e4d2168f5586242325d5e3193bd'
@@ -867,6 +869,12 @@ def root_invocation(script, head, tree, environment):
             '/usr/bin/python3', '-B', script, '--execute', head, tree]
 
 
+def verify_proof_base(git, head):
+    # The merged main anchors this proof; PARENT remains legacy-dump provenance.
+    require(git('rev-parse', PROOF_BASE + '^{tree}') == PROOF_BASE_TREE, 'PROOF_BASE_TREE_MISMATCH')
+    git('merge-base', '--is-ancestor', PROOF_BASE, head)
+
+
 def main():
     # Validate public workflow metadata before Git, sudo, Docker, or Restic.
     env = os.environ
@@ -893,8 +901,7 @@ def main():
     def git(*args):
         return command(['git', '-C', str(root), '--no-optional-locks', *args]).stdout.decode().strip()
     require(git('rev-parse', 'HEAD') == head and not git('status', '--porcelain=v1', '--untracked-files=all'), 'CHECKOUT_NOT_CLEAN_PR_HEAD')
-    require(git('rev-parse', PARENT + '^{tree}') == PARENT_TREE, 'PARENT_TREE_MISMATCH')
-    git('merge-base', '--is-ancestor', PARENT, head)
+    verify_proof_base(git, head)
     tree = git('rev-parse', 'HEAD^{tree}')
     if sys.argv[1:] == ['--preflight']:
         print(json.dumps({'preflight': 'passed', 'commit': head, 'tree': tree, 'runner': 'github-hosted'}))

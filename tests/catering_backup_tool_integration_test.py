@@ -233,6 +233,28 @@ sys.exit(result.returncode)
                 with self.subTest(number=wrong_number), self.assertRaises(m.GateError):
                     m.runtime_guard(env, bad, 'Linux')
 
+    def test_preflight_binds_the_merged_proof_base_separately_from_legacy_dump(self):
+        m = self.implementation()
+        self.assertTrue(hasattr(m, 'verify_proof_base'), 'merged proof-base binding is missing')
+        base = 'f757ca44c0ae22bf00bbbbfd5e0f5742aacd9f86'
+        tree = '63451cccb441c0f5403b9fd20660f9e3289e3354'
+        head = 'a' * 40
+        git = mock.Mock(side_effect=[tree, ''])
+        m.verify_proof_base(git, head)
+        self.assertEqual(git.call_args_list, [mock.call('rev-parse', base + '^{tree}'),
+                                             mock.call('merge-base', '--is-ancestor', base, head)])
+        for wrong_tree in ('', 'b' * 40):
+            with self.subTest(tree=wrong_tree):
+                git = mock.Mock(return_value=wrong_tree)
+                with self.assertRaisesRegex(m.GateError, 'PROOF_BASE_TREE_MISMATCH'):
+                    m.verify_proof_base(git, head)
+                self.assertEqual(git.call_count, 1)
+        git = mock.Mock(side_effect=[tree, m.GateError('TOOL_EXIT_1')])
+        with self.assertRaisesRegex(m.GateError, 'TOOL_EXIT_1'):
+            m.verify_proof_base(git, head)
+        self.assertEqual(m.PARENT, '34d71daba94ba227146300f69f1f7b2872dce58b')
+        self.assertEqual(m.PARENT_TREE, 'fb5c57b369c45e4d2168f5586242325d5e3193bd')
+
     def test_workflow_keeps_the_numbered_draft_source_guard(self):
         m = self.implementation()
         self.assertTrue(hasattr(m, 'PR_NUMBER'), 'numbered PR binding is missing')
