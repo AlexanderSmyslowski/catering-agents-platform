@@ -1,7 +1,7 @@
 # memory.md
 
-version: 5.379
-date: 2026-09-05
+version: 5.380
+date: 2026-09-09
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
 
@@ -1891,3 +1891,10 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 
 - Der Backup-/Restore-Scope ist auf die versionierten Namen `postgres,sites,platform-caddy,shared-edge-caddy` vereinheitlicht. Ein einziger Restic-stdin-Tar-Stream verwendet relative, eindeutige Komponentenpfade; der Backup-Readback bindet Whole-Bundle-, PostgreSQL- und sechs Caddy-/Sites-Komponentenchecksummen aus demselben Snapshot-Stream, und Restore verifiziert dieselben Bindungen ausschließlich aus dem isolierten Baum.
 - Der lokale Kandidat bleibt ungemergt und ohne Produktions-, Docker-, Restic-, SSH-, systemd-, Commit-, Push- oder PR-Aktion. Offene P1 für echte PG-/Caddy-/Collector-Ausführung, vollständige Attestations-Revalidierung und Plattformintegration bleiben Folgegates; keine Secretwerte oder sensiblen Pfadinhalte wurden gespeichert.
+
+### 5.380 - 2026-09-09
+
+- PR [#689](https://github.com/AlexanderSmyslowski/catering-agents-platform/pull/689) ergänzt den eng begrenzten synthetischen Produktionsimage-Nachweis in `tests/integration/catering_backup_tools.py`, dessen Python-Verträgen und der zugehörigen CI-/Runtime-Bindung. Der Werkzeuglauf bleibt auf diesen Draft-PR und seinen exakten Repository-/Source-Branch beschränkt; die Herkunftsprüfung trennt die gemergte Main-Basis von der historischen Legacy-Dump-Herkunft. Produktivskripte sowie deren Source-/Fragment-Hashes bleiben unverändert.
+- Der geprüfte Head `d6d0e6a20ce61e6595ee91d8340ec1e709b16704` mit Tree `66fea042d0c78e03edb163b115405e01c79cd71e` belegt `postgres@sha256:778d0b486d6daa02b77434d0358ec57a1b21fd8b6d22ac2eef56a33e816928f6` als synthetische Quelle und isoliertes Restore-Image. [CI 34349716763](https://github.com/AlexanderSmyslowski/catering-agents-platform/actions/runs/34349716763), Versuch 1, bestand mit vier erfolgreichen Jobs; die Hosted-Suite meldete 2691 bestandene Tests und 14 bestehende Skips, die Python-Fokusprüfung 46 bestandene Verträge. Diese Nachweise bleiben an den genannten geprüften Kandidaten gebunden.
+- PostgreSQL 17.9 erzeugte mit dem unveränderten produktiven Dump-Codeabschnitt einen echten Custom-Dump; Restic 0.16.4 sicherte und las die synthetischen Komponenten aus einem lokalen flüchtigen verschlüsselten Repository zurück. Gesamtstream-/Komponentenchecksummen sowie der vollständige Schema- und Inhaltsvergleich des gesicherten Zwei-Tabellen-Scopes einschließlich vier Geschäftsdatensätzen, drei Dokumentdatensätzen und Binärinhalten bestanden. Der isolierte Restore verwendete denselben Digest mit `--network none`, ausschließlich Loopback und ohne Ports oder Produktionsvolumes; ein beschädigter Dump wurde abgewiesen. Alle drei Testcontainer, drei anonymen Volumes, temporären Daten und Prozessgruppen waren anschließend entfernt.
+- Der Nachweis prüft ausschließlich synthetische Daten auf einem GitHub-Hosted-Runner, keine Produktionsentrypoints oder Produktionsdaten und keinen produktiven Off-host-Wiederherstellungsweg. Er enthält keine produktive RPO-/RTO-Zusage. Zum Zeitpunkt dieses Nachtrags war PR #689 noch nicht gemergt; der dokumentarische Folgecommit erweitert weder die Runtime-Freigabe noch den historischen Nachweisumfang.
