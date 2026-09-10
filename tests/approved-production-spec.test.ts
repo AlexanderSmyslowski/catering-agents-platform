@@ -286,6 +286,7 @@ function reviseReadyDraft(draft: ProductionDraft): ProductionDraft {
         kind: "event_data",
         decision: "change_requested",
         operatorComment: "Veranstaltungsdaten fachlich überarbeiten.",
+        operatorCommentVisibility: "operational",
         decidedBy: "Produktions-Mitarbeiter",
         decidedAt: "2026-08-10T12:06:00.000Z"
       }

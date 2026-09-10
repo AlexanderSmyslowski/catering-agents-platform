@@ -1,5 +1,5 @@
 import type { ProductionSourceInputValues } from "./production-input-panel.js";
-import type { IntakeRequestDetail } from "./api.js";
+import type { ProductionSourceDetail } from "./api.js";
 import {
   formatDocumentIngestionStatusLabel,
   formatDocumentIngestionWarningLabel
@@ -174,7 +174,7 @@ function buildSnapshotItems(input: {
   ];
 }
 
-function buildSourceCheckItems(intakeRequestDetail?: IntakeRequestDetail | null): string[] {
+function buildSourceCheckItems(intakeRequestDetail?: ProductionSourceDetail | null): string[] {
   const rawInputs = Array.isArray(intakeRequestDetail?.rawInputs) ? intakeRequestDetail.rawInputs : [];
 
   return rawInputs
@@ -349,7 +349,7 @@ function buildUploadResultSummary(input: {
   focusedProductionSpec?: Record<string, unknown>;
   productionQuestions: string[];
   productionAssumptions: string[];
-  intakeRequestDetail?: IntakeRequestDetail | null;
+  intakeRequestDetail?: ProductionSourceDetail | null;
 }): ProductionUploadResultSummaryState | undefined {
   if (input.documentPhase !== "done" || !input.focusedProductionSpec) {
     return undefined;
@@ -415,7 +415,7 @@ export function buildProductionInputPanelState(input: {
   focusedProductionSpec?: Record<string, unknown>;
   productionQuestions?: string[];
   productionAssumptions?: string[];
-  intakeRequestDetail?: IntakeRequestDetail | null;
+  intakeRequestDetail?: ProductionSourceDetail | null;
 }): ProductionInputPanelState {
   return {
     clearWorkspaceDisabled: input.submitting || !input.sourceInput.canClearWorkspace,

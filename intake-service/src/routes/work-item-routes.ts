@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import {
   areJsonValuesEqual,
+  projectAcceptedEventSpecForActor,
   validateAcceptedEventSpec,
   validateEventRequest,
   type AcceptedEventSpec,
@@ -307,9 +308,11 @@ export function registerIntakeWorkItemRoutes(
 
     const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
     return reply.send({
-      items: await store.listSpecs(actor, {
+      items: (await store.listSpecs(actor, {
         includeArchived: includeArchivedFromQuery(request.query)
-      })
+      })).map((spec) => projectAcceptedEventSpecForActor(actor, spec, {
+        includeTargetBudgetForNonCommercial: true
+      }))
     });
   });
 
@@ -325,7 +328,9 @@ export function registerIntakeWorkItemRoutes(
       return reply.code(404).send({ message: "AcceptedEventSpec nicht gefunden." });
     }
 
-    return reply.send(spec);
+    return reply.send(projectAcceptedEventSpecForActor(actor, spec, {
+      includeTargetBudgetForNonCommercial: true
+    }));
   });
 
   app.patch<{ Params: { specId: string }; Body: SpecUpdateBody }>(
@@ -360,7 +365,9 @@ export function registerIntakeWorkItemRoutes(
       });
 
       return reply.send({
-        acceptedEventSpec: updatedSpec
+        acceptedEventSpec: projectAcceptedEventSpecForActor(actor, updatedSpec, {
+          includeTargetBudgetForNonCommercial: true
+        })
       });
     }
   );

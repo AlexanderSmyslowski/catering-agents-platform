@@ -302,7 +302,15 @@ describe("production handoff port", () => {
     });
     expect(alphaList.json<{ items: unknown[] }>().items).toHaveLength(1);
     expect(betaList.statusCode).toBe(403);
-    expect(await store.getProductionDraft({ businessId: "alpha" }, draft.draftId)).toEqual(draft);
+    expect(draft.draftArtifacts.eventSpec?.budgetContext).toBeUndefined();
+    expect(draft.draftArtifacts.eventSpec?.servicePlan.modules.every((module) => module.pricing === undefined)).toBe(true);
+    expect(await store.getProductionDraft({ businessId: "alpha" }, draft.draftId)).toEqual({
+      ...draft,
+      draftArtifacts: {
+        ...draft.draftArtifacts,
+        eventSpec: handoff.eventSpecSnapshot
+      }
+    });
     expect(await store.getProductionDraft({ businessId: "beta" }, draft.draftId)).toBeUndefined();
     expect([betaReview.statusCode, betaRevision.statusCode, betaDecision.statusCode, betaApply.statusCode])
       .toEqual([403, 403, 403, 403]);

@@ -86,6 +86,7 @@ export const caseSchema = {
           ]
         },
         text: { type: "string", minLength: 1, maxLength: 10_000 },
+        visibility: { enum: ["operational", "commercial"] },
         sourceId: identifier,
         artifactId: identifier,
         sourceRef: { $ref: "#/$defs/caseSourceRef" },

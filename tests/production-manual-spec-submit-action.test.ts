@@ -16,11 +16,15 @@ function manualInput() {
 function input(overrides: Partial<ProductionManualSpecSubmitInput> = {}): ProductionManualSpecSubmitInput {
   return {
     createAcceptedSpecFromManualForm: vi.fn(async () => ({ acceptedEventSpec: { specId: "spec-manual-1" } })),
+    createProductionCase: vi.fn(async () => ({ case: { caseId: "case-manual-1" } })),
+    createProductionDraftFromAcceptedEventSpec: vi.fn(async () => ({ draft: { draftId: "draft-manual-1" } })),
     buildCurrentManualSpecInput: vi.fn(() => manualInput()),
     setSubmitting: vi.fn(),
     setProductionWorkspaceCleared: vi.fn(),
     clearMessages: vi.fn(),
     setFocusedProductionSpecId: vi.fn(),
+    setActiveProductionCaseId: vi.fn(),
+    setActiveProductionCaseSpecId: vi.fn(),
     resetManualSpecDraft: vi.fn(),
     refreshDashboard: vi.fn(async () => undefined),
     setNotice: vi.fn(),
@@ -51,14 +55,25 @@ describe("production manual spec submit action", () => {
         calls.push("createAcceptedSpecFromManualForm");
         return { acceptedEventSpec: { specId: "spec-manual-1" } };
       }),
+      createProductionCase: vi.fn(async () => {
+        calls.push("createProductionCase");
+        return { case: { caseId: "case-manual-1" } };
+      }),
+      createProductionDraftFromAcceptedEventSpec: vi.fn(async (caseId, spec) => {
+        calls.push(`createProductionDraftFromAcceptedEventSpec:${caseId}:${String(spec.specId)}`);
+        return { draft: { draftId: "draft-manual-1" } };
+      }),
+      setActiveProductionCaseId: vi.fn((caseId) => {
+        calls.push(`setActiveProductionCaseId:${caseId}`);
+      }),
+      setActiveProductionCaseSpecId: vi.fn((specId) => {
+        calls.push(`setActiveProductionCaseSpecId:${specId}`);
+      }),
       setFocusedProductionSpecId: vi.fn((specId) => {
         calls.push(`setFocusedProductionSpecId:${specId}`);
       }),
       resetManualSpecDraft: vi.fn(() => {
         calls.push("resetManualSpecDraft");
-      }),
-      refreshDashboard: vi.fn(async () => {
-        calls.push("refreshDashboard");
       }),
       setNotice: vi.fn((message) => {
         calls.push(`setNotice:${message}`);
@@ -76,15 +91,18 @@ describe("production manual spec submit action", () => {
       "clearMessages",
       "buildCurrentManualSpecInput",
       "createAcceptedSpecFromManualForm",
+      "createProductionCase",
+      "createProductionDraftFromAcceptedEventSpec:case-manual-1:spec-manual-1",
+      "setActiveProductionCaseId:case-manual-1",
+      "setActiveProductionCaseSpecId:spec-manual-1",
       "setFocusedProductionSpecId:spec-manual-1",
       "resetManualSpecDraft",
-      "refreshDashboard",
       "setNotice:Manuelle Spezifikation wurde angelegt.",
       "setSubmitting:false"
     ]);
   });
 
-  it("keeps the successful path usable even when the response has no spec id", async () => {
+  it("fails closed when the response has no spec id", async () => {
     const actionsInput = input({
       createAcceptedSpecFromManualForm: vi.fn(async () => ({ acceptedEventSpec: {} }))
     });
@@ -92,10 +110,31 @@ describe("production manual spec submit action", () => {
 
     await submitManualSpec();
 
+    expect(actionsInput.createProductionCase).not.toHaveBeenCalled();
+    expect(actionsInput.createProductionDraftFromAcceptedEventSpec).not.toHaveBeenCalled();
     expect(actionsInput.setFocusedProductionSpecId).not.toHaveBeenCalled();
-    expect(actionsInput.resetManualSpecDraft).toHaveBeenCalledTimes(1);
-    expect(actionsInput.refreshDashboard).toHaveBeenCalledTimes(1);
-    expect(actionsInput.setNotice).toHaveBeenCalledWith("Manuelle Spezifikation wurde angelegt.");
+    expect(actionsInput.resetManualSpecDraft).not.toHaveBeenCalled();
+    expect(actionsInput.setNotice).not.toHaveBeenCalled();
+    expect(actionsInput.setError).toHaveBeenCalledWith("Manuelle Spezifikation enthält keine gültige ID.");
+  });
+
+  it("does not expose an unpersisted spec when the Production draft import fails", async () => {
+    const actionsInput = input({
+      createProductionDraftFromAcceptedEventSpec: vi.fn(async () => {
+        throw new Error("Produktionsentwurf konnte nicht gespeichert werden");
+      })
+    });
+    const submitManualSpec = buildProductionManualSpecSubmitAction(actionsInput);
+
+    await submitManualSpec();
+
+    expect(actionsInput.setActiveProductionCaseId).not.toHaveBeenCalled();
+    expect(actionsInput.setActiveProductionCaseSpecId).not.toHaveBeenCalled();
+    expect(actionsInput.setFocusedProductionSpecId).not.toHaveBeenCalled();
+    expect(actionsInput.resetManualSpecDraft).not.toHaveBeenCalled();
+    expect(actionsInput.setNotice).not.toHaveBeenCalled();
+    expect(actionsInput.setError).toHaveBeenCalledWith("Produktionsentwurf konnte nicht gespeichert werden");
+    expect(actionsInput.setSubmitting).toHaveBeenLastCalledWith(false);
   });
 
   it("surfaces manual spec failures and always exits submitting state", async () => {

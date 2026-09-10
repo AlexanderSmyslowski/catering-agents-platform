@@ -1,11 +1,33 @@
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildProductionApp } from "../production-service/src/app.js";
+import { AuditLogStore } from "../shared-core/src/audit-log.js";
+
+const TRUSTED_SECRET = "production-audit-access-secret";
+const COMMERCIAL_SENTINEL = 9876.54;
+const SUMMARY_COMMERCIAL_SENTINEL = "SUMMARY_COMMERCIAL_SENTINEL-12345.67-EUR";
+
+function headersFor(actorName: string) {
+  return {
+    "x-catering-trusted-secret": TRUSTED_SECRET,
+    "x-catering-actor-name": actorName,
+    "x-catering-business-id": "local"
+  };
+}
 
 function createDataRoot(): string {
   return mkdtempSync(path.join(tmpdir(), "catering-agents-"));
+}
+
+function disposeDataRoot(dataRoot: string): void {
+  try {
+    execFileSync("/usr/bin/trash", [dataRoot], { stdio: "ignore" });
+  } catch {
+    // Test data is disposable; a sandbox denial must not turn cleanup into an irreversible delete.
+  }
 }
 
 describe("production audit access", () => {
@@ -64,5 +86,68 @@ describe("production audit access", () => {
 
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });
+  });
+
+  it("redacts persisted audit summaries and details for audit operators without changing admin or storage evidence", async () => {
+    const dataRoot = createDataRoot();
+    const auditLog = new AuditLogStore({ rootDir: dataRoot });
+    const persisted = await auditLog.logFor({ businessId: "local" }, {
+      action: "production.commercial_policy_checked",
+      entityType: "ProductionDraft",
+      entityId: "production-draft-commercial-sentinel",
+      actor: {
+        name: "Administrator",
+        source: "trusted-proxy:x-catering-actor-name"
+      },
+      summary: `Kommerzielle Produktionsrichtlinie ${SUMMARY_COMMERCIAL_SENTINEL} geprüft.`,
+      details: {
+        policyMaximumEstimatedCostEur: COMMERCIAL_SENTINEL,
+        commercialMarker: "COMMERCIAL_SENTINEL",
+        reviewState: "checked"
+      }
+    });
+    const app = buildProductionApp({
+      dataRoot,
+      auditLog,
+      trustedActorSecret: TRUSTED_SECRET
+    });
+
+    try {
+      const auditOperatorResponse = await app.inject({
+        method: "GET",
+        url: "/v1/production/audit/events?limit=10",
+        headers: headersFor("Betriebs-/Audit-Operator")
+      });
+
+      expect(auditOperatorResponse.statusCode).toBe(200);
+      const auditOperatorItems = auditOperatorResponse.json<{ items: Array<Record<string, unknown>> }>().items;
+      expect(auditOperatorItems).toEqual([
+        expect.objectContaining({
+          auditId: persisted.auditId,
+          action: persisted.action,
+          entityType: persisted.entityType,
+          entityId: persisted.entityId
+        })
+      ]);
+      expect(auditOperatorItems[0]).not.toHaveProperty("summary");
+      expect(auditOperatorItems[0]).not.toHaveProperty("details");
+      expect(JSON.stringify(auditOperatorItems)).not.toContain(String(COMMERCIAL_SENTINEL));
+      expect(JSON.stringify(auditOperatorItems)).not.toContain(SUMMARY_COMMERCIAL_SENTINEL);
+      expect(JSON.stringify(auditOperatorItems)).not.toContain("policyMaximumEstimatedCostEur");
+      expect(JSON.stringify(auditOperatorItems)).not.toContain("COMMERCIAL_SENTINEL");
+
+      const adminResponse = await app.inject({
+        method: "GET",
+        url: "/v1/production/audit/events?limit=10",
+        headers: headersFor("Administrator")
+      });
+
+      expect(adminResponse.statusCode).toBe(200);
+      expect(adminResponse.json()).toEqual({ items: [persisted] });
+      expect(await auditLog.getFor({ businessId: "local" }, persisted.auditId)).toEqual(persisted);
+    } finally {
+      await app.close();
+      disposeDataRoot(dataRoot);
+    }
   });
 });

@@ -3,11 +3,18 @@ import { formatSubmitErrorMessage } from "./submit-error-message.js";
 
 export type ProductionManualSpecSubmitInput = {
   createAcceptedSpecFromManualForm: (input: Record<string, unknown>) => Promise<Record<string, unknown>>;
+  createProductionCase: (input?: Record<string, never>) => Promise<{ case: { caseId: string } }>;
+  createProductionDraftFromAcceptedEventSpec: (
+    caseId: string,
+    spec: Record<string, unknown>
+  ) => Promise<{ draft: { draftId: string } }>;
   buildCurrentManualSpecInput: () => Record<string, unknown>;
   setSubmitting: (submitting: boolean) => void;
   setProductionWorkspaceCleared: (cleared: boolean) => void;
   clearMessages: () => void;
   setFocusedProductionSpecId: (specId: string) => void;
+  setActiveProductionCaseId: (caseId: string) => void;
+  setActiveProductionCaseSpecId: (specId: string) => void;
   resetManualSpecDraft: () => void;
   refreshDashboard: () => Promise<void>;
   setNotice: (message: string) => void;
@@ -16,13 +23,16 @@ export type ProductionManualSpecSubmitInput = {
 
 export function buildProductionManualSpecSubmitAction({
   createAcceptedSpecFromManualForm,
+  createProductionCase,
+  createProductionDraftFromAcceptedEventSpec,
   buildCurrentManualSpecInput,
   setSubmitting,
   setProductionWorkspaceCleared,
   clearMessages,
   setFocusedProductionSpecId,
+  setActiveProductionCaseId,
+  setActiveProductionCaseSpecId,
   resetManualSpecDraft,
-  refreshDashboard,
   setNotice,
   setError
 }: ProductionManualSpecSubmitInput) {
@@ -33,11 +43,13 @@ export function buildProductionManualSpecSubmitAction({
     try {
       const response = await createAcceptedSpecFromManualForm(buildCurrentManualSpecInput());
       const specId = extractAcceptedSpecId(response);
-      if (specId) {
-        setFocusedProductionSpecId(specId);
-      }
+      if (!specId) throw new Error("Manuelle Spezifikation enthält keine gültige ID.");
+      const productionCase = await createProductionCase({});
+      await createProductionDraftFromAcceptedEventSpec(productionCase.case.caseId, { specId });
+      setActiveProductionCaseId(productionCase.case.caseId);
+      setActiveProductionCaseSpecId(specId);
+      setFocusedProductionSpecId(specId);
       resetManualSpecDraft();
-      await refreshDashboard();
       setNotice("Manuelle Spezifikation wurde angelegt.");
     } catch (submitError) {
       setError(formatSubmitErrorMessage(submitError, "Manuelle Spezifikation konnte nicht erstellt werden."));

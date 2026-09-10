@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import {
   areJsonValuesEqual,
   createApprovalRequestRecord,
+  resolveMinimalMvpRoleFromTrustedActor,
   validateApprovedOffer,
   validateProductionHandoff,
   type ApprovalRequestRecord,
@@ -32,6 +33,10 @@ export interface OfferApprovalRouteDependencies {
 
 function deterministicId(prefix: string, value: unknown): string {
   return `${prefix}-${createHash("sha256").update(JSON.stringify(value)).digest("hex")}`;
+}
+
+function approvalRoleForActor(actor: TrustedActor): "offer_operator" | "admin" {
+  return resolveMinimalMvpRoleFromTrustedActor(actor) === "admin" ? "admin" : "offer_operator";
 }
 
 function sameDecision(
@@ -311,7 +316,7 @@ export function registerOfferApprovalRoutes(app: FastifyInstance, deps: OfferApp
         try {
           requestedApproval = createApprovalRequestRecord({
             actor,
-            role: "offer_operator",
+            role: approvalRoleForActor(actor),
             target: { kind: "offer_draft", artifactId: request.params.draftId, revision: requestedRevision! },
             decision,
             ...(decision === "approved" && request.body.variantId !== undefined

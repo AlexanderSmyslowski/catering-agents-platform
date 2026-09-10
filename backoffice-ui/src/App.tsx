@@ -14,7 +14,7 @@ import { buildAppRouteShellState } from "./app-route-shell-state.js";
 import { buildAppDashboardRouteState } from "./app-dashboard-route-state.js";
 import { HomePortalApp } from "./home-portal-app.js";
 import { OfferProductApp } from "./offer-product-app.js";
-import { ProductionProductApp } from "./production-product-app.js";
+import { ProductionRouteAccessBoundary } from "./production-route-access-boundary.js";
 import {
   buildRecordView,
   buildRecordViewMap,
@@ -58,7 +58,7 @@ import type {
   PurchaseList,
   Recipe
 } from "@catering/shared-core";
-import type { IntakeRequestDetail } from "./api.js";
+import type { ProductionSourceDetail } from "./api.js";
 import { buildProductionConversationState } from "./production-conversation-state.js";
 import { buildProductionArtifactSelectionAppBoundary } from "./production-artifact-selection-app-boundary.js";
 import { buildProductionFocusState } from "./production-focus-state.js";
@@ -79,6 +79,7 @@ import { useProductionQuestionAutoOpen } from "./use-production-question-auto-op
 import { useProductionDocumentProgress } from "./use-production-document-progress.js";
 import { useProductionIntakeDraft } from "./use-production-intake-draft.js";
 import { useProductionIntakeRequestDetail } from "./use-production-intake-request-detail.js";
+import { buildProductionSnapshotSourceDetail } from "./production-snapshot-source-detail.js";
 import { useProductionManualSpecForm } from "./use-production-manual-spec-form.js";
 import { useProductionPlanProgress } from "./use-production-plan-progress.js";
 import { useProductionWindowFileDrop } from "./use-production-window-file-drop.js";
@@ -171,6 +172,7 @@ type ProductWorkspaceProps = {
   resolveProductionCaseFromHandoff?: (handoffId: string) => Promise<{ caseId: string }>;
   currentProductionDraftId?: string;
   currentProductionDraft?: ProductionDraft;
+  productionSourceDetail?: ProductionSourceDetail;
   currentApprovedProductionSpecId?: string;
   currentProductionResultArtifactId?: string;
 };
@@ -416,6 +418,7 @@ function ProductWorkspaceView({
   resolveProductionCaseFromHandoff,
   currentProductionDraftId,
   currentProductionDraft,
+  productionSourceDetail,
   currentApprovedProductionSpecId,
   currentProductionResultArtifactId
 }: ProductWorkspaceProps) {
@@ -708,10 +711,20 @@ function ProductWorkspaceView({
   );
 
   const {
-    intakeRequestDetail,
-    intakeRequestDetailError,
+    intakeRequestDetail: loadedIntakeRequestDetail,
+    intakeRequestDetailError: loadedIntakeRequestDetailError,
     resetIntakeRequestDetail
-  } = useProductionIntakeRequestDetail({ currentIntakeRequestId });
+  } = useProductionIntakeRequestDetail({
+    // Production renders the persisted, server-projected draft snapshot. A
+    // request-detail lookup here would cross the commercial Intake boundary.
+    currentIntakeRequestId: route === "production" ? undefined : currentIntakeRequestId
+  });
+  const intakeRequestDetail = route === "production"
+    ? productionSourceDetail ?? null
+    : loadedIntakeRequestDetail;
+  const intakeRequestDetailError = route === "production"
+    ? undefined
+    : loadedIntakeRequestDetailError;
 
   const {
     editingSpecId,
@@ -890,9 +903,11 @@ function ProductWorkspaceView({
     createAcceptedSpecFromDocument,
     uploadSourceDocument,
     createProductionCase,
+    createProductionDraftFromAcceptedEventSpec,
     createProductionDraftFromDocument,
     activeProductionCaseId,
     setActiveProductionCaseId,
+    setActiveProductionCaseSpecId,
     getStagedProductionDocument: () => stagedProductionDocumentRef.current,
     setStagedProductionDocument: (stage) => {
       stagedProductionDocumentRef.current = stage;
@@ -1349,7 +1364,7 @@ function ProductRouteController({ route, shell, masthead }: ProductRouteControll
   }
 
   return (
-    <ProductionProductApp
+    <ProductionRouteAccessBoundary
       shell={shell}
       masthead={masthead}
       activeCaseId={activeProductionCaseId}
@@ -1373,11 +1388,12 @@ function ProductRouteController({ route, shell, masthead }: ProductRouteControll
           availableCases={product.data.cases}
           currentProductionDraftId={product.data.currentDraft?.draftId}
           currentProductionDraft={product.data.currentDraft}
+          productionSourceDetail={buildProductionSnapshotSourceDetail(product.data)}
           currentApprovedProductionSpecId={product.data.approvedProductionSpec?.approvedProductionSpecId}
           currentProductionResultArtifactId={product.data.currentPlan?.planId ?? product.data.currentPurchaseList?.purchaseListId}
         />
       )}
-    </ProductionProductApp>
+    </ProductionRouteAccessBoundary>
   );
 }
 

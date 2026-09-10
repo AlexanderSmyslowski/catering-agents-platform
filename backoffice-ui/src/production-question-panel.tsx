@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ProductionConversationProjection } from "../../shared-core/src/conversation-projection.js";
-import type { IntakeRequestDetail } from "./api.js";
+import type { ProductionSourceDetail } from "./api.js";
 import { ProductionIntakeOriginCard } from "./production-intake-origin-card.js";
 import { hasUnsafeIntakeSource } from "./production-intake-origin-card-state.js";
 import { getSpecLabel } from "./production-language.js";
@@ -55,7 +55,7 @@ export type ProductionQuestionPanelState = {
   productionConversationProjection: ProductionConversationProjection;
   workbenchSpecFacts: WorkbenchSpecFact[];
   intakeRequestDetailError?: string;
-  intakeRequestDetail: IntakeRequestDetail | null;
+  intakeRequestDetail: ProductionSourceDetail | null;
   filteredSpecs: Array<Record<string, unknown>>;
   documentPhase: "idle" | "analysing" | "done";
   productionWorkspaceCleared: boolean;

@@ -4,6 +4,7 @@ import {
   AuditLogStore,
   assertBusinessId,
   createTrustedActorResolver,
+  hasMinimalMvpCapability,
   createOfferDraft,
   createUploadSourceMetadata,
   extractTextFromDocument,
@@ -12,7 +13,6 @@ import {
   parseUploadedRecipeText,
   isDevAuthEnabled,
   RecipeLibrary,
-  resolveMinimalMvpRoleFromTrustedActor,
   multipartLimitsForUpload,
   readLimitedUploadBuffer,
   uploadErrorResponse,
@@ -132,7 +132,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
   });
   const actorForRequest = (request: { headers: Record<string, string | string[] | undefined> }, ..._ignored: unknown[]) => resolveActor(request);
   const isOfferOperator = (request: { headers: Record<string, string | string[] | undefined> }, ..._ignored: unknown[]) =>
-    resolveMinimalMvpRoleFromTrustedActor(actorForRequest(request)) === "offer_operator";
+    hasMinimalMvpCapability(actorForRequest(request), "offer");
   const requireOfferOperator = (
     request: { headers: Record<string, string | string[] | undefined> },
     reply: { code: (statusCode: number) => { send: (payload: unknown) => unknown } },
@@ -145,14 +145,14 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
     reply: { code: (statusCode: number) => { send: (payload: unknown) => unknown } }
   ): unknown | undefined => {
     const actor = actorForRequest(request);
-    const role = resolveMinimalMvpRoleFromTrustedActor(actor);
-    return role === "offer_operator" ||
-      (actor.trusted && (actor.name === "Production-Service" || role === "production_operator"))
+    const canReadOffer = hasMinimalMvpCapability(actor, "offer");
+    return canReadOffer ||
+      (actor.trusted && actor.name === "Production-Service")
       ? undefined
       : reply.code(403).send({ message: "Leseberechtigung für Produktionsübergaben erforderlich." });
   };
   const isOperationsAuditOperator = (request: { headers: Record<string, string | string[] | undefined> }, ..._ignored: unknown[]) =>
-    resolveMinimalMvpRoleFromTrustedActor(actorForRequest(request)) === "operations_audit_operator";
+    hasMinimalMvpCapability(actorForRequest(request), "operations_audit");
   const storageOptions = isOfferStore(input) ? input.storageOptions : options;
   const store =
     options.store ??

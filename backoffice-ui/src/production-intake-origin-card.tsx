@@ -1,11 +1,11 @@
-import type { IntakeRequestDetail } from "./api.js";
+import type { ProductionSourceDetail } from "./api.js";
 import {
   buildProductionIntakeOriginCardState,
   formatDocumentIngestionSummary
 } from "./production-intake-origin-card-state.js";
 
 type ProductionIntakeOriginCardProps = {
-  intakeRequestDetail: IntakeRequestDetail;
+  intakeRequestDetail: ProductionSourceDetail;
 };
 
 export { formatDocumentIngestionSummary } from "./production-intake-origin-card-state.js";
