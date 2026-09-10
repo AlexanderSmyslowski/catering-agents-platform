@@ -13,6 +13,7 @@ import type {
 import { SCHEMA_VERSION } from "../types.js";
 import { normalizeEventRequestToSpec } from "./normalization.js";
 import { priceModules } from "./pricing.js";
+import { validateAcceptedEventSpec } from "../validation.js";
 
 function materializeModules(spec: AcceptedEventSpec): ServiceModule[] {
   const defaultModules = eventTypeDefaults[spec.servicePlan.eventType]?.modules ?? [];
@@ -179,13 +180,7 @@ function createPortfolioMapping(packagePreset: CuratedOfferPackagePreset): Offer
   };
 }
 
-export function createOfferDraft(request: EventRequest): OfferDraft {
-  const baseSpec = normalizeEventRequestToSpec(request, {
-    sourceType: "offer_service",
-    reference: request.requestId,
-    commercialState: "quoted"
-  });
-
+function createOfferDraftFromSpec(baseSpec: AcceptedEventSpec, draftId: string): OfferDraft {
   const modules = materializeModules(baseSpec);
   const pricingSummary = priceModules(modules, baseSpec.attendees.expected);
   const proposedEventSpec: AcceptedEventSpec = {
@@ -195,6 +190,7 @@ export function createOfferDraft(request: EventRequest): OfferDraft {
       modules
     },
     budgetContext: {
+      ...(baseSpec.budgetContext ?? {}),
       pricingSummary
     }
   };
@@ -252,7 +248,7 @@ export function createOfferDraft(request: EventRequest): OfferDraft {
   ].join("\n");
 
   const internalWorkingText = [
-    `Draft-ID: draft-${request.requestId}`,
+    `Draft-ID: ${draftId}`,
     `Status: ${proposedEventSpec.readiness.status}`,
     ...(openQuestions.length > 0 ? ["Offene Punkte:", ...openQuestions.map((item) => `- ${item}`)] : [])
   ].join("\n");
@@ -260,7 +256,7 @@ export function createOfferDraft(request: EventRequest): OfferDraft {
   return {
     schemaVersion: SCHEMA_VERSION,
     businessId: "local",
-    draftId: `draft-${request.requestId}`,
+    draftId,
     revision: 1,
     eventSummary,
     serviceModules: modules,
@@ -272,6 +268,25 @@ export function createOfferDraft(request: EventRequest): OfferDraft {
     internalWorkingText,
     proposedEventSpec
   };
+}
+
+export function createOfferDraft(request: EventRequest): OfferDraft {
+  const baseSpec = normalizeEventRequestToSpec(request, {
+    sourceType: "offer_service",
+    reference: request.requestId,
+    commercialState: "quoted"
+  });
+
+  return createOfferDraftFromSpec(baseSpec, `draft-${request.requestId}`);
+}
+
+/**
+ * Build an offer from the server-stored AcceptedEventSpec so its explicit
+ * production decision and provenance survive the offer boundary unchanged.
+ */
+export function createOfferDraftFromAcceptedEventSpec(spec: AcceptedEventSpec): OfferDraft {
+  const validatedSpec = validateAcceptedEventSpec(structuredClone(spec));
+  return createOfferDraftFromSpec(validatedSpec, `draft-${validatedSpec.specId}`);
 }
 
 export function createCuratedOfferDraft(

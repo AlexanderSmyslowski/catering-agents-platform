@@ -964,15 +964,25 @@ describe("production case routes", () => {
   });
 
   it("records review, approval and applied result only after their product writes succeed", async () => {
-    const { app, store, intakeRecords } = buildHarness();
-    const productionCase = await createProductionCase(app);
-    const spec = handoff().eventSpecSnapshot;
+    const approvedHandoff = handoff();
+    const { app, store, intakeRecords } = buildHarness({
+      get: async (_context, handoffId) => handoffId === approvedHandoff.handoffId ? approvedHandoff : undefined
+    });
+    const caseResponse = await app.inject({
+      method: "POST",
+      url: `/v1/production/cases/from-handoff/${approvedHandoff.handoffId}`,
+      headers: alphaHeaders,
+      payload: {}
+    });
+    expect(caseResponse.statusCode, caseResponse.body).toBe(201);
+    const productionCase = caseResponse.json<{ case: ProductionCase }>().case;
+    const spec = approvedHandoff.eventSpecSnapshot;
     await intakeRecords.insertSpec({ businessId: "alpha" }, spec);
     const created = await app.inject({
       method: "POST",
-      url: "/v1/production/drafts",
+      url: `/v1/production/drafts/from-handoff/${approvedHandoff.handoffId}`,
       headers: alphaHeaders,
-      payload: { caseId: productionCase.caseId, specId: spec.specId }
+      payload: { caseId: productionCase.caseId }
     });
     expect(created.statusCode, created.body).toBe(201);
     const initialDraft = created.json().draft;

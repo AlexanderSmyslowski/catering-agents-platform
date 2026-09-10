@@ -213,7 +213,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
 
   app.register(multipart);
 
-  registerProductionCaseRoutes(app, { store, handoffReader, trustedActorSecret, allowDevActorHeader, requireProductionOperator, actorForRequest });
+  registerProductionCaseRoutes(app, { repository, store, handoffReader, trustedActorSecret, allowDevActorHeader, requireProductionOperator, actorForRequest });
 
   registerProductionQuantityWorkflowRoutes(app, {
     auditLog,
@@ -289,6 +289,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
 
   registerProductionArtifactRoutes(app, {
     store,
+    repository,
     intakeRecords,
     sourceDocumentReader,
     discoveryService,
@@ -306,6 +307,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
   registerProductionApprovalRoutes(app, {
     store,
     intakeRecords,
+    handoffReader,
     repository,
     auditLog,
     trustedActorSecret,

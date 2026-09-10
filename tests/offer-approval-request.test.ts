@@ -14,9 +14,11 @@ import {
   createOfferDraft,
   validateApprovalRequestRecord,
   validateApprovedOffer,
+  validateProductionHandoff,
   type ApprovalRequestRecord,
   type ApprovedOffer,
   type OfferDraft,
+  type ProductionHandoff,
   type Queryable
 } from "@catering/shared-core";
 import { buildOfferApp } from "../offer-service/src/app.js";
@@ -1376,6 +1378,49 @@ describe("offer approval request", () => {
     });
 
     expect(handoff.statusCode).toBe(409);
+  });
+
+  it("rejects a persisted handoff whose selected variant is not the immutable approved variant", async () => {
+    const { app, store, rootDir } = buildTestHarness();
+    const draft = await createDraft(app);
+    const approval = await app.inject({
+      method: "POST",
+      url: `/v1/offers/drafts/${draft.draftId}/decision`,
+      headers: trustedHeaders,
+      payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
+    });
+    expect(approval.statusCode).toBe(201);
+    const approvedOffer = approval.json<{ approvedOffer: ApprovedOffer }>().approvedOffer;
+    const created = await app.inject({
+      method: "POST",
+      url: `/v1/offers/approved/${approvedOffer.approvedOfferId}/handoffs`,
+      headers: trustedHeaders,
+      payload: {}
+    });
+    expect(created.statusCode).toBe(201);
+    const handoff = created.json<{ handoff: ProductionHandoff }>().handoff;
+    const handoffs = createBusinessScopedPersistentCollection<ProductionHandoff>({
+      collectionName: "offers/handoffs",
+      getId: (item) => item.handoffId,
+      rootDir,
+      validate: validateProductionHandoff
+    });
+    await handoffs.set({ businessId: "local" }, validateProductionHandoff({
+      ...handoff,
+      source: { ...handoff.source, selectedVariantId: "variant-not-approved" }
+    }));
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/v1/offers/handoffs/${handoff.handoffId}`,
+      headers: { ...trustedHeaders, "x-catering-actor-name": "Production-Service" }
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({
+      message: "Produktionsübergabe stimmt nicht mit der autoritativen Freigabeevidenz überein."
+    });
+    await app.close();
   });
 
   it("repairs a missing approved-offer projection before creating handoff from the aggregate", async () => {

@@ -811,6 +811,11 @@ export interface BusinessScopedPersistentCollection<T> {
     expected: T,
     item: T
   ): Promise<"updated" | "conflict" | "missing">;
+  deleteIfExact(
+    context: BusinessContext,
+    id: string,
+    expected: T
+  ): Promise<"deleted" | "conflict" | "missing">;
 }
 
 function assertScopedPayload<T>(context: BusinessContext, item: T): T {
@@ -1159,6 +1164,30 @@ class FileBackedBusinessScopedCollection<T> implements BusinessScopedPersistentC
     }
   }
 
+  async deleteIfExact(
+    context: BusinessContext,
+    id: string,
+    expected: T
+  ): Promise<"deleted" | "conflict" | "missing"> {
+    const normalizedExpected = this.normalizeForContext(context, expected, id);
+    const filePath = this.filePathFor(context, id);
+    if (!existsSync(filePath)) return "missing";
+    const releaseLock = acquireFileLock(filePath);
+    try {
+      if (!existsSync(filePath)) return "missing";
+      const existing = this.normalizeForContext(
+        context,
+        JSON.parse(readFileSync(filePath, "utf8")) as T,
+        id
+      );
+      if (!areJsonValuesEqual(existing, normalizedExpected)) return "conflict";
+      unlinkSync(filePath);
+      return "deleted";
+    } finally {
+      releaseLock();
+    }
+  }
+
   private directoryFor(context: BusinessContext): string {
     const businessId = assertBusinessId(context.businessId);
     return path.join(resolveDataRoot(this.options.rootDir), "businesses", businessId, this.options.collectionName);
@@ -1263,6 +1292,22 @@ class PostgresBackedBusinessScopedCollection<T> implements BusinessScopedPersist
       ]
     );
     if (result.rows.length === 1) return "updated";
+    return (await this.get(context, id)) ? "conflict" : "missing";
+  }
+
+  async deleteIfExact(
+    context: BusinessContext,
+    id: string,
+    expected: T
+  ): Promise<"deleted" | "conflict" | "missing"> {
+    const normalizedExpected = this.normalizeForContext(context, expected, id);
+    const businessId = assertBusinessId(context.businessId);
+    await this.ensureInitialized();
+    const result = await this.queryable.query(
+      "DELETE FROM catering_business_records WHERE business_id = $1 AND collection_name = $2 AND record_id = $3 AND payload = $4::jsonb RETURNING record_id",
+      [businessId, this.options.collectionName, id, JSON.stringify(normalizedExpected)]
+    );
+    if (result.rows.length === 1) return "deleted";
     return (await this.get(context, id)) ? "conflict" : "missing";
   }
 
