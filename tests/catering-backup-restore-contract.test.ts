@@ -153,6 +153,7 @@ function createBackupEntrypointFixture() {
       "printf 'docker %s\\n' \"$*\" >> \"$FAKE_LOG\"",
       "web_id=ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
       "edge_id=9999999999999999999999999999999999999999999999999999999999999999",
+      "if [[ \"${FAKE_CADDY_BINDING_DRIFT:-0}\" == 1 ]] && grep -q ' backup ' \"$FAKE_LOG\"; then web_id=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; fi",
       "case \"${1-}\" in",
       "  ps) if [[ \"$*\" == *'service=postgres'* ]]; then printf 'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\\n'; elif [[ \"$*\" == *'service=web'* ]]; then printf '%s\\n' \"$web_id\"; elif [[ \"$*\" == *'service=edge'* ]]; then printf '%s\\n' \"$edge_id\"; else exit 1; fi ;;",
       "  inspect)",
@@ -635,7 +636,8 @@ describe("Catering backup and isolated restore repository contract", () => {
     const backup = source(files.backup);
     expect(backup).toContain("caddy_binding_before");
     expect(backup).toContain("caddy_binding_after");
-    expect(backup).toContain("CADDY_CAPTURE_DRIFT");
+    expect(backup).toContain("CADDY_CAPTURE_BINDING_DRIFT");
+    expect(backup).toContain("CADDY_CAPTURE_SOURCE_DRIFT");
     const snapshot = backup.indexOf('snapshot_json="$(snapshot_stream');
     const recheck = backup.indexOf("caddy_binding_after", snapshot);
     expect(snapshot).toBeGreaterThanOrEqual(0);
@@ -808,7 +810,7 @@ describe("Catering backup and isolated restore repository contract", () => {
         },
       });
       expect(captureDrift.status).not.toBe(0);
-      expect(String(captureDrift.stderr)).toContain("CADDY_CAPTURE_DRIFT");
+      expect(String(captureDrift.stderr)).toContain("CADDY_CAPTURE_SOURCE_DRIFT");
       expect(readFileSync(path.join(fakeVolumeRoot, "platform-infra_caddy_data", "_data", "marker"), "utf8")).toBe("generation-two\n");
       expect(readFileSync(previousEvidence, "utf8")).toBe(previousEvidenceBytes);
       expect(statSync(pointer).isFIFO()).toBe(true);
@@ -890,6 +892,118 @@ describe("Catering backup and isolated restore repository contract", () => {
       removeFixture(root);
     }
   }, 180000);
+
+  for (const kind of ["binding", "source"] as const) {
+    test(`Caddy ${kind} drift stops before readback and candidate publication`, () => {
+      const fixture = createBackupEntrypointFixture();
+      const { root, backupEnv, pointer, previousEvidence, previousEvidenceBytes, logPath } = fixture;
+      try {
+        const result = spawnSync(path.join(repoRoot, files.backup), [], { encoding: "utf8", env: {
+          ...backupEnv,
+          FAKE_CADDY_BINDING_DRIFT: kind === "binding" ? "1" : "0",
+          FAKE_CADDY_CAPTURE_SWAP: kind === "source" ? "1" : "0",
+          FAKE_CADDY_CAPTURE_COUNT: path.join(root, "capture-count"),
+        } });
+        expect(result.status).not.toBe(0);
+        expect(String(result.stderr)).toContain(kind === "binding" ? "CADDY_CAPTURE_BINDING_DRIFT" : "CADDY_CAPTURE_SOURCE_DRIFT");
+        expect(existsSync(pointer)).toBe(false);
+        expect(readdirSync(path.join(root, "snapshots"))).toEqual([]);
+        expect(readdirSync(path.join(root, "candidates"))).toEqual([]);
+        expect(readFileSync(previousEvidence, "utf8")).toBe(previousEvidenceBytes);
+        expect(readdirSync(root).some(entry => entry.startsWith(".work-"))).toBe(false);
+        const commands = readFileSync(logPath, "utf8");
+        expect(commands).toContain(" backup ");
+        expect(commands).not.toMatch(/^restic .* dump /m);
+      } finally { removeFixture(root); }
+    });
+  }
+
+  for (const [project, service, name, prefix, bindSource, bindTarget] of [
+    ["platform-infra", "web", "platform-infra-web-1", "platform-infra_caddy", "/opt/catering-agents-platform/platform-infra/sites", "/etc/caddy/sites"],
+    ["shared-edge", "edge", "shared-edge-edge-1", "shared-edge_edge_caddy", "/opt/shared-edge/Caddyfile", "/etc/caddy/Caddyfile"],
+  ]) {
+    test(`Caddy mount order is immaterial while full bindings stay strict: ${service}`, () => {
+      const backup = source(files.backup);
+      const start = backup.indexOf("assert_caddy_container_mounts() {");
+      const end = backup.indexOf("\n}\n\nassert_caddy_container_mounts platform-infra", start);
+      expect(start).toBeGreaterThanOrEqual(0);
+      expect(end).toBeGreaterThan(start);
+      const helper = backup.slice(start, end + 2);
+      const root = mkdtempSync(path.join(tmpdir(), "catering-caddy-order-"));
+      const docker = path.join(root, "docker");
+      const mountFile = path.join(root, "mounts");
+      const data = `/volumes/${prefix}_data/_data`;
+      const config = `/volumes/${prefix}_config/_data`;
+      const rows = [
+        `volume|${prefix}_data|${data}|/data|true`,
+        `volume|${prefix}_config|${config}|/config|true`,
+        `bind||${bindSource}|${bindTarget}|false`,
+      ];
+      writeFileSync(docker, `#!/usr/bin/env bash
+set -euo pipefail
+case "$1" in
+  ps) printf '%s\\n' "$TEST_ID" ;;
+  inspect)
+    [[ "$2" == --format && "$4" == "$TEST_ID" ]]
+    case "$3" in
+      '{{.Id}}') printf '%s\\n' "$TEST_ID" ;;
+      '{{.Name}}') printf '/%s\\n' "$TEST_NAME" ;;
+      *compose.project*) printf '%s\\n' "$TEST_PROJECT" ;;
+      *compose.service*) printf '%s\\n' "$TEST_SERVICE" ;;
+      '{{.State.Status}}') printf 'running\\n' ;;
+      *'.State.Health'*) printf 'healthy\\n' ;;
+      *'.Mounts'*) cat "$TEST_MOUNTS" ;;
+      *) exit 91 ;;
+    esac ;;
+  *) exit 92 ;;
+esac
+`, { mode: 0o700 });
+      const run = (mounts: string[], id = "e".repeat(64), expectedData = data, extraEnv: NodeJS.ProcessEnv = {}) => {
+        writeFileSync(mountFile, mounts.join("\n") + "\n", { mode: 0o600 });
+        return runShell(`set -euo pipefail
+${helper}
+DOCKER_CMD=${JSON.stringify(docker)}
+fail_state() { printf '%s\\n' "$1" >&2; return 1; }
+if assert_caddy_container_mounts ${[project, service, name, `${prefix}_data`, `${prefix}_config`, expectedData, config, bindSource, bindTarget].map(value => JSON.stringify(value)).join(" ")}; then
+  printf '%s\\n' "$CADDY_LAST_BINDING_DIGEST"
+else
+  exit 19
+fi`, { TEST_ID: id, TEST_NAME: name, TEST_PROJECT: project, TEST_SERVICE: service, TEST_MOUNTS: mountFile, ...extraEnv });
+      };
+      try {
+        const permutations = [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]];
+        const fingerprints = permutations.map(order => {
+          const result = run(order.map(index => rows[index]));
+          expect(result.status, String(result.stderr)).toBe(0);
+          expect(String(result.stdout).trim()).toMatch(/^[0-9a-f]{64}$/);
+          return String(result.stdout).trim();
+        });
+        expect(new Set(fingerprints).size).toBe(1);
+        const changedContainer = run(rows, "f".repeat(64));
+        expect(changedContainer.status).toBe(0);
+        expect(String(changedContainer.stdout).trim()).not.toBe(fingerprints[0]);
+        const changedSource = run([rows[0].replace(data, "/other/data"), ...rows.slice(1)], "e".repeat(64), "/other/data");
+        expect(changedSource.status).toBe(0);
+        expect(String(changedSource.stdout).trim()).not.toBe(fingerprints[0]);
+        for (const invalid of [
+          [rows[0], rows[0], rows[2]], [...rows, rows[0]], rows.slice(1),
+          [rows[0].replace(data, "/wrong"), ...rows.slice(1)],
+          [rows[0].replace("|/data|", "|/wrong|"), ...rows.slice(1)],
+          [rows[0].replace("|true", "|false"), ...rows.slice(1)],
+          [rows[0].replace(`${prefix}_data`, "wrong-volume"), ...rows.slice(1)],
+          [...rows.slice(0, 2), rows[2].replace("|false", "|true")],
+          [...rows.slice(0, 2), rows[2] + "|extra"],
+          [rows[0], "|unexpected|metadata", ...rows.slice(1)],
+        ]) {
+          const result = run(invalid);
+          expect(result.status, JSON.stringify(invalid)).toBe(19);
+          expect(String(result.stderr)).toContain("CADDY_CONTAINER_MOUNT_INVALID");
+        }
+        writeFileSync(path.join(root, "sort"), "#!/usr/bin/env bash\nexit 71\n", { mode: 0o700 });
+        expect(run(rows, "e".repeat(64), data, { PATH: `${root}:${process.env.PATH}` }).status).toBe(19);
+      } finally { removeFixture(root); }
+    });
+  }
 
   test("backup binds each Caddy container once to its complete volume matrix", () => {
     const backup = source(files.backup);
