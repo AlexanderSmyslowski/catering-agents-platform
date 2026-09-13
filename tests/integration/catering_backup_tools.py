@@ -21,9 +21,9 @@ import time
 import tempfile
 
 REPOSITORY = 'AlexanderSmyslowski/catering-agents-platform'
-BRANCH = 'codex/catering-caddy-mount-order-fix-20260909'
-# Only this reviewed Draft PR may acquire the synthetic tools.
-PR_NUMBER = 690
+# Only Draft PR events for this unique authorized branch may acquire tools.
+# The actual event number is cross-checked and recorded, never guessed in advance.
+BRANCH = 'codex/catering-betterstack-observer-20260913'
 PROOF_BASE = 'f757ca44c0ae22bf00bbbbfd5e0f5742aacd9f86'
 PROOF_BASE_TREE = '63451cccb441c0f5403b9fd20660f9e3289e3354'
 PRODUCTION_IMAGE = 'postgres@sha256:778d0b486d6daa02b77434d0358ec57a1b21fd8b6d22ac2eef56a33e816928f6'
@@ -31,8 +31,8 @@ PARENT = '34d71daba94ba227146300f69f1f7b2872dce58b'
 PARENT_TREE = 'fb5c57b369c45e4d2168f5586242325d5e3193bd'
 SOURCE_HASHES = {
     'platform-infra/backup/catering-backup.sh': 'f08608144a70577d7486bb02002e11f4c2f4426b164b6a47b5baca0e89de45fb',
-    'platform-infra/backup/catering-restore-probe.sh': 'beb8a9dfb32da262ae932a108e0d32b73af5de6ecda7edc5a4c2b4f2f5cae0f1',
-    'platform-infra/backup/catering-backup-common.sh': '74028a453e749c5b80517ab51dae197e07097e6c2b8b81aee40d1f74d4d47c96',
+    'platform-infra/backup/catering-restore-probe.sh': 'dff327382bf237af8ab23203c4be284fe8c3d7018161b283ef34c3571d8bde5a',
+    'platform-infra/backup/catering-backup-common.sh': '3191cf1103df60a148990fab480e68ee568b535501b3928d62ecb49278d3f633',
     'shared-core/src/persistence.ts': 'fc9c03509db36052a4de0aa04d31e518913877b9736be39925561bfe6f5d547f',
     'intake-service/src/source-document-store.ts': 'b4923e5d1a0bc30ac59cfbbe1adf4a33c98a6e81ce4c257fe235645237f795d0',
 }
@@ -135,11 +135,14 @@ def load_components(root):
 def runtime_guard(env, event, operating_system):
     expected = {'GITHUB_ACTIONS': 'true', 'RUNNER_ENVIRONMENT': 'github-hosted',
                 'RUNNER_OS': 'Linux', 'GITHUB_REPOSITORY': REPOSITORY,
-                'GITHUB_EVENT_NAME': 'pull_request', 'GITHUB_REF': f'refs/pull/{PR_NUMBER}/merge'}
+                'GITHUB_EVENT_NAME': 'pull_request'}
     require(operating_system == 'Linux' and all(env.get(k) == v for k, v in expected.items()), 'RUNTIME_ISOLATION')
     pr = event.get('pull_request', {})
+    number = event.get('number')
+    require(type(number) is int and number > 0 and type(pr.get('number')) is int
+            and pr['number'] == number and env.get('GITHUB_REF') == f'refs/pull/{number}/merge', 'RUNTIME_PR_BINDING')
     head, base = pr.get('head', {}), pr.get('base', {})
-    require(PR_NUMBER > 0 and event.get('number') == PR_NUMBER and pr.get('draft') is True
+    require(pr.get('draft') is True
             and head.get('ref') == BRANCH and base.get('ref') == 'main'
             and head.get('repo', {}).get('full_name') == REPOSITORY
             and base.get('repo', {}).get('full_name') == REPOSITORY
@@ -896,7 +899,7 @@ def main():
             raise GateError('INTERRUPTED')
         signal.signal(signal.SIGTERM, interrupted)
         signal.signal(signal.SIGINT, interrupted)
-        return execute(root, parent, {'commit': head, 'tree': sys.argv[3], 'runner': 'github-hosted', 'os': 'Linux', 'pr': PR_NUMBER})
+        return execute(root, parent, {'commit': head, 'tree': sys.argv[3], 'runner': 'github-hosted', 'os': 'Linux', 'pr': event['number']})
     require(os.geteuid() != 0, 'RUNNER_GIT_IDENTITY_REQUIRED')
     def git(*args):
         return command(['git', '-C', str(root), '--no-optional-locks', *args]).stdout.decode().strip()

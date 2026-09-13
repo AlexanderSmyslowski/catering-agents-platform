@@ -1,7 +1,7 @@
 # memory.md
 
-version: 5.381
-date: 2026-09-09
+version: 5.386
+date: 2026-09-13
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
 
@@ -1904,3 +1904,59 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 - Der Caddy-Mountvergleich kanonisiert vollständig validierte Mountzeilen mit `LC_ALL=C sort`, ohne Deduplizierung oder Feldverlust. Sechs Permutationen pro Caddy-Rolle erzeugten vorher sechs Fingerabdrücke; die Regression verlangt einen einzigen. Identitätswechsel, geänderte Einbindungen, ungültige/zusätzliche/fehlende Zeilen und Sortierfehler bleiben gesperrt oder als Bindungsänderung erkennbar.
 - Die getrennten Codes `CADDY_CAPTURE_BINDING_DRIFT` und `CADDY_CAPTURE_SOURCE_DRIFT` unterscheiden die bestehenden Prüfstellen vor Readback und Candidate-Veröffentlichung. Die Quelldateigenerationsprüfung und alle Veröffentlichungsgrenzen bleiben bestehen. Nur der Hash des tatsächlich geänderten Backupskripts wird im synthetischen Werkzeugvertrag neu gebunden; unveränderte Fragmente und historische Nachweise bleiben unverändert.
 - Die begrenzte Produktionsmetadatenaufnahme beobachtete bei beiden Caddy-Rollen unterschiedliche Reihenfolgen bei identischen vollständigen Mountinformationen und Containeridentitäten. Zwei kurze Metadatenaufnahmen zeigten keine Quelldrift; dies ist kein historischer Nachweis. Der zweite Backupversuch vom 09.09.2026 scheiterte mit dem damaligen gemeinsamen Code `CADDY_CAPTURE_DRIFT`; seine konkrete Vergleichsstelle bleibt nicht eindeutig zuordenbar. Ein per Zeitfenster, Host und Stream-Laufkennung zugeordneter Restic-Snapshot bleibt ohne Readback und ohne gültigen Candidate. Die erfolgreich initialisierte Dokumenttabelle bleibt erhalten. Dieser Korrekturkandidat ist noch nicht auf dem Produktionshost installiert; kein weiterer Backupversuch oder Restore ist dadurch freigegeben.
+
+### 5.382 - 2026-09-12
+
+- Nach ausdrücklicher Betreiberfreigabe wurde PR #690 mit exakt gebundenem Head `1cab2e6c86b21c26bb74597fe3312906aa3c733a` regulär als `3393b475e69b6c22e34923e2b273fa66bfb67fb4` gemergt. Der Tree `2f1e9624558f7b6488255b2514f9b69ca9b3d1eb` entspricht dem technisch abgenommenen und in PR-CI `34406737764`, Versuch 1, geprüften Kandidaten.
+- Auf dem bestätigten Host wurde ausschließlich `catering-backup.sh` aus dem tatsächlichen Merge-Blob installiert: SHA-256 `f08608144a70577d7486bb02002e11f4c2f4426b164b6a47b5baca0e89de45fb`, root:root/0755. Die zwei Source-Felder der geschützten Environment-Datei wurden auf den Merge-Commit/Tree gebunden; alle übrigen Konfigurationsbytes, beide Attestationen und die fünf anderen installierten Artefakte blieben unverändert. Der eigene Vorzustand ist geschützt erhalten. Ein vorheriger Installationsaufruf hielt bereits im Prozess-Preflight ohne Schreibwirkung an; der kurzzeitige Auslöser ist nicht eindeutig zugeordnet.
+- Genau ein dritter Catering-Backupversuch lief am 12.09.2026 von 18:19:47 bis 18:19:57 UTC unter `catering-backup-third-gate.service`, Invocation `85ae0223cb0b456c9111d03287809d44`. `systemd-run --wait` endete mit Exit 0 nach 10,086 Sekunden; laufgebundene systemd-Metadaten bestätigen erfolgreiche Deaktivierung und `JOB_RESULT=done`. Das Betriebsbudget von 1800 Sekunden wurde eingehalten; der technische Diensttimeout blieb separat bei einer Stunde.
+- Snapshot `869292d94fdd23351715dec18185f1bbf58f05cc6b3242a66a88a1950259144f` wurde zurückgelesen und als quellgebundener Candidate mit Artifact/Pointer für `postgres,sites,platform-caddy,shared-edge-caddy` geprüft. Datenzeitpunkt: 18:19:47 UTC; Backend-Snapshotzeit: 18:19:51.386239054 UTC. Arbeitsverzeichnisse sind bereinigt. Der nicht validierte Snapshot aus Versuch 2 bleibt erhalten und wurde nicht nachträglich zum Candidate erklärt.
+- Status: **THIRD BACKUP SUCCESS – CANDIDATE ONLY – HOLD BEFORE RESTORE**. Kein Restore, keine autoritative Restore-Evidence, keine Timeraktivierung, keine Schema-/Anwendungs-/Netzänderung und kein weiterer Backupversuch. Vor einem später ausdrücklich freigegebenen Restore sind Candidate-Alter und sämtliche Livebindungen/Kapazitäten erneut zu prüfen; dieser Backup-Erfolg ist kein produktiver Restore-/RTO-Nachweis. Verdichtete Übergabe: `docs/agent-memory/2026-09-12-third-backup-candidate.md`; geheime Daten bleiben ausschließlich in geschützter Verarbeitung auf dem Host.
+
+
+### 5.383 - 2026-09-12
+
+- Nach separater Betreiberfreigabe wurde genau ein isolierter Restore des Snapshots `869292d94fdd23351715dec18185f1bbf58f05cc6b3242a66a88a1950259144f` ausgeführt. Herkunft bleibt Merge `3393b475e69b6c22e34923e2b273fa66bfb67fb4`, Tree `2f1e9624558f7b6488255b2514f9b69ca9b3d1eb`; kein neuer Backupversuch und keine Installation.
+- `catering-restore-first-gate.service`, Invocation `11186cea6cb34f849dc99e50d4be2c26`, lief am 12.09.2026 von 20:33:42 bis 20:33:54 UTC. `systemd-run --wait`: Exit 0, 11,85 Sekunden inklusive wartender Beobachtung; das Skript meldet in Sekundenauflösung 12 Sekunden. Beide Grenzen (7200 Sekunden Betriebsbudget, 14400 Sekunden technisch) sind eingehalten. Ein vorheriger Prozess-Preflight stoppte nachweislich vor jeder Restoreausführung; sein verschwundener Auslöser bleibt unbekannt.
+- Der gepinnte lokale PostgreSQL-Container wurde mit `--network none`, ohne Ports oder Produktionsvolumes ausgeführt. Nach tatsächlichem `pg_restore --exit-on-error` waren `catering_business_records` und `catering_source_documents` abfragbar; dies beweist weder gleiche Produktionszeilenzahlen noch einen vollständigen Schema-/Geschäftsdatenvergleich. Stream-, Manifest-, Dump- und sechs Sites-/Caddy-Komponentenbindungen sind verifiziert.
+- Receipt, Repositorystatus und finale Evidence wurden durch die vorhandenen atomaren/fsync-Publisher veröffentlicht und geschützt nachgeprüft. Evidence-SHA256: `e82a889c5cc463ed42fce9aefc031e3554f3f262675a47059b2f148bb0550ddc`; Candidate-Alter beim Evidence-Schreiben etwa 8047,427 Sekunden, innerhalb von 21600 Sekunden. Probecontainer, sein zugeordnetes anonymes Volume und temporäre Daten fehlen; Anwendungsidentitäten, Startzeiten, Neustartzähler, Mount-/Netzbindungen und Volume-Inventar sind unverändert.
+- Status: **RESTORE PROBE SUCCESS – SNAPSHOT-BOUND EVIDENCE VERIFIED**; **HOLD BEFORE TIMER ACTIVATION AND PHASE 3**. Originaldienste inaktiv, Timer deaktiviert. Kein vollständiger Host-Wiederaufbau oder dauerhafter RPO-/RTO-Nachweis aus diesem Einzeltest. Übergabe: `docs/agent-memory/2026-09-12-first-restore-probe.md`; Detailnachweise im bisherigen geschützten lokalen Evidenzordner.
+
+### 5.384 - 2026-09-12
+
+- Der begrenzte Aktivierungs-/Alarm-/Erstzyklus-/Ruecknahmeplan fuer die
+  unveraenderten Originaldienste und den Drei-Stunden-Timer ist unabhaengig
+  geprueft (Plan-SHA256 `10c6b007603eeabb90cb590731e3b1a0eaba808a38aff6b3c8fa0907596cba98`).
+  Artefakt: `~/.codex/local-evidence/catering-finalconfig-0jae6hqe/catering-operations-activation-plan.md`.
+- Die gezielten Metadaten vom 12.09.2026 bestaetigen unveraenderte Units ohne
+  Drop-ins, Originaldienste inaktiv und Timer deaktiviert. Der vorhandene
+  Collector/manuelle Workflow ist keine automatische Alarmierung; der
+  installierte optionale Zeiterfassungs-Notifier hat keinen konfigurierten
+  Zustellkanal. Weder dessen Zustellstatus noch Empfang durch Alexander ist
+  fuer Catering belegt.
+- Drei konkrete Startvoraussetzungen bleiben offen: gepruefter lokaler
+  Catering-Beobachter; bestaetigter vorhandener Meldeweg samt unabhaengiger
+  Heartbeat-/Hostausfallerkennung; belegter gemeinsamer Ressourcenspielraum
+  fuer die fest geplanten fremden Backup-/Wartungsjobs. Der Plan benennt
+  dafuer den engen Ergaenzungsumfang, sichere synthetische Alarmtests,
+  Persistent-Nachholung und Ruecknahme auch bei laufender OnSuccess-Kette.
+- Keine Produktionsmutation, Alarm-/Timeraktivierung oder weitere
+  Backup-/Restoreausfuehrung in diesem Planblock. Der historische echte
+  Restoreerfolg bleibt erhalten; sein Alter ist von aktueller Abdeckung zu
+  unterscheiden. **HOLD BEFORE TIMER ACTIVATION AND PHASE 3.**
+  Uebergabe: `docs/agent-memory/2026-09-12-operations-transition-plan.md`.
+
+### 5.385 - 2026-09-13
+
+- Betreiberentscheidung: Catering-Ueberwachung ausschliesslich mit bestehendem Better Stack; kein anderer Anbieter, kein neuer Tarif oder Host. Implementierung/Tests/Review/Draft-PR sind beauftragt, Produktionsinstallation, Monitormutation, Live-Signale, Timer und weitere Backup-/Restorejobs nicht.
+- Im bestehenden Worktree liegt der neue Branch `codex/catering-betterstack-observer-20260913` auf verifiziertem main `3393b475e69b6c22e34923e2b273fa66bfb67fb4`, Tree `2f1e9624558f7b6488255b2514f9b69ca9b3d1eb`. Bekannte lokale Vorarbeiten bleiben erhalten. Produktivcode unveraendert: 3511 von3581Zeilen, Rest70. Unabhaengiger Scope-Review sieht fuer den verlangten sicheren Beobachter eine begrenzte Planungsschaetzung von400neuen Zeilen; angefragter Deckel3911 ist noch nicht freigegeben. Kein implementierter Beobachter, Commit/Push oder neuer PR.
+- Better-Stack-Konto/Team/Check-ID, Sendersemantik, Fristen und Alexanders Alarmempfang sind noch nicht lesend gebunden; vorhandene Browserprofile zeigen Anmeldung. Keine Zugangstokens oder Ping-URLs ausgegeben, keine Monitore angelegt/geaendert. Sechs synthetische Fristarithmetiktests bestanden, aber noch keine Beobachter- oder Transportintegrationstests. Aktuelle Ressourcenmomentwerte und bestehende Druckueberwachung belegen weiterhin keine gemeinsame Lastspitze; P3 bleibt offen.
+- Fortsetzung braucht die konkrete Budgetantwort und fuer Kontozuordnung die Anmeldung im vorhandenen Team. Aktivierungsdelta und geheimnisfreie Nachweise liegen im bisherigen lokalen Evidenzordner; neue Uebergabe `docs/agent-memory/2026-09-13-catering-observer-budget-hold.md`. **HOLD BEFORE INSTALLATION, TIMER ACTIVATION AND PHASE3.** Historischer Backup-/Restoreerfolg unveraendert; ZeiterfassungPR82 nicht bearbeitet.
+
+### 5.386 - 2026-09-13
+
+- Der ausdruecklich freigegebene lokale Catering-Beobachter ist als Repository-Kandidat auf `codex/catering-betterstack-observer-20260913` umgesetzt. Er verwendet die reinen gemeinsamen Recordschemas/Leser und den vorhandenen dauerhaften Publisher; keine zweite Backup-Evidence, kein Dump/Restic/Restore oder Reparaturbetrieb. Finaler Nachweis, Herkunft, Datenalter, neuere Dienstfehler, Zyklusbudgets und Attestationsfristen werden getrennt von Signalannahme bewertet.
+- Der einmalig genehmigte Gesamtdeckel betraegt3911Zeilen. Die urspruengliche Basis3181 und der bestaetigte Vorstand3511 bleiben erhalten: Kandidat3870, kumulativ+689 seit3181 bzw+359 seit3511, Rest41. Produktiver Python-Hilfscode und Cron sind mitgezaehlt, Tests und Dokumentation separat. Unveraenderte Backupbytes und historische Fragmente werden nicht umetikettiert.
+- Unabhaengiger Code-/Runbook-Risikoreview bestanden; zeitliche und Prozessfehler sind mit echten synthetischen Regressionen abgesichert, einschliesslich TERM zwischen Helferstart/Registrierung und Uhr-Ruecksprung nach worker-seitigem Fristablauf. Die bestehende Werkzeug-CI wird auf den eindeutigen Branch und die validierte aktuelle PR-Ereignisnummer gebunden; alle Repository-/Head-/Runner-/Isolationspruefungen bleiben erhalten. Konkrete Abschlusspruefungen und PR-/Head-/Tree-/CI-Bindung werden im lokalen Abschlussbericht festgehalten.
+- Better-Stack-Kontozuordnung ist noch offen: Chrome zeigt die bestehende Anmeldebestaetigung. Weder Check-ID/Team/Signalquelle noch Intervalle/Eskalation/Empfaenger/Tarifkapazitaet werden vermutet. Keine Monitormutation oder Signale. Zusaetzlich bleiben numerische Anbieter-/Uhr-Fristannahmen und gemeinsamer Ressourcen-Spitzenbedarf P3 vor Aktivierung zu belegen.
+- Ausfuehrbares Delta zum erhaltenen geprueften Grundplan: `platform-infra/backup/OBSERVER-RUNBOOK.md`. **HOLD BEFORE INSTALLATION, TIMER ACTIVATION AND PHASE 3.** Historischer realer Backup-/Restoreerfolg bleibt unveraendert, ebenso Zeiterfassungs-PR82. Keine Produktionsinstallation, neuen Backups/Restores, Timer-/App-/Netz-/Secretaenderungen. Uebergabe: `docs/agent-memory/2026-09-13-catering-observer-candidate.md`.

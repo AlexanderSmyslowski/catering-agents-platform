@@ -1356,3 +1356,69 @@ verify_checksum() {
   actual="$(sha256sum "$file" 2>/dev/null | awk '{print $1}')" || { fail_state CHECKSUM_READ_FAILED; return 1; }
   [[ "$actual" == "$expected" ]] || { fail_state CHECKSUM_MISMATCH; return 1; }
 }
+
+# Shared fixed record contracts; callers do not source an operational entrypoint.
+record_field() {
+  local record="${1-}" wanted="${2-}" line key value found="" count=0
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ "$line" == *=* ]] || { fail_state RECORD_FIELD_INVALID; return 1; }
+    key="${line%%=*}"; value="${line#*=}"
+    if [[ "$key" == "$wanted" ]]; then found="$value"; count=$((count + 1)); fi
+  done <<< "$record"
+  [[ "$count" == 1 && -n "$found" ]] || { fail_state RECORD_FIELD_INVALID; return 1; }
+  printf '%s' "$found"
+}
+
+validate_record_schema() {
+  local kind="${1-}" record="${2-}" line key value allowed seen="|" required
+  case "$kind" in
+    pointer) allowed='|status|candidate_path|candidate_checksum|created_at|'; required='status candidate_path candidate_checksum created_at' ;;
+    candidate) allowed='|status|scope|host_binding|source_commit|source_tree|snapshot_id|repository_identity|artifact_path|artifact_checksum|bundle_path|bundle_checksum|secret_recovery_reference_sha256|restore_postgres_image|created_at|status_timestamp|'; required='status scope host_binding source_commit source_tree snapshot_id repository_identity artifact_path artifact_checksum bundle_path bundle_checksum secret_recovery_reference_sha256 restore_postgres_image created_at status_timestamp' ;;
+    artifact) allowed='|status|scope|host_binding|source_commit|source_tree|secret_recovery_reference_sha256|restore_postgres_image|bundle_path|bundle_checksum|manifest_path|manifest_checksum|postgres_dump_path|component_postgres_dump_checksum|component_caddy_stream_checksum|component_sites_checksum|component_platform_caddy_data_checksum|component_platform_caddy_config_checksum|component_shared_edge_caddyfile_checksum|component_shared_edge_caddy_data_checksum|component_shared_edge_caddy_config_checksum|'; required='status scope host_binding source_commit source_tree secret_recovery_reference_sha256 restore_postgres_image bundle_path bundle_checksum manifest_path manifest_checksum postgres_dump_path component_postgres_dump_checksum component_caddy_stream_checksum component_sites_checksum component_platform_caddy_data_checksum component_platform_caddy_config_checksum component_shared_edge_caddyfile_checksum component_shared_edge_caddy_data_checksum component_shared_edge_caddy_config_checksum' ;;
+    receipt) allowed='|status|version|scope|host_binding|snapshot_id|repository_identity|artifact_path|artifact_checksum|bundle_path|bundle_checksum|manifest_path|manifest_checksum|secret_recovery_reference_sha256|restore_postgres_image|component_sites_checksum|component_platform_caddy_data_checksum|component_platform_caddy_config_checksum|component_shared_edge_caddyfile_checksum|component_shared_edge_caddy_data_checksum|component_shared_edge_caddy_config_checksum|verified_at|'; required='status version scope host_binding snapshot_id repository_identity artifact_path artifact_checksum bundle_path bundle_checksum manifest_path manifest_checksum secret_recovery_reference_sha256 restore_postgres_image component_sites_checksum component_platform_caddy_data_checksum component_platform_caddy_config_checksum component_shared_edge_caddyfile_checksum component_shared_edge_caddy_data_checksum component_shared_edge_caddy_config_checksum verified_at' ;;
+    status) allowed='|status|identity|host_binding|scope|verified_at|'; required='status identity host_binding scope verified_at' ;;
+    evidence) allowed='|status|project|scope|host_binding|created_at|snapshot_id|checksum|artifact_path|artifact_snapshot_id|artifact_checksum|artifact_host_binding|artifact_scope|artifact_created_at|repository_identity|repository_status|receipt_path|receipt_checksum|secret_recovery_reference_sha256|restore_postgres_image|component_sites_checksum|component_platform_caddy_data_checksum|component_platform_caddy_config_checksum|component_shared_edge_caddyfile_checksum|component_shared_edge_caddy_data_checksum|component_shared_edge_caddy_config_checksum|duration_seconds|'; required='status project scope host_binding created_at snapshot_id checksum artifact_path artifact_snapshot_id artifact_checksum artifact_host_binding artifact_scope artifact_created_at repository_identity repository_status receipt_path receipt_checksum secret_recovery_reference_sha256 restore_postgres_image component_sites_checksum component_platform_caddy_data_checksum component_platform_caddy_config_checksum component_shared_edge_caddyfile_checksum component_shared_edge_caddy_data_checksum component_shared_edge_caddy_config_checksum duration_seconds' ;;
+    observer) allowed='|status|last_seen_epoch|failure_epoch|delivery_accepted|backup_health|'; required='status last_seen_epoch failure_epoch delivery_accepted backup_health' ;;
+    *) fail_state RECORD_UNKNOWN_KIND; return 1 ;;
+  esac
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    # NUL is rejected by read_bounded_record before this textual parser runs;
+    # Bash cannot represent NUL in a variable or pattern.
+    [[ "$line" == *=* && "$line" != *$'\r'* ]] || { fail_state RECORD_INVALID; return 1; }
+    key="${line%%=*}"; value="${line#*=}"
+    [[ "$allowed" == *"|$key|"* && -n "$value" && "$seen" != *"|$key|"* ]] || {
+      if [[ "$seen" == *"|$key|"* ]]; then
+        fail_state RECORD_DUPLICATE_FIELD
+      else
+        fail_state RECORD_UNKNOWN_FIELD
+      fi
+      return 1
+    }
+    seen+="$key|"
+  done <<< "$record"
+  for key in $required; do [[ "$seen" == *"|$key|"* ]] || { fail_state RECORD_MISSING_FIELD; return 1; }; done
+}
+
+# Entrypoints bind EXPECTED_UID before calling the shared reader.
+# shellcheck disable=SC2153
+read_record() {
+  local path="${1-}" kind="${2-}" expected_checksum="${3-}" value
+  safe_record_path "$path" || { fail_state STATE_PATH_INVALID; return 1; }
+  assert_root_mode_600 "$path" "$EXPECTED_UID" || return 1
+  value="$(read_bounded_record "$path" "$MAX_RECORD_BYTES" "$EXPECTED_UID" "$expected_checksum")" || { fail_state STATE_READ_FAILED; return 1; }
+  validate_record_payload "$value" || { fail_state STATE_INVALID; return 1; }
+  validate_record_schema "$kind" "$value" || return 1
+  printf '%s' "$value"
+}
+
+verify_record_checksum() {
+  local expected="${1-}" path="${2-}"
+  require_digest "$expected" || { fail_state CHECKSUM_INVALID; return 1; }
+  verify_checksum "$expected" "$path"
+}
+
+assert_versioned_record_path() {
+  local path="${1-}" directory="${2-}" name
+  name="${path##*/}"
+  [[ "$name" =~ ^[A-Za-z0-9_.:-]+$ && "$path" == "$directory/$name" ]] || { fail_state STATE_PATH_INVALID; return 1; }
+}
