@@ -244,15 +244,63 @@ class ObserverContracts(unittest.TestCase):
 
     def test_new_failure_during_verification_cannot_send_success(self):
         original = self.module.shell
+        healthy_backup = dict(self.units['backup'])
+        failed = NOW - 10
+        observed_now = NOW
         def delayed(root, command, args, payload=None):
+            nonlocal observed_now
             result = original(root, command, args, payload)
             if 'atomic_write_record' in command:
-                self.units['backup'].update(Result='exit-code', ExecMainStatus='1', ActiveState='failed')
+                self.units['backup'].update(Result='exit-code', ExecMainStatus='1', ActiveState='failed',
+                                           ExecMainStartTimestamp=system_stamp(failed))
+                observed_now = NOW - 1
             return result
         with mock.patch.object(self.module, 'shell', side_effect=delayed), \
+             mock.patch.object(self.module, 'utc_now', lambda: observed_now), \
              mock.patch.object(self.module, 'transmit', return_value=True) as send:
-            self.check(send=True)
-        self.assertFalse(any(call.args[1] for call in send.call_args_list))
+            outcome = self.check(send=True)
+        self.assertEqual(outcome['reason'], 'SERVICE_FAILED')
+        self.assertFalse(outcome['delivery_accepted'])
+        send.assert_not_called()
+        persisted = dict(line.split('=', 1) for line in (self.state / 'state').read_text().splitlines())
+        self.assertEqual(persisted['failure_epoch'], str(failed))
+        self.assertEqual(persisted['last_seen_epoch'], str(NOW))
+        self.assertEqual(persisted['backup_health'], 'critical')
+        self.assertEqual(persisted['delivery_accepted'], 'false')
+        with mock.patch.object(self.module, 'transmit', return_value=True) as send:
+            self.units['backup'] = healthy_backup
+            for _ in range(2):
+                outcome = self.check(send=True)
+                self.assertEqual(outcome['reason'], 'FAILURE_LATCHED')
+                self.assertEqual(outcome['backup_health'], 'critical')
+                self.assertIn('failure_epoch=' + str(failed) + '\n', (self.state / 'state').read_text())
+            self.units['backup'].update(Result='exit-code', ExecMainStatus='1', ActiveState='failed',
+                                       ExecMainStartTimestamp=system_stamp(NOW - 30))
+            self.assertEqual(self.check(send=True)['reason'], 'SERVICE_FAILED')
+            self.assertIn('failure_epoch=' + str(failed) + '\n', (self.state / 'state').read_text())
+            self.assertFalse(any(call.args[1] for call in send.call_args_list))
+
+            # A complete new synthetic proof replaces the old generation, not just its timestamp.
+            self.created = NOW - 5
+            self.artifact.update(bundle_path='catering-backup-stream-2', bundle_checksum='9' * 64,
+                                 component_caddy_stream_checksum='9' * 64)
+            self.receipt.update(snapshot_id='6' * 64, verified_at=stamp(NOW - 1),
+                                bundle_path=self.artifact['bundle_path'], bundle_checksum=self.artifact['bundle_checksum'])
+            self.evidence.update(snapshot_id='6' * 64, artifact_snapshot_id='6' * 64,
+                                 created_at=stamp(self.created), artifact_created_at=stamp(self.created))
+            self.rebind_artifact()
+            self.write_record(self.root / 'catering-backup-repository-status', dict(status='read-only-verified',
+                              identity=self.binding['repository_identity'], host_binding=self.binding['host_binding'],
+                              scope=SCOPE, verified_at=stamp(NOW - 1)))
+            self.units['backup'].update(Result='success', ExecMainStatus='0', ActiveState='inactive',
+                                       ExecMainStartTimestamp=system_stamp(self.created), ExecMainExitTimestamp=system_stamp(NOW - 4))
+            self.units['restore'].update(ExecMainStartTimestamp=system_stamp(NOW - 4), ExecMainExitTimestamp=system_stamp(NOW - 1))
+            self.units['timer'].update(ActiveEnterTimestamp=system_stamp(self.created), LastTriggerUSec=system_stamp(self.created))
+            outcome = self.check(send=True)
+            self.assertEqual(outcome['backup_health'], 'healthy')
+            self.assertTrue(outcome['delivery_accepted'])
+            self.assertIn('failure_epoch=' + str(failed) + '\n', (self.state / 'state').read_text())
+        self.assertEqual([call.args[1] for call in send.call_args_list], [False, False, False, True])
 
     def test_record_swap_during_publication_cannot_send_success(self):
         original = self.module.shell
@@ -290,14 +338,37 @@ class ObserverContracts(unittest.TestCase):
 
     def test_failed_state_publication_prevents_all_signals(self):
         original = self.module.shell
-        def refused(root, command, args, payload=None):
-            if 'atomic_write_record' in command:
-                raise OSError('SYNTHETIC_SECRET')
-            return original(root, command, args, payload)
-        with mock.patch.object(self.module, 'shell', side_effect=refused), \
-             mock.patch.object(self.module, 'transmit', return_value=True) as send:
-            self.assertFalse(self.check(send=True)['delivery_accepted'])
-        send.assert_not_called()
+        initial_state, healthy_backup = (self.state / 'state').read_bytes(), dict(self.units['backup'])
+        for phase in ['first', 'late_before_write', 'late_after_write']:
+            with self.subTest(phase=phase):
+                self.write(self.state / 'state', initial_state)
+                self.units['backup'] = dict(healthy_backup)
+                writes = 0
+                def refused(root, command, args, payload=None):
+                    nonlocal writes
+                    if 'atomic_write_record' not in command:
+                        return original(root, command, args, payload)
+                    writes += 1
+                    if phase == 'first' or (writes == 2 and phase == 'late_before_write'):
+                        raise OSError('SYNTHETIC_SECRET')
+                    result = original(root, command, args, payload)
+                    if writes == 2:
+                        raise OSError('SYNTHETIC_SECRET')
+                    self.units['backup'].update(Result='exit-code', ExecMainStatus='1', ActiveState='failed',
+                                               ExecMainStartTimestamp=system_stamp(NOW - 10))
+                    return result
+                with mock.patch.object(self.module, 'shell', side_effect=refused), \
+                     mock.patch.object(self.module, 'transmit', return_value=True) as send:
+                    outcome = self.check(send=True)
+                self.assertEqual(outcome['observer_run'], 'failed')
+                self.assertEqual(outcome['backup_health'], 'unknown')
+                self.assertEqual(outcome['reason'], 'OBSERVER_FAILED')
+                self.assertFalse(outcome['delivery_accepted'])
+                send.assert_not_called()
+                persisted = dict(line.split('=', 1) for line in (self.state / 'state').read_text().splitlines())
+                self.assertEqual(persisted['failure_epoch'], str(NOW - 10) if phase == 'late_after_write' else '0')
+                self.assertEqual(persisted['backup_health'], 'critical' if phase == 'late_after_write' else
+                                 'unknown' if phase == 'first' else 'healthy')
 
     def test_observer_lock_does_not_wait_or_send(self):
         with (self.state / 'lock').open('rb') as lock:

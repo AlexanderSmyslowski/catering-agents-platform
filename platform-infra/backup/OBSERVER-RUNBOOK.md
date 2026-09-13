@@ -33,6 +33,15 @@ später gesicherter Datenstand vollständig wiederhergestellt wurde. Wiederholte
 Auswertung derselben Sperre verschiebt diese Zeit nicht. Neue Reader-/Netzfehler
 werden als solche behandelt, nicht als erfundener Produktionsfehler.
 
+Auch ein erstmals in der letzten Dienstabfrage erkannter Ausfall wird vor dem
+Abbruch mit dem vorhandenen Publisher als kritischer Zustand gespeichert.
+Fehlerzeitpunkt und bereits gespeicherte Uhrmarke werden dabei nicht gesenkt.
+Scheitert die Veröffentlichung, bleibt der Lauf fehlgeschlagen und sendet
+kein Signal; er behauptet weder dauerhafte Vormerkung noch vollständige
+Rücknahme. Nach einem Fehler nach Dateiaustausch kann die Dauerhaftigkeit
+ungeklärt sein. Alte Evidence allein hebt die erfolgreich gespeicherte Sperre
+nicht auf; erst ein späterer vollständig gebundener Nachweis erlaubt Recovery.
+
 Geprüfte Grenzen: Datenalter 21600 Sekunden; Backup 1800, Restore 7200,
 Timer-Accuracy 60 plus insgesamt 240 Dispatchsekunden; vollständige neue
 Evidence und beendete Dienste spätestens 9300 Sekunden nach Fälligkeit.
@@ -176,9 +185,10 @@ Nicht neu initialisieren, um eine Uhr- oder Fehlersperre zu umgehen.
 ## Ressourcen und Rücknahme
 
 Produktivzählung: ursprüngliche Ersatzbasis 3181, bestätigter Vorstand 3511,
-jetzt 3870 inklusive Beobachter, gemeinsamem Helferdelta und Cron. Das sind
-689 kumulativ seit der ursprünglichen Basis und 359 seit dem Vorstand; vom
-ausdrücklich genehmigten Gesamtdeckel 3911 bleiben 41 Zeilen. Tests und
+jetzt 3877 inklusive Beobachter, gemeinsamem Helferdelta und Cron. Das sind
+696 kumulativ seit der ursprünglichen Basis und 366 seit dem Vorstand;
+gegenüber dem ersten Kandidaten 3870 kommen sieben Zeilen hinzu. Vom
+ausdrücklich genehmigten Gesamtdeckel 3911 bleiben 34 Zeilen. Tests und
 Dokumentation zählen separat; keine historische Basis wurde zurückgesetzt.
 
 Die bestehende synthetische Werkzeug-CI ist auf den eindeutigen Branch

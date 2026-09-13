@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.386
+version: 5.387
 date: 2026-09-13
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -1960,3 +1960,10 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 - Unabhaengiger Code-/Runbook-Risikoreview bestanden; zeitliche und Prozessfehler sind mit echten synthetischen Regressionen abgesichert, einschliesslich TERM zwischen Helferstart/Registrierung und Uhr-Ruecksprung nach worker-seitigem Fristablauf. Die bestehende Werkzeug-CI wird auf den eindeutigen Branch und die validierte aktuelle PR-Ereignisnummer gebunden; alle Repository-/Head-/Runner-/Isolationspruefungen bleiben erhalten. Konkrete Abschlusspruefungen und PR-/Head-/Tree-/CI-Bindung werden im lokalen Abschlussbericht festgehalten.
 - Better-Stack-Kontozuordnung ist noch offen: Chrome zeigt die bestehende Anmeldebestaetigung. Weder Check-ID/Team/Signalquelle noch Intervalle/Eskalation/Empfaenger/Tarifkapazitaet werden vermutet. Keine Monitormutation oder Signale. Zusaetzlich bleiben numerische Anbieter-/Uhr-Fristannahmen und gemeinsamer Ressourcen-Spitzenbedarf P3 vor Aktivierung zu belegen.
 - Ausfuehrbares Delta zum erhaltenen geprueften Grundplan: `platform-infra/backup/OBSERVER-RUNBOOK.md`. **HOLD BEFORE INSTALLATION, TIMER ACTIVATION AND PHASE 3.** Historischer realer Backup-/Restoreerfolg bleibt unveraendert, ebenso Zeiterfassungs-PR82. Keine Produktionsinstallation, neuen Backups/Restores, Timer-/App-/Netz-/Secretaenderungen. Uebergabe: `docs/agent-memory/2026-09-13-catering-observer-candidate.md`.
+
+### 5.387 - 2026-09-13
+
+- PR691 bleibt Draft. Betreiberreview5190890022/Inline3999756639 hat am abgenommenen Ausgangshead6940c68def203aae16f50cd9030e706603ea1a7f eine fehlende dauerhafte Fehler-Vormerkung bei der letzten Dienstabfrage belegt. Die vorherige gruene CI34756615916 bleibt Nachweis dieses Ausgangsstands; sie prueft nicht das folgende Delta. Kein falsches Erfolgssignal oder Produktionsvorfall wird daraus behauptet.
+- Die letzte Abfrage verwendet nun ebenfalls `service_failure` und den vorhandenen Publisher: Fehlerzeitpunkt und bereits gespeicherte Uhrmarke bleiben monoton, ein erkannter Fehler wird vor dem Abbruch kritisch gespeichert. Publisherfehler bleiben fehlgeschlagene Laeufe ohne Signal oder Dauerhaftigkeitsbehauptung. Zwei bestehende Tests wurden erweitert; RED/GREEN mit echten lokalen Validatoren und Publisher prueft persistierten Zustand, verschwundenen/geaenderten Dienstfehler, gebundene neue Recovery und Schreibfehler vor/nach Zustandsersatz. Keine neue Testplattform oder Zustandsmaschine.
+- Produktivzaehlung3877/3911, Rest34: +7 gegenueber3870, +366 seit3511, +696 seit3181. Historische Basen bleiben erhalten. Bestehender Branch/PR und unveraenderte Workflows; genaue Folgecommit-/Review-/Pruef-/CI-Bindung im lokalen `observer-final-guard-report.md`. Uebergabe: `docs/agent-memory/2026-09-13-catering-observer-final-guard.md`.
+- Better-Stack-Kontozuordnung, numerische Anbieter-/Uhr-Fristannahmen und gemeinsamer Ressourcen-Spitzenbedarf bleiben eigene Betriebsinputs. Keine Monitormutation, Signale, Installation, Aktivierung oder weitere Backup-/Restorelaeufe; ZeiterfassungPR82 unveraendert. **HOLD BEFORE INSTALLATION, TIMER ACTIVATION AND PHASE 3.**

@@ -361,7 +361,15 @@ def run(policy_path, send=False):
             records.generations.pop(str(state_root / 'state'))
             records.stable()
             if output['backup_health'] == 'healthy':
-                service_health(get_units(), utc_now(), created, verified, failure)
+                units = get_units()
+                checked_now = utc_now()
+                observed_failure = service_failure(units, max(terminal_now, checked_now))
+                if observed_failure:
+                    failure = max(failure, observed_failure)
+                    # Keep the failure and the already published clock mark before aborting.
+                    publish_state(state_root, max(terminal_now, checked_now), failure, 'critical')
+                    raise ValueError('SERVICE_FAILED')
+                service_health(units, checked_now, created, verified, failure)
             terminal_now = utc_now()
             require(now <= terminal_now and time.monotonic() - started < 95, 'OBSERVER_BUDGET_EXCEEDED')
             if output['backup_health'] == 'healthy' and terminal_now >= deadline - sum(durations):
