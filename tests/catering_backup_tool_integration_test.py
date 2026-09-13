@@ -199,40 +199,50 @@ sys.exit(result.returncode)
 
     def test_every_required_runtime_binding_fails_closed(self):
         m = self.implementation()
-        self.assertTrue(hasattr(m, 'PR_NUMBER'), 'numbered PR binding is missing')
-        number = m.PR_NUMBER or 999999
+        number = 999999  # Synthetic event ID; the runtime binds the real event, not this fixture.
         env = {'GITHUB_ACTIONS': 'true', 'RUNNER_ENVIRONMENT': 'github-hosted',
                'RUNNER_OS': 'Linux', 'GITHUB_REPOSITORY': m.REPOSITORY,
                'GITHUB_EVENT_NAME': 'pull_request', 'GITHUB_REF': f'refs/pull/{number}/merge'}
-        event = {'number': number, 'pull_request': {'draft': True, 'head': {
+        event = {'number': number, 'pull_request': {'number': number, 'draft': True, 'head': {
             'ref': m.BRANCH, 'sha': 'a' * 40, 'repo': {'full_name': m.REPOSITORY}},
             'base': {'ref': 'main', 'repo': {'full_name': m.REPOSITORY}}}}
-        # Zero is a closed bootstrap gate until GitHub assigns the new Draft PR.
-        with mock.patch.object(m, 'PR_NUMBER', 0):
-            with self.assertRaises(m.GateError):
-                m.runtime_guard(env, event, 'Linux')
-        with mock.patch.object(m, 'PR_NUMBER', number):
-            self.assertEqual(m.runtime_guard(env, event, 'Linux'), 'a' * 40)
-            for key in env:
-                bad = dict(env); bad.pop(key)
-                with self.subTest(key=key), self.assertRaises(m.GateError):
-                    m.runtime_guard(bad, event, 'Linux')
-            for path, value in [(('draft',), False), (('head',), {}), (('base',), {}),
-                    (('head', 'ref'), 'codex/catering-backup-restore-slice-20260903'),
-                    (('head', 'ref'), 'codex/catering-production-postgres-restore-proof-20260909'),
-                    (('base', 'ref'), 'other'), (('head', 'sha'), 'invalid'),
-                    (('head', 'repo', 'full_name'), 'foreign/fork'),
-                    (('base', 'repo', 'full_name'), 'foreign/base')]:
-                bad = copy.deepcopy(event); target = bad['pull_request']
-                for key in path[:-1]:
-                    target = target[key]
-                target[path[-1]] = value
-                with self.subTest(path=path), self.assertRaises(m.GateError):
-                    m.runtime_guard(env, bad, 'Linux')
-            for wrong_number in (687, 689, number + 1):
-                bad = copy.deepcopy(event); bad['number'] = wrong_number
-                with self.subTest(number=wrong_number), self.assertRaises(m.GateError):
-                    m.runtime_guard(env, bad, 'Linux')
+        self.assertEqual(m.runtime_guard(env, event, 'Linux'), 'a' * 40)
+        for key in env:
+            bad = dict(env); bad.pop(key)
+            with self.subTest(key=key), self.assertRaises(m.GateError):
+                m.runtime_guard(bad, event, 'Linux')
+        for path, value in [(('draft',), False), (('head',), {}), (('base',), {}),
+                (('head', 'ref'), 'codex/catering-backup-restore-slice-20260903'),
+                (('head', 'ref'), 'codex/catering-production-postgres-restore-proof-20260909'),
+                (('base', 'ref'), 'other'), (('head', 'sha'), 'invalid'),
+                (('head', 'repo', 'full_name'), 'foreign/fork'),
+                (('base', 'repo', 'full_name'), 'foreign/base')]:
+            bad = copy.deepcopy(event); target = bad['pull_request']
+            for key in path[:-1]:
+                target = target[key]
+            target[path[-1]] = value
+            with self.subTest(path=path), self.assertRaises(m.GateError):
+                m.runtime_guard(env, bad, 'Linux')
+        for wrong_number in (687, 689, number + 1):
+            bad = copy.deepcopy(event); bad['number'] = wrong_number
+            with self.subTest(number=wrong_number), self.assertRaises(m.GateError):
+                m.runtime_guard(env, bad, 'Linux')
+        for wrong in (None, 0, -1, True, 1.5, '999999'):
+            bad = copy.deepcopy(event)
+            bad['number'] = wrong
+            bad['pull_request']['number'] = wrong
+            with self.subTest(invalid_number=wrong), self.assertRaises(m.GateError):
+                m.runtime_guard(dict(env, GITHUB_REF=f'refs/pull/{wrong}/merge'), bad, 'Linux')
+        for key in ('number', 'pull_request_number'):
+            bad = copy.deepcopy(event)
+            if key == 'number':
+                bad.pop('number')
+            else:
+                bad['pull_request'].pop('number')
+            with self.subTest(missing=key), self.assertRaises(m.GateError):
+                m.runtime_guard(env, bad, 'Linux')
+        with self.assertRaises(m.GateError):
+            m.runtime_guard(dict(env, GITHUB_REF='refs/pull/123/merge'), event, 'Linux')
 
     def test_preflight_binds_the_merged_proof_base_separately_from_legacy_dump(self):
         m = self.implementation()
@@ -256,13 +266,12 @@ sys.exit(result.returncode)
         self.assertEqual(m.PARENT, '34d71daba94ba227146300f69f1f7b2872dce58b')
         self.assertEqual(m.PARENT_TREE, 'fb5c57b369c45e4d2168f5586242325d5e3193bd')
 
-    def test_workflow_keeps_the_numbered_draft_source_guard(self):
+    def test_workflow_keeps_the_unique_branch_and_event_bound_draft_source_guard(self):
         m = self.implementation()
-        self.assertTrue(hasattr(m, 'PR_NUMBER'), 'numbered PR binding is missing')
-        self.assertEqual(m.BRANCH, 'codex/catering-caddy-mount-order-fix-20260909')
+        self.assertEqual(m.BRANCH, 'codex/catering-betterstack-observer-20260913')
         workflow = (ROOT / '.github/workflows/ci.yml').read_text()
         job = workflow.split('  synthetic-backup-tool-integration:\n', 1)[1]
-        for binding in [f'github.event.pull_request.number == {m.PR_NUMBER} &&',
+        for binding in ['github.event.pull_request.number > 0 &&',
                 "github.event_name == 'pull_request' &&", 'github.event.pull_request.draft == true &&',
                 'github.event.pull_request.head.repo.full_name == github.repository &&',
                 f"github.event.pull_request.head.ref == '{m.BRANCH}'"]:

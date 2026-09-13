@@ -1476,8 +1476,9 @@ exec ${quote(discovered.stdout.trim())} "$@"
     const dockerRunIndex = restore.indexOf('"$DOCKER_CMD" run --name');
     expect(resticIndex).toBeGreaterThanOrEqual(0);
     expect(dockerRunIndex).toBeGreaterThan(resticIndex);
-    expect(restore).toContain("verify_checksum");
-    expect(restore.indexOf("verify_checksum")).toBeLessThan(dockerRunIndex);
+    expect(source(files.common)).toContain('verify_checksum "$expected" "$path"');
+    expect(restore).toContain("verify_record_checksum");
+    expect(restore.indexOf("verify_record_checksum")).toBeLessThan(dockerRunIndex);
   });
 
   test("restore uses one digest-pinned, networkless PostgreSQL probe with no published ports", () => {
@@ -1634,7 +1635,8 @@ rto_elapsed_allowed 14400
 
   test("restore validates the state-root and receipt directory trust boundaries before writes", () => {
     const restore = source(files.restore);
-    expect(restore).toContain("assert_root_mode");
+    expect(restore).toContain("read_record");
+    expect(source(files.common)).toContain('assert_root_mode_600 "$path" "$EXPECTED_UID"');
     expect(restore).toContain("BACKUP_ROOT");
     expect(restore).toContain("assert_directory_mode");
     expect(restore).toContain("RESTORE_CLEANUP_FAILED");
@@ -1688,12 +1690,15 @@ rto_elapsed_allowed 14400
 
   test("restore uses a closed-world schema for every persisted record slot", () => {
     const restore = source(files.restore);
-    expect(restore).toContain("validate_record_schema");
+    const common = source(files.common);
+    expect(restore).toContain('source "$SCRIPT_DIR/catering-backup-common.sh"');
+    expect(restore).toContain("read_record");
+    expect(common).toContain('validate_record_schema "$kind" "$value"');
     for (const field of ["status", "scope", "host_binding", "source_commit", "source_tree", "snapshot_id", "repository_identity", "secret_recovery_reference_sha256"]) {
       expect(restore).toContain(field);
     }
-    expect(restore).toContain("RECORD_UNKNOWN_FIELD");
-    expect(restore).toContain("RECORD_DUPLICATE_FIELD");
+    expect(common).toContain("RECORD_UNKNOWN_FIELD");
+    expect(common).toContain("RECORD_DUPLICATE_FIELD");
   });
 
   test("the timer defines the three-hour UTC schedule with a bounded dispatch allowance", () => {
