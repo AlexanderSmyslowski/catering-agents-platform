@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.389
+version: 5.390
 date: 2026-09-19
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -2011,3 +2011,27 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 - Alter Host bleibt Writer. Kein Cutover, keine öffentlichen Zielports,
   keine produktiven Zielschreibvorgänge, kein Merge oder Timerstart.
   Daten-/Backup-/Restoreprobe nicht wegen Sessionwechsel wiederholen.
+
+
+### 5.390 - 2026-09-19 — Geschützte Bedienprobe, Persistenz grün/Reloadlücke offen
+
+- CateringOS ist noch nicht geschäftlich produktiv eingesetzt; alter Host hält
+  den maßgeblichen bisherigen Datenbestand. Ziel166533273 unverändert, keine
+  neue Bestellung, kein Appbuild, kein Backup-/Restore-/Alarmwiederholungslauf.
+- Betreiber-SSH/Unixsocket/localhost-TLS und echte Basic-Auth-Anmeldung geprüft.
+  Begrenzter Zugang endet spätestens19.09.2026 18:03:55UTC; kein Zielscheduler.
+  Chrome vertraut nur dem vom Betreiber importierten konkreten Endzertifikat,
+  keine breite CA-Ausnahme. Zugang/Hashes/Rücknahme in bestehender
+  [Zielübergabe](docs/agent-memory/2026-09-19-catering-target-build.md).
+- Aktiv sind unveränderte Images mit getrennter neuer Test-DB
+  catering_operator_probe_20260919/eigener nicht privilegierter Rolle.
+  Genau eine synthetische manuelle Anlage gespeichert; drei zugeordnete Records
+  (Anfrage/Spezifikation/Audit) erneut lesbar. Nach Browser-Reload geht der
+  UI-Bezug verloren, Historie0. Begrenzter Produktbefund übergeben, PR682 nicht
+  bearbeitet; keine vollständige fachliche oder End-to-End-Abnahme behaupten.
+- Bisherige kopierte DB/Daten/Schema/ACL unverändert nachgeprüft. Test-DB niemals
+  in finale Übernahme aufnehmen; aktive geschützte Compose-Overrides beachten.
+- Neun Advisories konkreten vier Node-Images/Paketversionen/Pfaden zugeordnet;
+  keine behoben, statische Grenzen erhalten. Bestehende CI35445643679/V1 am
+  Head7bed609 vollständig success. Kein neuer Produktcode, Budget3878/3911.
+- HOLD vor öffentlicher Umschaltung und automatischen Jobs. Kein Altserverzugriff.

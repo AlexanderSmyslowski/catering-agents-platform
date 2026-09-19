@@ -6,7 +6,8 @@ Der isolierte Zielstand ist aufgebaut; Datenkopie, externe Sicherung,
 isolierter Restore und gekennzeichneter E-Mail-Test sind nachgewiesen.
 **HOLD BEFORE PRODUCTION CUTOVER AND AUTOMATIC JOB ACTIVATION.**
 Keine öffentliche DNS-/Proxyroute und keine alte Anwendung wurde geändert.
-Der alte Host bleibt produktiver Writer. Das 60-Minuten-Wartungsfenster ist
+Der alte Host hält weiterhin den maßgeblichen bisherigen Datenbestand.
+CateringOS ist laut Betreiber noch nicht geschäftlich produktiv eingesetzt. Das 60-Minuten-Wartungsfenster ist
 weiter nur ein Planwert, weder terminiert noch als Dauer garantiert.
 
 ## Ressource und unveränderte Anwendung
@@ -56,7 +57,7 @@ private Web-/Edge-TLS-Routen mit richtiger CA geprüft, jeweils Auth-Challenge40
 - **Externer Snapshot:**
   `6a96e397f8c25c2e4c713d3294c9e3ca9b774243578c20be9d80c6fe8ebdeab7`.
   Dessen created_at13:02:51UTC ist der Erfassungszeitpunkt der Zielkopie;
-  produktive Quelldaten sind weiterhin an den obigen Kopier-Snapshot gebunden.
+  der maßgebliche bisherige Datenbestand bleibt an den obigen Kopier-Snapshot gebunden.
 - **Isolierter Restore:** genau einmal aus diesem Offhost-Snapshot, Invocation
   `bf45da66373a43f7b5e972bdbeb15664`, Start13:05:38UTC,
   systemd-Laufzeit17,142s, Gesamtergebnis success/Exit0. Echter PG-Innenrestore,
@@ -155,3 +156,181 @@ Maßgebliche JSON-Belege: target-data-result-20260919, target-app-readonly-resul
 target-restore-first-result-20260919, target-restore-postcheck-20260919,
 target-alarm-result-20260919, target-resources-probes-summary-20260919.
 Diese versionierte Kurzfassung trägt die Ergebnisse auch ohne Zugriff auf den Mac.
+
+
+## Geschützte Bedienprobe am 19.09.2026
+
+**Teilweise bestanden:** echte Browseranmeldung, sichere TLS-Verbindung,
+Navigation, synthetische Anlage und persistenter API-/DB-Readback bestanden.
+**Wiederaufnahme des manuell angelegten Vorgangs nach Browser-Reload offen.**
+Kein vollständiger fachlicher CateringOS-Abnahmenachweis. PR682 unverändert.
+STR-001 v1.1 gelesen (Blob158ae4b9c37a18804d70c45b100241d56a87ebcf).
+
+Nur auf Ziel166533273 eine neue leere Datenbank aus `template0` angelegt:
+`catering_operator_probe_20260919`, eigene gleichnamig begrenzte Loginrolle
+`catering_operator_probe`, Business-ID `cccb044b-b47b-4d23-aff5-1abaeaeaec12`.
+Keine erhöhten Rollenrechte oder Mitgliedschaften; keine Tabellen-/Spaltenrechte
+oder dauerhaften CREATE-Rechte in `catering_agents`. Dessen unverändertes PUBLIC-
+CONNECT-Recht ist keine Datenberechtigung. Beide DBs nutzen denselben PG17.9-
+Container; es wird keine physische Isolation behauptet.
+
+Vier Appdienste und Web wurden ausschließlich mit separaten geschützten
+Testbindungen und **denselben Image-IDs** neu erstellt. PG und Edge wurden nicht
+neu erstellt. Base-Compose und `/etc/catering-target/runtime.env` unverändert.
+Aktiv ist zusätzlich das root-only Override unter
+`/var/lib/catering-operator-probe/20260919/operator-override.json` mit `operator.env`.
+Ein späteres Compose-Up ohne dieses Override würde die Testbindung verlieren;
+nicht beiläufig ausführen. Die gesamte Test-DB ist von jeder finalen Übernahme
+und jeder späteren Sicherung des maßgeblichen Datenbestands auszuschließen.
+
+### Betreiberzugang
+
+- Auf diesem Mac: **https://catering-target.localhost:18443** im offenen Chrome-Tab
+  „Catering-Agenten“. Normale Basic-Auth-Anmeldung und Chromes „Verbindung ist
+  sicher“ tatsächlich bestätigt; kein Zertifikatsfehler übergangen.
+- Anmeldung ausschließlich aus der geschützten lokalen Datei
+  `~/.codex/private/catering-target-operator-20260919/browser-login.json`
+  (Ordner0700/Datei0600), keine Zugangswerte in Bericht/Git. Passwort nicht im
+  Google-Passwortmanager gespeichert. Die offene Sitzung ist bereits angemeldet.
+- Zugriff nur über Betreiber-SSH, lokales `127.0.0.1:18443` und zielseitigen
+  Unixsocket `/run/catering-operator/tls.sock`. Keine öffentlichen Appports,
+  öffentlichen DNS-/Bestandsproxyeingriffe oder Änderungen der Egresssperren.
+- Der manuelle Transport `catering-operator-tls-20260919.service` endet spätestens
+  **19.09.2026 18:03:55UTC / 20:03:55MESZ** (RuntimeMaxSec14400, Restart=no).
+  Kein Timer, Cron oder dauerhafter Zugangsdienst. Lokaler SSH-Forward ist für
+  diese begrenzte Bedienphase geöffnet; nicht parallel ein zweites Mal starten.
+- Chrome importierte durch den Betreiber **nur das vorhandene Endzertifikat**,
+  SHA256 `91A7C5F8E61131AB7DC65D5FF6F3CEE327ABDD7FF7A0EB748C94286816558FA7`,
+  SAN ausschließlich `catering-target.localhost`; DigitalSignature, kein
+  keyCertSign. BasicConstraints fehlen, nicht als explizites CA:false ausgeben.
+  Gültig bis **20.09.2026 02:03:46UTC**. Kein automatisches Vertrauen für dessen
+  Nachfolger; den eigenen Chrome-Eintrag nach der Bedienphase gezielt entfernen.
+- Die vorherige macOS-Trustbindung ist im Benutzer-Keychain nur für
+  Chrome/SSL/diesen Host hinterlegt; Chrome unterstützt diese Einschränkungsform
+  nicht und ignoriert sie. Keine breit vertraute CA in Chrome hinzugefügt.
+  Der Browser-Connector blockierte seinen Basic-Auth-Aufruf mit
+  ERR_BLOCKED_BY_CLIENT. Nach Beenden ausschließlich seiner Debugverbindung
+  funktionierte der normale Chrome-Anmeldedialog, ohne Schutzabschaltung.
+
+Falls nur der lokale Forward beendet wurde und der begrenzte Zieltransport noch
+aktiv ist, denselben Zugang einmal manuell öffnen (keine Secrets im Befehl):
+
+```sh
+ssh -N -T -o BatchMode=yes -o ExitOnForwardFailure=yes \
+  -o ControlMaster=no -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+  -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
+  -o UserKnownHostsFile="$HOME/.codex/local-evidence/catering-finalconfig-0jae6hqe/target-known-hosts-20260919" \
+  -i "$HOME/.ssh/codex_hetzner_review" \
+  -L 127.0.0.1:18443:/run/catering-operator/tls.sock codex@2.29.43.174
+```
+
+Bei abgelaufenem Transport/Zertifikat nicht durch Warnungsumgehung, neue
+öffentliche Ports oder einen ungeprüften automatischen Neustart ersetzen.
+
+### Speichernachweis und konkrete Übergabe an den Produktstrang
+
+Genau eine UI-Anlage am **19.09.2026 14:23:10UTC**:
+Produktion → Auftrag manuell erfassen → „Manuellen Auftrag anlegen“.
+Kundenlabel `SYNTHETISCH SERVERPROBE 166533273 20260919`, Konferenz,
+01.10.2026,2Teilnehmer,Buffet,Wasser; eindeutig synthetischer Ort/Notiz.
+Keine KI-/Versand-/Webhookaktion, kein Seed oder zweiter Speicherversuch.
+
+Die UI meldete „Manuelle Spezifikation wurde angelegt“ und zeigte die Daten.
+Nach vollständigem Reload verschwand der Bezug; „Frühere Produktionsaufträge“
+zeigte0/„Keine passenden Aufträge gefunden“. Persistenz dagegen bestätigt:
+`manual-1789827790122`, `spec-manual-1789827790122` und genau ein Audit-Eintrag,
+alle drei in der eigenen Business-ID; Anfrage/Spezifikation erneut authentisiert
+und TLS-geprüft über die vorhandenen GET-Leserouten abgerufen. Produktionsfälle0.
+
+Begrenzte Fehlerzuordnung: Der tatsächliche Intake-Handler
+`intake-service/src/app.ts:866–906` speichert Anfrage, Spezifikation und Audit,
+aber keinen Produktionsfall. Mitgelieferte Quellen
+`backoffice-ui/src/production-manual-spec-submit-action.ts:31–42`,
+`App.tsx:471–484,560–565,1309–1315` und `api.ts:550–607` halten den Fokus im
+React-Zustand und laden Spezifikationen nur über Fall-/Fokusbindung. Das erklärt
+konsistent den beobachteten Reloadverlust, **keinen Verlust der DB-Daten**.
+Webartefakt `index-B7dQcOZX.js`, SHA256
+`bf9acd1008dfbaf7a550f1ce3553f4f87debc13e6c2800636556f7bc752218f9`;
+keine vollständige Source-map-Zuordnung des minifizierten Bundles behauptet.
+
+Produktstrang: Diesen bestehenden manuellen Pfad samt Reload/Wiederaufnahme
+prüfen und gegebenenfalls dort korrigieren. Keine Fallobjekte per SQL nachbauen,
+keine globale „erstes Objekt“-Auswahl als Umgehung. Hier kein Produktcode,
+kein neuer Build und keine Arbeit an PR682. Die technische Bedienprobe ist
+wegen dieses End-to-End-Teils nicht vollständig bestanden.
+
+### Nachzustand, Rücknahme und Grenzen
+
+Zielnachprüfung **14:27:38UTC**: Alle sieben Image-IDs unverändert, keine
+veröffentlichten Ports, interne isolierte Netze/IPv6aus/Restart=no unverändert.
+Keine SMTP-/Webhook-/AWS-/API-Key-Schlüssel in den vier App-Environments.
+Die aggregierten Inhalts-/Schema-/Owner-/ACL-Signaturen der kopierten bisherigen
+DB sind unverändert:35Legacyrecords,
+1Migrationsmarker,0Businessrecords,0Dokumente. Der Altserver wurde nicht betreten.
+
+Geschützte Rücknahmequelle: `/var/lib/catering-operator-probe/20260919/`
+mit `runtime.env.before`, `compose.json.before`, `Caddyfile.before` und
+Original-DB-/ACL-Nachweis. Zugriff schließen: lokalen Forward beenden und
+gegebenenfalls ausschließlich den genannten temporären Relayservice stoppen;
+keine Daten/Evidence löschen. Rückbindung der App an die bisherige Datenkopie
+wäre eine gesonderte bewusste Konfigurationsaktion mit denselben Images und
+Originalenv, kein automatischer Abschluss dieser Probe. Eigenes zusätzliches
+TLS-Hostfragment nur bei einer späteren gezielten Rücknahme aus Originalbytes
+entfernen/validieren; keine alten oder fremden Proxys berühren.
+
+Backup-/Restore-/Alarmnachweise oben bleiben historische gültige Einzelbelege;
+sie wurden nicht wiederholt und beweisen nicht das neue Test-DB-/Zugangsdelta.
+Vor Umzug bleiben: Wiederaufnahme des manuellen Produktpfads, endgültige
+Daten-/Zugangskonfiguration ohne Test-DB, aktuelle finale Datenübernahme mit
+alleiniger Schreibhoheit/Rückweg sowie ausdrückliche öffentliche Umschaltfreigabe.
+Automatischer Betrieb/Monitoring bleibt separat unaktiviert.
+
+### Neun Abhängigkeitswarnungen, unveränderte Images
+
+Paketinventar frisch aus allen vier Nodeimages: fastify5.8.5,fast-uri3.1.5,
+browserslist4.28.2,baseline-browser-mapping2.10.38. Alle neun Versionswarnungen
+betreffen enthaltene Pakete; keine behoben, kein Update/Build ausgeführt.
+340 statische Quell-/Manifestdateien in den vier Images identisch gebunden.
+`not_actionable` im lokalen Triageformat gilt ausschließlich für den jeweils
+untersuchten Ausführungspfad, nicht als allgemeine Entwarnung.
+
+| Warnung | Enthaltene Version | Imagebefund | Ausführungspfad und Begrenzung |
+|---|---|---|---|
+| 1 / [GHSA-3m5p-2c4r-xxw2](https://github.com/advisories/GHSA-3m5p-2c4r-xxw2) | fastify 5.8.5 | Ja, alle vier Node-Images | Proxy-Vertrauensprüfung: Alle vier Fastify-Konstruktoren ohne trustProxy; app.ts:508/185/198 und print-export index.ts:342. Dienste intern, keine veröffentlichten Ports. Bei später aktiviertem numerischem trustProxy neu bewerten. |
+| 2 / [GHSA-w2qp-rph6-63g4](https://github.com/advisories/GHSA-w2qp-rph6-63g4) | fastify 5.8.5 | Ja, alle vier Node-Images | Body-Typumwandlung: Keine Route installiert ein Fastify-Body-Schema. Eigene Ajv-Validierung mit festen Objektschemas ohne coerceTypes; Anlage sendet ein JSON-Objekt. Neue Body-Schema-Pfade wären erneut zu prüfen. |
+| 3 / [GHSA-5jgf-p345-68v8](https://github.com/advisories/GHSA-5jgf-p345-68v8) | fast-uri 3.1.5 | Ja, alle vier Node-Images | Schema-relative IDN-Hostnamen: fast-uri nur transitiv für feste JSON-Schema-Referenzen (Ajv/Compiler/Serializer). Kein Produktimport, untrusted dynamisches Schema oder loadSchema. Konfigurierte Dienst-URLs verwenden URL/fetch; kein solcher Netzwerkpfad. |
+| 4 / [GHSA-fph4-wmhf-6fwf](https://github.com/advisories/GHSA-fph4-wmhf-6fwf) | fast-uri 3.1.5 | Ja, alle vier Node-Images | Mehrfache Prozentdekodierung von Hostnamen: gleicher fest gebundener Schemapfad. Keine frei wählbare URI-Normalisierung als Grundlage für Netzwerk-/Redirectentscheidungen. Egress bleibt zusätzlich gesperrt. |
+| 5 / [GHSA-73wf-gq98-2v4g](https://github.com/advisories/GHSA-73wf-gq98-2v4g) | browserslist 4.28.2 | Ja, alle vier Node-Images | Benutzerdefinierte Statistiknormalisierung: über Babel-Buildwerkzeuge enthalten. Dienste starten per tsx; kein Produktaufruf, Statistikimport oder Frontendbuild zur Laufzeit. Kein Build in dieser Probe. |
+| 6 / [GHSA-c83g-rgw3-j3cx](https://github.com/advisories/GHSA-c83g-rgw3-j3cx) | browserslist 4.28.2 | Ja, alle vier Node-Images | Unbegrenzte Query-Caches/Speicherverbrauch: gleicher Buildwerkzeugpfad; keine Route leitet Eingaben an Browserslist-Queries weiter, kein Buildprozess gestartet. |
+| 7 / [GHSA-jqff-g426-hqxp](https://github.com/advisories/GHSA-jqff-g426-hqxp) | fast-uri 3.1.5 | Ja, alle vier Node-Images | Kodierte URI-Schemen: gleicher fester Schemapfad. Keine Kette aus Nutzereingabe, Normalisierung und fetch/Header/Redirect in den ausgelieferten Dienstquellen. |
+| 8 / [GHSA-f65p-4m7j-42xc](https://github.com/advisories/GHSA-f65p-4m7j-42xc) | fast-uri 3.1.5 | Ja, alle vier Node-Images | Fehlerhafte IPv6-Normalisierung: vertrauenswürdige feste Schemas; kein Aufrufer verwendet normalisierte Schema-IDs als Netzwerkziele. |
+| 9 / [GHSA-w5vr-8v7q-w6rv](https://github.com/advisories/GHSA-w5vr-8v7q-w6rv) | baseline-browser-mapping 2.10.38 | Ja, alle vier Node-Images | Ungültige Eingabe kann Prozess beenden: über Browserslist/Babel enthalten, von den vier App-Entrypoints/Leserouten nicht aufgerufen. Keine solche Buildwerkzeugausführung im Test. |
+
+Web/Edge sind Caddy-Laufzeitimages, PG ist17.9; kein Node/npm an den geprüften
+Laufzeitpfaden. Keine vollständige transitive SBOM des statischen Webbundles.
+Fast-uri-Bewertung hat deshalb weiterhin die dokumentierte statische Beweisgrenze;
+kein konkreter erreichbarer Advisorypfad in der Bedienprobe festgestellt.
+Vor öffentlicher Erreichbarkeit Warnungen/Pfade gezielt erneut beurteilen und
+über kompatible Produktkorrekturen entscheiden; nicht stillschweigend schließen.
+
+### Prüfung dieses Blocks
+
+Unabhängiger Scope-/Befehls-/Trustreview durch target_operator_scope_review,
+Astra/xhigh; konkrete Vorbereitungs- und Relayaufrufe nach Review ausgeführt.
+Keine unveränderte Vollsuite oder Backup-/Restoreprobe wiederholt.
+Bestehende [CI35445643679/V1](https://github.com/AlexanderSmyslowski/catering-agents-platform/actions/runs/35445643679)
+am Dokumentationshead7bed609200536d6ff815365957bcde120110a00b abgeschlossen:
+alle4Jobs success,2696Tests/14bestehendeSkips sowie ausgeführter synthetischer
+Docker-/Restic-/Restoretest und Cleanup. Kein Retry. Installierter Code weiterf6c0aee4,
+Produktivbudget3878/3911,Rest33. Dieses Delta ist Betriebsnachweis/Dokumentation.
+
+Belege im bestehenden lokalen Ordner: `target-operator-prepare-result-20260919.json`,
+`target-operator-relay-result-20260919.json`, `target-operator-trust-review-20260919.json`,
+`target-operator-ui-after-save-20260919.txt`, `target-operator-ui-after-reload-20260919.txt`,
+`target-operator-ui-history-after-reload-20260919.txt`,
+`target-operator-testdb-after-save-corrected-20260919.json`,
+`target-operator-persisted-readback-20260919.json`, `target-operator-postcheck-20260919.json`,
+`target-advisory-triage-20260919.json/.md`, `target-image-source-binding-20260919.json`.
+Die erste SQL-Zählabfrage erwartete in der neuen DB noch nicht vorhandene
+Legacy-/Dokumenttabellen und scheiterte rein lesend; die Katalog-/Businessrecord-
+Abfrage danach belegt den tatsächlichen Zustand. Kein fehlgeschlagener Appwrite.
