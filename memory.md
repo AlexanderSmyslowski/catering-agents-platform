@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.388
+version: 5.389
 date: 2026-09-19
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -1863,3 +1863,10 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 - Vor dem Browserstart wurde ausschließlich die lokale Start-/Stop-Verwaltung begrenzt korrigiert: Worktree-eigene Screen-Namen, exakte eigene Prozesszuordnung, keine globale LaunchAgent-Mutation, vorhandene Legacy-Writer als Lesesperren, alle fünf festen Ports vor Migration/Start geprüft, Runtime-Marker auf macOS über Trash. Fremde Dienste und vorhandene Daten bleiben erhalten. Der unabhängige Review hielt eine zwischenzeitlich verlorene Legacy-Sperre an; erst nach Regression, Korrektur und unabhängigem GO wurde gestartet. Sieben betroffene Testdateien mit 87 Tests und erneuter Build: Exit 0.
 - Die Browser-Evidenz bindet den Ausgangshead/Tree plus Lifecycle-Diff, neuen Ownership-Test und unverändertes Lockfile. Der bestehende Runner durchläuft vier frische Wurzeln, endet aber in allen Modi im Handoff-Zweig; daraus wird keine zusätzliche Answer-/Archiv-/Fehlupload-Abnahme behauptet. Details, Kommandos, Exitcodes und Fingerabdrücke: `docs/agent-memory/2026-09-19-gate-c-product-acceptance.md`.
 - Der Betreiber hat die Fortsetzung konkretisiert: vorhandenen Operatorweg gegen Produktzielvertrag und historische Referenzfallnachweise abgleichen; anschließend den ersten unbelegten technischen Übergang synthetisch prüfen. Nächster begrenzter Nachweis ist Produktionsentwurf → Vorbereitung am erhaltenen Browserfall. Eine echte menschliche Küchenprüfung bleibt offen. STR-001 v1.1 ist gelesen; CateringOS ist laut Betreiber noch nicht geschäftlich produktiv eingesetzt. Kein Gesamt-GO, kein Servereingriff, Merge, Deployment, Echtdaten- oder kostenpflichtiger Providerlauf.
+
+### 5.389 - 2026-09-19
+
+- Nach erfolgreicher Fix-Abnahme wurde der erste konkret unbelegte Operatorübergang am erhaltenen synthetischen Handoff-Fall geprüft: **Entwurf vorbereiten** liefert HTTP 201 und speichert Revision 2 im Status `pending_review`. Nach Neuladen und Wiederöffnen desselben Falls sind Handoff-Quelle, Event-Spec und vorbereitete Revision unverändert; die ursprüngliche Revision ist `superseded`. Geprüfter sauberer Head `7b3b5366e29b0f71f8c96ad79019eb229b2253b2`, Tree `1a06abd5b548dac3e0670fb2480a75d76acf4beb`.
+- Die Browser-/Antwortprüfung hat Exit 0, keine Konsolenfehler und weiterhin gesperrte Freigabe bestätigt. Fünf offene Reviewkarten, zwei fehlende Klassifikationen und `insufficient`-Planbereitschaft bleiben sichtbar. Rezepte, Produktionsbatches und Einkaufspositionen sind leer; keine freigegebenen Produktionsspecs. Der technische Vorbereitungsschritt ist belegt, ein ausführbarer Produktions-/Einkaufs-/Exportstand daraus nicht.
+- Der kurze Abgleich gegen Produktzielvertrag, Referenzcheckliste und erledigten Evaluatorplan trennt historische Goldlaufanker von den heutigen Browsernachweisen. Kein historischer Gate-A/B-Block wurde neu eröffnet und kein angeblich geordneter Folgeplan erfunden. Details und tatsächliche Kommandos/Exitcodes im bestehenden Snapshot `docs/agent-memory/2026-09-19-gate-c-product-acceptance.md`.
+- Menschliche Küchenprüfung bleibt ausdrücklich offen. Keine Reviewkarte wurde im Folgeblock bestätigt, kein Entwurf freigegeben oder übernommen. Keine neue Fachfunktion, neue Abhängigkeit, neue Datenwurzel, Serveränderung oder externe Geschäftswirkung; kein Gate-C-Gesamt-GO.

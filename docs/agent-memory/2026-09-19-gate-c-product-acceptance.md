@@ -1,6 +1,6 @@
 # Gate C – lokale Produktabnahme am 19.09.2026
 
-Status: Angebotsstart-Fix lokal abgenommen; begrenzter Operator-Folgeblock offen. Kein Gate-C-Gesamt-GO, Merge oder Deployment.
+Status: Angebotsstart-Fix lokal abgenommen; Operatorübergang Handoff-Entwurf → gespeicherte Vorbereitung zusätzlich synthetisch belegt, fachliche Blocker bleiben offen. Kein Gate-C-Gesamt-GO, Merge oder Deployment.
 
 ## Übernommener Stand
 
@@ -62,12 +62,27 @@ Der zusätzliche Auth-Korridor lief während der Erstellung dieses Berichts und 
 | Übergang | Bereits belegt | Konkret offen / nächste Prüfung |
 | --- | --- | --- |
 | Angebots-/Eventgrundlage → Fall und Handoff → Produktionsentwurf | Aktueller echter Browserlauf; synthetisch, Desktop/Mobil. | Nicht unverändert wiederholen. |
-| Produktionsentwurf → Vorbereitung von Entscheidungen/Rezepten/Plan/Einkauf | Historische Goldläufe PR #676/#677; aktuelle vorhandene API-/Panel-Tests. Deren Quellen und Stände sind getrennt vom heutigen Browserbeleg. | Erster aktueller integrierter Browsernachweis für „Entwurf vorbereiten“ am erhaltenen synthetischen Handoff-Fall. |
+| Produktionsentwurf → Vorbereitung von Entscheidungen/Rezepten/Plan/Einkauf | Historische Goldläufe PR #676/#677; vorhandene API-/Panel-Tests. Zusätzlich unten beschriebener Browsernachweis für Vorbereitung und Wiederöffnung auf `7b3b536`. | Technische Vorbereitung belegt; fehlende Klassifikationen blockieren weiter belastbare Rezepte, Mengen und Einkauf. |
 | Vorbereiteter Stand → Übernahme / Produktionsunterlagen / Export | Historische Goldlauf-/Apply-/Exportverträge; PR #682 lieferte erfolgreichen Build/Test-CI am historischen Integrationsstand. | Keine aktuelle vollständige Operator-Abnahme daraus ableiten; nach dem nächsten Übergang neu einordnen. |
 | Fachliche Küchenabnahme | Keine neue tatsächliche menschliche Prüfung in diesem Auftrag. | Menschlich offen; synthetische Entscheidungen sind keine menschliche Freigabe. |
 
 `PRODUCTION_PROMPT_REPLACEMENT_CONTRACT.md` bleibt das fachliche Ziel. Die Checkliste vom 16.08.2026 gilt für ihren damaligen Referenzanker; fehlende echte Quellen, menschliche Prüfung und `full_cost_model` werden nicht erfunden. Der dortige erledigte Evaluatorplan wird nicht erneut implementiert. Die spätere eventbezogene Rezeptprüfung und die Goldlauf-Fortschritte werden durch historische offene Checklistenpunkte nicht aufgehoben.
 
-## Noch ausstehend
+Historische Quellenbindung: PR #676 auf `13553dbd14dd020e11f69fe02d3a9b14662726c9` dokumentiert Goldlauf 1/2; PR #677 auf `faf17e8a1def016b4263a7288a81161e14288145` Goldlauf 3/3 und Gate-B-Produktbaseline; PR #678 auf `002027cd176bebc321eeee0034fe63fa17ec5daa` den nachfolgenden Session-/Gate-B-Stand. Dies sind gelesene historische Nachweise, keine heute erneut ausgeführten Goldläufe. Die heutige technische Belegung ersetzt weder deren Fallanker noch den fehlenden Köpff-Quellnachweis oder eine menschliche Unterschrift.
 
-- Nach erfolgreicher Fix-Abnahme: vom Betreiber konkretisierter Abgleich des integrierten Operatorwegs gegen Produktzielvertrag, `REFERENCE_CASE_ACCEPTANCE_CHECKLIST.md` und den bereits erledigten Plan `2026-08-16-reference-order-milestone.md`; danach nur den ersten unbelegten technischen Übergang synthetisch prüfen. Keine erfundene historische Aufgabenfolge; tatsächliche menschliche Küchenprüfung bleibt separat offen.
+## Begrenzter Operator-Folgeblock
+
+- Geprüfter sauberer Commit `7b3b5366e29b0f71f8c96ad79019eb229b2253b2`, Tree `1a06abd5b548dac3e0670fb2480a75d76acf4beb`. Dieser Commit sichert exakt den zuvor mit Dirty-Fingerprint geprüften Lifecycle-Code plus Dokumentation. Alle neun Quellen-/Test-/Lockfile-Hashes aus der ersten Browserabnahme nochmals identisch bestätigt; keine unveränderte Volltestwiederholung.
+- Die letzte eigene synthetische Datenwurzel des erfolgreichen Full-Fresh-Laufs wurde erhalten und wiederverwendet, anhand des Laufprotokolls gebunden (`.runtime/acceptance-20260919/operator-continuation-root.txt`). Eigene Dienste über `bash scripts/start-local-stack.sh` gestartet, Exit 0; dieselbe bereinigte Fixture-Umgebung wie zuvor. Browsername `catering-operator-20260919`.
+- Browseraktionen: `/produktion` öffnen → Historie öffnen → vorhandenen Auftrag wiederöffnen → **Entwurf vorbereiten** anklicken. Alle CLI-Aktionen Exit 0. Genau ein `POST …/production/drafts/…/prepare` am 19.09.2026 um 13:03:38 UTC, Antwort **201**. Kein neuer Angebotslauf und keine Review-/Freigabe-/Apply-Mutation in diesem Browserblock.
+- Die Antwort enthält Revision 2 mit `pending_review`, unveränderter Handoff-Quelle und identischer Event-Spec. Die vorherige Revision ist serverseitig `superseded`. Nach Browser-Reload und ausdrücklich erneuter Fallauswahl liefert `GET …/drafts?caseId=…` HTTP 200 mit exakt derselben gespeicherten Revision 2; das sichtbare Panel zeigt fünf offene Prüfpunkte und deaktiviertes **Entwurf freigeben**.
+- Fachlicher Zustand: `productionPlan.readiness.status=insufficient`, zwei Klassifikationsblocker, keine Produktionsbatches, keine Rezepte und leere Einkaufspositionen. Vorhandene Küchenblätter enthalten ausdrücklich Rezeptklärungs-/Blocking-Hinweise. Das ist ein vorbereiteter Prüfstand, kein ausführbares Produktionsdokument. Keine `approvedProductionSpecs`, keine menschliche Küchenprüfung und keine Übernahme in freigegebene Produktobjekte.
+- `python3 .runtime/acceptance-20260919/check-operator-transition.py` → **Exit 0**, 13:10:11 UTC. Prüft tatsächlich sichtbare DOM-Marker und gesperrte Freigabe, Konsolenfehler (0), Antwortgleichheit nach Wiederöffnung, Handoff-/Event-Spec-Bindung, Supersede-Status, offene Entscheidungen und obige Blocker. Einzelne Browser-`eval`-/`console`-Kommandos ebenfalls Exit 0. Lokale synthetische Rohbelege: `operator-prepare-response.json`, `operator-reloaded-drafts.json`, `operator-draft-requests.json`, `operator-dom-assertions.json`, `operator-console.json`, `operator-transition-check.json`; Snapshots vor/nach Wiederöffnung in `.playwright-cli/`.
+- Abschluss: ausschließlich den benannten Browser geschlossen und `bash scripts/stop-local-stack.sh` ausgeführt, jeweils Exit 0. Separater Cleanup-Check Exit 0: alle fünf Ports wieder ohne Listener (`lsof` jeweils Exit 1 = kein Treffer), keine eigenen Screen-Sitzungen, synthetische Datenwurzel weiterhin vorhanden. Nachweis `operator-cleanup-check.json`. Keine fremden Dienste beendet und keine Daten gelöscht.
+
+## Verbleibende Grenzen
+
+- **Bereits belegt:** Angebotsstart/Handoff und nun zusätzlich die fallgebundene, persistierte Entwurfsvorbereitung im echten lokalen Browser.
+- **Konkret fehlender Nachweis:** Operatorübergang von fachlich geklärten Klassifikationen/Produktionswegen/Rezepten zu vollständigem, übernommenem Plan mit Einkaufsabdeckung und Export. Die heute korrekt ausgewiesenen Eingabelücken sind keine neue Fehlfunktion und werden nicht automatisch als gelöst behandelt.
+- **Reproduzierbarer Produktfehler:** Angebotsstart behoben; für den begrenzten neuen Vorbereitungsschritt kein abnahmehindernder Fehler reproduziert. Der dokumentierte Umfangsmangel des bestehenden Full-Fresh-Runners bleibt eine Nachweisgrenze seiner vier Modusnamen.
+- **Notwendige menschliche Prüfung:** eventbezogene Küchenprüfung einschließlich Rezept-/Allergen-/Mengen-/Quellenprüfung und Bestätigung ohne Rettungs-Chat weiterhin offen. Synthetische UI-Aktionen oder Testentscheidungen liefern diese Prüfung nicht.
