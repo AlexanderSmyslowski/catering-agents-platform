@@ -1,3 +1,5 @@
+import { buildSpecEditUpdateInput } from "../backoffice-ui/src/production-spec-edit-update.js";
+import { specEditSnapshotFromSpec } from "../backoffice-ui/src/production-spec-edit-snapshot.js";
 import { describe, expect, it, vi } from "vitest";
 import {
   buildProductionSpecEditPersistAction,
@@ -140,4 +142,52 @@ it("rejects an unchanged canonical save when its pinned case is no longer active
   expect(actionInput.reviseProductionDraft).not.toHaveBeenCalled();
   expect(actionInput.updateAcceptedSpec).not.toHaveBeenCalled();
   expect(actionInput.resetSpecEdit).not.toHaveBeenCalled();
+});
+
+
+it("sends only changed manufacturing fields and timewindow in one canonical revision", async () => {
+  const source = { specId: "spec-lunch", event: { type: "meeting" }, menuPlan: [{ componentId: "coffee", label: "Coffee", menuCategory: "classic" }] };
+  const draft = { draftId: "canonical-r4", revision: 4, status: "pending_review" as const, createdAt: "2026-09-19", source: { sourceRef: "offer-handoff:handoff-1" }, reviewCards: [], draftArtifacts: { eventSpec: source } };
+  const schedule = [{ label: "Service", start: "09:00", end: "12:00" }];
+  const actionInput = input({ productionDraftContext: { caseId: "case-1", draft },
+    reviseProductionDraft: vi.fn(async () => ({ draft: { ...draft, draftId: "canonical-r5", revision: 5 } })),
+    buildCurrentSpecUpdateInput: () => ({ eventType: "meeting", menuItems: ["Coffee"], eventSchedule: schedule,
+      componentUpdates: [{ componentId: "coffee", menuCategory: "classic", productionMode: "convenience_purchase", purchasedElements: ["Kaffee"], notes: "synthetisch", recipeOverrideId: "" }] })
+  });
+  actionInput.getCurrentProductionDraftContext = () => actionInput.productionDraftContext;
+  await buildProductionSpecEditPersistAction(actionInput)();
+  expect(actionInput.reviseProductionDraft).toHaveBeenCalledWith("canonical-r4", { caseId: "case-1", expectedRevision: 4, componentClassifications: [], eventSchedule: schedule,
+    componentUpdates: [{ componentId: "coffee", productionMode: "convenience_purchase", purchasedElements: ["Kaffee"], notes: "synthetisch" }] });
+  expect(actionInput.updateAcceptedSpec).not.toHaveBeenCalled();
+});
+
+
+it("preserves untouched structured source values while explicitly clearing a note and recipe choice", async () => {
+  const source = { specId: "spec-lunch", event: { schedule: [{ label: "Aufbau", start: "08:00", end: "09:00" }, { label: "Station 2", start: "09:00", end: "12:00" }] },
+    menuPlan: [{ componentId: "coffee", label: "Coffee", menuCategory: "classic", recipeOverrideId: "existing-recipe", productionDecision: { mode: "hybrid", purchasedElements: ["Gebäck, geschnitten"], notes: "alte Notiz" } }] };
+  const snapshot = specEditSnapshotFromSpec(source);
+  const componentStates = Object.fromEntries(snapshot.components);
+  componentStates.coffee = { ...componentStates.coffee!, notes: "", recipeOverrideId: "" };
+  const draft = { draftId: "canonical-r4", revision: 4, status: "pending_review" as const, createdAt: "2026-09-19", source: { sourceRef: "offer-handoff:handoff-1" }, reviewCards: [], draftArtifacts: { eventSpec: source } };
+  const actionInput = input({ productionDraftContext: { caseId: "case-1", draft },
+    reviseProductionDraft: vi.fn(async () => ({ draft: { ...draft, draftId: "canonical-r5", revision: 5 } })),
+    buildCurrentSpecUpdateInput: () => buildSpecEditUpdateInput({ ...snapshot, componentStates })
+  });
+  actionInput.getCurrentProductionDraftContext = () => actionInput.productionDraftContext;
+  await buildProductionSpecEditPersistAction(actionInput)();
+  expect(actionInput.reviseProductionDraft).toHaveBeenCalledWith("canonical-r4", { caseId: "case-1", expectedRevision: 4, componentClassifications: [],
+    componentUpdates: [{ componentId: "coffee", notes: "", recipeOverrideId: "" }] });
+});
+
+
+it("never interprets omitted optional component fields as explicit clearing", async () => {
+  const source = { specId: "spec-lunch", menuPlan: [{ componentId: "coffee", label: "Coffee", menuCategory: "classic", recipeOverrideId: "existing-recipe", productionDecision: { mode: "hybrid", purchasedElements: ["Gebäck"], notes: "alt" } }] };
+  const draft = { draftId: "canonical-r4", revision: 4, status: "pending_review" as const, createdAt: "2026-09-19", source: { sourceRef: "offer-handoff:handoff-1" }, reviewCards: [], draftArtifacts: { eventSpec: source } };
+  const actionInput = input({ productionDraftContext: { caseId: "case-1", draft },
+    reviseProductionDraft: vi.fn(async () => ({ draft: { ...draft, draftId: "canonical-r5", revision: 5 } })),
+    buildCurrentSpecUpdateInput: () => ({ menuItems: ["Coffee"], componentUpdates: [{ componentId: "coffee", notes: "neu" }] })
+  });
+  actionInput.getCurrentProductionDraftContext = () => actionInput.productionDraftContext;
+  await buildProductionSpecEditPersistAction(actionInput)();
+  expect(actionInput.reviseProductionDraft).toHaveBeenCalledWith("canonical-r4", { caseId: "case-1", expectedRevision: 4, componentClassifications: [], componentUpdates: [{ componentId: "coffee", notes: "neu" }] });
 });

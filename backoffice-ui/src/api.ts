@@ -1049,6 +1049,14 @@ export type ProductionDraftClassificationUpdate = {
   caseId: string;
   expectedRevision: number;
   componentClassifications: Array<{ componentId: string; menuCategory: "classic" | "vegetarian" | "vegan" }>;
+  componentUpdates?: Array<{
+    componentId: string;
+    productionMode?: "scratch" | "hybrid" | "convenience_purchase" | "external_finished";
+    purchasedElements?: string[];
+    recipeOverrideId?: string;
+    notes?: string;
+  }>;
+  eventSchedule?: Array<{ label: string; start?: string; end?: string }>;
 };
 
 export async function reviseProductionDraft(draftId: string, input?: ProductionDraftClassificationUpdate) {

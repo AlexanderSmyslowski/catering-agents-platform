@@ -127,3 +127,15 @@ describe("useProductionSpecEditor", () => {
     expect(probe.editor.dismissedProductionAnswerSpecId).toBe("spec-lunch");
   });
 });
+
+
+it("preserves complex original schedule while editing only manufacturing notes", () => {
+  const schedule = [{ label: "Aufbau", start: "08:00", end: "09:00" }, { label: "Station 2", start: "09:00", end: "12:00" }];
+  const spec = { ...lunchSpec, event: { ...lunchSpec.event, schedule } };
+  const probe = renderEditor(spec);
+  act(() => probe.editor.beginSpecEdit(spec));
+  expect(probe.editor.hasFocusedSpecEditChanges).toBe(false);
+  act(() => probe.editor.updateEditingComponentState("component-hummus", { notes: "neue Notiz" }));
+  expect(probe.editor.buildCurrentSpecUpdateInput().eventSchedule).toEqual(schedule);
+  expect(probe.editor.hasFocusedSpecEditChanges).toBe(true);
+});

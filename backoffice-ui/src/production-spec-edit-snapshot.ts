@@ -4,6 +4,7 @@ export type SpecEditSnapshot = {
   eventType: string;
   eventDate: string;
   eventSchedule?: string;
+  originalEventSchedule?: Array<{ label: string; start?: string; end?: string }>;
   attendeeCount: string;
   serviceForm: string;
   menuItems: string;
@@ -27,6 +28,19 @@ export function componentEditStateFromMenuItem(item: Record<string, unknown>): C
   };
 }
 
+export function formatEventSchedule(schedule: Array<Record<string, unknown>>): string {
+  return schedule
+      .map((item) => {
+        const label = String(item.label ?? "").trim();
+        const start = String(item.start ?? "").trim();
+        const end = String(item.end ?? "").trim();
+        const time = [start, end].filter(Boolean).join("-");
+        return [label && label !== "Service" ? label : "", time].filter(Boolean).join(" ");
+      })
+      .filter(Boolean)
+      .join(", ");
+}
+
 export function specEditSnapshotFromSpec(spec: Record<string, unknown>): SpecEditSnapshot {
   const event = spec.event as Record<string, unknown> | undefined;
   const attendees = spec.attendees as Record<string, unknown> | undefined;
@@ -36,16 +50,8 @@ export function specEditSnapshotFromSpec(spec: Record<string, unknown>): SpecEdi
   return {
     eventType: String(event?.type ?? ""),
     eventDate: String(event?.date ?? ""),
-    eventSchedule: schedule
-      .map((item) => {
-        const label = String(item.label ?? "").trim();
-        const start = String(item.start ?? "").trim();
-        const end = String(item.end ?? "").trim();
-        const time = [start, end].filter(Boolean).join("-");
-        return [label && label !== "Service" ? label : "", time].filter(Boolean).join(" ");
-      })
-      .filter(Boolean)
-      .join(", "),
+    eventSchedule: formatEventSchedule(schedule),
+    originalEventSchedule: schedule.map(item => ({ ...item })) as SpecEditSnapshot["originalEventSchedule"],
     attendeeCount: String(attendees?.expected ?? ""),
     serviceForm: String(event?.serviceForm ?? ""),
     menuItems: menuPlan.map((item) => String(item.label ?? "")).filter(Boolean).join(", "),
@@ -54,8 +60,9 @@ export function specEditSnapshotFromSpec(spec: Record<string, unknown>): SpecEdi
 }
 
 export function normalizedSpecEditSnapshot(snapshot: SpecEditSnapshot): string {
+  const { originalEventSchedule: _originalSchedule, ...editable } = snapshot;
   return JSON.stringify({
-    ...snapshot,
+    ...editable,
     eventType: snapshot.eventType.trim(),
     eventDate: snapshot.eventDate.trim(),
     eventSchedule: (snapshot.eventSchedule ?? "").trim(),

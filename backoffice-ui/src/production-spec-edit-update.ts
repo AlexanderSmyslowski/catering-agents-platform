@@ -1,9 +1,11 @@
+import { formatEventSchedule } from "./production-spec-edit-snapshot.js";
 import type { ComponentEditState } from "./production-answer-types.js";
 
 export type SpecEditUpdateFormState = {
   eventType: string;
   eventDate: string;
   eventSchedule?: string;
+  originalEventSchedule?: SpecEditUpdateInput["eventSchedule"];
   attendeeCount: string;
   serviceForm: string;
   menuItems: string;
@@ -36,35 +38,23 @@ function splitCommaList(value: string): string[] {
     .filter(Boolean);
 }
 
-function normalizeTimeToken(value: string): string | undefined {
-  const match = value.trim().match(/^([01]?\d|2[0-3])(?::|\.|h)?(\d{2})?$/i);
-  if (!match) {
-    return undefined;
-  }
-
-  const hour = match[1].padStart(2, "0");
-  const minute = match[2] ?? "00";
-  return `${hour}:${minute}`;
-}
-
-function parseEventSchedule(value: string): SpecEditUpdateInput["eventSchedule"] {
+function parseEventSchedule(value: string, original?: SpecEditUpdateInput["eventSchedule"]): SpecEditUpdateInput["eventSchedule"] {
   const trimmed = value.trim();
-  if (!trimmed) {
-    return undefined;
+  // A display string cannot encode every source schedule. Keep the source structure
+  // while its visible value is unchanged, including labels and multiple periods.
+  if (original && trimmed === formatEventSchedule(original).trim()) {
+    return original.length ? original.map(item => ({ ...item })) : undefined;
   }
-
-  const tokens = Array.from(trimmed.matchAll(/\b([01]?\d|2[0-3])(?::|\.|h)?(\d{2})?\b/gi))
-    .map((match) => normalizeTimeToken(match[0]))
-    .filter((item): item is string => Boolean(item));
-  const [start, end] = tokens;
-
-  return [
-    {
-      label: trimmed,
-      ...(start ? { start } : {}),
-      ...(end ? { end } : {})
-    }
-  ];
+  if (!trimmed && !original?.length) return undefined;
+  const match = trimmed.match(/^(?:(.+?)\s+)?([01]\d|2[0-3]):([0-5]\d)\s*[-–]\s*([01]\d|2[0-3]):([0-5]\d)$/);
+  const label = match?.[1]?.trim() || "Service";
+  if (!match || /[,;:\n]|\d\s*[-–]/.test(label)) {
+    throw new Error("Zeitfenster bitte als eindeutigen Abschnitt eingeben, z. B. Service 09:00-12:00. Mehrere oder unklare Abschnitte können hier nicht geändert werden.");
+  }
+  const start = `${match[2]}:${match[3]}`;
+  const end = `${match[4]}:${match[5]}`;
+  if (start >= end) throw new Error("Zeitfenster: Das Ende muss am selben Tag nach dem Beginn liegen.");
+  return [{ label, start, end }];
 }
 
 function parseMenuCategory(value: string): SpecEditComponentUpdate["menuCategory"] {
@@ -95,7 +85,7 @@ export function buildSpecEditUpdateInput(state: SpecEditUpdateFormState): SpecEd
   return {
     eventType: state.eventType.trim() || undefined,
     eventDate: state.eventDate.trim() || undefined,
-    eventSchedule: parseEventSchedule(state.eventSchedule ?? ""),
+    eventSchedule: parseEventSchedule(state.eventSchedule ?? "", state.originalEventSchedule),
     serviceForm: state.serviceForm.trim() || undefined,
     attendeeCount: state.attendeeCount.trim() ? Number(state.attendeeCount) : undefined,
     menuItems: splitCommaList(state.menuItems),

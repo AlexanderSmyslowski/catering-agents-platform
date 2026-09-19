@@ -4494,4 +4494,166 @@ describe("explicit handoff classification revisions", () => {
     } finally { await app.close(); }
   });
 
+  function manufacturingCommand(caseId: string, revision: number) {
+    return { ...classificationCommand(caseId, revision),
+      componentUpdates: [
+        { componentId: "coffee", productionMode: "external_finished", notes: "Synthetischer externer Service" },
+        { componentId: "croissant", productionMode: "convenience_purchase", purchasedElements: ["Croissants", "Wasser"] }
+      ], eventSchedule: [{ label: "Service", start: "09:00", end: "12:00" }]
+    };
+  }
+  it("saves manufacturing and time together, retries once, prepares and reopens without losing source data", async () => {
+    const { app, store, draft, caseId } = await preparedClassificationFixture();
+    try {
+      const original = (await store.getProductionDraft({ businessId: "local" }, draft.draftId))!;
+      const payload = manufacturingCommand(caseId, draft.revision);
+      const request = { method: "POST" as const, url: `/v1/production/drafts/${draft.draftId}/revise`, headers: actorHeaders, payload };
+      const saved = await app.inject(request);
+      expect(saved.statusCode, saved.body).toBe(201);
+      const revision = saved.json<{ draft: ProductionDraft }>().draft;
+      const expectedSpec = { ...draft.draftArtifacts.eventSpec, uncertainties: [], event: { ...draft.draftArtifacts.eventSpec!.event, schedule: payload.eventSchedule },
+        menuPlan: draft.draftArtifacts.eventSpec!.menuPlan.map((component, index) => ({ ...component, menuCategory: index ? "vegetarian" : "classic",
+          productionDecision: index ? { mode: "convenience_purchase", purchasedElements: ["Croissants", "Wasser"] } : { mode: "external_finished", notes: "Synthetischer externer Service" }
+        })) };
+      expect(revision.draftArtifacts.eventSpec).toEqual(expectedSpec);
+      expect((await store.getProductionDraft({ businessId: "local" }, revision.draftId))!.draftArtifacts.eventSpec).toEqual({
+        ...original.draftArtifacts.eventSpec, event: expectedSpec.event, menuPlan: expectedSpec.menuPlan, uncertainties: []
+      });
+      expect(revision.source).toEqual(original.source);
+      expect((await app.inject(request)).json().draft).toEqual(revision);
+      const preparedResponse = await app.inject({ method: "POST", url: `/v1/production/drafts/${revision.draftId}/prepare`, headers: actorHeaders, payload: {} });
+      expect(preparedResponse.statusCode, preparedResponse.body).toBe(201);
+      const prepared = preparedResponse.json<{ draft: ProductionDraft }>().draft;
+      expect(prepared.draftArtifacts.eventSpec).toEqual(expectedSpec);
+      expect(prepared.reviewCards.every(card => card.decision === "pending")).toBe(true);
+      expect((prepared.draftArtifacts.openQuestions ?? []).some(q => /productionDecision.mode|event.schedule/.test(q.field))).toBe(false);
+      const reopened = await app.inject({ method: "GET", url: `/v1/production/drafts?caseId=${caseId}`, headers: actorHeaders });
+      expect(reopened.json<{ items: ProductionDraft[] }>().items.find(item => item.draftId === prepared.draftId)).toEqual(prepared);
+      expect((await store.getProductionDraft({ businessId: "local" }, draft.draftId))!.draftArtifacts.eventSpec).toEqual(original.draftArtifacts.eventSpec);
+    } finally { await app.close(); }
+  });
+  it("preserves all known schedule periods and decision fields for a notes-only edit", async () => {
+    const spec = eventSpec();
+    spec.event.schedule = [{ label: "Aufbau", start: "08:00", end: "09:00" }, { label: "Station 2", start: "09:00", end: "12:00" }];
+    spec.menuPlan[0]!.productionDecision = { mode: "hybrid", purchasedElements: ["Dressing"], notes: "alt" };
+    const { app, draft, caseId } = await productionFixture(spec);
+    try {
+      const saved = await app.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/revise`, headers: actorHeaders,
+        payload: { caseId, expectedRevision: draft.revision, componentUpdates: [{ componentId: spec.menuPlan[0]!.componentId, notes: "neu" }] } });
+      expect(saved.statusCode, saved.body).toBe(201);
+      expect(saved.json().draft.draftArtifacts.eventSpec).toEqual({ ...draft.draftArtifacts.eventSpec,
+        menuPlan: draft.draftArtifacts.eventSpec!.menuPlan.map(component => ({ ...component, productionDecision: { ...component.productionDecision, notes: "neu" } })) });
+    } finally { await app.close(); }
+  });
+  it("validates recipe selection in the library and keeps scratch evidence gate closed", async () => {
+    const { app, draft, caseId } = await preparedClassificationFixture();
+    try {
+      const payload = { ...classificationCommand(caseId, draft.revision), componentUpdates: [{ componentId: "coffee", productionMode: "scratch", recipeOverrideId: "recipe-caesar-salad" }] };
+      const saved = await app.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/revise`, headers: actorHeaders, payload });
+      expect(saved.statusCode, saved.body).toBe(201);
+      const revision = saved.json<{ draft: ProductionDraft }>().draft;
+      expect(revision.draftArtifacts.eventSpec!.menuPlan[0]!.recipeOverrideId).toBe("recipe-caesar-salad");
+      expect(revision.draftArtifacts.recipes).toBeUndefined();
+      const prepared = await app.inject({ method: "POST", url: `/v1/production/drafts/${revision.draftId}/prepare`, headers: actorHeaders, payload: {} });
+      expect(prepared.statusCode, prepared.body).toBe(409);
+      expect(prepared.json().message).toMatch(/Planungs-Evidenz/);
+    } finally { await app.close(); }
+  });
+  it.each([
+    ["unknown mode", { componentUpdates: [{ componentId: "coffee", productionMode: "magic" }] }],
+    ["unknown component", { componentUpdates: [{ componentId: "foreign", notes: "neu" }] }],
+    ["duplicate component", { componentUpdates: [{ componentId: "coffee", productionMode: "scratch" }, { componentId: "coffee", productionMode: "hybrid" }] }],
+    ["empty patch", { componentUpdates: [{ componentId: "coffee" }] }],
+    ["unallowed component field", { componentUpdates: [{ componentId: "coffee", servings: 100 }] }],
+    ["unknown recipe", { componentUpdates: [{ componentId: "coffee", productionMode: "scratch", recipeOverrideId: "foreign-recipe" }] }],
+    ["purchases without mode", { componentUpdates: [{ componentId: "coffee", purchasedElements: ["Wasser"] }] }],
+    ["bad purchases", { componentUpdates: [{ componentId: "coffee", productionMode: "hybrid", purchasedElements: [""] }] }],
+    ["invalid minutes", { eventSchedule: [{ label: "Service", start: "09:75", end: "12:00" }] }],
+    ["complex new schedule", { eventSchedule: [{ label: "Aufbau", start: "08:00", end: "09:00" }, { label: "Service", start: "09:00", end: "12:00" }] }],
+    ["ambiguous range", { eventSchedule: [{ label: "Service", start: "12:00", end: "09:00" }] }],
+    ["missing time", { eventSchedule: [{ label: "Service" }] }]
+  ])("rejects manufacturing %s without mutating the source", async (_name, patch) => {
+    const { app, store, draft, caseId } = await preparedClassificationFixture();
+    try {
+      const before = await store.listProductionDrafts({ businessId: "local" });
+      const saved = await app.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/revise`, headers: actorHeaders,
+        payload: { caseId, expectedRevision: draft.revision, ...patch } });
+      expect(saved.statusCode, saved.body).toBe(422);
+      expect(await store.listProductionDrafts({ businessId: "local" })).toEqual(before);
+    } finally { await app.close(); }
+  });
+
+  it("resolves only the answered generated schedule uncertainty and preserves independent source questions", async () => {
+    const spec = purchaseEventSpec();
+    const generated = { field: "event.schedule", message: 'Zeitangabe in "synthetischer Termin" ist nicht als vollständiger Termin belastbar.', severity: "low" as const, suggestedQuestion: "Wie lautet das verbindliche Zeitfenster?" };
+    const sourceQuestion = { field: "event.schedule", message: "Aufbauzugang der Quelle bestätigen.", severity: "high" as const, suggestedQuestion: "Ist der Aufbauzugang gesichert?" };
+    spec.uncertainties = [generated, sourceQuestion];
+    const { app, store, draft, caseId } = await productionFixture(spec);
+    try {
+      const saved = await app.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/revise`, headers: actorHeaders,
+        payload: { caseId, expectedRevision: draft.revision, eventSchedule: [{ label: "Service", start: "09:00", end: "12:00" }] } });
+      expect(saved.statusCode, saved.body).toBe(201);
+      expect(saved.json().draft.draftArtifacts.eventSpec.uncertainties).toEqual([sourceQuestion]);
+      expect((await store.getProductionDraft({ businessId: "local" }, draft.draftId))!.draftArtifacts.eventSpec!.uncertainties).toEqual([generated, sourceQuestion]);
+    } finally { await app.close(); }
+  });
+
+  it.each([0, 1])("preserves independent review target on schedule uncertainty %s", async (targetIndex) => {
+    const spec = purchaseEventSpec();
+    spec.uncertainties = [
+      { field: "event.schedule", message: 'Zeitangabe in "synthetischer Termin" ist nicht als vollständiger Termin belastbar.', severity: "low", suggestedQuestion: "Wie lautet das verbindliche Zeitfenster?" },
+      { field: "event.schedule", message: "Aufbauzugang bestätigen.", severity: "high" }
+    ];
+    const { app, store, draft, caseId } = await productionFixture(spec);
+    try {
+      const current = (await store.getProductionDraft({ businessId: "local" }, draft.draftId))!;
+      const withReview = validateProductionDraft({ ...current, reviewCards: [...current.reviewCards, {
+        cardId: "independent-time-review", kind: "risk", title: "Zeitquelle prüfen", summary: "Menschliche Prüfung erforderlich.", decision: "pending", requiredApproval: true,
+        targetPath: `$.draftArtifacts.eventSpec.uncertainties[${targetIndex}]`
+      }] });
+      await productionDecisionRepositoryFor(store).withTargetCriticalSection({ businessId: "local" }, { kind: "production_draft", artifactId: draft.draftId, revision: draft.revision }, async scope => { await scope.setDraft(withReview); });
+      const saved = await app.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/revise`, headers: actorHeaders,
+        payload: { caseId, expectedRevision: draft.revision, eventSchedule: [{ label: "Service", start: "09:00", end: "12:00" }] } });
+      expect(saved.statusCode, saved.body).toBe(targetIndex === 0 ? 422 : 201);
+      if (targetIndex === 0) {
+        expect(await store.getProductionDraft({ businessId: "local" }, draft.draftId)).toEqual(withReview);
+      } else {
+        expect(saved.json().draft.reviewCards).toContainEqual(expect.objectContaining({ cardId: "independent-time-review", decision: "pending", requiredApproval: true, targetPath: "$.draftArtifacts.eventSpec.uncertainties[0]" }));
+      }
+    } finally { await app.close(); }
+  });
+
+  it.each([
+    ["removed second period", "$.draftArtifacts.eventSpec.event.schedule[1]", [{ label: "Service", start: "10:00", end: "13:00" }], 422],
+    ["replaced first period", "$.draftArtifacts.eventSpec.event.schedule[0]", [{ label: "Service", start: "08:00", end: "09:00" }], 422],
+    ["changed period with unchanged targeted start", "$.draftArtifacts.eventSpec.event.schedule[0].start", [{ label: "Aufbau", start: "08:00", end: "10:00" }], 422],
+    ["whole schedule target", "$.draftArtifacts.eventSpec.event.schedule", [{ label: "Aufbau", start: "08:00", end: "09:00" }], 422],
+    ["identical first period retained", "$.draftArtifacts.eventSpec.event.schedule[0]", [{ label: "Aufbau", start: "08:00", end: "09:00" }], 201],
+    ["manufacturing edit with unchanged schedule", "$.draftArtifacts.eventSpec.event.schedule[1]", undefined, 201]
+  ])("protects independent schedule review: %s", async (_name, targetPath, nextSchedule, status) => {
+    const spec = purchaseEventSpec();
+    spec.event.schedule = [{ label: "Aufbau", start: "08:00", end: "09:00" }, { label: "Service", start: "09:00", end: "12:00" }];
+    const { app, store, draft, caseId } = await productionFixture(spec);
+    try {
+      const original = (await store.getProductionDraft({ businessId: "local" }, draft.draftId))!;
+      const review = { cardId: "independent-service-review", kind: "risk" as const, title: "Servicezugang prüfen", summary: "Zugang zur Servicephase menschlich prüfen.", decision: "pending" as const, requiredApproval: true, targetPath };
+      const source = validateProductionDraft({ ...original, reviewCards: [...original.reviewCards, review] });
+      await productionDecisionRepositoryFor(store).withTargetCriticalSection({ businessId: "local" }, { kind: "production_draft", artifactId: draft.draftId, revision: draft.revision }, async scope => { await scope.setDraft(source); });
+      const before = await store.listProductionDrafts({ businessId: "local" });
+      const response = await app.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/revise`, headers: actorHeaders, payload: {
+        caseId, expectedRevision: draft.revision,
+        ...(nextSchedule ? { eventSchedule: nextSchedule } : { componentUpdates: [{ componentId: spec.menuPlan[0]!.componentId, notes: "synthetische Herstellungsnotiz" }] })
+      } });
+      expect(response.statusCode, response.body).toBe(status);
+      if (status === 422) {
+        expect(await store.listProductionDrafts({ businessId: "local" })).toEqual(before);
+      } else {
+        const result = response.json<{ draft: ProductionDraft }>().draft;
+        expect(result.reviewCards).toContainEqual(review);
+        expect(result.draftArtifacts.eventSpec!.event.schedule).toEqual(nextSchedule ?? spec.event.schedule);
+        expect((await store.getProductionDraft({ businessId: "local" }, draft.draftId))!.draftArtifacts.eventSpec!.event.schedule).toEqual(spec.event.schedule);
+      }
+    } finally { await app.close(); }
+  });
+
 });

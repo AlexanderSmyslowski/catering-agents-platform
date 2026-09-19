@@ -43,20 +43,40 @@ function buildClassificationUpdate(context: ProductionDraftEditContext, update: 
   }
   const snapshot = specEditSnapshotFromSpec(spec);
   const baseline = buildSpecEditUpdateInput({ ...snapshot, componentStates: Object.fromEntries(snapshot.components) });
-  const withoutCategories = (input: SpecEditUpdateInput) => ({ ...input,
-    componentUpdates: input.componentUpdates?.map(({ menuCategory: _category, ...component }) => component)
-      .sort((left, right) => left.componentId.localeCompare(right.componentId))
-  });
-  if (JSON.stringify(stableValue(withoutCategories(update))) !== JSON.stringify(stableValue(withoutCategories(baseline)))) {
-    throw new Error("In diesem Handoff können hier nur Klassifikationen gespeichert werden. Andere Änderungen bitte zurücknehmen.");
+  const equal = (left: unknown, right: unknown) => JSON.stringify(stableValue(left)) === JSON.stringify(stableValue(right));
+  const fixedFields = ["eventType", "eventDate", "attendeeCount", "serviceForm", "menuItems"] as const;
+  if (fixedFields.some(key => !equal(update[key], baseline[key]))) {
+    throw new Error("In diesem Handoff sind hier Klassifikationen, Herstellung, Rezeptauswahl und Zeitfenster bearbeitbar. Andere Änderungen bitte zurücknehmen.");
   }
-  const componentClassifications = (update.componentUpdates ?? []).flatMap((component) => {
-    const original = baseline.componentUpdates?.find((item) => item.componentId === component.componentId);
-    if (component.menuCategory === original?.menuCategory) return [];
-    if (!component.menuCategory) throw new Error("Klassifikationen können hier ergänzt oder geändert, aber nicht gelöscht werden.");
-    return [{ componentId: component.componentId, menuCategory: component.menuCategory }];
-  });
-  return { caseId, expectedRevision: draft.revision!, componentClassifications };
+  const seen = new Set<string>();
+  const componentClassifications: ProductionDraftClassificationUpdate["componentClassifications"] = [];
+  const componentUpdates: NonNullable<ProductionDraftClassificationUpdate["componentUpdates"]> = [];
+  for (const component of update.componentUpdates ?? []) {
+    const original = baseline.componentUpdates?.find(item => item.componentId === component.componentId);
+    if (!original || seen.has(component.componentId)) throw new Error("Komponenten müssen dem geöffneten Entwurf eindeutig entsprechen.");
+    seen.add(component.componentId);
+    const changed = (key: keyof typeof component) => Object.prototype.hasOwnProperty.call(component, key) && !equal(component[key], original[key]);
+    if (changed("menuCategory")) {
+      if (!component.menuCategory) throw new Error("Klassifikationen können hier ergänzt oder geändert, aber nicht gelöscht werden.");
+      componentClassifications.push({ componentId: component.componentId, menuCategory: component.menuCategory });
+    }
+    const patch: NonNullable<ProductionDraftClassificationUpdate["componentUpdates"]>[number] = { componentId: component.componentId };
+    if (changed("productionMode")) {
+      if (!component.productionMode) throw new Error("Die Herstellungsentscheidung kann hier nicht gelöscht werden.");
+      patch.productionMode = component.productionMode;
+    }
+    if (changed("purchasedElements")) patch.purchasedElements = component.purchasedElements ?? [];
+    if (changed("recipeOverrideId")) patch.recipeOverrideId = component.recipeOverrideId ?? "";
+    if (changed("notes")) patch.notes = component.notes ?? "";
+    if (Object.keys(patch).length > 1) componentUpdates.push(patch);
+  }
+  if (seen.size !== baseline.componentUpdates?.length) throw new Error("Vorhandene Komponenten dürfen hier nicht entfernt werden.");
+  const scheduleChanged = !equal(update.eventSchedule, baseline.eventSchedule);
+  if (scheduleChanged && !update.eventSchedule?.length) throw new Error("Das Zeitfenster kann hier nicht gelöscht werden.");
+  return { caseId, expectedRevision: draft.revision!, componentClassifications,
+    ...(componentUpdates.length ? { componentUpdates } : {}),
+    ...(scheduleChanged ? { eventSchedule: update.eventSchedule } : {})
+  };
 }
 
 export type ProductionSpecEditPersistActionInput = ProductionQuestionEditSuccessActions & {
@@ -100,7 +120,7 @@ export function buildProductionSpecEditPersistAction({
         throw new Error("Die geöffneten Antworten gehören nicht eindeutig zu diesem Produktionsentwurf.");
       }
       const command = buildClassificationUpdate(productionDraftContext!, update);
-      if (command.componentClassifications.length === 0) {
+      if (command.componentClassifications.length === 0 && !command.componentUpdates?.length && !command.eventSchedule) {
         return productionDraftContext!.draft.draftArtifacts!.eventSpec;
       }
       const response = await reviseProductionDraft(productionDraftContext!.draft.draftId, command);

@@ -2789,25 +2789,58 @@ export function registerProductionArtifactRoutes(
       }
       if (command && typeof command === "object" && Object.keys(command).length > 0) {
         const input = command as Record<string, unknown>;
-        const classifications = input.componentClassifications;
+        const classifications = input.componentClassifications ?? [];
+        const componentUpdates = input.componentUpdates ?? [];
+        const schedule = input.eventSchedule;
+        const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === "object" && !Array.isArray(value));
+        const has = (value: object, key: string) => Object.prototype.hasOwnProperty.call(value, key);
+        const modes = ["scratch", "hybrid", "convenience_purchase", "external_finished"];
         if (
-          Object.keys(input).some((key) => !["caseId", "expectedRevision", "componentClassifications"].includes(key)) ||
-          typeof input.caseId !== "string" || !input.caseId.trim() ||
-          !Number.isInteger(input.expectedRevision) ||
-          !Array.isArray(classifications) || classifications.length === 0 ||
-          classifications.some((item) => !item || typeof item !== "object" || Array.isArray(item) ||
+          Object.keys(input).some((key) => !["caseId", "expectedRevision", "componentClassifications", "componentUpdates", "eventSchedule"].includes(key)) ||
+          typeof input.caseId !== "string" || !input.caseId.trim() || !Number.isInteger(input.expectedRevision) ||
+          (has(input, "componentClassifications") && !Array.isArray(input.componentClassifications)) ||
+          (has(input, "componentUpdates") && !Array.isArray(input.componentUpdates)) ||
+          !Array.isArray(classifications) || !Array.isArray(componentUpdates) ||
+          (classifications.length === 0 && componentUpdates.length === 0 && schedule === undefined) ||
+          classifications.some((item) => !isRecord(item) ||
             Object.keys(item).some((key) => !["componentId", "menuCategory"].includes(key)) ||
-            typeof item.componentId !== "string" || !["classic", "vegetarian", "vegan"].includes(item.menuCategory))
+            typeof item.componentId !== "string" || (typeof item.menuCategory !== "string" || !["classic", "vegetarian", "vegan"].includes(item.menuCategory))) ||
+          componentUpdates.some((item) => !isRecord(item) ||
+            Object.keys(item).some((key) => !["componentId", "productionMode", "purchasedElements", "recipeOverrideId", "notes"].includes(key)) ||
+            Object.keys(item).length < 2 || typeof item.componentId !== "string" || !item.componentId.trim() ||
+            (has(item, "productionMode") && (typeof item.productionMode !== "string" || !modes.includes(item.productionMode))) ||
+            (has(item, "purchasedElements") && (!Array.isArray(item.purchasedElements) || item.purchasedElements.length > 100 ||
+              item.purchasedElements.some(value => typeof value !== "string" || !value.trim() || value.length > 500))) ||
+            (has(item, "recipeOverrideId") && (typeof item.recipeOverrideId !== "string" || item.recipeOverrideId.length > 200 || item.recipeOverrideId !== item.recipeOverrideId.trim())) ||
+            (has(item, "notes") && (typeof item.notes !== "string" || item.notes.length > 2000)))
         ) {
-          return reply.code(422).send({ message: "Für die Klassifikationskorrektur sind nur Fall, Revision und eindeutige Komponentenkategorien zulässig." });
+          return reply.code(422).send({ message: "Nur eindeutige Änderungen an Klassifikation, Herstellung, Rezeptauswahl und Zeitfenster mit Fall und Revision sind zulässig." });
+        }
+        if (has(input, "eventSchedule") && (!Array.isArray(schedule) || schedule.length !== 1 || schedule.some(item =>
+          !isRecord(item) || Object.keys(item).some(key => !["label", "start", "end"].includes(key)) ||
+          typeof item.label !== "string" || !item.label.trim() || item.label.length > 200 ||
+          typeof item.start !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(item.start) ||
+          typeof item.end !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(item.end) || item.start >= item.end))) {
+          return reply.code(422).send({ message: "Zeitfenster benötigt einen eindeutigen Abschnitt mit Beginn und späterem Ende am selben Tag (HH:mm). Komplexe Zeitfenster können hier nicht geändert werden." });
         }
         const eventSpec = draft.draftArtifacts.eventSpec;
         const categories = new Map<string, "classic" | "vegetarian" | "vegan">(
           classifications.map((item) => [item.componentId, item.menuCategory])
         );
-        if (!eventSpec || categories.size !== classifications.length ||
-          [...categories.keys()].some((id) => !eventSpec.menuPlan.some((component) => component.componentId === id))) {
-          return reply.code(422).send({ message: "Die Klassifikationen müssen vorhandene Komponenten eindeutig benennen." });
+        type ComponentPatch = { componentId: string; productionMode?: NonNullable<AcceptedEventSpec["menuPlan"][number]["productionDecision"]>["mode"]; purchasedElements?: string[]; recipeOverrideId?: string; notes?: string };
+        const patches = new Map<string, ComponentPatch>(componentUpdates.map(item => [item.componentId, item as ComponentPatch]));
+        if (!eventSpec || categories.size !== classifications.length || patches.size !== componentUpdates.length ||
+          [...categories.keys(), ...patches.keys()].some((id) => !eventSpec.menuPlan.some((component) => component.componentId === id))) {
+          return reply.code(422).send({ message: "Die Änderungen müssen vorhandene Komponenten eindeutig benennen." });
+        }
+        for (const [componentId, patch] of patches) {
+          const component = eventSpec.menuPlan.find(item => item.componentId === componentId)!;
+          if ((has(patch, "purchasedElements") || has(patch, "notes")) && !(patch.productionMode ?? component.productionDecision?.mode)) {
+            return reply.code(422).send({ message: "Zukaufelemente und Herstellungsnotizen benötigen eine ausdrückliche Herstellungsentscheidung." });
+          }
+          if (patch.recipeOverrideId && !await repository.get(actor, patch.recipeOverrideId)) {
+            return reply.code(422).send({ message: "Das ausgewählte Rezept ist in der Rezeptbibliothek dieses Betriebs nicht vorhanden." });
+          }
         }
         if (!["pending_review", "superseded"].includes(draft.status) || input.expectedRevision !== draft.revision) {
           return reply.code(409).send({ message: "Die Produktionsrevision ist nicht mehr offen oder wurde zwischenzeitlich geändert." });
@@ -2827,14 +2860,63 @@ export function registerProductionArtifactRoutes(
         if (!sourceReviewCards) {
           return reply.code(422).send({ message: "Ein unabhängiger Prüfpunkt verweist auf ein zu ersetzendes Artefakt und muss zuerst geklärt werden." });
         }
+        const revisedSchedule = schedule as AcceptedEventSpec["event"]["schedule"];
+        const scheduleChanged = revisedSchedule !== undefined && !areJsonValuesEqual(eventSpec.event.schedule ?? [], revisedSchedule);
+        if (scheduleChanged) {
+          for (const card of sourceReviewCards) {
+            const target = card.targetPath?.match(/^\$\.draftArtifacts\.eventSpec\.event\.schedule(?:\[(\d+)\])?(?:[.\[]|$)/);
+            if (!target) continue;
+            const index = target[1] === undefined ? undefined : Number(target[1]);
+            const originalPeriod = index === undefined ? undefined : eventSpec.event.schedule?.[index];
+            const revisedPeriod = index === undefined ? undefined : revisedSchedule?.[index];
+            // A surviving index alone does not identify the same service phase.
+            // Keep its independent obligation only when the entire period survives unchanged.
+            if (!originalPeriod || !revisedPeriod || !areJsonValuesEqual(originalPeriod, revisedPeriod)) {
+              return reply.code(422).send({ message: "Eine unabhängige Prüfpflicht verweist auf einen geänderten oder entfernten Zeitabschnitt. Bitte diese Zeitangabe zuerst klären." });
+            }
+          }
+        }
+        const remainingUncertainties = scheduleChanged ? eventSpec.uncertainties?.filter(item => !(
+          item.field === "event.schedule" && item.severity === "low" &&
+          item.suggestedQuestion === "Wie lautet das verbindliche Zeitfenster?" &&
+          /^Zeitangabe in "[\s\S]*" ist nicht als vollständiger Termin belastbar\.$/.test(item.message)
+        )) : eventSpec.uncertainties;
+        // Only the known extraction question is answered by this control. Source
+        // constraints and independently authored time questions stay open.
+        for (const card of sourceReviewCards) {
+          const target = card.targetPath?.match(/^\$\.draftArtifacts\.eventSpec\.uncertainties\[(\d+)\](.*)$/);
+          if (!target) continue;
+          const question = eventSpec.uncertainties?.[Number(target[1])];
+          const index = question ? remainingUncertainties?.indexOf(question) ?? -1 : -1;
+          if (index < 0) return reply.code(422).send({ message: "Eine unabhängige Prüfpflicht zur Zeitangabe muss zuerst geklärt werden." });
+          card.targetPath = `$.draftArtifacts.eventSpec.uncertainties[${index}]${target[2]}`;
+        }
         const revisedEventSpec = validateAcceptedEventSpec({
           ...eventSpec,
-          menuPlan: eventSpec.menuPlan.map((component) => ({
-            ...component,
-            ...(categories.has(component.componentId) ? { menuCategory: categories.get(component.componentId) } : {})
-          }))
+          ...(revisedSchedule ? { event: { ...eventSpec.event, schedule: revisedSchedule } } : {}),
+          ...(remainingUncertainties ? { uncertainties: remainingUncertainties } : {}),
+          menuPlan: eventSpec.menuPlan.map((component) => {
+            const patch = patches.get(component.componentId);
+            const decisionChanged = patch && ["productionMode", "purchasedElements", "notes"].some(key => has(patch, key));
+            return {
+              ...component,
+              ...(categories.has(component.componentId) ? { menuCategory: categories.get(component.componentId) } : {}),
+              ...(patch && has(patch, "recipeOverrideId") ? { recipeOverrideId: patch.recipeOverrideId || undefined } : {}),
+              ...(decisionChanged ? { productionDecision: {
+                ...component.productionDecision,
+                ...(has(patch, "productionMode") ? { mode: patch.productionMode } : {}),
+                ...(has(patch, "purchasedElements") ? { purchasedElements: patch.purchasedElements } : {}),
+                ...(has(patch, "notes") ? { notes: patch.notes } : {})
+              } } : {})
+            };
+          })
         });
-        const commandHash = hashText(stableJson({ caseId, classifications: [...categories].sort(([left], [right]) => left.localeCompare(right)) }));
+        // Keep the existing category-only command identity stable for interrupted retries.
+        const commandHash = hashText(stableJson({ caseId, classifications: [...categories].sort(([left], [right]) => left.localeCompare(right)),
+          ...(patches.size ? { componentUpdates: [...patches.values()].sort((left, right) => left.componentId.localeCompare(right.componentId)) } : {}),
+          ...(schedule ? { eventSchedule: schedule } : {})
+        }));
+        const planningChange = patches.size > 0 || Boolean(schedule);
         const revision = validateProductionDraft({
           ...draft,
           draftId: productionDraftRevisionCommandIdentity(actor.businessId, draft, commandHash).draftId,
@@ -2842,7 +2924,7 @@ export function registerProductionArtifactRoutes(
           supersedesDraftId: draft.draftId,
           createdAt: new Date().toISOString(),
           status: "pending_review",
-          // Operator classifications amend the canonical snapshot, never the accepted offer.
+          // Explicit operator edits amend the canonical snapshot, never the accepted offer.
           // Derived artifacts and their decisions must be regenerated from this revision.
           draftArtifacts: {
             eventSpec: revisedEventSpec,
@@ -2851,8 +2933,8 @@ export function registerProductionArtifactRoutes(
           },
           reviewCards: [...sourceReviewCards, {
             cardId: "card-classification-event-spec", kind: "event_data",
-            title: "Eventdaten und Klassifikationen prüfen",
-            summary: "Explizite Komponentenkategorien ergänzt. Produktionsentwurf erneut vorbereiten und prüfen.",
+            title: planningChange ? "Eventdaten und Herstellungsangaben prüfen" : "Eventdaten und Klassifikationen prüfen",
+            summary: planningChange ? "Explizite Herstellungsangaben oder Zeitfenster geändert. Produktionsentwurf erneut vorbereiten und prüfen." : "Explizite Komponentenkategorien ergänzt. Produktionsentwurf erneut vorbereiten und prüfen.",
             decision: "pending", requiredApproval: true,
             targetPath: "$.draftArtifacts.eventSpec"
           }]
@@ -2877,11 +2959,11 @@ export function registerProductionArtifactRoutes(
               } else if (!areJsonValuesEqual(currentSource, { ...draft, status: "superseded" })) {
                 return undefined;
               }
-              await scope.appendRevisionEvent(draft, existing, "Komponentenkategorien ergänzt; neue Produktionsrevision zur Prüfung erstellt.");
+              await scope.appendRevisionEvent(draft, existing, planningChange ? "Herstellungsangaben oder Zeitfenster geändert; neue Produktionsrevision zur Prüfung erstellt." : "Komponentenkategorien ergänzt; neue Produktionsrevision zur Prüfung erstellt.");
               return existing;
             }
             if (!await scope.commitPreparedDraft(draft, revision)) return undefined;
-            await scope.appendRevisionEvent(draft, revision, "Komponentenkategorien ergänzt; neue Produktionsrevision zur Prüfung erstellt.");
+            await scope.appendRevisionEvent(draft, revision, planningChange ? "Herstellungsangaben oder Zeitfenster geändert; neue Produktionsrevision zur Prüfung erstellt." : "Komponentenkategorien ergänzt; neue Produktionsrevision zur Prüfung erstellt.");
             return revision;
           }
         );
@@ -2892,9 +2974,10 @@ export function registerProductionArtifactRoutes(
           action: "production.production_draft_revision_created", entityType: "ProductionDraft",
           entityId: committed.draftId, actor, at: committed.createdAt,
           idempotencyKey: `production-draft-revision:${committed.draftId}`,
-          summary: "Explizite Komponentenkategorien in neuer ProductionDraft-Revision gespeichert.",
+          summary: planningChange ? "Explizite Herstellungsangaben oder Zeitfenster in neuer ProductionDraft-Revision gespeichert." : "Explizite Komponentenkategorien in neuer ProductionDraft-Revision gespeichert.",
           details: compactAuditDetails({ draftId: committed.draftId, supersedesDraftId: draft.draftId,
             classificationCount: categories.size, changeRequestHash: commandHash,
+            ...(planningChange ? { componentUpdateCount: patches.size, scheduleChanged } : {}),
             humanApprovalRequired: true, writesProductObject: false })
         });
         return reply.code(201).send({ draft: projectProductionDraft(actor, committed) });
