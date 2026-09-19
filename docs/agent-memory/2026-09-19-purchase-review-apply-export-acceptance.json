@@ -213,8 +213,18 @@
       "rowCount": 5,
       "sha256": "29e3dbc16ac9b4e14b8c23b9f6b3ffc5478ffd5776937c411b88dd7675bd2171",
       "downloadedFileMatchesEvidenceCopy": true,
-      "wrapperExitCode": 1,
-      "wrapperLimit": "The Playwright wrapper returned 1 after logging both download-started and download-completed events; both files exist, are byte-identical and were parsed successfully."
+      "wrapperAttempts": [
+        {
+          "startedAt": "2026-09-19T19:49:52.369Z",
+          "exitCode": 1
+        },
+        {
+          "startedAt": "2026-09-19T19:50:58.481Z",
+          "exitCode": 0
+        }
+      ],
+      "finalWrapperExitCode": 0,
+      "wrapperLimit": "The first Playwright wrapper attempt returned 1 after logging download events; the identical browser download retry returned 0. The downloaded file and evidence copy are byte-identical and were parsed successfully."
     },
     "contentLimitsVisible": [
       "recipe status remains review_required / Prüfung nötig",
