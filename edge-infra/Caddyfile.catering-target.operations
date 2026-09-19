@@ -2,23 +2,6 @@
 	email {$CADDY_EMAIL}
 }
 
-# Importing exactly one of these snippets keeps the operational switch small and
-# makes a missing or unknown mode a configuration error instead of open access.
-(locked) {
-	@locked_non_read not method GET HEAD
-	respond @locked_non_read 423
-
-	@locked_unknown_read {
-		method GET HEAD
-		not path / /index.html /favicon.ico /assets/* /api/intake/health /api/offers/health /api/production/health /api/exports/health /api/intake/v1/intake/requests /api/intake/v1/intake/requests/* /api/intake/v1/intake/specs /api/intake/v1/intake/specs/* /api/offers/v1/offers/cases /api/offers/v1/offers/cases/* /api/offers/v1/offers/drafts /api/offers/v1/offers/drafts/* /api/offers/v1/offers/recipes /api/offers/v1/offers/recipes/* /api/production/v1/production/cases /api/production/v1/production/cases/* /api/production/v1/production/plans /api/production/v1/production/plans/* /api/production/v1/production/purchase-lists /api/production/v1/production/purchase-lists/*
-	}
-	respond @locked_unknown_read 404
-}
-
-(enabled) {
-	header -X-Catering-Writer-Gate
-}
-
 {$CATERING_PUBLIC_HOST} {
 	route {
 		@outside_operator not remote_ip {$CATERING_OPERATOR_SOURCE_IPV4}/32
@@ -28,7 +11,19 @@
 			{$CATERING_BASIC_AUTH_USER} {$CATERING_BASIC_AUTH_PASSWORD_HASH}
 		}
 
-		import {$CATERING_WRITER_MODE}
+		# Anything other than the exact protected value "enabled" remains locked.
+		@locked_non_read {
+			not method GET HEAD
+			not vars {env.CATERING_WRITER_MODE} enabled
+		}
+		respond @locked_non_read 423
+
+		@locked_unknown_read {
+			method GET HEAD
+			not path / /index.html /favicon.ico /assets/* /api/intake/health /api/offers/health /api/production/health /api/exports/health /api/intake/v1/intake/requests /api/intake/v1/intake/requests/* /api/intake/v1/intake/specs /api/intake/v1/intake/specs/* /api/offers/v1/offers/cases /api/offers/v1/offers/cases/* /api/offers/v1/offers/drafts /api/offers/v1/offers/drafts/* /api/offers/v1/offers/recipes /api/offers/v1/offers/recipes/* /api/production/v1/production/cases /api/production/v1/production/cases/* /api/production/v1/production/plans /api/production/v1/production/plans/* /api/production/v1/production/purchase-lists /api/production/v1/production/purchase-lists/*
+			not vars {env.CATERING_WRITER_MODE} enabled
+		}
+		respond @locked_unknown_read 404
 
 		reverse_proxy http://web:8081 {
 			header_up Host {$CATERING_PUBLIC_HOST}

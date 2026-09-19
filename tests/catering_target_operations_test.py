@@ -55,13 +55,14 @@ class TargetOperations(unittest.TestCase):
         self.assertIn('method GET HEAD', route)
         self.assertIn('/api/intake/health', route)
         self.assertIn('/api/production/v1/production/cases/*', route)
-        self.assertIn('{$CATERING_WRITER_MODE}', route)
+        self.assertIn('not vars {env.CATERING_WRITER_MODE} enabled', route)
         self.assertIn('respond @locked_non_read 423', route)
         self.assertIn('respond @locked_unknown_read 404', route)
         self.assertIn('reverse_proxy http://web:8081', route)
         self.assertNotIn('catering-target.invalid', route)
         self.assertNotIn('tls internal', route)
         self.assertNotIn('CATERING_UPSTREAM', route)
+        self.assertNotIn('import {$CATERING_WRITER_MODE}', route)
 
     def test_probe_baselines_remain_non_restarting_and_portless(self):
         platform = json.loads(

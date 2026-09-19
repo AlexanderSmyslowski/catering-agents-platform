@@ -386,8 +386,9 @@ Probe- und Rücknahmebasis vorhanden:
   Hostnamen, `web:8081`, Betreiber-IP `/32` und Basic Auth. Modus `locked`
   lässt nur die dokumentierten UI-/Health-/Fachlesepfade mit `GET`/`HEAD` zum
   Upstream; andere Leserouten enden mit 404 und alle Schreibmethoden mit 423
-  am Edge. Nur der exakte Modus `enabled` öffnet den vollständigen Apppfad.
-  Ein fehlender oder unbekannter Modus macht die Caddy-Konfiguration ungültig.
+  am Edge. Nur der exakte Modus `enabled` öffnet den vollständigen Apppfad;
+  jeder andere Wert bleibt gesperrt. Ein fehlender Wert lässt zusätzlich schon
+  das Rendern der finalen Compose-Kette scheitern.
 
 Vor Installation werden beide Base-/Override-Paare aus dem später akzeptierten
 Mergecommit gerendert. Der synthetische CI-Vertrag prüft exakte Images, Dienste,

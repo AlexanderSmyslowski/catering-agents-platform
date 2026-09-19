@@ -2070,10 +2070,10 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
   Probe-Manifeste umzudeuten: Plattform-Restartoverride, Edge-Override mit
   eigener Public-Bridge und ausschließlich 80/443 sowie finale Caddy-Route.
 - Der Edge verlangt Hostname, einzelne Betreiber-IPv4-Adresse, Basic Auth und
-  Writer-Modus ohne offene Defaults. `locked` lässt ausschließlich benannte
+  Writer-Modus ohne offene Defaults. Jeder Modus außer exakt `enabled` lässt ausschließlich benannte
   GET-/HEAD-Pfade zum festen Upstream `web:8081`; Schreibmethoden enden mit 423,
   unbekannte Leserouten mit 404. Nur `enabled` öffnet den Apppfad; unbekannte
-  Modi sind ungültig. Rücknahme setzt wieder `locked` und erstellt nur Edge neu.
+  Modi bleiben gesperrt. Rücknahme setzt wieder `locked` und erstellt nur Edge neu.
 - Gezielter Vertrag und Hosted-CI-Proof prüfen zusammengeführte Compose-
   Identitäten/Netze/Ports/Mounts/DB-Bindung und echte Caddy-Source-/Auth-/
   Lese-/Schreibsemantik. Die CI verwendet einen unveränderlich gepinnten

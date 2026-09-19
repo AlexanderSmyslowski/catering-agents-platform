@@ -119,18 +119,26 @@ def assert_compose_contract(env: dict[str, str]) -> None:
     ):
         raise AssertionError('final edge lost the protected Caddyfile mount')
 
-    missing_host = env.copy()
-    missing_host.pop('CATERING_PUBLIC_HOST')
-    result = run(
-        'docker', 'compose',
-        '-f', 'edge-infra/docker-compose.catering-target.json',
-        '-f', 'edge-infra/docker-compose.catering-target.operations.json',
-        'config', '--format', 'json',
-        env=missing_host,
-        check=False,
-    )
-    if result.returncode == 0:
-        raise AssertionError('edge Compose accepted a missing public hostname')
+    for variable in {
+        'CADDY_EMAIL',
+        'CATERING_PUBLIC_HOST',
+        'CATERING_OPERATOR_SOURCE_IPV4',
+        'CATERING_BASIC_AUTH_USER',
+        'CATERING_BASIC_AUTH_PASSWORD_HASH',
+        'CATERING_WRITER_MODE',
+    }:
+        missing = env.copy()
+        missing.pop(variable)
+        result = run(
+            'docker', 'compose',
+            '-f', 'edge-infra/docker-compose.catering-target.json',
+            '-f', 'edge-infra/docker-compose.catering-target.operations.json',
+            'config', '--format', 'json',
+            env=missing,
+            check=False,
+        )
+        if result.returncode == 0:
+            raise AssertionError(f'edge Compose accepted missing required input: {variable}')
 
 
 def caddy_env(
@@ -179,7 +187,7 @@ def http_request(
     authorization: str | None = None,
     path: str = '/api/intake/health',
 ) -> tuple[int, str]:
-    headers = ['Host: catering-operations.test', 'Connection: close']
+    headers = ['Host: catering-operations.example.invalid', 'Connection: close']
     if authorization:
         headers.append(f'Authorization: Basic {authorization}')
     request = '\r\n'.join([f'{method} {path} HTTP/1.1', *headers, '', ''])
@@ -208,10 +216,16 @@ def wait_for_http(client: str, authorization: str) -> None:
     raise AssertionError(f'edge/backend did not become ready: {last_error}')
 
 
-def run_edge(name: str, ingress: str, public: str, env: dict[str, str]) -> None:
+def run_edge(
+    name: str,
+    ingress: str,
+    public: str,
+    env: dict[str, str],
+    caddyfile: Path,
+) -> None:
     command = [
         'docker', 'run', '--detach', '--name', name, '--network', ingress,
-        '--volume', f'{ROOT / "edge-infra/Caddyfile.catering-target.operations"}:/etc/caddy/Caddyfile:ro',
+        '--volume', f'{caddyfile}:/etc/caddy/Caddyfile:ro',
     ]
     for variable in (
         'CADDY_EMAIL', 'CATERING_PUBLIC_HOST', 'CATERING_OPERATOR_SOURCE_IPV4',
@@ -239,6 +253,12 @@ def assert_caddy_runtime() -> None:
         with tempfile.TemporaryDirectory(prefix='catering-ops-') as temp_dir:
             backend_config = Path(temp_dir) / 'Caddyfile'
             backend_config.write_text('{\n\tauto_https off\n}\n:8081 {\n\trespond "upstream-reached" 200\n}\n')
+            final_route = (ROOT / 'edge-infra/Caddyfile.catering-target.operations').read_text()
+            site_marker = '{$CATERING_PUBLIC_HOST} {'
+            if final_route.count(site_marker) != 1:
+                raise AssertionError('final Caddy route has an ambiguous site address')
+            runtime_route = Path(temp_dir) / 'Caddyfile.edge-http-fixture'
+            runtime_route.write_text(final_route.replace(site_marker, f'http://{site_marker}', 1))
             run(
                 'docker', 'run', '--detach', '--name', backend, '--network', ingress,
                 '--network-alias', 'web', '--volume', f'{backend_config}:/etc/caddy/Caddyfile:ro',
@@ -259,13 +279,8 @@ def assert_caddy_runtime() -> None:
             ).stdout.strip()
             authorization = base64.b64encode(b'operator-fixture:synthetic-password').decode()
 
-            locked_env = caddy_env(
-                password_hash,
-                'locked',
-                allowed_ip,
-                public_host='http://catering-operations.test',
-            )
-            run_edge(edge, ingress, public, locked_env)
+            locked_env = caddy_env(password_hash, 'locked', allowed_ip)
+            run_edge(edge, ingress, public, locked_env, runtime_route)
             wait_for_http(allowed, authorization)
             status, _ = http_request(denied, 'GET', authorization)
             if status != 403:
@@ -286,28 +301,31 @@ def assert_caddy_runtime() -> None:
                 if status != 423 or 'upstream-reached' in response:
                     raise AssertionError(f'locked write was not rejected before upstream: {method} {status}')
 
-            run('docker', 'container', 'rm', '--force', edge)
-            enabled_env = caddy_env(
-                password_hash,
-                'enabled',
-                allowed_ip,
-                public_host='http://catering-operations.test',
-            )
-            run_edge(edge, ingress, public, enabled_env)
+            run('docker', 'container', 'rm', '--force', '--volumes', edge)
+            enabled_env = caddy_env(password_hash, 'enabled', allowed_ip)
+            run_edge(edge, ingress, public, enabled_env, runtime_route)
             wait_for_http(allowed, authorization)
             status, response = http_request(allowed, 'POST', authorization)
             if status != 200 or 'upstream-reached' not in response:
                 raise AssertionError(f'explicit writer enable did not reach upstream: {status}')
 
-            run('docker', 'container', 'rm', '--force', edge)
-            run_edge(edge, ingress, public, locked_env)
+            run('docker', 'container', 'rm', '--force', '--volumes', edge)
+            run_edge(edge, ingress, public, locked_env, runtime_route)
             wait_for_http(allowed, authorization)
             status, response = http_request(allowed, 'POST', authorization)
             if status != 423 or 'upstream-reached' in response:
                 raise AssertionError(f'writer rollback did not restore the lock: {status}')
+
+            run('docker', 'container', 'rm', '--force', '--volumes', edge)
+            invalid_env = caddy_env(password_hash, 'missing-*.caddy', allowed_ip)
+            run_edge(edge, ingress, public, invalid_env, runtime_route)
+            wait_for_http(allowed, authorization)
+            status, response = http_request(allowed, 'POST', authorization)
+            if status != 423 or 'upstream-reached' in response:
+                raise AssertionError(f'invalid writer mode did not remain locked: {status}')
     finally:
         for container in containers:
-            run('docker', 'container', 'rm', '--force', container, check=False)
+            run('docker', 'container', 'rm', '--force', '--volumes', container, check=False)
         for network in networks:
             run('docker', 'network', 'rm', network, check=False)
 
@@ -327,7 +345,7 @@ def main() -> None:
     missing_host = locked_env.copy()
     missing_host.pop('CATERING_PUBLIC_HOST')
     caddy_validate(missing_host, expected_success=False)
-    caddy_validate(caddy_env(password_hash, 'unknown', '192.0.2.25'), expected_success=False)
+    caddy_validate(caddy_env(password_hash, 'missing-*.caddy', '192.0.2.25'), expected_success=True)
     caddy_validate(caddy_env(password_hash, 'locked', '0.0.0.0/0'), expected_success=False)
     assert_caddy_runtime()
     print('target operations compose and Caddy proof: PASS')
