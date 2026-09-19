@@ -861,6 +861,60 @@ describe("ProductionDraft apply", () => {
     }
   });
 
+  it("applies an authoritative offer-derived handoff when its Intake source anchor and event identity are unchanged", async () => {
+    const dataRoot = createDataRoot();
+    dataRoots.push(dataRoot);
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
+    const store = new ProductionStore({ rootDir: dataRoot });
+    const auditLog = new AuditLogStore({ rootDir: dataRoot });
+    const intakeRecords = new InMemoryIntakeRecordsPort();
+    const persistedOffer = await createPersistedOfferHandoff(dataRoot);
+    const draft = {
+      ...await buildDraft(
+        "production-draft-apply-offer-derived-handoff",
+        persistedOffer.handoff.eventSpecSnapshot
+      ),
+      source: {
+        kind: "manual_import" as const,
+        receivedAt: "2026-07-01T12:00:00.000Z",
+        sourceRef: `offer-handoff:${persistedOffer.handoff.handoffId}`
+      }
+    };
+    const canonicalIntakeSpec = structuredClone(persistedOffer.handoff.eventSpecSnapshot);
+    canonicalIntakeSpec.lifecycle = { commercialState: "manual" };
+    canonicalIntakeSpec.sourceLineage = canonicalIntakeSpec.sourceLineage.map((source) => ({
+      ...source,
+      sourceType: "manual_input" as const
+    }));
+    delete canonicalIntakeSpec.budgetContext;
+    const app = buildProductionApp({
+      dataRoot,
+      repository,
+      store,
+      auditLog,
+      intakeRecords,
+      handoffReader: { get: async (context, handoffId) => persistedOffer.store.getHandoff(context, handoffId) },
+      trustedActorSecret: TRUSTED_SECRET,
+      env: { CATERING_DEV_AUTH: "1" }
+    });
+    await linkProductionCaseToDraft(app, store, draft, persistedOffer.handoff.handoffId);
+
+    try {
+      const response = await importApproveAndApply(app, store, draft, intakeRecords, canonicalIntakeSpec);
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json<{ eventSpec: AcceptedEventSpec }>().eventSpec).toMatchObject({
+        specId: persistedOffer.handoff.eventSpecSnapshot.specId,
+        event: persistedOffer.handoff.eventSpecSnapshot.event,
+        attendees: persistedOffer.handoff.eventSpecSnapshot.attendees,
+        sourceLineage: persistedOffer.handoff.eventSpecSnapshot.sourceLineage
+      });
+    } finally {
+      await app.close();
+      await persistedOffer.app.close();
+    }
+  });
+
   it("rejects Apply when no persisted Offer approval and Handoff evidence is linked", async () => {
     const dataRoot = createDataRoot();
     dataRoots.push(dataRoot);

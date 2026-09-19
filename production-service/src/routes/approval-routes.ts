@@ -198,13 +198,60 @@ function acceptedEventSpecConsistencyError(
   if (canonical.operationalArchive?.status === "archived") {
     return `AcceptedEventSpec ${candidate.specId} ist archiviert und nicht mehr für Apply freigegeben.`;
   }
-  if (!areJsonValuesEqual(canonical.sourceLineage, candidate.sourceLineage)) {
-    return `AcceptedEventSpec ${candidate.specId} besitzt eine inkonsistente sourceLineage.`;
+  if (areJsonValuesEqual(canonical, candidate)) return undefined;
+
+  const canonicalSourceReferences = canonical.sourceLineage.map((source) => source.reference);
+  const candidateSourceReferences = candidate.sourceLineage.map((source) => source.reference);
+  // Offer approval deliberately adds commercial terms and presentation labels;
+  // normalize only those known transformations before comparing the snapshot.
+  const candidateWithoutOfferCommercialization = structuredClone(candidate);
+  if (
+    canonical.lifecycle.commercialState === "manual" &&
+    candidate.lifecycle.commercialState === "accepted"
+  ) {
+    candidateWithoutOfferCommercialization.lifecycle = structuredClone(canonical.lifecycle);
   }
-  if (!areJsonValuesEqual(canonical, candidate)) {
-    return `AcceptedEventSpec ${candidate.specId} weicht vom unveränderlichen Handoff-Ursprung ab.`;
+  if (!canonical.budgetContext) {
+    delete candidateWithoutOfferCommercialization.budgetContext;
   }
-  return undefined;
+  if (
+    canonical.servicePlan.staffingStyle === "buffet_support" &&
+    candidate.servicePlan.staffingStyle === "lean_service"
+  ) {
+    candidateWithoutOfferCommercialization.servicePlan.staffingStyle =
+      canonical.servicePlan.staffingStyle;
+  }
+  candidateWithoutOfferCommercialization.menuPlan =
+    candidateWithoutOfferCommercialization.menuPlan.map((component) => {
+      const canonicalComponent = canonical.menuPlan.find((item) => item.componentId === component.componentId);
+      return canonicalComponent && component.label === `${canonicalComponent.label} kompakt`
+        ? { ...component, label: canonicalComponent.label }
+        : component;
+    });
+  const isCanonicalIntakeSnapshotAcceptedByOffer =
+    candidate.lifecycle.commercialState === "accepted" &&
+    areJsonValuesEqual(canonical.sourceLineage, candidate.sourceLineage) &&
+    areJsonValuesEqual(canonical, candidateWithoutOfferCommercialization);
+  if (isCanonicalIntakeSnapshotAcceptedByOffer) return undefined;
+
+  // Older offer drafts were derived from the same Intake request rather than
+  // carrying its AcceptedEventSpec byte-for-byte. The immutable, server-read
+  // Handoff remains authoritative only while its source references and core
+  // event identity still match the live, non-archived Intake record.
+  const isOfferDerivedFromCanonicalIntake =
+    canonical.schemaVersion === candidate.schemaVersion &&
+    canonical.sourceLineage.length > 0 &&
+    canonical.sourceLineage.every((source) => source.sourceType !== "offer_service") &&
+    candidate.sourceLineage.every((source) => source.sourceType === "offer_service") &&
+    areJsonValuesEqual(canonicalSourceReferences, candidateSourceReferences) &&
+    candidate.lifecycle.commercialState === "accepted" &&
+    areJsonValuesEqual(canonical.event, candidate.event) &&
+    areJsonValuesEqual(canonical.attendees, candidate.attendees);
+  if (isOfferDerivedFromCanonicalIntake) return undefined;
+
+  return !areJsonValuesEqual(canonical.sourceLineage, candidate.sourceLineage)
+    ? `AcceptedEventSpec ${candidate.specId} besitzt eine inkonsistente sourceLineage.`
+    : `AcceptedEventSpec ${candidate.specId} weicht vom unveränderlichen Handoff-Ursprung ab.`;
 }
 
 function isAuthorizedProductionAmendment(previous: AcceptedEventSpec, next: AcceptedEventSpec): boolean {
