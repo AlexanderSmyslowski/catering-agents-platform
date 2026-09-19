@@ -2,7 +2,9 @@
 
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+# Screen is user-global; canonical worktree identity keeps local lifecycle operations isolated.
+STACK_NAMESPACE="catering-$(printf '%s' "${ROOT_DIR}" | shasum -a 256 | cut -c 1-24)"
 RUNTIME_DIR="${ROOT_DIR}/.runtime/local-stack"
 LOG_DIR="${RUNTIME_DIR}/logs"
 DATA_ROOT="${CATERING_DATA_ROOT:-${ROOT_DIR}/data}"
@@ -22,6 +24,12 @@ if [[ "$#" -gt 0 ]]; then
 fi
 
 required_sessions=(
+  "${STACK_NAMESPACE}-ui"
+  "${STACK_NAMESPACE}-intake"
+  "${STACK_NAMESPACE}-offer"
+  "${STACK_NAMESPACE}-production"
+  "${STACK_NAMESPACE}-exports"
+  # Legacy sessions may still write the migration's input; detect them without taking ownership.
   "catering-ui"
   "catering-intake"
   "catering-offer"
@@ -268,10 +276,11 @@ stack_session_exists() {
   return 1
 }
 
-production_port_is_bound() {
+local_port_is_bound() {
+  local port="$1"
   local probe_status=0
   if command -v lsof >/dev/null 2>&1; then
-    lsof -nP -iTCP:3103 -sTCP:LISTEN >/dev/null 2>&1 || probe_status=$?
+    lsof -nP -iTCP:"${port}" -sTCP:LISTEN >/dev/null 2>&1 || probe_status=$?
     if [[ "${probe_status}" == "1" ]]; then
       return 1
     fi
@@ -282,8 +291,8 @@ production_port_is_bound() {
   node -e '
     const server = require("node:net").createServer();
     server.once("error", (error) => process.exit(error.code === "EADDRINUSE" ? 0 : 2));
-    server.listen(3103, "127.0.0.1", () => server.close(() => process.exit(1)));
-  ' || probe_status=$?
+    server.listen(Number(process.argv[1]), "127.0.0.1", () => server.close(() => process.exit(1)));
+  ' "${port}" || probe_status=$?
   if [[ "${probe_status}" == "1" ]]; then
     return 1
   fi
@@ -292,11 +301,14 @@ production_port_is_bound() {
 }
 
 production_writer_is_quiescent() {
-  if screen_session_exists "catering-production"; then
+  if screen_session_exists "${STACK_NAMESPACE}-production" || screen_session_exists "catering-production"; then
     echo "Eine bestehende Production-screen-Sitzung verhindert den sicheren Protokollwechsel." >&2
     return 1
   fi
-  if pgrep -f "${ROOT_DIR}/node_modules/.*production-service/src/server.ts" >/dev/null 2>&1; then
+  if ps -ax -o command= | awk -v root="${ROOT_DIR}/node_modules/" '
+    index($0, root) && index($0, "production-service/src/server.ts") { found=1 }
+    END { exit !found }
+  '; then
     echo "Ein bestehender Production-Prozess verhindert den sicheren Protokollwechsel." >&2
     return 1
   fi
@@ -305,7 +317,7 @@ production_writer_is_quiescent() {
     echo "Ein geladener Production-Supervisor verhindert den sicheren Protokollwechsel." >&2
     return 1
   fi
-  if production_port_is_bound; then
+  if local_port_is_bound 3103; then
     echo "Port 3103 ist bereits belegt; der Production-Protokollstand ist nicht verifizierbar." >&2
     return 1
   fi
@@ -318,6 +330,14 @@ if stack_session_exists || ! production_writer_is_quiescent; then
   exit 1
 fi
 
+# Health checks use fixed ports, so every endpoint must belong to this fresh startup.
+for port in 3101 3102 3103 3104 3200; do
+  if local_port_is_bound "${port}"; then
+    echo "Port ${port} ist bereits belegt oder nicht sicher prüfbar; lokaler Start abgebrochen." >&2
+    exit 1
+  fi
+done
+
 printf '%s\n' "${DATA_ROOT}" >"${DATA_ROOT_FILE}"
 echo "Lokale Datenwurzel: ${DATA_ROOT}"
 run_business_scope_migration
@@ -325,7 +345,7 @@ run_business_scope_migration
 start_service() {
   local name="$1"
   local command="$2"
-  local session_name="catering-${name}"
+  local session_name="${STACK_NAMESPACE}-${name}"
   local log_file="${LOG_DIR}/${name}.log"
 
   if screen_session_exists "${session_name}"; then

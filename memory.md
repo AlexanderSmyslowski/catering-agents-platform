@@ -1,7 +1,7 @@
 # memory.md
 
-version: 5.374
-date: 2026-08-31
+version: 5.388
+date: 2026-09-19
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
 
@@ -1854,3 +1854,12 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 - Die historischen Produkt- und UI-Test-Harnesses deklarieren den lokalen Headermodus nun ausdrücklich mit `CATERING_DEV_AUTH=1` oder modellieren den kanonischen Session-Handshake. Hosted- und No-Session-Verträge bleiben im Session-Modus und prüfen mit gültigem Rootsecret am Request HTTP 401; interne Service-Principals bleiben an ihre exakten Routen und den serverkonfigurierten Betrieb gebunden. Der unabhängig geprüfte Kompatibilitätsport enthält keine Produktcodeänderung und schwächt keinen Rollen-, Redaktions- oder Fail-Closed-Vertrag ab.
 - Der vollständige fachliche Kandidatenkorridor ohne exakt vier fachfremde Phase-3-/Post-Cutover-Vertragsdateien ist terminal grün: 391 Testdateien bestanden, eine übersprungen; 2.368 Tests bestanden, 14 übersprungen; Exit 0. `npm run build` einschließlich Typecheck und UI-Build sowie `git diff --check` sind grün.
 - Der ungekürzte Vollsuite-Versuch reproduzierte 19 bekannte Fehler in `post-cutover-evidence-workflow-contract.test.ts` und wartete anschließend in `platform-infra/scripts/catering-phase3-pilot.sh --resume`. Diese Infrastrukturabweichung wurde nicht verändert oder als Auth-Evidenz gewertet. Der reale externe Hosted-URL-/Proxy-Nachweis bleibt weiterhin offen; daraus folgt weder Gate-B-Gesamt-GO noch ein Git-, Merge-, Deployment-, Release- oder Tag-Auftrag.
+
+
+### 5.388 - 2026-09-19
+
+- Produktfortsetzung auf PR #694 (`codex/gate-c-local-session-rehearsal-20260919`) über der integrierten Produktbasis von PR #682; kein Main-Rebase oder Merge. Geprüfter Ausgangshead `0b3e59832c3012b1c210a9de12fb6d871541d11d`, Tree `1fb5336165aa2c9894e29c06399442a9a065c3da`. Neuere Main-Betriebsarbeit und fremde lokale Gate-A-Rezeptarbeit wurden erfasst und erhalten. Die Versionsnummer berücksichtigt die bereits separat auf main vorhandene Historie bis 5.387, ohne diese Betriebsarbeit in den Produktzweig zu kopieren.
+- Der begrenzte Angebotsstart-Fix ist lokal abgenommen: Installation nach unverändertem Lockfile; drei angeforderte Testdateien mit 49 Tests, ergänzender Vier-App-/Session-/Rollenpfad mit neun Tests, Typecheck und Build jeweils Exit 0. Der echte `browser:rehearsal:full-fresh` besteht mit Exit 0: leerer Angebotsstart auf Desktop/Mobil, synthetischer Angebotsfall und Übergabe bis zum fallgebundenen Produktionsentwurf, keine Konsolenfehler. Unberechtigte Cookie-/Header-/Bearer-/Rollenpfade bleiben 401/403; kein Berechtigungsvertrag gelockert.
+- Vor dem Browserstart wurde ausschließlich die lokale Start-/Stop-Verwaltung begrenzt korrigiert: Worktree-eigene Screen-Namen, exakte eigene Prozesszuordnung, keine globale LaunchAgent-Mutation, vorhandene Legacy-Writer als Lesesperren, alle fünf festen Ports vor Migration/Start geprüft, Runtime-Marker auf macOS über Trash. Fremde Dienste und vorhandene Daten bleiben erhalten. Der unabhängige Review hielt eine zwischenzeitlich verlorene Legacy-Sperre an; erst nach Regression, Korrektur und unabhängigem GO wurde gestartet. Sieben betroffene Testdateien mit 87 Tests und erneuter Build: Exit 0.
+- Die Browser-Evidenz bindet den Ausgangshead/Tree plus Lifecycle-Diff, neuen Ownership-Test und unverändertes Lockfile. Der bestehende Runner durchläuft vier frische Wurzeln, endet aber in allen Modi im Handoff-Zweig; daraus wird keine zusätzliche Answer-/Archiv-/Fehlupload-Abnahme behauptet. Details, Kommandos, Exitcodes und Fingerabdrücke: `docs/agent-memory/2026-09-19-gate-c-product-acceptance.md`.
+- Der Betreiber hat die Fortsetzung konkretisiert: vorhandenen Operatorweg gegen Produktzielvertrag und historische Referenzfallnachweise abgleichen; anschließend den ersten unbelegten technischen Übergang synthetisch prüfen. Nächster begrenzter Nachweis ist Produktionsentwurf → Vorbereitung am erhaltenen Browserfall. Eine echte menschliche Küchenprüfung bleibt offen. STR-001 v1.1 ist gelesen; CateringOS ist laut Betreiber noch nicht geschäftlich produktiv eingesetzt. Kein Gesamt-GO, kein Servereingriff, Merge, Deployment, Echtdaten- oder kostenpflichtiger Providerlauf.
