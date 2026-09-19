@@ -105,8 +105,18 @@ def assert_compose_contract(env: dict[str, str]) -> None:
         raise AssertionError('public edge bridge rendered as internal')
     if edge['networks']['catering_public']['enable_ipv6']:
         raise AssertionError('public edge bridge unexpectedly enables IPv6')
-    mounts = {mount['target']: (mount['source'], mount['read_only']) for mount in edge_service['volumes']}
-    if mounts.get('/etc/caddy/Caddyfile') != ('/opt/catering-edge/Caddyfile', True):
+    caddy_mounts = [
+        mount for mount in edge_service['volumes']
+        if mount['target'] == '/etc/caddy/Caddyfile'
+    ]
+    if len(caddy_mounts) != 1:
+        raise AssertionError('final edge has an ambiguous Caddyfile mount')
+    caddy_mount = caddy_mounts[0]
+    if (
+        caddy_mount.get('type') != 'bind'
+        or caddy_mount.get('source') != '/opt/catering-edge/Caddyfile'
+        or caddy_mount.get('read_only') is not True
+    ):
         raise AssertionError('final edge lost the protected Caddyfile mount')
 
     missing_host = env.copy()
