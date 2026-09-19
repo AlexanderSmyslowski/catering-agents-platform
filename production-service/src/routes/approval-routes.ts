@@ -10,6 +10,7 @@ import {
   createApprovalRequestRecord,
   createCuratedOfferDraft,
   createOfferDraft,
+  createOfferDraftFromAcceptedEventSpec,
   createProductionApplyManifest,
   normalizeEventRequestToSpec,
   resolveMinimalMvpRoleFromTrustedActor,
@@ -197,7 +198,8 @@ function acceptedEventSpecConsistencyError(
   candidate: AcceptedEventSpec,
   approvedCandidate: AcceptedEventSpec,
   sourceRequest?: EventRequest,
-  selectedOfferVariantId?: string
+  selectedOfferVariantId?: string,
+  sourceAcceptedEventSpecSnapshot?: AcceptedEventSpec
 ): string | undefined {
   if (!canonical) return `AcceptedEventSpec ${candidate.specId} fehlt im autoritativen Intake.`;
   if (canonical.specId !== candidate.specId) {
@@ -210,36 +212,23 @@ function acceptedEventSpecConsistencyError(
 
   const canonicalSourceReferences = canonical.sourceLineage.map((source) => source.reference);
   const candidateSourceReferences = candidate.sourceLineage.map((source) => source.reference);
-  // Offer approval deliberately adds commercial terms and presentation labels;
-  // normalize only those known transformations before comparing the snapshot.
-  const candidateWithoutOfferCommercialization = structuredClone(candidate);
-  if (
-    canonical.lifecycle.commercialState === "manual" &&
-    candidate.lifecycle.commercialState === "accepted"
-  ) {
-    candidateWithoutOfferCommercialization.lifecycle = structuredClone(canonical.lifecycle);
-  }
-  if (canonical.lifecycle.commercialState === "manual" && !canonical.budgetContext) {
-    delete candidateWithoutOfferCommercialization.budgetContext;
-  }
-  if (
-    canonical.servicePlan.staffingStyle === "buffet_support" &&
-    candidate.servicePlan.staffingStyle === "lean_service"
-  ) {
-    candidateWithoutOfferCommercialization.servicePlan.staffingStyle =
-      canonical.servicePlan.staffingStyle;
-  }
-  candidateWithoutOfferCommercialization.menuPlan =
-    candidateWithoutOfferCommercialization.menuPlan.map((component) => {
-      const canonicalComponent = canonical.menuPlan.find((item) => item.componentId === component.componentId);
-      return canonicalComponent && component.label === `${canonicalComponent.label} kompakt`
-        ? { ...component, label: canonicalComponent.label }
-        : component;
-    });
+  const sourceOfferDraft = sourceAcceptedEventSpecSnapshot
+    ? createOfferDraftFromAcceptedEventSpec(sourceAcceptedEventSpecSnapshot)
+    : undefined;
+  const sourceOfferVariant = sourceOfferDraft?.variantSet.find(
+    (variant) => variant.variantId === selectedOfferVariantId
+  );
+  const expectedAcceptedSourceOfferSnapshot = sourceOfferVariant
+    ? {
+        ...structuredClone(sourceOfferVariant.proposedEventSpec),
+        lifecycle: { commercialState: "accepted" as const }
+      }
+    : undefined;
   const isCanonicalIntakeSnapshotAcceptedByOffer =
-    candidate.lifecycle.commercialState === "accepted" &&
-    areJsonValuesEqual(canonical.sourceLineage, candidate.sourceLineage) &&
-    areJsonValuesEqual(canonical, candidateWithoutOfferCommercialization);
+    Boolean(sourceAcceptedEventSpecSnapshot) &&
+    areJsonValuesEqual(canonical, sourceAcceptedEventSpecSnapshot) &&
+    Boolean(expectedAcceptedSourceOfferSnapshot) &&
+    areJsonValuesEqual(candidate, expectedAcceptedSourceOfferSnapshot);
   if (isCanonicalIntakeSnapshotAcceptedByOffer) return undefined;
 
   // Older offer drafts were derived from the Intake request rather than its
@@ -726,7 +715,14 @@ async function validateHandoffSnapshot(
   actor: TrustedActor,
   approvedSpec: ApprovedProductionSpec,
   scope?: ProductionCaseApplyScope
-): Promise<{ conflict: string } | { rootSpec: AcceptedEventSpec; selectedOfferVariantId: string }> {
+): Promise<
+  { conflict: string } |
+  {
+    rootSpec: AcceptedEventSpec;
+    selectedOfferVariantId: string;
+    sourceAcceptedEventSpecSnapshot?: AcceptedEventSpec;
+  }
+> {
   const getDraft = (draftId: string) => scope ? scope.getDraft(draftId) : store.getProductionDraft(actor, draftId);
   const caseIdForDraft = async (draftId: string) => {
     try { return await store.findCaseIdForArtifact(actor, draftId); }
@@ -799,7 +795,10 @@ async function validateHandoffSnapshot(
   }
   return {
     rootSpec: structuredClone(handoff.eventSpecSnapshot),
-    selectedOfferVariantId: handoff.source.selectedVariantId
+    selectedOfferVariantId: handoff.source.selectedVariantId,
+    ...(handoff.sourceAcceptedEventSpecSnapshot
+      ? { sourceAcceptedEventSpecSnapshot: structuredClone(handoff.sourceAcceptedEventSpecSnapshot) }
+      : {})
   };
 }
 
@@ -1819,7 +1818,8 @@ export function registerProductionApprovalRoutes(
             lockedHandoffValidation.rootSpec,
             eventSpec,
             sourceRequest,
-            lockedHandoffValidation.selectedOfferVariantId
+            lockedHandoffValidation.selectedOfferVariantId,
+            lockedHandoffValidation.sourceAcceptedEventSpecSnapshot
           );
           if (eventSpecConflict) conflicts.push(eventSpecConflict);
 
