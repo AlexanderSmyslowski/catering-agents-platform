@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import re
 import secrets
+import select
 import subprocess
 import tempfile
 import time
@@ -194,7 +195,6 @@ def http_request(
     process = subprocess.Popen(
         ['docker', 'exec', '--interactive', client, 'nc', '-w', '4', 'edge', '80'],
         cwd=ROOT,
-        text=True,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
@@ -202,17 +202,35 @@ def http_request(
     if process.stdin is None or process.stdout is None:
         process.kill()
         raise AssertionError('client streams were not created')
-    process.stdin.write(request)
+    process.stdin.write(request.encode())
     process.stdin.flush()
+    response = bytearray()
+    deadline = time.monotonic() + 6
+    while b'\r\n\r\n' not in response:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        readable, _, _ = select.select([process.stdout], [], [], remaining)
+        if not readable:
+            break
+        chunk = os.read(process.stdout.fileno(), 4096)
+        if not chunk:
+            break
+        response.extend(chunk)
     try:
-        process.wait(timeout=6)
-    except subprocess.TimeoutExpired:
+        process.stdin.close()
+    except BrokenPipeError:
+        pass
+    if b'\r\n\r\n' not in response:
         process.kill()
         process.wait()
         raise AssertionError(f'client timed out waiting for the HTTP response to {method}')
-    finally:
-        process.stdin.close()
-    output = process.stdout.read()
+    try:
+        process.wait(timeout=1)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait()
+    output = response.decode(errors='replace')
     match = re.search(r'^HTTP/1\.[01] (\d{3})', output, re.MULTILINE)
     if not match:
         raise AssertionError(f'client did not receive an HTTP response for {method}: {output}')
