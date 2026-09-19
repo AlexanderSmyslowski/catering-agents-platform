@@ -76,3 +76,5 @@ Aktueller Handoff-Override – 2026-08-15
 
 
 Aktueller Zusatzauftrag 19.09.2026: Isolierter Catering-Zielaufbau, siehe [versionierte Übergabe](2026-09-19-catering-target-build.md). Die dort ausdrücklich erteilte begrenzte Infrastrukturfreigabe ergänzt historische Out-of-Scope-Aussagen dieses Dokuments. Keine Produktionsumschaltung.
+
+Stand nach Zielprobe19.09.2026: [versionierte Zielübergabe](2026-09-19-catering-target-build.md) enthält die erfolgreichen tatsächlichen Daten-, Backup-, Restore- und Alarmnachweise. Server166533273 niemals neu bestellen; keine Proben wiederholen. Installierter Code f6c0aee4/Tree56854bb7 bleibt gebunden, auch bei einem reinen Dokumentationsfolgecommit. **HOLD vor Produktionsumschaltung und automatischer Jobaktivierung.**

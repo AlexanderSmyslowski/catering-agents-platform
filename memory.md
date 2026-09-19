@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.388
+version: 5.389
 date: 2026-09-19
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -1989,3 +1989,25 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 - Kein DNS-/Proxy-Cutover, keine produktiven Zielwriter, kein Zielscheduler,
   keine Phase3. Abschluss ist erst mit echten Ziel-/Backup-/Restore-/Alarm-
   Nachweisen möglich. Die bisherigen Erfolge nicht erneut als Zielproof ausgeben.
+
+
+### 5.389 - 2026-09-19 — Isolierte Zielprobe abgeschlossen; HOLD vor Umschaltung
+
+- Server166533273 bereits beschafft und isoliert geprüft, keine zweite Bestellung.
+  Sieben unveränderte Produktionsimages/PG17.9; exakte vier Tabellen samt Daten-
+  und Schemavergleich aus Snapshot12:57:44UTC übernommen. Appgesundheit/Leserouten
+  erfolgreich, kein interaktiver Login oder schreibender Geschäftsdurchlauf behauptet.
+- Installierter Backupcode f6c0aee4b54209b30d7cb1cf36a4ea53908f1acb,
+  Tree56854bb7adcd8e08212d1c013967f0dd4faaa5c4. DraftPR693, CI35442024153/V1
+  alle4Jobs erfolgreich:2696Tests/14Skips, realer synthetischer Docker/Restic/Restore.
+- Genau ein Zielbackup und ein Offhost-Restore erfolgreich, jeExit0;
+  Snapshot6a96e397f8c25c2e4c713d3294c9e3ca9b774243578c20be9d80c6fe8ebdeab7,
+  finale gebundene Evidence und Cleanup validiert. Quellkopiezeit und
+  Zielbackupzeit getrennt halten. Attestationsfrist09.10.2026 unverändert.
+- Manueller Testalarm empfangsbestätigt und geschlossen; keine automatischen
+  Signale oder Scheduler. Ressourcen während echter Proben beobachtet,
+  keine Langzeit-/Spitzenlastgarantie. Vollständige Grenzen und Belege in
+  [versionierter Zielübergabe](docs/agent-memory/2026-09-19-catering-target-build.md).
+- Alter Host bleibt Writer. Kein Cutover, keine öffentlichen Zielports,
+  keine produktiven Zielschreibvorgänge, kein Merge oder Timerstart.
+  Daten-/Backup-/Restoreprobe nicht wegen Sessionwechsel wiederholen.
