@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.390
+version: 5.391
 date: 2026-09-19
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -2035,3 +2035,30 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
   keine behoben, statische Grenzen erhalten. Bestehende CI35445643679/V1 am
   Head7bed609 vollständig success. Kein neuer Produktcode, Budget3878/3911.
 - HOLD vor öffentlicher Umschaltung und automatischen Jobs. Kein Altserverzugriff.
+
+
+### 5.391 - 2026-09-19 — Begrenztes Catering-Betriebsübergangspaket
+
+- STR-001 v1.1 und die bestehende Zielübergabe wurden in einen ausführbaren
+  Übergangsablauf verdichtet; keine Host-, Daten-, DNS-, Zugangs-, Timer- oder
+  Monitoringmutation. Ziel bleibt Server166533273 mit denselben Images/PG17.9.
+- Finale Appbindung ist `catering_agents` ohne das aktive Operator-Override.
+  Die synthetische Test-DB bleibt getrennt und wird weder übernommen noch
+  gesichert. Finaler Vier-Tabellen-Dump, eindeutiger Writer und genau ein neuer
+  timergestarteter finaler Backup-/Restore-Nachweis ist festgelegt; kein
+  zusätzlicher manueller Ersatzstart. Vor Aktivierung sind Timerstempel und
+  bei möglichem Nachhollauf mindestens9300s bis zum nächsten Kalendertermin zu
+  prüfen; ohne Nachhollauf gilt die Reserve zum darauffolgenden Termin.
+- Kleinster Betriebsdelta: Restartpolicies für die vorhandenen Container,
+  eigener Edge auf 80/443 mit gültigem TLS, enger Betreiber-Quellbindung und nur
+  Edge auf einer Public-Bridge,
+  danach Heartbeat493066/Team569103 mit Cron300 und Provider300/300 sowie der
+  unveränderte Drei-Stunden-Timer. Die drei Betriebsartefakte sind noch nicht
+  implementiert; Probe-Compose bleibt Rücknahmebasis.
+- Der Reloadverlust ist image-/produktgebunden, nicht als DB-/Umzugsverlust
+  belegt und keine Aussage über PR682. Er bleibt Produktabnahmehindernis vor
+  geschäftlicher Nutzung, blockiert aber nicht diese technische Vorbereitung.
+- Rückweg vor Zielwrites darf den unveränderten Altstand reaktivieren; danach
+  nur nach geprüftem vollständigem Rücktransfer. PR693 bleibt Draft. CI
+  35449296866/V1 war bei Dokumentation noch laufend; Review und finaler CI-Head
+  bleiben zu binden. **HOLD vor Merge, Umschaltung und automatischen Jobs.**

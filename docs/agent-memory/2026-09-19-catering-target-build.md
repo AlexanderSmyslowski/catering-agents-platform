@@ -334,3 +334,226 @@ Belege im bestehenden lokalen Ordner: `target-operator-prepare-result-20260919.j
 Die erste SQL-Zählabfrage erwartete in der neuen DB noch nicht vorhandene
 Legacy-/Dokumenttabellen und scheiterte rein lesend; die Katalog-/Businessrecord-
 Abfrage danach belegt den tatsächlichen Zustand. Kein fehlgeschlagener Appwrite.
+
+## Begrenztes Betriebsübergangspaket — vorbereitet am 19.09.2026
+
+Dieses Paket konkretisiert den späteren Übergang; es führt ihn nicht aus.
+STR-001 v1.1, Blob `158ae4b9c37a18804d70c45b100241d56a87ebcf`,
+bleibt maßgeblich. PR #693 steht bei Erstellung dieses Abschnitts auf Head
+`64a80a74d08de23aaca346a02a787485682c9ed6`, Tree
+`43793910c4e157f75ba7c98d854a3d35de96a80c`. Der automatisch gestartete
+[CI-Lauf 35449296866/V1](https://github.com/AlexanderSmyslowski/catering-agents-platform/actions/runs/35449296866)
+war zu diesem Zeitpunkt noch nicht abgeschlossen; drei Jobs waren erfolgreich,
+`build-and-test` lief noch. Das ist kein grüner Gesamtstatus.
+
+### Produktbefund und Umzugsbezug
+
+Der Reload-/Wiederaufnahmefehler ist an die unveränderten App-/Webimage-IDs, das
+ausgelieferte Webartefakt und die getrennte synthetische Testdatenbank gebunden.
+Die Speicherung selbst blieb erhalten; Anfrage und Spezifikation waren über die
+vorhandenen API-Leserouten erneut lesbar. Dafür gibt es keinen Hinweis auf einen
+verlorenen Dump, eine fehlerhafte PostgreSQL-Übernahme, ein Netzwerkproblem oder
+eine falsche Ziel-Hostbindung. Ein **umzugsbedingter Datenverlust ist damit nicht
+erkennbar**. Die verbleibende Grenze ist wichtig: PR #682 wurde weder geprüft
+noch verändert. Der Befund beweist deshalb nicht, dass dessen Produktstand
+dasselbe Verhalten zeigt. Er blockiert die Behauptung einer vollständigen
+fachlichen Bedienabnahme, aber nicht die technische Vorbereitung der
+Serverentkopplung. Vor geschäftlicher Nutzung muss der Produktstrang den
+Reload-/Wiederaufnahmepfad eigenständig abnehmen.
+
+### Festgelegter Zielzustand und begrenztes Konfigurationsdelta
+
+| Bereich | Zielzustand | Noch vorzubereitende beziehungsweise auszuführende Änderung |
+|---|---|---|
+| Daten | `catering_agents` enthält den finalen konsistenten Stand des bisherigen Writers. | Das aktive Operator-Override wird aus der Compose-Kette entfernt. `catering_operator_probe_20260919` und seine synthetischen Records werden weder umbenannt noch in Dump, Restore, Backup oder Anwendung eingebunden. |
+| Anwendung | Dieselben sechs unveränderlichen Plattform-Images und PostgreSQL 17.9 laufen mit `/etc/catering-target/runtime.env`. | Ausschließlich ein Betriebs-Override setzt für die vorhandenen Dienste `restart: unless-stopped`; Images, Befehle, Schema und Appkonfiguration bleiben gleich. `docker.service` und dessen Bootstatus sind vor Ausführung frisch zu bestätigen. |
+| Zugang | Ein eigener Edge beendet gültiges TLS für den tatsächlich bestätigten Catering-Host und leitet ausschließlich auf `web:8081`. Eine frisch gebundene enge Betreiber-Quelladresse und Basic Auth liegen vor allen App-/API-Routen. | Der private `.invalid`-/Unixsocket-Probeweg wird nicht als Dauerzugang verwendet. Der aktuelle Repositorydefault `catering.the-one.catering` ist vor Freigabe gegen den effektiv betriebenen Hostnamen und die DNS-Zone zu bestätigen. Ein eigener öffentlicher Edge-Override veröffentlicht nur 80/443, erhält das exakte Caddy-Zielrouting und sperrt die Anwendung für alle nicht gebundenen Quellen, ohne die ACME-Prüfung zu umgehen. |
+| Netze | PostgreSQL und vier Fachdienste bleiben nur auf `catering_private`; Web bleibt auf `catering_private` und `catering_ingress`. | Nur der Edge erhält zusätzlich eine eigene nicht interne Public-Bridge für 80/443. Kein anderer Container erhält einen Hostport oder diese Bridge. Beide Appnetze bleiben `internal`, IPv6 aus und im isolierten IPv4-Gatewaymodus; die bestehende Egresssperre der Appdienste bleibt bestehen. |
+| Secrets | Nur die bereits begrenzten Catering-Werte werden verwendet. | Werte werden geschützt in den bestehenden root-only Env-/Policydateien gebunden; keine Übernahme fremder Proxy-, App- oder Providersecrets. Das befristete Betreiberzertifikat und der Test-Forward werden nicht verlängert oder als Produktionszugang übernommen. |
+| Sicherung | Der vollständige Vier-Tabellen-Scope sichert ausschließlich `catering_agents`. | Bestehende Backup-/Restore-Units bleiben bytegleich. Nach dem finalen Datenabgleich ist genau ein neuer vollständiger Backup-→Restore-Nachweis nötig, weil der historische Snapshot den finalen Datenstand und die Betriebsroute nicht belegt. |
+| Überwachung | Der lokale Beobachter bewertet die finale Evidence und Heartbeat 493066 ausschließlich als `backup_restore_health`. | Policy auf den Zielhost und den bestätigten Monitor binden; Cron exakt 300 Sekunden, Provider `period=300`, `grace=300`. Keine alte Shared-Host-Evidence und kein bloßes Lebenszeichen darf den Monitor grün halten. |
+
+Die noch nicht vorhandenen Betriebs-Overrides sind bewusst kleine
+Installationsartefakte, keine neue Orchestrierung: ein Plattform-Override für
+die Restartpolicies, ein Edge-Override für Restartpolicy/Public-Bridge/Ports
+und eine eigene Caddy-Datei für den bestätigten Host. Vor Installation müssen
+sie aus dem später akzeptierten Mergecommit gerendert und in einem synthetischen
+Compose-Gate auf exakte Images, Netzmitgliedschaften, Hostports und Mounts
+geprüft werden. PR #693 enthält diese drei Betriebsartefakte derzeit noch nicht;
+seine vorhandenen Target-Dateien bleiben die isolierte Probe- und Rücknahmebasis.
+
+### Ausführbare Übergangsreihenfolge
+
+1. **Aktualität und Freigabebindung.** Den freigegebenen PR-Head, Mergecommit,
+   installierbare Blobhashes, Ziel-ID 166533273, Images, Hostschlüssel,
+   Attestationsrestlaufzeit, DNS-Hostname/-TTL/-Kontrolle, Firewall und freien
+   Speicher frisch prüfen. Vor der Writer-Sperre zusätzlich Timerstempel,
+   `LastTriggerUSec`, `NextElapseUSecRealtime`, laufende Jobs und einen möglichen
+   Persistent-Nachhollauf lesend zuordnen; fehlende Stempel nicht erzeugen oder
+   verändern. Ist ein sofortiger Nachhollauf möglich, das Fenster nur wählen,
+   wenn bis zum nächsten Kalendertermin mindestens 9.300 Sekunden verbleiben.
+   Ist ein Nachhollauf belegbar ausgeschlossen, darf der ausgewählte nächste
+   reguläre Termin im Fenster liegen; sein darauffolgender Termin muss die
+   9.300-Sekunden-Reserve lassen. Die
+   Attestationen laufen am 09.10.2026 14:53:16 UTC aus; weniger als 48 Stunden
+   Restlaufzeit sperren den Start. Abgelaufene Probezugänge nicht erneuern oder
+   umgehen. Keine konkurrierenden Daten-, Backup-, Restore- oder
+   Deploymentvorgänge.
+2. **Schreibhoheit am Altbetrieb sperren.** Im angekündigten 60-minütigen
+   Planfenster ausschließlich die alten Catering-Writer und ihren
+   öffentlichen Schreibweg anhalten. PostgreSQL und fremde Anwendungen bleiben
+   unangetastet. Aktive DB-Verbindungen und den alten autoritativen Datenstand
+   festhalten; der alte Host bleibt bis zur Umschaltung Rückfallanker.
+3. **Finale Datenkopie.** Einen konsistenten vollständigen logischen Dump des
+   maßgeblichen Altstands mit den vorhandenen Größen-/Geheimnisgrenzen erzeugen,
+   geschützt übertragen und zunächst in eine neue, nicht von Apps verwendete
+   Ziel-DB restaurieren. Vier Tabellen, Schema, Migrationseintrag,
+   Inhaltsbindungen und ACLs vergleichen. Erst nach bestandenem Vergleich unter
+   ausgeschlossenen Appverbindungen die bisherige Zielkopie geschützt erhalten
+   und die neue DB als `catering_agents` schalten. Die Operator-Test-DB bleibt
+   getrennt und unreferenziert; sie wird in diesem Übergang nicht gelöscht.
+4. **Zielkonfiguration zunächst ohne öffentlichen Verkehr.** App/Web/Edge stoppen,
+   Operator-Override und temporären Relay aus der aktiven Kette nehmen. Den
+   Plattform-Restartoverride installieren und Plattform/DB mit den identischen
+   Images starten. Den bestehenden Ziel-Edge weiterhin ausschließlich in seiner
+   privaten, portlosen Basiskonfiguration starten; sein Caddy-Datenstand gehört
+   zum vertraglichen Backupscope. Intern Health, exakte Image-/DB-/Business-
+   bindung, Lesbarkeit, Restartpolicies und fehlende fremde Netz-/Volume-
+   Mitgliedschaften prüfen. Public-Bridge, öffentlicher Edge-Override und DNS
+   bleiben noch aus.
+5. **Finalen Edge und TLS bei weiter gesperrten Zielwrites herstellen.** Den
+   geprüften öffentlichen Edge-Override und die finale Caddy-Datei installieren,
+   ausschließlich Ziel-80/443 öffnen und den bestätigten Catering-DNS-Eintrag
+   auf `2.29.43.174` umschalten. Der finale Caddy-Vertrag lässt App-/API-Zugriffe
+   nur aus der frisch bestätigten engen Betreiber-Quelladresse und nach Basic
+   Auth zu; die ACME-Challenge bleibt erreichbar, ohne eine Approute zu öffnen.
+   Importierte alte Zugangswerte allein gelten nicht als Schreibsperre. Altwriter
+   bleiben gestoppt; der Betreiber führt bis Schritt 8 ausschließlich benannte
+   Leseprüfungen aus. Gültige Zertifikatskette, richtigen Hostnamen,
+   Quelladresssperre, Basic-Auth-Challenge, internen Upstream und Caddy-
+   Datenvolumes prüfen. Scheitert Zertifikatsausstellung, Zugriffsfence oder
+   Routing, vor jedem Zielwrite DNS auf den unveränderten Altweg zurückstellen
+   und Zielports schließen.
+6. **Genau einen timergestarteten finalen Backup-/Restorezyklus ausführen.** Die
+   unveränderten Originalunits installieren. Timerstempel, `LastTriggerUSec`,
+   `NextElapseUSecRealtime` und den in Schritt 1 gewählten Nachhollauf- oder
+   regulären Terminpfad samt zugehöriger 9.300-Sekunden-Reserve erneut lesen;
+   ein zwischenzeitlich neuer oder unklarer Zustand stoppt. Dann genau einmal
+   `systemctl enable --now catering-backup.timer`; kein zusätzliches
+   `start catering-backup.service`, kein Restorestart und keine Stempeländerung.
+   Systemd entscheidet über Nachhollauf oder nächste reguläre Fälligkeit. Beginnt
+   im begrenzten Fenster kein Lauf, vor Zielwrites zurücknehmen und ein neues
+   geeignetes Fenster wählen, statt manuell nachzustarten. Der eine tatsächliche
+   Timerlauf muss Backup und `OnSuccess`-Restore gegen den finalen Datenstand
+   samt finalem Edge/TLS ausführen. Snapshot, Source-/Host-/Scopebindung,
+   Readback, vier Tabellen, Caddy-Komponenten, Cleanup und finale Evidence
+   prüfen. Der historische Snapshot
+   `6a96e397f8c25c2e4c713d3294c9e3ca9b774243578c20be9d80c6fe8ebdeab7`
+   bleibt gültiger Probenachweis, wird aber nicht als dieser finale Nachweis
+   umetikettiert.
+7. **Echten Meldeweg prüfen.** Erst mit frischer finaler Evidence den
+   dedizierten Heartbeat 493066 exakt auf Team 569103, 300/300 und den bestätigten
+   Empfänger, alleinigen Sender, Signalbedeutung und Policywerte binden.
+   `provider_delay`, `escalation_delay`, `clock_margin` und `request_seconds`
+   müssen tatsächliche oder ausdrücklich bedingte Werte bleiben; NTP oder HTTP
+   200 ersetzt keine Garantie. Nur bei genügend verbleibender Evidence- und
+   Attestationsfrist Heartbeat 493066 ausdrücklich entpausieren, den Cron alle
+   300 Sekunden aktivieren und einen realen gesunden Ping samt Providerannahme
+   belegen. Den Ausbleibetest am UTC-Zeitpunkt
+   dieses letzten angenommenen Pings verankern, Cron kontrolliert aussetzen und
+   mindestens die gebundene Summe aus `period`, `grace`, `provider_delay`,
+   `escalation_delay`, `clock_margin` und `request_seconds` abdecken. Cron bei Erfolg,
+   Fehler oder Verbindungsabbruch sicher wiederherstellen. Erst tatsächlichen
+   Ausbleibeincident und Alexanders Empfang bestätigen; danach ausschließlich
+   eine neue reale gesunde Beobachterauswertung als Recovery verwenden. Keine
+   Backup-Evidence verändern.
+8. **Zielschreibhoheit freigeben und Nachzustand belegen.** Erst nach den
+   Schritten 1–7 den neuen Host als alleinigen Writer freigeben; der alte
+   Catering-Schreibweg bleibt gesperrt. Authentisierte Anmeldung und vorhandene
+   Leserouten nachprüfen, aber keinen synthetischen Ersatzdatensatz erzeugen.
+   Single-writer-Nachweis, TLS/Auth/Routen,
+   Containerneustartregeln, Timer/Cron/Monitorbindung, letzten Snapshot,
+   Restore-Evidence, Alarm/Recovery, Ressourcenwerte und unveränderte fremde
+   Anwendungen erfassen. Keine synthetischen Probeobjekte in die finale DB
+   kopieren und den bekannten Reloadbefund nicht als bestanden darstellen. Das
+   60-Minuten-Fenster bleibt ein Planwert für Writer-Sperre, finalen Timerlauf,
+   Alarmtest und Umschaltung; keine Unterbrechungsfreiheit oder Einhaltung ohne
+   tatsächliche Lauf-/Providerzeiten behaupten.
+
+### Rückweg vor und nach neuen Zielschreibvorgängen
+
+Beide Rückwege beginnen gleich: Zielwriter sperren; künftige Timer- und
+Cronstarts verhindern; Heartbeat 493066 pausieren, damit der nicht autoritative
+Zielstand nicht weiter gesund gemeldet wird; aktive/queued Backup-, OnSuccess-
+und Restore-Invocations eindeutig zuordnen. Eine gesunde fast beendete Kette
+gezielt auslaufen lassen. Bei festgefahrener oder fehlgeschlagener Kette nur die
+exakten zugehörigen Units stoppen, deren Cleanup und Nachzustand prüfen. Erst
+nach quieszentem Zustand DB-, Edge- oder Routingbindungen ändern. Den neuen
+autoritativen Writer und dessen noch fehlende oder vorhandene Überwachung als
+explizites `HOLD` beziehungsweise Coverage-Ergebnis festhalten.
+
+- **Vor dem ersten Zielschreibvorgang:** Zielroute schließen, DNS auf den
+  unveränderten Altweg zurückstellen und die alten Catering-Writer wieder
+  freigeben. Der alte Datenstand ist dann noch autoritativ. Weder Ziel-Evidence
+  noch Backups löschen.
+- **Nach dem ersten Zielschreibvorgang:** kein Rückfall auf die inzwischen
+  veraltete Alt-DB. Nach dem gemeinsamen Rücknahmevorspann einen konsistenten vollständigen
+  Zieldump erstellen, getrennt auf dem Altserver restaurieren und mit denselben
+  Vier-Tabellen-/Schema-/ACL-Prüfungen validieren. Erst danach Alt-DB und Route
+  gemeinsam zurückschalten. Falls dieser Rücktransfer nicht sicher gelingt,
+  bleibt das Ziel der einzige Writer und der Fehler wird vorwärts behoben.
+
+### Warnungen unter der vorgesehenen Erreichbarkeit
+
+Der öffentliche Angriffsrand verschiebt sich von SSH/Unixsocket zu Caddy auf
+80/443. Die App-/API-Route ist zusätzlich zur vollständigen Basic-Auth-Prüfung
+auf die gebundene Betreiber-Quelladresse begrenzt. Die vier Node-Dienste und
+PostgreSQL bleiben ohne Hostports; Caddy entfernt fremde Actor-/Business-/Trusted-
+Header, und `trustProxy` bleibt ausgeschaltet. Damit entstehen für die beiden
+Fastify- und vier fast-uri-Advisories keine neu belegten Trigger. Browserslist
+und baseline-browser-mapping bleiben Buildwerkzeuge; auf dem Ziel wird kein
+Build gestartet. Die neun betroffenen Versionen bleiben dennoch vorhanden.
+Diese Einordnung gilt nur für die exakt beschriebene Route: eine unauthentisierte
+API, numerisches `trustProxy`, dynamische Schemas/URIs, Runtime-Builds oder ein
+direkter Appport wären neue Freigabeblocker. Die fehlende vollständige SBOM des
+statischen Webbundles bleibt eine Nachweisgrenze, ist aber bei unverändertem,
+vor Basic Auth ausgeliefertem Bundle kein neu belegter Advisorypfad.
+
+### Benötigte nächste Betreiberfreigabe und echte Restblocker
+
+Die nächste Freigabe kann als ein zusammenhängendes Wartungsfenster erteilt
+werden. Sie muss exakt umfassen: (a) regulären Merge von PR #693 nach finaler
+CI/Reviewbindung; (b) Implementierung, Review und Installation der drei oben
+benannten Betriebsartefakte; (c) Stop/Freigabe der alten Catering-Writer;
+(d) finalen Vier-Tabellen-Dump, geschützten DB-Tausch und App-Rückbindung;
+(e) genau einen timergestarteten finalen Originalservice-Backup-/Restorezyklus;
+(f) Ziel-Firewall/DNS/TLS-
+Umschaltung; (g) Aktivierung von Heartbeat 493066, Cron und Drei-Stunden-Timer
+samt vollständig gebundenem Ausbleibe-/Recoverytest; sowie
+(h) die beiden beschriebenen Rückwege. Fremde Anwendungen, Alt-Datenlöschung,
+Produktcode, PR #682, Schemaänderungen und zusätzliche Plattformen bleiben aus.
+
+Vor dieser Freigabe sind nur folgende echte Punkte offen:
+
+1. CI35449296866/V1 und der unabhängige Review dieses Übergangsdeltas müssen
+   terminal ausgewertet und an den finalen PR-Head gebunden werden.
+2. Die drei kleinen Betriebsartefakte sind noch nicht implementiert oder durch
+   Compose-Render/Review abgenommen; die Probe-Compose-Dateien dürfen dafür
+   nicht still umgedeutet werden.
+3. Effektiver öffentlicher Catering-Hostname, DNS-Kontrolle/TTL, Firewallregel,
+   ACME-Erreichbarkeit und die enge Betreiber-Quelladresse sind unmittelbar vor
+   dem Wartungsfenster frisch zu bestätigen. Der Repositorydefault oder Basic
+   Auth allein ist kein Live- beziehungsweise Schreibfence-Nachweis.
+4. Provider-/Eskalationsverzögerung, Uhrreserve, Requestbudget, alleiniger
+   Heartbeat-Sender und tatsächlicher Empfänger müssen vor Aktivierung gegen
+   Provider, Policy und verbleibende Evidencefrist gebunden werden; 300/300
+   allein beweist keine Zustellfrist.
+5. Attestationen müssen am Ausführungstag mehr als 48 Stunden gültig sein;
+   andernfalls ist eine getrennt freigegebene Neubindung erforderlich.
+6. Der Reload-/Wiederaufnahmefehler bleibt ein Produktabnahmehindernis vor
+   geschäftlicher Nutzung. Er ist nach heutigem Beleg kein Migrationsfehler und
+   keine Aussage über PR #682.
+
+Bis dahin gilt weiter: **HOLD BEFORE PRODUCTION CUTOVER, AUTOMATIC JOB
+ACTIVATION AND MERGE.** Dieser Abschnitt hat keine Betriebs-, Zugangs-, DNS-,
+Proxy-, Daten-, Timer- oder Monitoringänderung ausgeführt.
