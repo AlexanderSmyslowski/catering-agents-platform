@@ -302,7 +302,8 @@ describe("applied canonical snapshots", () => {
         (spec: AcceptedEventSpec) => { spec.attendees.expected = 36; },
         (spec: AcceptedEventSpec) => { spec.event.date = "2026-09-23"; },
         (spec: AcceptedEventSpec) => { spec.menuPlan[0]!.productionDecision = { mode: "scratch" }; },
-        (spec: AcceptedEventSpec) => { spec.budgetContext!.pricingSummary!.subtotal.amount = 1; }
+        (spec: AcceptedEventSpec) => { spec.budgetContext!.pricingSummary!.subtotal.amount = 1; },
+        (spec: AcceptedEventSpec) => { delete spec.budgetContext; }
       ]) {
         const changed = structuredClone(original);
         mutate(changed);

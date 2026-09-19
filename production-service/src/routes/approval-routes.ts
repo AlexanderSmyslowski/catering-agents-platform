@@ -8,8 +8,12 @@ import {
   AuditLogStore,
   createApprovedProductionSpec,
   createApprovalRequestRecord,
+  createCuratedOfferDraft,
+  createOfferDraft,
   createProductionApplyManifest,
+  normalizeEventRequestToSpec,
   resolveMinimalMvpRoleFromTrustedActor,
+  selectCuratedPackage,
   validateProductionDraft,
   type ApprovedProductionSpec,
   type AcceptedEventSpec,
@@ -17,6 +21,7 @@ import {
   type AuditEntry,
   type BusinessContext,
   type CaseEvent,
+  type EventRequest,
   type ProductionHandoff,
   type ProductionDraft,
   type ProductionApplyManifest,
@@ -189,7 +194,10 @@ async function existingArtifactConflict<T>(input: {
 
 function acceptedEventSpecConsistencyError(
   canonical: AcceptedEventSpec | undefined,
-  candidate: AcceptedEventSpec
+  candidate: AcceptedEventSpec,
+  approvedCandidate: AcceptedEventSpec,
+  sourceRequest?: EventRequest,
+  selectedOfferVariantId?: string
 ): string | undefined {
   if (!canonical) return `AcceptedEventSpec ${candidate.specId} fehlt im autoritativen Intake.`;
   if (canonical.specId !== candidate.specId) {
@@ -211,7 +219,7 @@ function acceptedEventSpecConsistencyError(
   ) {
     candidateWithoutOfferCommercialization.lifecycle = structuredClone(canonical.lifecycle);
   }
-  if (!canonical.budgetContext) {
+  if (canonical.lifecycle.commercialState === "manual" && !canonical.budgetContext) {
     delete candidateWithoutOfferCommercialization.budgetContext;
   }
   if (
@@ -234,19 +242,73 @@ function acceptedEventSpecConsistencyError(
     areJsonValuesEqual(canonical, candidateWithoutOfferCommercialization);
   if (isCanonicalIntakeSnapshotAcceptedByOffer) return undefined;
 
-  // Older offer drafts were derived from the same Intake request rather than
-  // carrying its AcceptedEventSpec byte-for-byte. The immutable, server-read
-  // Handoff remains authoritative only while its source references and core
-  // event identity still match the live, non-archived Intake record.
+  // Older offer drafts were derived from the Intake request rather than its
+  // AcceptedEventSpec. Rebuild the only historical Intake edit shape used by
+  // that UI path from the immutable request and the reviewed production labels
+  // and categories; arbitrary later Intake changes must still fail closed.
+  const sourceReference = candidate.sourceLineage.length === 1 &&
+    candidate.sourceLineage[0]?.sourceType === "offer_service"
+    ? candidate.sourceLineage[0].reference
+    : undefined;
+  const canonicalSourceReference = canonical.sourceLineage.length === 1 &&
+    canonical.sourceLineage[0]?.sourceType !== "offer_service"
+    ? canonical.sourceLineage[0].reference
+    : undefined;
+  const sourceBaseline = sourceRequest && sourceReference === sourceRequest.requestId
+    ? normalizeEventRequestToSpec(sourceRequest)
+    : undefined;
+  const offerDraft = sourceRequest && sourceReference === sourceRequest.requestId
+    ? (() => {
+        const offerBaseline = normalizeEventRequestToSpec(sourceRequest, {
+          sourceType: "offer_service",
+          reference: sourceRequest.requestId,
+          commercialState: "quoted"
+        });
+        const packagePreset = selectCuratedPackage(offerBaseline);
+        return packagePreset
+          ? createCuratedOfferDraft(sourceRequest, packagePreset)
+          : createOfferDraft(sourceRequest);
+      })()
+    : undefined;
+  const selectedOfferVariant = offerDraft?.variantSet.find(
+    (variant) => variant.variantId === selectedOfferVariantId
+  );
+  const expectedAcceptedOfferSnapshot = selectedOfferVariant
+    ? {
+        ...structuredClone(selectedOfferVariant.proposedEventSpec),
+        lifecycle: { commercialState: "accepted" as const }
+      }
+    : undefined;
+  const categoryTags = (category: AcceptedEventSpec["menuPlan"][number]["menuCategory"]) =>
+    category === "vegetarian" ? ["vegetarian"] : category === "vegan" ? ["vegan"] : [];
+  const reconstructedCanonical = sourceBaseline &&
+    sourceBaseline.specId === canonical.specId &&
+    sourceBaseline.menuPlan.length === approvedCandidate.menuPlan.length
+    ? {
+        ...sourceBaseline,
+        menuPlan: approvedCandidate.menuPlan.map((reviewed, index) => {
+          const baseline = sourceBaseline.menuPlan[index]!;
+          const category = reviewed.menuCategory;
+          return {
+            ...baseline,
+            componentId: `${reviewed.label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "menu"}-${index + 1}`,
+            label: reviewed.label,
+            ...(category ? {
+              menuCategory: category,
+              dietaryTags: categoryTags(category),
+              productionDecision: { purchasedElements: [] }
+            } : {})
+          };
+        })
+      }
+    : undefined;
   const isOfferDerivedFromCanonicalIntake =
-    canonical.schemaVersion === candidate.schemaVersion &&
-    canonical.sourceLineage.length > 0 &&
-    canonical.sourceLineage.every((source) => source.sourceType !== "offer_service") &&
-    candidate.sourceLineage.every((source) => source.sourceType === "offer_service") &&
+    canonicalSourceReference === sourceReference &&
     areJsonValuesEqual(canonicalSourceReferences, candidateSourceReferences) &&
-    candidate.lifecycle.commercialState === "accepted" &&
-    areJsonValuesEqual(canonical.event, candidate.event) &&
-    areJsonValuesEqual(canonical.attendees, candidate.attendees);
+    Boolean(expectedAcceptedOfferSnapshot) &&
+    areJsonValuesEqual(candidate, expectedAcceptedOfferSnapshot) &&
+    Boolean(reconstructedCanonical) &&
+    areJsonValuesEqual(canonical, reconstructedCanonical);
   if (isOfferDerivedFromCanonicalIntake) return undefined;
 
   return !areJsonValuesEqual(canonical.sourceLineage, candidate.sourceLineage)
@@ -664,7 +726,7 @@ async function validateHandoffSnapshot(
   actor: TrustedActor,
   approvedSpec: ApprovedProductionSpec,
   scope?: ProductionCaseApplyScope
-): Promise<{ conflict: string } | { rootSpec: AcceptedEventSpec }> {
+): Promise<{ conflict: string } | { rootSpec: AcceptedEventSpec; selectedOfferVariantId: string }> {
   const getDraft = (draftId: string) => scope ? scope.getDraft(draftId) : store.getProductionDraft(actor, draftId);
   const caseIdForDraft = async (draftId: string) => {
     try { return await store.findCaseIdForArtifact(actor, draftId); }
@@ -735,7 +797,10 @@ async function validateHandoffSnapshot(
   if (!pricingSummary || !areJsonValuesEqual(handoff.pricingSnapshot, pricingSummary)) {
     return { conflict: "Freigegebener Produktionssnapshot besitzt eine inkonsistente Offer-Preisgrundlage." };
   }
-  return { rootSpec: structuredClone(handoff.eventSpecSnapshot) };
+  return {
+    rootSpec: structuredClone(handoff.eventSpecSnapshot),
+    selectedOfferVariantId: handoff.source.selectedVariantId
+  };
 }
 
 type ProductionDraftTimelineScope = {
@@ -1742,9 +1807,19 @@ export function registerProductionApprovalRoutes(
 
         try {
           const canonicalEventSpec = await intakeRecords.getSpec(actor, eventSpec.specId);
+          const legacySourceReference = lockedHandoffValidation.rootSpec.sourceLineage.length === 1 &&
+            lockedHandoffValidation.rootSpec.sourceLineage[0]?.sourceType === "offer_service"
+            ? lockedHandoffValidation.rootSpec.sourceLineage[0].reference
+            : undefined;
+          const sourceRequest = legacySourceReference
+            ? await intakeRecords.getRequest(actor, legacySourceReference)
+            : undefined;
           const eventSpecConflict = acceptedEventSpecConsistencyError(
             canonicalEventSpec,
-            lockedHandoffValidation.rootSpec
+            lockedHandoffValidation.rootSpec,
+            eventSpec,
+            sourceRequest,
+            lockedHandoffValidation.selectedOfferVariantId
           );
           if (eventSpecConflict) conflicts.push(eventSpecConflict);
 
