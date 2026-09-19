@@ -207,7 +207,7 @@ def wait_for_http(client: str, authorization: str) -> None:
     for _ in range(40):
         try:
             status, _ = http_request(client, 'GET', authorization)
-            if status == 200:
+            if status == 218:
                 return
             last_error = f'HTTP {status}'
         except AssertionError as error:
@@ -252,7 +252,7 @@ def assert_caddy_runtime() -> None:
         run('docker', 'network', 'create', public)
         with tempfile.TemporaryDirectory(prefix='catering-ops-') as temp_dir:
             backend_config = Path(temp_dir) / 'Caddyfile'
-            backend_config.write_text('{\n\tauto_https off\n}\n:8081 {\n\trespond "upstream-reached" 200\n}\n')
+            backend_config.write_text('{\n\tauto_https off\n}\n:8081 {\n\trespond "upstream-reached" 218\n}\n')
             final_route = (ROOT / 'edge-infra/Caddyfile.catering-target.operations').read_text()
             site_marker = '{$CATERING_PUBLIC_HOST} {'
             if final_route.count(site_marker) != 1:
@@ -291,7 +291,7 @@ def assert_caddy_runtime() -> None:
                     raise AssertionError(f'unauthenticated request was not challenged: {status}')
             for method in ('GET', 'HEAD'):
                 status, _ = http_request(allowed, method, authorization)
-                if status != 200:
+                if status != 218:
                     raise AssertionError(f'allowed read did not reach upstream: {method} {status}')
             status, _ = http_request(allowed, 'GET', authorization, '/unapproved-read')
             if status != 404:
@@ -306,7 +306,7 @@ def assert_caddy_runtime() -> None:
             run_edge(edge, ingress, public, enabled_env, runtime_route)
             wait_for_http(allowed, authorization)
             status, _ = http_request(allowed, 'POST', authorization)
-            if status != 200:
+            if status != 218:
                 raise AssertionError(f'explicit writer enable did not reach upstream: {status}')
 
             run('docker', 'container', 'rm', '--force', '--volumes', edge)
