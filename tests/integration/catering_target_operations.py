@@ -191,15 +191,32 @@ def http_request(
     if authorization:
         headers.append(f'Authorization: Basic {authorization}')
     request = '\r\n'.join([f'{method} {path} HTTP/1.1', *headers, '', ''])
-    result = run(
-        'docker', 'exec', '--interactive', client, 'nc', '-w', '4', 'edge', '80',
-        check=False,
-        input_text=request,
+    process = subprocess.Popen(
+        ['docker', 'exec', '--interactive', client, 'nc', '-w', '4', 'edge', '80'],
+        cwd=ROOT,
+        text=True,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
     )
-    match = re.search(r'^HTTP/1\.[01] (\d{3})', result.stdout, re.MULTILINE)
+    if process.stdin is None or process.stdout is None:
+        process.kill()
+        raise AssertionError('client streams were not created')
+    process.stdin.write(request)
+    process.stdin.flush()
+    try:
+        process.wait(timeout=6)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait()
+        raise AssertionError(f'client timed out waiting for the HTTP response to {method}')
+    finally:
+        process.stdin.close()
+    output = process.stdout.read()
+    match = re.search(r'^HTTP/1\.[01] (\d{3})', output, re.MULTILINE)
     if not match:
-        raise AssertionError(f'client did not receive an HTTP response for {method}: {result.stdout}')
-    return int(match.group(1)), result.stdout
+        raise AssertionError(f'client did not receive an HTTP response for {method}: {output}')
+    return int(match.group(1)), output
 
 
 def wait_for_http(client: str, authorization: str) -> None:
