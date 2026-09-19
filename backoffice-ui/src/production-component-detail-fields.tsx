@@ -1,6 +1,7 @@
 import type { PurchasedQuantityEdit } from "./production-answer-types.js";
 
 type ProductionComponentDetailFieldsProps = {
+  canEditPurchasedQuantities?: boolean;
   purchasedElements: string;
   purchasedElementNames?: string[];
   purchasedQuantities?: PurchasedQuantityEdit[];
@@ -12,6 +13,7 @@ type ProductionComponentDetailFieldsProps = {
 };
 
 export function ProductionComponentDetailFields({
+  canEditPurchasedQuantities = false,
   purchasedElements,
   purchasedElementNames,
   purchasedQuantities,
@@ -31,7 +33,7 @@ export function ProductionComponentDetailFields({
           placeholder="z. B. Teig, Blätterteig, fertiger Boden, Saucenbasis"
         />
       </label>
-      {onPurchasedQuantitiesChange && purchasedElements.trim() ? (
+      {canEditPurchasedQuantities && onPurchasedQuantitiesChange && purchasedElements.trim() ? (
         <fieldset>
           <legend>Zukaufmengen – Operatorentscheidung</legend>
           <p className="helper-text">Menge pro Person und Einheit für jeden zugekauften Bestandteil festlegen.</p>

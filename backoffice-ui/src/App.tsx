@@ -65,7 +65,7 @@ import { buildProductionConversationState } from "./production-conversation-stat
 import { buildProductionArtifactSelectionAppBoundary } from "./production-artifact-selection-app-boundary.js";
 import { buildProductionFocusState } from "./production-focus-state.js";
 import { buildProductionIntakeActionsAppBoundary } from "./production-intake-actions-app-boundary.js";
-import type { ProductionDraftEditContext } from "./production-spec-edit-persist-action.js";
+import { canEditProductionDraftQuantities, type ProductionDraftEditContext } from "./production-spec-edit-persist-action.js";
 import type { StagedProductionDocument } from "./production-document-submit-action.js";
 import { buildMiniPilotCheckReportState } from "./mini-pilot-check-report-state.js";
 import { extractAcceptedSpecId } from "./production-api-response-ids.js";
@@ -1059,6 +1059,7 @@ function ProductWorkspaceView({
   const {
     productionRouteMainLayoutState
   } = buildAppProductionRouteAppBoundary({
+    canEditPurchasedQuantities: canEditProductionDraftQuantities(editingSpecId, editingProductionDraftContext.current),
     activeProductionCaseId,
     viewState: productionRouteViewState,
     submitting,

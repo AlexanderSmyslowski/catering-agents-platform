@@ -12,6 +12,12 @@ export function isHandoffDraftContext(context?: ProductionDraftEditContext): boo
   return Boolean(context?.draft.source?.sourceRef?.startsWith("offer-handoff:"));
 }
 
+export function canEditProductionDraftQuantities(editingSpecId: string | undefined, context?: ProductionDraftEditContext): boolean {
+  return Boolean(editingSpecId && context?.caseId && isHandoffDraftContext(context) &&
+    context.draft.status === "pending_review" && Number.isInteger(context.draft.revision) && context.draft.revision! > 0 &&
+    context.draft.draftArtifacts?.eventSpec?.specId === editingSpecId);
+}
+
 export function assertCurrentProductionDraftContext(
   expected: ProductionDraftEditContext,
   readCurrent: (() => ProductionDraftEditContext | undefined) | undefined,

@@ -9,6 +9,7 @@ export type ProductionQuestionEditSuccessActions = {
 };
 
 export type ProductionQuestionEditorStateInput = {
+  canEditPurchasedQuantities?: boolean;
   editingSpecId?: string;
   editingEventType: string;
   editingEventDate: string;
@@ -22,6 +23,7 @@ export type ProductionQuestionEditorStateInput = {
 };
 
 export function buildProductionQuestionEditorState({
+  canEditPurchasedQuantities = false,
   editingSpecId,
   editingEventType,
   editingEventDate,
@@ -34,6 +36,7 @@ export function buildProductionQuestionEditorState({
   recipes
 }: ProductionQuestionEditorStateInput): ProductionQuestionEditorState {
   return {
+    canEditPurchasedQuantities,
     editingSpecId,
     editingEventType,
     editingEventDate,

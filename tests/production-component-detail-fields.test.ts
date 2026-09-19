@@ -80,7 +80,7 @@ describe("production component detail fields", () => {
 it("edits operator quantities and derives totals from the current attendee count", () => {
   function Editor() {
     const [purchasedQuantities, setQuantities] = useState([{ element: "Croissants", amountPerPerson: "1", unit: "Stück" }, { element: "Wasser", amountPerPerson: "0.5", unit: "l" }]);
-    return createElement(ProductionComponentDetailFields, { purchasedElements: "Croissants, Wasser", notes: "", onNotesChange: () => {}, onPurchasedElementsChange: () => {}, purchasedQuantities, onPurchasedQuantitiesChange: setQuantities, attendeeCount: 35 });
+    return createElement(ProductionComponentDetailFields, { canEditPurchasedQuantities: true, purchasedElements: "Croissants, Wasser", notes: "", onNotesChange: () => {}, onPurchasedElementsChange: () => {}, purchasedQuantities, onPurchasedQuantitiesChange: setQuantities, attendeeCount: 35 });
   }
   const container = document.createElement("div");
   document.body.append(container);

@@ -4,6 +4,7 @@ import { ProductionComponentDetailFields } from "./production-component-detail-f
 import { ProductionRecipeOverrideSelect } from "./production-recipe-override-select.js";
 
 type ProductionComponentAnswerCardProps = {
+  canEditPurchasedQuantities?: boolean;
   attendeeCount?: number;
   componentId: string;
   componentLabel: string;
@@ -13,6 +14,7 @@ type ProductionComponentAnswerCardProps = {
 };
 
 export function ProductionComponentAnswerCard({
+  canEditPurchasedQuantities = false,
   attendeeCount,
   componentId,
   componentLabel,
@@ -48,6 +50,7 @@ export function ProductionComponentAnswerCard({
         }
       />
       <ProductionComponentDetailFields
+        canEditPurchasedQuantities={canEditPurchasedQuantities}
         purchasedElements={state.purchasedElements}
         purchasedElementNames={state.originalPurchasedElements?.join(", ") === state.purchasedElements ? state.originalPurchasedElements : undefined}
         purchasedQuantities={state.purchasedQuantities}

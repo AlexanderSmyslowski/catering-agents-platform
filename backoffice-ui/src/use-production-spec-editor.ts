@@ -99,11 +99,13 @@ export function useProductionSpecEditor({ focusedProductionSpec }: UseProduction
     setEditingComponentStates((current) => ({
       ...current,
       [componentId]: {
-        menuCategory: current[componentId]?.menuCategory ?? "",
-        productionMode: current[componentId]?.productionMode ?? "",
-        purchasedElements: current[componentId]?.purchasedElements ?? "",
-        recipeOverrideId: current[componentId]?.recipeOverrideId ?? "",
-        notes: current[componentId]?.notes ?? "",
+        ...(current[componentId] ?? {
+          menuCategory: "",
+          productionMode: "",
+          purchasedElements: "",
+          recipeOverrideId: "",
+          notes: ""
+        }),
         ...patch
       }
     }));

@@ -18,6 +18,7 @@ import type { ComponentEditState } from "./production-answer-types.js";
 export { formatDocumentIngestionSummary } from "./production-intake-origin-card-state.js";
 
 export type ProductionQuestionEditorState = {
+  canEditPurchasedQuantities?: boolean;
   editingSpecId?: string;
   editingEventType: string;
   editingEventDate: string;
@@ -101,6 +102,7 @@ export function ProductionQuestionPanel({
   } = questionState;
   const { openSpecForQuestions, refreshAfterDraftDecision } = questionActions;
   const {
+    canEditPurchasedQuantities = false,
     editingSpecId,
     editingEventType,
     editingEventDate,
@@ -216,6 +218,7 @@ export function ProductionQuestionPanel({
               answerEditor={
                 actionState.isFocusedSpecEditing ? (
                   <ProductionStructuredAnswerEditor
+                    canEditPurchasedQuantities={canEditPurchasedQuantities}
                     focusedProductionSpec={focusedProductionSpec}
                     editingEventType={editingEventType}
                     editingEventDate={editingEventDate}
