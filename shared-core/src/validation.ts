@@ -1,3 +1,4 @@
+import { validPurchasedQuantities } from "./purchased-quantities.js";
 import Ajv2020Module from "ajv/dist/2020.js";
 import addFormatsModule from "ajv-formats";
 import type { ErrorObject } from "ajv";
@@ -23,12 +24,14 @@ const Ajv2020 = (
   Ajv2020Module as unknown as {
     default?: new (options?: Record<string, unknown>) => {
       addSchema: (schema: unknown) => void;
+      addKeyword: (definition: unknown) => void;
       getSchema: (id: string) => Validator | undefined;
     };
   }
 ).default ??
   (Ajv2020Module as unknown as new (options?: Record<string, unknown>) => {
     addSchema: (schema: unknown) => void;
+    addKeyword: (definition: unknown) => void;
     getSchema: (id: string) => Validator | undefined;
   });
 
@@ -81,6 +84,9 @@ const ajv = new Ajv2020({
   allErrors: true
 });
 
+// Validate the cross-field mapping wherever the shared component schema is embedded.
+ajv.addKeyword({ keyword: "validPurchasedQuantities", type: "object", schemaType: "boolean",
+  validate: (_schema: boolean, value: unknown) => validPurchasedQuantities(value), errors: false });
 addFormats(ajv);
 for (const schema of schemaBundle) {
   ajv.addSchema(schema);

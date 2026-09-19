@@ -1,0 +1,341 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-09-19",
+  "scope": "Existing synthetic handoff: manufacturing choices and time-window save/reopen; PR694 comment Z1-Z3 plus independent M-R1 correction.",
+  "status": "partial: code and canonical save/reopen verified; full prepare remains blocked",
+  "comment": "https://github.com/AlexanderSmyslowski/catering-agents-platform/pull/694#issuecomment-5742696479",
+  "baseHead": "d3129c5c9e2b1dc5547bb1e58dde3b7759b218d4",
+  "baseTree": "964a562d3ea271713729f61735e716bfff90e0c2",
+  "branch": "codex/gate-c-local-session-rehearsal-20260919",
+  "sourceDiffSha256": "8ad79c4da8c4de8a1d043268b0bb1c92c5f9476f19deb9e99fb4f90dad01631e",
+  "sourceAndTestFiles": [
+    {
+      "path": "backoffice-ui/src/api.ts",
+      "headBlob": "772806de3c7f3b6cddc2b33438394c49c7974044",
+      "sha256": "2db5227767d264ac9b5b0cd27b9ab4dc7a38ec1cb3a6ee07b5c6a409994eca86"
+    },
+    {
+      "path": "backoffice-ui/src/production-spec-edit-persist-action.ts",
+      "headBlob": "53d7fb5cef58ae382ca4ed42361eedc5a718489e",
+      "sha256": "bcac75501de6f6484d83dbc223749f8b4f95bd265f75cce2bb415cf30cd9e3fc"
+    },
+    {
+      "path": "backoffice-ui/src/production-spec-edit-snapshot.ts",
+      "headBlob": "a4f5c848279ef2a1b48327d6d95b8cc4daebb985",
+      "sha256": "388b048474c35ef8f9b3bd1c1b6fa802e362b3b2f971617e3db38c6404f42a79"
+    },
+    {
+      "path": "backoffice-ui/src/production-spec-edit-update.ts",
+      "headBlob": "93911a54722867e896a9e783c025988fb627f7f1",
+      "sha256": "4eb1df1cc554632124f9cb866c2bb9c591f45e56bef95f886e0725660c4fbcc1"
+    },
+    {
+      "path": "backoffice-ui/src/use-production-spec-editor.ts",
+      "headBlob": "a9ef5bd65284e4b4e0dec9cbfb09757f1fb03f74",
+      "sha256": "0974e358dbe8214a08ed67c8c14eee460e06566bba43326bc5780554bece4ef0"
+    },
+    {
+      "path": "production-service/src/routes/artifact-routes.ts",
+      "headBlob": "60c24d826a65a3ca5e0777a527e1ebbd2b1bc4b3",
+      "sha256": "0ee3bc962c051d619e9c03e33c145439d0f141cfb86823287636ed2eab6c1974"
+    },
+    {
+      "path": "tests/production-planning-evidence-p1.test.ts",
+      "headBlob": "bdd1de9f5fec46c54b7c44b3bc37a8e310ad64d8",
+      "sha256": "8a769482917ee3e0eebf027973bab6fbe6476b027aa0da00a04b34c2130700a9"
+    },
+    {
+      "path": "tests/production-spec-edit-persist-action.test.ts",
+      "headBlob": "9dfabb647b2a5df7e4d803241a2403591ceda8a2",
+      "sha256": "2e05a640b690bca42b4a6324532ab78fe52c67ea5ff69810309921a3650ee99c"
+    },
+    {
+      "path": "tests/production-spec-edit-snapshot.test.ts",
+      "headBlob": "7347e7c6e86c1cc28daf850032438cb71586959c",
+      "sha256": "dff5fd62539463fbccec632823a5a6aa4bccd47273e9fabd5c350c12675b58dd"
+    },
+    {
+      "path": "tests/production-spec-edit-update.test.ts",
+      "headBlob": "b6b61a8f1f2b3559c4c6b5c18276347df669b811",
+      "sha256": "723c256e2164601193655f79e78857d805b81d8bed3fd2e231cfd242fe2bdc92"
+    },
+    {
+      "path": "tests/use-production-spec-editor.test.ts",
+      "headBlob": "b806b052800bb56082ee456f78489ef70296e88a",
+      "sha256": "0c66f46a417c9d2306b3c0490b365a3e61e9826cfda0fc236b6737c53f9dfb17"
+    }
+  ],
+  "dependencyAnchor": {
+    "package-lock.json": "9e87460f1cdf88a68dbce46798655ffa6f5ebd9766bcc33ce17fc7ee79165a46"
+  },
+  "verification": {
+    "historicalFullApiRun": {
+      "command": "npx vitest run tests/production-planning-evidence-p1.test.ts --maxWorkers=1",
+      "passed": 82,
+      "exitCode": 0,
+      "source": "first manufacturing freeze, before M-R1"
+    },
+    "finalAffectedApiRun": {
+      "command": "npx vitest run tests/production-planning-evidence-p1.test.ts -t 'explicit handoff classification revisions' --maxWorkers=1",
+      "passed": 40,
+      "notRerun": 48,
+      "exitCode": 0
+    },
+    "ui": {
+      "command": "npx vitest run tests/production-spec-edit-update.test.ts tests/production-spec-edit-snapshot.test.ts tests/production-spec-edit-persist-action.test.ts tests/use-production-spec-editor.test.ts tests/production-planning-controls.test.ts tests/production-draft-review-panel.test.tsx --maxWorkers=1",
+      "passed": 55,
+      "exitCode": 0,
+      "reused": "All related source/test files unchanged across M-R1, hashes verified"
+    },
+    "typecheck": {
+      "command": "npx tsc --noEmit",
+      "exitCode": 0
+    },
+    "build": {
+      "command": "npm run build",
+      "exitCode": 0,
+      "binding": "manufacturing-build-m-r1-binding.json"
+    },
+    "originalZ1Z3": {
+      "controlsPassed": 2,
+      "failed": 3,
+      "exitCode": 1
+    },
+    "fixedSameAssertions": {
+      "passed": 5,
+      "exitCode": 0,
+      "command": "node --import tsx --input-type=module < manufacturing-original-z1-z3-input.mjs"
+    },
+    "independentMR1Probe": {
+      "beforeHttp": 201,
+      "beforeExit": 1,
+      "afterHttp": 422,
+      "afterExit": 0
+    },
+    "payloadAndDomAssertions": {
+      "command": "python3 .runtime/acceptance-20260919/manufacturing-assert-payloads.py",
+      "exitCode": 0
+    },
+    "startAndStop": {
+      "exitCodes": [
+        0,
+        0
+      ],
+      "sameSyntheticDataRootRetained": true,
+      "portsFreeAfterStop": [
+        3101,
+        3102,
+        3103,
+        3104,
+        3200
+      ],
+      "foreignRecipeAllergenFilesUnchanged": true
+    }
+  },
+  "runtime": {
+    "exitCode": 0,
+    "baselineHead": "d3129c5c9e2b1dc5547bb1e58dde3b7759b218d4",
+    "baselineTree": "964a562d3ea271713729f61735e716bfff90e0c2",
+    "sourceDiffSha256": "8ad79c4da8c4de8a1d043268b0bb1c92c5f9476f19deb9e99fb4f90dad01631e",
+    "caseId": "production-case-handoff-6e0bf64a6bafbc9f5e43b5af9e935b5a5474ff2749c394bcc54005bd0a9b0291",
+    "handoffId": "handoff-c6118104258962aa50d11638df006a97e50207c2bf7d3a745df4931fda6a458e",
+    "specId": "spec-browser-rehearsal-offer-case",
+    "priorDraftId": "production-draft-prepared-4826a6f5ae94d23e88c518b56cc4a42c5cf0f0f7779ba6d84c9cce43f2bc62f3",
+    "savedDraftId": "production-draft-revision-fe73b9d268bebeaa20b213567133c2b95aacacaed15b1ca20b92f5b28e7fea6c",
+    "savedRevision": 5,
+    "saveHttpStatus": 201,
+    "prepareHttpStatus": 409,
+    "prepareBlocker": "Prepare benötigt exakt eine Planungs-Evidenz je Produktionskomponente.",
+    "sameCaseHandoffSpecBinding": true,
+    "explicitChangesOnly": true,
+    "reopenedDraftExact": true,
+    "extraRevisionCreated": false,
+    "approvedSpecs": 0,
+    "savedReviewCards": [
+      {
+        "cardId": "card-classification-event-spec",
+        "kind": "event_data",
+        "title": "Eventdaten und Herstellungsangaben prüfen",
+        "summary": "Explizite Herstellungsangaben oder Zeitfenster geändert. Produktionsentwurf erneut vorbereiten und prüfen.",
+        "decision": "pending",
+        "requiredApproval": true,
+        "targetPath": "$.draftArtifacts.eventSpec"
+      }
+    ],
+    "openQuestions": 0,
+    "productionPlan": "absent",
+    "recipes": "absent",
+    "purchaseList": "absent",
+    "quantityWorkflowItems": 0,
+    "browserCommands": 44,
+    "allBrowserCommandsExit0": true,
+    "expectedHttp409ConsoleEntries": 1,
+    "unexpectedConsoleErrors": 0,
+    "humanKitchenReview": "not performed",
+    "fullPrepareAcceptance": "blocked by missing scratch planning evidence; no HTTP201 preparation claimed"
+  },
+  "operatorDecisions": {
+    "eventSchedule": [
+      {
+        "label": "Service",
+        "start": "09:00",
+        "end": "12:00"
+      }
+    ],
+    "components": {
+      "kaffeepause-1": {
+        "mode": "scratch",
+        "notes": "Synthetische Operatorentscheidung für diesen Test; Rezept- und Mengengrundlage bleibt offen."
+      },
+      "croissants-und-wasserservice-2": {
+        "mode": "convenience_purchase",
+        "purchasedElements": [
+          "Croissants",
+          "Wasser"
+        ],
+        "notes": "Synthetische Operatorentscheidung für diesen Test; Produktspezifikation und Beschaffungsmengen bleiben offen."
+      }
+    },
+    "basis": "Synthetic operator decisions authorized for the retained test case; not a real kitchen statement. Croissants and water are source labels; manufacturing mode, operational time and notes are test decisions."
+  },
+  "nextPrerequisites": [
+    "scratch component kaffeepause-1 lacks case/draft/revision-bound planning evidence: existing recipe assignment, quantity decision and human RecipeEventUseReview.",
+    "Existing backoffice has no caller for planning-evidence; quantity-workflow returns empty until an approved ProductionSpec exists.",
+    "Croissants and water are saved purchase-intent labels only; actual product specification, units and procurement quantities remain unverified.",
+    "No human kitchen review or production/export approval has occurred."
+  ],
+  "independentCodeReview": {
+    "status": "CODE_GO",
+    "file": "manufacturing-m-r1-independent-review.json",
+    "resolvedFinding": "M-R1"
+  },
+  "rawEvidence": {
+    "manufacturing-after-prepare.log": "db67f63fbe034125657c95fdd2bb77e2c653304157fb0963b96e22195833a743",
+    "manufacturing-after-save.log": "17ae7c4f0d1626addf40905009a83995b983f0744bc27fd7cfbf243ad4d2f0d0",
+    "manufacturing-api-final.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "manufacturing-api-final.log": "74f8e76cd4c5e9f653f684a751be1e7c2b7e50909641b9931e3810fc5cd8c2fb",
+    "manufacturing-api-green-attempt.exit": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+    "manufacturing-api-green-attempt.log": "97da3b6106c2fbea54bcb35f3004927c22d7751956997d9fcc56fcc0bfcd1d7d",
+    "manufacturing-api-green-final.exit": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+    "manufacturing-api-green-final.log": "01c5f233245b158c27e496a6b583ae72a4a2984a8981ca5e6fdbf694bdff0b94",
+    "manufacturing-api-green.exit": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+    "manufacturing-api-green.log": "af969602deec77cef38120aeabf0371b3a53858c8ca7ad4aeb63b830cd96c8be",
+    "manufacturing-api-red.exit": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+    "manufacturing-api-red.log": "d0b0162618e66727d85ca6ea398999cb721de7cb09d9a0357547598d540f172f",
+    "manufacturing-assert-payloads.py": "41b44513e3924d50b88fb5556108a7cbd01d556565ae224d33c00bfa95bfa420",
+    "manufacturing-baseline.json": "8ce76072b864bfb332cc59d9842b62c133edc23901406d83ba47000f1fdec125",
+    "manufacturing-before-edit.log": "76d34cb93fdeba4f570e4a1e880e9ddd8e03ce4718921189984193ea40cecc3c",
+    "manufacturing-browser-commands.jsonl": "cd30cc9ecafadc0b9dfbc533737a357fcef0b11de6cae431e93af166d2eed110",
+    "manufacturing-browser.py": "185279727984f65a0fff26dd26113cb97a86a8d478663b8d9b7b29acabf07fad",
+    "manufacturing-build-binding.json": "ae6f9726fb8465394cb3ad8b81874a626af62f63e210be2ac6fdae2c5cff3d28",
+    "manufacturing-build-m-r1-binding.json": "745367941e9a671ebf1111ce314009f3d80a08b2bde7b873988903ee5f8269af",
+    "manufacturing-build-m-r1.log": "80c7cdda6fb6dbfef510f3d06ead6bc086ac6402144683af8631dcb93d2d570b",
+    "manufacturing-build.log": "b0314de820b45f2b1a14fb996b147e09e8137782cfdd4ab9c512cf85bc97ec47",
+    "manufacturing-case-open.log": "7a10470fc3342caaba2fbd7811f0857aee6e344cd9b415cfe2b3f376805290d2",
+    "manufacturing-close.log": "45f328ebe5add0dcd68fc8a142eda739264bea1354e82dcf49bb94555efbe3d6",
+    "manufacturing-coffee-mode.log": "dadafbcc255e89e2f42217e0dbf706f04c42915ade0c5e0f0ad69326b508dbba",
+    "manufacturing-coffee-note.log": "edefa960a5697c6f299b118b1bfced76efc0fb142633e4b517f050801cdbd265",
+    "manufacturing-console.log": "f663c55c47f8e1322ad29c3b1af1002fc76432bf9fd9d675529a1bcbc7395a14",
+    "manufacturing-croissant-mode.log": "ee85ea363f0f5566c24fc30384ac83760341125f30cfcbe50c66fdb533d47f33",
+    "manufacturing-croissant-note.log": "31c0bdd5803e259e3271cb1ac5b287da253f52acaf536e4e32b9d0b4ef85e298",
+    "manufacturing-diff-check.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "manufacturing-diff-check.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "manufacturing-dom.log": "b772830742235b0fb51a5194f2131846e16b0161aca7de96320c81a671f9d7bd",
+    "manufacturing-edit-fields.log": "8c5fd1c3dc9d5baed82813646353a0cfd0827866927c6dc8cb34827f159e6e8e",
+    "manufacturing-edit-open.log": "42e89584b36c904d59935283b2d6887ac5d53150cce5af6c31ff829d36ffb95d",
+    "manufacturing-fields-screenshot.log": "2f30807257170076d6da95e8afd94ae529156aab887f32b79ee0de73f86f4503",
+    "manufacturing-filled.log": "8f8a8ceb9605f8aebcddd675c60a39df7b91cca9d516ec8b342d32cb7ec47b88",
+    "manufacturing-final-requests.log": "1a20b5de05d0c8b52197f9f9dc2332179438482b5389f696c3e45aabdb79d5d0",
+    "manufacturing-fixed-z1-z3-binding.json": "bf001c104b7edc52dd9eaca3c5f990e7444d6deaa300f2a46a7871a539b73411",
+    "manufacturing-fixed-z1-z3.log": "5517059c03f29e3720c33ab7953feb20986d47b84b06145760cf85329d1dbbf2",
+    "manufacturing-history.log": "e9d70f83b0d99035007ba214bc34d93fafdda65bf9ec11f2936edc100d600b4a",
+    "manufacturing-hub-lock-start.json": "1a319ecdc1449756b5e9b7cfd17356a9150903e32a2f0b76d764f88b19ac400b",
+    "manufacturing-implementation-evidence.json": "5b720e9bff163868e89df61aea0d93a24f294497ea77ca734e2cfe6f1db441ea",
+    "manufacturing-implementation-freeze.json": "28e9cd3f2fa006ef2ec92f28453db44bbaa09ce89874dbb4ed53332037a4c513",
+    "manufacturing-independent-review.json": "b74c51890a74ba7be22503d941b97d3ea52106eb3ebfa30137bdfad61f0a5178",
+    "manufacturing-initial.log": "9e6a518fcefb01ef61b638213365f97ca4537d2113be2f0654f6caefc36902ec",
+    "manufacturing-installed-dependencies-exit.txt": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "manufacturing-installed-dependencies.json": "d2e67df0ac27b73876cd1fa4ede8e9b535b5182380c6f07703041f5e1cf5f44f",
+    "manufacturing-m-r1-freeze.json": "eec483ccf945595214929616d6f98309efbfb206728d22fb5c6907a638fc8f88",
+    "manufacturing-m-r1-independent-review.json": "d9f8a3406802555040c44d5f2cf9ac65a402e459be1ef0808763e9df12f6543a",
+    "manufacturing-omitted-field-red.exit": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+    "manufacturing-omitted-field-red.log": "d9df65becb2be5b2b457a5c30558705a230374e896a77f63b6382148b534e9c0",
+    "manufacturing-open.log": "dea92b200ed15b6c037125ef36976e1f5636043b602f921dff5ee87507bac56c",
+    "manufacturing-operator-decisions.json": "b1d630540d750ed5fb88240afc4e568f3eceeab6c7dcdcf20c7483fa87ce9302",
+    "manufacturing-original-z1-z3-binding.json": "b4ccfdf0bdc7999c13007d823669d7ffbc3a2c1d3d2dc45e127b033eb90f560d",
+    "manufacturing-original-z1-z3-input.mjs": "4e18203be641a7fb59dbb401f1d420f069241b6e9cc0a8466bdba80d32985bf3",
+    "manufacturing-original-z1-z3.log": "84dfd0ffe15216d5de3261f48841ffb8aed201893622ac6bd9f77864f126e9ea",
+    "manufacturing-payload-check.json": "fd8616cb86278c25911e4624c5fc4c19ec8f179801df8f82fa9d813739f24bd1",
+    "manufacturing-pr-comments.json": "b437f95427960c8cae7e3bf5cdf1339c2b1c3d6516b08852c94e7dd4ec4d1217",
+    "manufacturing-preflight.json": "dcbc47857d0308c127e2a286e84c6359869ae8a832a7725a3d3cf294a8f6fc71",
+    "manufacturing-prepare-requests.log": "7dd483cbefe0a8fc6b94a439a3072a8721c03411ab5416450cfc424afeb002c7",
+    "manufacturing-prepare-response.log": "85e45cda3314e2a790759dfb035d64f1ff4e10e06f1d88a55df891b8318a7626",
+    "manufacturing-prepare.log": "7c8da48740cbeffbc0ad7f7e8e7f29c625b6f621e678277919a1642089522e70",
+    "manufacturing-purchases.log": "acb35e2bc786d38f03ce2323df5d4eeba78307ac243554ee5f284d4363c0cf71",
+    "manufacturing-quantity-workflow.log": "aaed76919d482ac940e8fdc0665989d5eb1b5162a97d4618536f0c8f1ce9db74",
+    "manufacturing-reload.log": "048b3ebdd29b6b2a3d0351d6f80b973ea941cedd964833683d3691ebf17b0272",
+    "manufacturing-reloaded.log": "ea9a54d5470de3b947274bb210ad6aeb9775dcd1cdceb7f689166f06eed52bb1",
+    "manufacturing-reopen-answers.log": "52b4188d6db69f891483c59adaf45b5425d9423d71cb42c08f5a13eace4ec359",
+    "manufacturing-reopen-case.log": "bebd94081eab199e9e44e862098eb1a0f91a742cadf8eb4e68be83baafe8482a",
+    "manufacturing-reopen-editor.log": "cf630a21311abe904097d17d0590bb67e74453dd5af886368ef285f707b4eb50",
+    "manufacturing-reopen-history-snapshot.log": "f7a99fc782ea57637b7c90f3d017b93863af22a62a9b13f0145142afb394b538",
+    "manufacturing-reopen-history.log": "ea62c159bca9d7775b3e4a901b820c8a9d424322acbf27771e145fcd26ff5ec7",
+    "manufacturing-reopened-answers.log": "e2b97e3742ca30039ca3d14fa32f16a2820d9e4fae81b48a08eaa922833d78d0",
+    "manufacturing-reopened-case.log": "099b5f0f7cc4833afee69d4c9c4e02a46d9e80580620a74d7d5a4045a7ad0ccb",
+    "manufacturing-reopened-drafts.log": "9544dbdf0525c83038c807f38f7d8c3b768d73e72d9385e12c0457e23d716fb5",
+    "manufacturing-reopened-editor.log": "b18b297ad7c68db16341e15bb86da1c4ad8a1a4c0c1837ecf3c5b504bb813629",
+    "manufacturing-reopened.log": "aee4b0c3e094b483d1bc03e445754ee7a2a9b18027a5c9f312135bb1a2c8dad6",
+    "manufacturing-review-delta-diffcheck.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "manufacturing-review-delta-diffcheck.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "manufacturing-review-delta-green.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "manufacturing-review-delta-green.log": "d22d006b015803c6eba6dd6c8b75711f5cc2f05ecf2b78aa454d04563782f952",
+    "manufacturing-review-delta-red.exit": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+    "manufacturing-review-delta-red.log": "a1c8ed1795c4cd98214f0471baa32c640cec134f42f6845d6459dc4cc825d650",
+    "manufacturing-review-delta-typecheck.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "manufacturing-review-delta-typecheck.log": "759c582d8258becaa967c5dc15f22c4618613f6a732963aa888752eb6d7ad774",
+    "manufacturing-review-schedule-target-probe-green.log": "430bed3b332176c43d29641498fbba45d75336849a19325238a1d31ce9877973",
+    "manufacturing-review-schedule-target-probe.log": "edd218ff1b5d9d225e327ea0e39b3678bf12b3c26ecbbc9840bd750070012b41",
+    "manufacturing-review-schedule-target-probe.ts": "30e18c39c8f62dc8e46193478761e4408fb6db840cfa97a9059f4ac79a5e264b",
+    "manufacturing-save-case.log": "099b5f0f7cc4833afee69d4c9c4e02a46d9e80580620a74d7d5a4045a7ad0ccb",
+    "manufacturing-save-drafts.log": "9544dbdf0525c83038c807f38f7d8c3b768d73e72d9385e12c0457e23d716fb5",
+    "manufacturing-save-requests.log": "02845911b804b53a43fdf691ead400857217ee7b0088fc3f63e4224f98049faa",
+    "manufacturing-save-response.log": "365bf15601eb5694e00fa343383ab3efe0a013f8db71ec597d494b199ed0cd54",
+    "manufacturing-save.log": "e55a3a930648df54ca5d279aded071734f0dd302d1f9c7c21fd774e1be733252",
+    "manufacturing-schedule-green.exit": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+    "manufacturing-schedule-green.log": "3c7103ba7af05dd103537f90ed4117151b2bd9e684e144e9c4aaf057479185fd",
+    "manufacturing-schedule-question-red.exit": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+    "manufacturing-schedule-question-red.log": "dbe9ad5ef0cc6902235dc32ce78d5cc4cbd73a5fad1ab9557ff5663f13cc1e21",
+    "manufacturing-screenshot.log": "6f54742a07615a032bd4c7f0e40cbbf3b918194249cd413d1bb6f2d3ffb6e0e3",
+    "manufacturing-show-fields.log": "5f2442cbe756980cfe8ee83826f962c8aa70ef6c7b44783859b45fba6f88c294",
+    "manufacturing-start-exit.txt": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "manufacturing-start-stack.py": "5e4c4773871cd7298cad2b6bdf53187d0baca97b18c484935022a1ac69cd5252",
+    "manufacturing-start.log": "bd60fb57237ef12e065b5d52b63413def045e638ca890a2ac420682d20e615c3",
+    "manufacturing-stop-check.json": "5511e164554a4f28f7e9b1d3e5df72309269967ca764dedf503a533028cc46dc",
+    "manufacturing-stop.log": "e60979f7f8457625350389fa377d2e6c547d4251d107977ff485ee95e26c8378",
+    "manufacturing-time.log": "b41759758e8983054eea55f4a034c733173c98e880f7f17490e74e13270a6b60",
+    "manufacturing-typecheck-accepted.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "manufacturing-typecheck-accepted.log": "759c582d8258becaa967c5dc15f22c4618613f6a732963aa888752eb6d7ad774",
+    "manufacturing-typecheck-attempt.exit": "53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3",
+    "manufacturing-typecheck-attempt.log": "d8311604cb5de1b57d7dfe183b6a75b2cbd74b13f93dab809b8bfa6a330aabb9",
+    "manufacturing-typecheck-final.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "manufacturing-typecheck-final.log": "759c582d8258becaa967c5dc15f22c4618613f6a732963aa888752eb6d7ad774",
+    "manufacturing-typecheck.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "manufacturing-typecheck.log": "759c582d8258becaa967c5dc15f22c4618613f6a732963aa888752eb6d7ad774",
+    "manufacturing-ui-accepted.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "manufacturing-ui-accepted.log": "42d488df250cf11bffb0d3e161cad5d3b91fa1f206f0ab29a255cf32133c4153",
+    "manufacturing-ui-final.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "manufacturing-ui-final.log": "5941920ccae88260500f882d2d4749d2e6ed92e9c958afdb40e4bbc15d95f4a1",
+    "manufacturing-ui-green-attempt.exit": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+    "manufacturing-ui-green-attempt.log": "47eae535e8671c4402f82edb3428486a40543e1082b1cb683cdb7715a7e1c4ba",
+    "manufacturing-ui-green.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "manufacturing-ui-green.log": "0168983f08de044a633969494491f718efa460792233cc1d5d115dd580b90ad4",
+    "manufacturing-ui-red.exit": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+    "manufacturing-ui-red.log": "830bccffe06dece28ba9c0983b4d494220d32aa66b7f10b25fce3585a8d30486"
+  },
+  "evidenceLimits": [
+    "Raw evidence remains local in .runtime/acceptance-20260919; this file records reviewed outcomes and content hashes.",
+    "Only relevant non-sensitive source/test/evidence files were hashed. No secrets, foreign runtime data or real customer data were inspected.",
+    "Unchanged offer-start/classification acceptance reused, not rerun. No new offer or reference case.",
+    "Full preparation is not accepted: actual HTTP409 persisted no new prepared draft, recipes, plan or purchase list. No Gate-C overall GO."
+  ]
+}

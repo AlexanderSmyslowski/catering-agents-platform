@@ -1,8 +1,8 @@
 import path from "node:path";
 import react from "@vitejs/plugin-react";
-import { defineConfig, loadEnv } from "vite";
+import { defineConfig, loadEnv, type ProxyOptions } from "vite";
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const trustedHeaders = (actorName: string) => env.CATERING_TRUSTED_ACTOR_SECRET
     ? { "x-catering-trusted-secret": env.CATERING_TRUSTED_ACTOR_SECRET, "x-catering-actor-name": actorName, "x-catering-business-id": env.CATERING_DEFAULT_BUSINESS_ID ?? "local" }
@@ -13,6 +13,32 @@ export default defineConfig(({ mode }) => {
     rewrite: (input: string) => input.replace(prefix, ""),
     headers: trustedHeaders(actorName)
   });
+
+  // The local rehearsal spans several service-owned roles. Its session uses the
+  // aggregate identity; an explicit planning review must carry that same actor.
+  const intakeTarget = env.VITE_INTAKE_PROXY_TARGET ?? "http://localhost:3101";
+  const productionTarget = env.VITE_PRODUCTION_PROXY_TARGET ?? "http://localhost:3103";
+  const isLoopbackTarget = (target: string) => /^http:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?\/?$/.test(target);
+  const devAuth = ["1", "true"].includes(env.CATERING_DEV_AUTH?.trim().toLowerCase() ?? "");
+  const localSessionEnabled = command === "serve" && mode !== "production"
+    && process.env.NODE_ENV !== "production" && env.NODE_ENV !== "production"
+    && devAuth && Boolean(env.CATERING_TRUSTED_ACTOR_SECRET?.trim())
+    && isLoopbackTarget(intakeTarget);
+  const localSessionProxy: Record<string, ProxyOptions> = localSessionEnabled
+    ? { "^/api/intake/v1/auth/session(?:\\?.*)?$": proxyTarget(intakeTarget, /^\/api\/intake/, "Administrator") }
+    : {};
+  const localPlanningEvidenceProxy: Record<string, ProxyOptions> = localSessionEnabled && isLoopbackTarget(productionTarget)
+    ? {
+      "^/api/production/v1/production/cases/[^/?]+/planning-evidence(?:\\?.*)?$": {
+        ...proxyTarget(productionTarget, /^\/api\/production/, "Produktions-Mitarbeiter"),
+        configure: (proxy) => {
+          proxy.on("proxyReq", (proxyReq, request) => {
+            if (request.method === "POST") proxyReq.setHeader("x-catering-actor-name", "Administrator");
+          });
+        }
+      }
+    }
+    : {};
 
   return {
     plugins: [react()],
@@ -25,6 +51,8 @@ export default defineConfig(({ mode }) => {
       host: "0.0.0.0",
       port: 3200,
       proxy: {
+        ...localSessionProxy,
+        ...localPlanningEvidenceProxy,
         "/api/intake/v1/intake/seed-demo": proxyTarget(env.VITE_INTAKE_PROXY_TARGET ?? "http://localhost:3101", /^\/api\/intake/, "Betriebs-/Audit-Operator"),
         "/api/intake": {
           ...proxyTarget(env.VITE_INTAKE_PROXY_TARGET ?? "http://localhost:3101", /^\/api\/intake/, "Intake-Mitarbeiter")

@@ -17,10 +17,13 @@ import {
   auditIdFor,
   approvalRequestIdForTarget,
   createEventRequestFromText,
+  createCuratedOfferDraft,
+  createOfferDraft,
   evaluateQuantityRecipeProductionBridge,
   evaluateReadiness,
   normalizeEventRequestToSpec,
   SCHEMA_VERSION,
+  selectCuratedPackage,
   type AcceptedEventSpec,
   type QuantityDecisionInput,
   type ProductionDraft,
@@ -161,7 +164,12 @@ async function buildDraft(
       productionDecision: { mode: "convenience_purchase", purchasedElements: ["Baguette"] }
     },
     "kleines Dessert optional": { menuCategory: "classic", productionDecision: { mode: "scratch" } },
-    "vegetarischer Tomatensuppe": { menuCategory: "vegetarian", productionDecision: { mode: "scratch" } }
+    "vegetarischer Tomatensuppe": { menuCategory: "vegetarian", productionDecision: { mode: "scratch" } },
+    "Kaffeepause kompakt": { menuCategory: "classic", productionDecision: { mode: "scratch" } },
+    "Croissants und Wasserservice. kompakt": {
+      menuCategory: "vegetarian",
+      productionDecision: { mode: "scratch" }
+    }
   };
   const planningSpecBase: AcceptedEventSpec = {
     ...spec,
@@ -855,6 +863,133 @@ describe("ProductionDraft apply", () => {
       expect(auditJson).not.toContain("SECRET_RECIPE_NAME");
       expect(auditJson).not.toContain("SECRET_OPERATOR_COMMENT");
       expect(auditJson).not.toContain("SECRET_DRAFT_NOTE");
+    } finally {
+      await app.close();
+      await persistedOffer.app.close();
+    }
+  });
+
+  it("applies an authoritative offer-derived handoff when its Intake source anchor and event identity are unchanged", async () => {
+    const dataRoot = createDataRoot();
+    dataRoots.push(dataRoot);
+    const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
+    const store = new ProductionStore({ rootDir: dataRoot });
+    const auditLog = new AuditLogStore({ rootDir: dataRoot });
+    const intakeRecords = new InMemoryIntakeRecordsPort();
+    const persistedOffer = await createPersistedOfferHandoff(dataRoot);
+    const sourceRequest = createEventRequestFromText({
+      requestId: "production-draft-apply-legacy-offer-request",
+      channel: "text",
+      rawText: "Besprechung am 2026-11-06 fuer 35 Teilnehmer mit Kaffeepause, Croissants und Wasserservice."
+    });
+    const offerDerivedBase = normalizeEventRequestToSpec(sourceRequest, {
+      sourceType: "offer_service",
+      reference: sourceRequest.requestId,
+      commercialState: "quoted"
+    });
+    const packagePreset = selectCuratedPackage(offerDerivedBase);
+    const offerDraft = packagePreset
+      ? createCuratedOfferDraft(sourceRequest, packagePreset)
+      : createOfferDraft(sourceRequest);
+    const selectedVariant = offerDraft.variantSet[0]!;
+    const pricingSummary = structuredClone(selectedVariant.proposedEventSpec.budgetContext!.pricingSummary!);
+    const legacyHandoff = structuredClone(persistedOffer.handoff);
+    legacyHandoff.eventSpecSnapshot = {
+      ...structuredClone(selectedVariant.proposedEventSpec),
+      lifecycle: { commercialState: "accepted" }
+    };
+    legacyHandoff.pricingSnapshot = pricingSummary;
+    legacyHandoff.source.selectedVariantId = selectedVariant.variantId;
+    const draft = {
+      ...await buildDraft(
+        "production-draft-apply-offer-derived-handoff",
+        legacyHandoff.eventSpecSnapshot
+      ),
+      source: {
+        kind: "manual_import" as const,
+        receivedAt: "2026-07-01T12:00:00.000Z",
+        sourceRef: `offer-handoff:${persistedOffer.handoff.handoffId}`
+      }
+    };
+    intakeRecords.seedRequest({ businessId: "local" }, sourceRequest);
+    const canonicalBase = normalizeEventRequestToSpec(sourceRequest);
+    const reviewedEventSpec = draft.draftArtifacts.eventSpec!;
+    const canonicalIntakeSpec: AcceptedEventSpec = {
+      ...canonicalBase,
+      menuPlan: reviewedEventSpec.menuPlan.map((reviewed, index) => {
+        const baseline = canonicalBase.menuPlan[index]!;
+        const category = reviewed.menuCategory;
+        return {
+          ...baseline,
+          componentId: `${reviewed.label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "menu"}-${index + 1}`,
+          label: reviewed.label,
+          ...(category ? {
+            menuCategory: category,
+            dietaryTags: category === "vegetarian" ? ["vegetarian"] : category === "vegan" ? ["vegan"] : [],
+            productionDecision: { purchasedElements: [] }
+          } : {})
+        };
+      })
+    };
+    const app = buildProductionApp({
+      dataRoot,
+      repository,
+      store,
+      auditLog,
+      intakeRecords,
+      handoffReader: { get: async () => structuredClone(legacyHandoff) },
+      trustedActorSecret: TRUSTED_SECRET,
+      env: { CATERING_DEV_AUTH: "1" }
+    });
+    await linkProductionCaseToDraft(app, store, draft, persistedOffer.handoff.handoffId);
+
+    try {
+      const approvedProductionSpecId = await approveDraft(
+        app,
+        store,
+        draft,
+        intakeRecords,
+        canonicalIntakeSpec
+      );
+      for (const [name, mutate] of [
+        ["label", (spec: AcceptedEventSpec) => { spec.menuPlan[0]!.label = "Fremde Kaffeepause"; }],
+        ["production mode", (spec: AcceptedEventSpec) => {
+          spec.menuPlan[0]!.productionDecision = { mode: "scratch", purchasedElements: [] };
+        }]
+      ] satisfies Array<[string, (spec: AcceptedEventSpec) => void]>) {
+        const changed = structuredClone(canonicalIntakeSpec);
+        mutate(changed);
+        await intakeRecords.replaceSpec({ businessId: "local" }, canonicalIntakeSpec, changed);
+        const rejected = await app.inject({
+          method: "POST",
+          url: `/v1/production/approved-specs/${approvedProductionSpecId}/apply`,
+          headers: trustedProductionHeaders
+        });
+        expect(rejected.statusCode, `${name}: ${rejected.body}`).toBe(409);
+        expect(await store.listPlans({ businessId: "local" })).toEqual([]);
+        expect(await store.listApplyManifests({ businessId: "local" })).toEqual([]);
+        await intakeRecords.replaceSpec({ businessId: "local" }, changed, canonicalIntakeSpec);
+      }
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/production/approved-specs/${approvedProductionSpecId}/apply`,
+        headers: trustedProductionHeaders
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json<{ eventSpec: AcceptedEventSpec }>().eventSpec).toMatchObject({
+        specId: legacyHandoff.eventSpecSnapshot.specId,
+        event: {
+          type: "meeting",
+          date: "2026-11-06",
+          durationHours: 3,
+          locale: "de-DE",
+          serviceForm: "coffee_break"
+        },
+        attendees: { expected: 35 },
+        sourceLineage: legacyHandoff.eventSpecSnapshot.sourceLineage
+      });
+      expect(await store.listApplyManifests({ businessId: "local" })).toHaveLength(1);
     } finally {
       await app.close();
       await persistedOffer.app.close();

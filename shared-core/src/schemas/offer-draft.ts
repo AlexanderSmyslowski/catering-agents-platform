@@ -78,6 +78,9 @@ export const offerDraftSchema = {
     proposedEventSpec: {
       $ref: "https://schemas.catering.local/accepted-event-spec.json"
     },
+    sourceAcceptedEventSpecSnapshot: {
+      $ref: "https://schemas.catering.local/accepted-event-spec.json"
+    },
     portfolioMapping: {
       type: "object",
       additionalProperties: false,

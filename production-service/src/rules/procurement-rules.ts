@@ -1,5 +1,6 @@
 import {
   procurementGroupFor,
+  validPurchasedQuantities,
   type AcceptedEventSpec,
   type PurchaseItem
 } from "@catering/shared-core";
@@ -29,16 +30,27 @@ export function procurementItemsForComponent(
 ): PurchaseItem[] {
   const productionMode = component.productionDecision?.mode;
   const purchasedElements = component.productionDecision?.purchasedElements ?? [];
+  const quantities = component.productionDecision?.purchasedQuantities;
+  if (quantities !== undefined && !validPurchasedQuantities(component.productionDecision)) {
+    throw new Error("Zukaufmengen müssen alle zugekauften Bestandteile eindeutig abdecken.");
+  }
+  const quantityFor = (element: string) => quantities?.find(item => item.element === element);
+  const totalFor = (element: string) => {
+    const total = (quantityFor(element)?.amountPerPerson ?? 1) * servings;
+    if (!Number.isFinite(total)) throw new Error("Die abgeleitete Zukaufmenge muss endlich sein.");
+    return total;
+  };
 
-  if (productionMode === "hybrid" || productionMode === "convenience_purchase") {
+  if (productionMode === "hybrid" || productionMode === "convenience_purchase" ||
+    (productionMode === "external_finished" && quantities !== undefined)) {
     const baseSlug = componentSlug(component);
     return purchasedElements.map((element, index) => ({
       ingredientId: `proc-${baseSlug}-${slugify(element)}-${index + 1}`,
       displayName: `${element} für ${component.label}`,
-      normalizedQty: servings,
-      normalizedUnit: "portion",
-      purchaseQty: servings,
-      purchaseUnit: "portion",
+      normalizedQty: totalFor(element),
+      normalizedUnit: quantityFor(element)?.unit ?? "portion",
+      purchaseQty: totalFor(element),
+      purchaseUnit: quantityFor(element)?.unit ?? "portion",
       group: procurementGroupFor(element),
       supplierHint: "Metro Convenience",
       sourceRecipes: [`procurement:${component.componentId}`],

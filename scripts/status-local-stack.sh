@@ -2,7 +2,9 @@
 
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+# Screen is user-global; canonical worktree identity keeps local lifecycle operations isolated.
+STACK_NAMESPACE="catering-$(printf '%s' "${ROOT_DIR}" | shasum -a 256 | cut -c 1-24)"
 DATA_ROOT_FILE="${ROOT_DIR}/.runtime/local-stack/data-root.txt"
 CURL_MAX_TIME_SECONDS="${CATERING_LOCAL_CURL_MAX_TIME_SECONDS:-5}"
 
@@ -26,11 +28,11 @@ print_url_status() {
   fi
 }
 
-print_screen_status "catering-ui" "UI"
-print_screen_status "catering-intake" "Intake"
-print_screen_status "catering-offer" "Angebot"
-print_screen_status "catering-production" "Produktion"
-print_screen_status "catering-exports" "Export"
+print_screen_status "${STACK_NAMESPACE}-ui" "UI"
+print_screen_status "${STACK_NAMESPACE}-intake" "Intake"
+print_screen_status "${STACK_NAMESPACE}-offer" "Angebot"
+print_screen_status "${STACK_NAMESPACE}-production" "Produktion"
+print_screen_status "${STACK_NAMESPACE}-exports" "Export"
 
 if [[ -f "${DATA_ROOT_FILE}" ]]; then
   echo "Datenwurzel: $(cat "${DATA_ROOT_FILE}")"

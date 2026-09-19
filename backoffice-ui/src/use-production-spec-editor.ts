@@ -20,6 +20,7 @@ export function useProductionSpecEditor({ focusedProductionSpec }: UseProduction
   const [editingEventType, setEditingEventType] = useState("");
   const [editingEventDate, setEditingEventDate] = useState("");
   const [editingEventSchedule, setEditingEventSchedule] = useState("");
+  const [originalEventSchedule, setOriginalEventSchedule] = useState<SpecEditSnapshot["originalEventSchedule"]>();
   const [editingAttendeeCount, setEditingAttendeeCount] = useState("");
   const [editingServiceForm, setEditingServiceForm] = useState("");
   const [editingMenuItems, setEditingMenuItems] = useState("");
@@ -64,6 +65,7 @@ export function useProductionSpecEditor({ focusedProductionSpec }: UseProduction
     setEditingEventType(snapshot.eventType);
     setEditingEventDate(snapshot.eventDate);
     setEditingEventSchedule(snapshot.eventSchedule ?? "");
+    setOriginalEventSchedule(snapshot.originalEventSchedule);
     setEditingAttendeeCount(snapshot.attendeeCount);
     setEditingServiceForm(snapshot.serviceForm);
     setEditingMenuItems(snapshot.menuItems);
@@ -86,6 +88,7 @@ export function useProductionSpecEditor({ focusedProductionSpec }: UseProduction
     setEditingEventType("");
     setEditingEventDate("");
     setEditingEventSchedule("");
+    setOriginalEventSchedule(undefined);
     setEditingAttendeeCount("");
     setEditingServiceForm("");
     setEditingMenuItems("");
@@ -96,11 +99,13 @@ export function useProductionSpecEditor({ focusedProductionSpec }: UseProduction
     setEditingComponentStates((current) => ({
       ...current,
       [componentId]: {
-        menuCategory: current[componentId]?.menuCategory ?? "",
-        productionMode: current[componentId]?.productionMode ?? "",
-        purchasedElements: current[componentId]?.purchasedElements ?? "",
-        recipeOverrideId: current[componentId]?.recipeOverrideId ?? "",
-        notes: current[componentId]?.notes ?? "",
+        ...(current[componentId] ?? {
+          menuCategory: "",
+          productionMode: "",
+          purchasedElements: "",
+          recipeOverrideId: "",
+          notes: ""
+        }),
         ...patch
       }
     }));
@@ -114,7 +119,8 @@ export function useProductionSpecEditor({ focusedProductionSpec }: UseProduction
       attendeeCount: editingAttendeeCount,
       serviceForm: editingServiceForm,
       menuItems: editingMenuItems,
-      componentStates: editingComponentStates
+      componentStates: editingComponentStates,
+      originalEventSchedule
     });
   }
 

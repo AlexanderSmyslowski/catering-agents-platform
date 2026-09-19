@@ -316,11 +316,12 @@ async function createCanonicalProduction(options: {
   expect(approvedOffer?.pricingSummary).toEqual(handoff?.pricingSnapshot);
   expect(approvedOffer?.selectedVariant.proposedEventSpec.budgetContext?.pricingSummary)
     .toEqual(handoff?.pricingSnapshot);
+  expect(handoff?.sourceAcceptedEventSpecSnapshot).toBeDefined();
 
   const repository = new InMemoryRecipeRepository({ rootDir });
   await repository.seed({ businessId: "local" }, internalRecipes);
   const intakeRecords = new InMemoryIntakeRecordsPort();
-  await intakeRecords.insertSpec({ businessId: "local" }, handoff!.eventSpecSnapshot);
+  await intakeRecords.insertSpec({ businessId: "local" }, handoff!.sourceAcceptedEventSpecSnapshot!);
   const store = new ProductionStore({ rootDir });
   const revisionApprovalPath = options.llmAdapter
     ? writeRevisionProcessingApproval(rootDir)

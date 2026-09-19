@@ -4,6 +4,8 @@ import { ProductionComponentDetailFields } from "./production-component-detail-f
 import { ProductionRecipeOverrideSelect } from "./production-recipe-override-select.js";
 
 type ProductionComponentAnswerCardProps = {
+  canEditPurchasedQuantities?: boolean;
+  attendeeCount?: number;
   componentId: string;
   componentLabel: string;
   recipes: Array<Record<string, unknown>>;
@@ -12,6 +14,8 @@ type ProductionComponentAnswerCardProps = {
 };
 
 export function ProductionComponentAnswerCard({
+  canEditPurchasedQuantities = false,
+  attendeeCount,
   componentId,
   componentLabel,
   recipes,
@@ -46,11 +50,19 @@ export function ProductionComponentAnswerCard({
         }
       />
       <ProductionComponentDetailFields
+        canEditPurchasedQuantities={canEditPurchasedQuantities}
         purchasedElements={state.purchasedElements}
+        purchasedElementNames={state.originalPurchasedElements?.join(", ") === state.purchasedElements ? state.originalPurchasedElements : undefined}
+        purchasedQuantities={state.purchasedQuantities}
+        attendeeCount={attendeeCount}
+        onPurchasedQuantitiesChange={(purchasedQuantities) => updateEditingComponentState(componentId, { purchasedQuantities })}
         notes={state.notes}
         onPurchasedElementsChange={(purchasedElements) =>
           updateEditingComponentState(componentId, {
-            purchasedElements
+            purchasedElements,
+            ...(state.purchasedQuantities !== undefined ? { purchasedQuantities: purchasedElements.split(",").map(element => element.trim()).filter(Boolean).map(element =>
+              state.purchasedQuantities!.find(quantity => quantity.element === element) ?? { element, amountPerPerson: "", unit: "" }
+            ) } : {})
           })
         }
         onNotesChange={(notes) =>

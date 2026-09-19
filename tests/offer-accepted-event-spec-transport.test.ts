@@ -179,7 +179,22 @@ describe("AcceptedEventSpec production decision transport", () => {
         }
       });
       expectStatus(updatedIntakeResponse, 200);
-      const updatedSpec = (updatedIntakeResponse.json() as { acceptedEventSpec: AcceptedEventSpec }).acceptedEventSpec;
+      const updatedSpecWithoutBudget = (updatedIntakeResponse.json() as { acceptedEventSpec: AcceptedEventSpec }).acceptedEventSpec;
+      const updatedSpec: AcceptedEventSpec = {
+        ...structuredClone(updatedSpecWithoutBudget),
+        budgetContext: {
+          pricingSummary: {
+            subtotal: { amount: 420, currency: "EUR" },
+            perPerson: { amount: 12, currency: "EUR" },
+            notes: ["Synthetische Intake-Budgetgrundlage vor Angebotskalkulation."]
+          }
+        }
+      };
+      expect(await intakeStore.replaceSpec(
+        { businessId: "local" },
+        updatedSpecWithoutBudget,
+        updatedSpec
+      )).toBe("updated");
       const intakeSpecBeforeApply = structuredClone(updatedSpec);
       const authoritativeDecision = updatedSpec.menuPlan[0]?.productionDecision;
       expect(authoritativeDecision?.mode).toBe("scratch");
@@ -228,8 +243,15 @@ describe("AcceptedEventSpec production decision transport", () => {
         payload: {}
       });
       expectStatus(handoffResponse, 201);
-      const handoff = (handoffResponse.json() as { handoff: { handoffId: string; eventSpecSnapshot: AcceptedEventSpec } }).handoff;
+      const handoff = (handoffResponse.json() as {
+        handoff: {
+          handoffId: string;
+          eventSpecSnapshot: AcceptedEventSpec;
+          sourceAcceptedEventSpecSnapshot?: AcceptedEventSpec;
+        };
+      }).handoff;
       expect(handoff.eventSpecSnapshot.specId).toBe(updatedSpec.specId);
+      expect(handoff.sourceAcceptedEventSpecSnapshot).toEqual(intakeSpecBeforeApply);
       expect(handoff.eventSpecSnapshot.sourceLineage).toEqual(authoritativeProvenance);
       expect(handoff.eventSpecSnapshot.menuPlan.find((component) => component.componentId === componentId)?.productionDecision)
         .toEqual(authoritativeDecision);
@@ -330,6 +352,41 @@ describe("AcceptedEventSpec production decision transport", () => {
       const approvedProductionSpecId = (productionApprovalResponse.json() as {
         approvedProductionSpec: { approvedProductionSpecId: string }
       }).approvedProductionSpec.approvedProductionSpecId;
+      const intakeWithoutBudget = structuredClone(intakeSpecBeforeApply);
+      delete intakeWithoutBudget.budgetContext;
+      expect(await intakeStore.replaceSpec(
+        { businessId: "local" },
+        intakeSpecBeforeApply,
+        intakeWithoutBudget
+      )).toBe("updated");
+      const rejectedBudgetDeletion = await productionApp.inject({
+        method: "POST",
+        url: `/v1/production/approved-specs/${approvedProductionSpecId}/apply`,
+        headers: productionHeaders,
+        payload: {}
+      });
+      expectStatus(rejectedBudgetDeletion, 409);
+      expect(await productionStore.listPlans({ businessId: "local" })).toEqual([]);
+      expect(await productionStore.listApplyManifests({ businessId: "local" })).toEqual([]);
+      expect(await intakeStore.replaceSpec(
+        { businessId: "local" },
+        intakeWithoutBudget,
+        handoff.eventSpecSnapshot
+      )).toBe("updated");
+      const rejectedHandoffRootReplacement = await productionApp.inject({
+        method: "POST",
+        url: `/v1/production/approved-specs/${approvedProductionSpecId}/apply`,
+        headers: productionHeaders,
+        payload: {}
+      });
+      expectStatus(rejectedHandoffRootReplacement, 409);
+      expect(await productionStore.listPlans({ businessId: "local" })).toEqual([]);
+      expect(await productionStore.listApplyManifests({ businessId: "local" })).toEqual([]);
+      expect(await intakeStore.replaceSpec(
+        { businessId: "local" },
+        handoff.eventSpecSnapshot,
+        intakeSpecBeforeApply
+      )).toBe("updated");
       const applyResponse = await productionApp.inject({
         method: "POST",
         url: `/v1/production/approved-specs/${approvedProductionSpecId}/apply`,

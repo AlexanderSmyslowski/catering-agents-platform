@@ -235,6 +235,7 @@ export interface MenuComponent {
   productionDecision?: {
     mode?: "scratch" | "hybrid" | "convenience_purchase" | "external_finished";
     purchasedElements?: string[];
+    purchasedQuantities?: Array<{ element: string; amountPerPerson: number; unit: string }>;
     notes?: string;
   };
 }
@@ -325,6 +326,7 @@ export interface OfferDraft {
   customerFacingText: string;
   internalWorkingText: string;
   proposedEventSpec: AcceptedEventSpec;
+  sourceAcceptedEventSpecSnapshot?: AcceptedEventSpec;
   portfolioMapping?: OfferPortfolioMapping;
   reviewStatus?: OfferReviewStatus;
 }
@@ -342,6 +344,7 @@ export interface ApprovedOffer {
   serviceModules: ServiceModule[];
   pricingSummary: PricingSummary;
   selectedVariant: OfferVariant;
+  sourceAcceptedEventSpecSnapshot?: AcceptedEventSpec;
 }
 
 export interface ProductionHandoff {
@@ -352,6 +355,7 @@ export interface ProductionHandoff {
   approvalRequestId: string;
   createdAt: string;
   eventSpecSnapshot: AcceptedEventSpec;
+  sourceAcceptedEventSpecSnapshot?: AcceptedEventSpec;
   pricingSnapshot: PricingSummary;
   source: { draftId: string; revision: number; selectedVariantId: string };
 }

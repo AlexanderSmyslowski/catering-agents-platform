@@ -15,6 +15,7 @@ export const approvedOfferSchema = {
     selectedVariant: { type: "object", additionalProperties: false, required: ["variantId", "label", "qualityTier", "estimatedPrice", "moduleIds", "proposedEventSpec"], properties: {
       variantId: { type: "string" }, label: { type: "string" }, qualityTier: { enum: ["economy", "standard", "premium"] },
       estimatedPrice: { $ref: "https://schemas.catering.local/common.json#/$defs/money" }, moduleIds: { type: "array", items: { type: "string" } }, proposedEventSpec: { $ref: "https://schemas.catering.local/accepted-event-spec.json" }
-    } }
+    } },
+    sourceAcceptedEventSpecSnapshot: { $ref: "https://schemas.catering.local/accepted-event-spec.json" }
   }
 } as const;

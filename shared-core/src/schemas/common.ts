@@ -243,6 +243,7 @@ export const commonSchema = {
         },
         productionDecision: {
           type: "object",
+          validPurchasedQuantities: true,
           additionalProperties: false,
           properties: {
             mode: {
@@ -251,6 +252,20 @@ export const commonSchema = {
             purchasedElements: {
               type: "array",
               items: { type: "string" }
+            },
+            purchasedQuantities: {
+              type: "array",
+              maxItems: 100,
+              items: {
+                type: "object",
+                additionalProperties: false,
+                required: ["element", "amountPerPerson", "unit"],
+                properties: {
+                  element: { type: "string", pattern: "\\S", maxLength: 500 },
+                  amountPerPerson: { type: "number", exclusiveMinimum: 0 },
+                  unit: { type: "string", pattern: "\\S", maxLength: 100 }
+                }
+              }
             },
             notes: { type: "string" }
           }

@@ -286,7 +286,10 @@ export function createOfferDraft(request: EventRequest): OfferDraft {
  */
 export function createOfferDraftFromAcceptedEventSpec(spec: AcceptedEventSpec): OfferDraft {
   const validatedSpec = validateAcceptedEventSpec(structuredClone(spec));
-  return createOfferDraftFromSpec(validatedSpec, `draft-${validatedSpec.specId}`);
+  return {
+    ...createOfferDraftFromSpec(validatedSpec, `draft-${validatedSpec.specId}`),
+    sourceAcceptedEventSpecSnapshot: structuredClone(validatedSpec)
+  };
 }
 
 export function createCuratedOfferDraft(

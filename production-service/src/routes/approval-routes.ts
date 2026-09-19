@@ -8,8 +8,12 @@ import {
   AuditLogStore,
   createApprovedProductionSpec,
   createApprovalRequestRecord,
+  createCuratedOfferDraft,
+  createOfferDraft,
   createProductionApplyManifest,
+  normalizeEventRequestToSpec,
   resolveMinimalMvpRoleFromTrustedActor,
+  selectCuratedPackage,
   validateProductionDraft,
   type ApprovedProductionSpec,
   type AcceptedEventSpec,
@@ -17,6 +21,7 @@ import {
   type AuditEntry,
   type BusinessContext,
   type CaseEvent,
+  type EventRequest,
   type ProductionHandoff,
   type ProductionDraft,
   type ProductionApplyManifest,
@@ -187,21 +192,13 @@ async function existingArtifactConflict<T>(input: {
     : undefined;
 }
 
-function productionDecisionSnapshot(spec: AcceptedEventSpec): Array<{
-  componentId: string;
-  productionDecision: AcceptedEventSpec["menuPlan"][number]["productionDecision"];
-}> {
-  return spec.menuPlan
-    .map((component) => ({
-      componentId: component.componentId,
-      productionDecision: component.productionDecision
-    }))
-    .sort((left, right) => left.componentId.localeCompare(right.componentId));
-}
-
 function acceptedEventSpecConsistencyError(
   canonical: AcceptedEventSpec | undefined,
-  candidate: AcceptedEventSpec
+  candidate: AcceptedEventSpec,
+  approvedCandidate: AcceptedEventSpec,
+  sourceRequest?: EventRequest,
+  selectedOfferVariantId?: string,
+  sourceAcceptedEventSpecSnapshot?: AcceptedEventSpec
 ): string | undefined {
   if (!canonical) return `AcceptedEventSpec ${candidate.specId} fehlt im autoritativen Intake.`;
   if (canonical.specId !== candidate.specId) {
@@ -210,13 +207,132 @@ function acceptedEventSpecConsistencyError(
   if (canonical.operationalArchive?.status === "archived") {
     return `AcceptedEventSpec ${candidate.specId} ist archiviert und nicht mehr für Apply freigegeben.`;
   }
-  if (!areJsonValuesEqual(canonical.sourceLineage, candidate.sourceLineage)) {
-    return `AcceptedEventSpec ${candidate.specId} besitzt eine inkonsistente sourceLineage.`;
+  if (sourceAcceptedEventSpecSnapshot) {
+    // The immutable Offer/Handoff chain already owns its reviewed commercial
+    // snapshot. This additional snapshot anchors the live Intake record to the
+    // exact pre-offer state, including fields that offer pricing may replace.
+    return areJsonValuesEqual(canonical, sourceAcceptedEventSpecSnapshot)
+      ? undefined
+      : `AcceptedEventSpec ${candidate.specId} weicht vom unveränderlichen Intake-Ursprung ab.`;
   }
-  if (!areJsonValuesEqual(productionDecisionSnapshot(canonical), productionDecisionSnapshot(candidate))) {
-    return `AcceptedEventSpec ${candidate.specId} besitzt inkonsistente Produktionsentscheidungen.`;
+  if (areJsonValuesEqual(canonical, candidate)) return undefined;
+
+  const canonicalSourceReferences = canonical.sourceLineage.map((source) => source.reference);
+  const candidateSourceReferences = candidate.sourceLineage.map((source) => source.reference);
+
+  // Older offer drafts were derived from the Intake request rather than its
+  // AcceptedEventSpec. Rebuild the only historical Intake edit shape used by
+  // that UI path from the immutable request and the reviewed production labels
+  // and categories; arbitrary later Intake changes must still fail closed.
+  const sourceReference = candidate.sourceLineage.length === 1 &&
+    candidate.sourceLineage[0]?.sourceType === "offer_service"
+    ? candidate.sourceLineage[0].reference
+    : undefined;
+  const canonicalSourceReference = canonical.sourceLineage.length === 1 &&
+    canonical.sourceLineage[0]?.sourceType !== "offer_service"
+    ? canonical.sourceLineage[0].reference
+    : undefined;
+  const sourceBaseline = sourceRequest && sourceReference === sourceRequest.requestId
+    ? normalizeEventRequestToSpec(sourceRequest)
+    : undefined;
+  const offerDraft = sourceRequest && sourceReference === sourceRequest.requestId
+    ? (() => {
+        const offerBaseline = normalizeEventRequestToSpec(sourceRequest, {
+          sourceType: "offer_service",
+          reference: sourceRequest.requestId,
+          commercialState: "quoted"
+        });
+        const packagePreset = selectCuratedPackage(offerBaseline);
+        return packagePreset
+          ? createCuratedOfferDraft(sourceRequest, packagePreset)
+          : createOfferDraft(sourceRequest);
+      })()
+    : undefined;
+  const selectedOfferVariant = offerDraft?.variantSet.find(
+    (variant) => variant.variantId === selectedOfferVariantId
+  );
+  const expectedAcceptedOfferSnapshot = selectedOfferVariant
+    ? {
+        ...structuredClone(selectedOfferVariant.proposedEventSpec),
+        lifecycle: { commercialState: "accepted" as const }
+      }
+    : undefined;
+  const categoryTags = (category: AcceptedEventSpec["menuPlan"][number]["menuCategory"]) =>
+    category === "vegetarian" ? ["vegetarian"] : category === "vegan" ? ["vegan"] : [];
+  const reconstructedCanonical = sourceBaseline &&
+    sourceBaseline.specId === canonical.specId &&
+    sourceBaseline.menuPlan.length === approvedCandidate.menuPlan.length
+    ? {
+        ...sourceBaseline,
+        menuPlan: approvedCandidate.menuPlan.map((reviewed, index) => {
+          const baseline = sourceBaseline.menuPlan[index]!;
+          const category = reviewed.menuCategory;
+          return {
+            ...baseline,
+            componentId: `${reviewed.label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "menu"}-${index + 1}`,
+            label: reviewed.label,
+            ...(category ? {
+              menuCategory: category,
+              dietaryTags: categoryTags(category),
+              productionDecision: { purchasedElements: [] }
+            } : {})
+          };
+        })
+      }
+    : undefined;
+  const isOfferDerivedFromCanonicalIntake =
+    canonicalSourceReference === sourceReference &&
+    areJsonValuesEqual(canonicalSourceReferences, candidateSourceReferences) &&
+    Boolean(expectedAcceptedOfferSnapshot) &&
+    areJsonValuesEqual(candidate, expectedAcceptedOfferSnapshot) &&
+    Boolean(reconstructedCanonical) &&
+    areJsonValuesEqual(canonical, reconstructedCanonical);
+  if (isOfferDerivedFromCanonicalIntake) return undefined;
+
+  return !areJsonValuesEqual(canonical.sourceLineage, candidate.sourceLineage)
+    ? `AcceptedEventSpec ${candidate.specId} besitzt eine inkonsistente sourceLineage.`
+    : `AcceptedEventSpec ${candidate.specId} weicht vom unveränderlichen Handoff-Ursprung ab.`;
+}
+
+function isAuthorizedProductionAmendment(previous: AcceptedEventSpec, next: AcceptedEventSpec): boolean {
+  if (previous.menuPlan.length !== next.menuPlan.length) return false;
+  const expected = structuredClone(previous);
+  const copyField = (target: object, source: object, key: string) => {
+    const destination = target as Record<string, unknown>;
+    const input = source as Record<string, unknown>;
+    if (Object.prototype.hasOwnProperty.call(input, key)) destination[key] = input[key];
+    else delete destination[key];
+  };
+  // Only the explicit revision command's fields may differ. Keeping every
+  // other field in the comparison makes future schema additions fail closed.
+  for (const [index, component] of expected.menuPlan.entries()) {
+    const successor = next.menuPlan[index]!;
+    if (component.componentId !== successor.componentId) return false;
+    for (const key of ["menuCategory", "recipeOverrideId"]) copyField(component, successor, key);
+    if (successor.productionDecision) {
+      const decision = { ...component.productionDecision };
+      for (const key of ["mode", "purchasedElements", "purchasedQuantities", "notes"]) {
+        copyField(decision, successor.productionDecision, key);
+      }
+      component.productionDecision = decision as NonNullable<typeof component.productionDecision>;
+    }
   }
-  return undefined;
+  if (!areJsonValuesEqual({ schedule: previous.event.schedule }, { schedule: next.event.schedule })) {
+    const schedule = next.event.schedule;
+    if (!schedule || schedule.length !== 1 || schedule.some(period =>
+      Object.keys(period).some(key => !["label", "start", "end"].includes(key)) ||
+      !period.label?.trim() || !period.start || !period.end ||
+      !/^([01]\d|2[0-3]):[0-5]\d$/.test(period.start) ||
+      !/^([01]\d|2[0-3]):[0-5]\d$/.test(period.end) || period.start >= period.end
+    )) return false;
+    expected.event.schedule = schedule;
+    if (expected.uncertainties) expected.uncertainties = expected.uncertainties.filter(item => !(
+      item.field === "event.schedule" && item.severity === "low" &&
+      item.suggestedQuestion === "Wie lautet das verbindliche Zeitfenster?" &&
+      /^Zeitangabe in "[\s\S]*" ist nicht als vollständiger Termin belastbar\.$/.test(item.message)
+    ));
+  }
+  return areJsonValuesEqual(expected, next);
 }
 
 async function approvedSnapshotConsistencyError(
@@ -582,19 +698,32 @@ async function decisionCaseEventProjectionError(
   return undefined;
 }
 
-async function handoffSnapshotConsistencyError(
+async function validateHandoffSnapshot(
   store: ProductionStore,
   handoffReader: ProductionHandoffReader | undefined,
   actor: TrustedActor,
-  approvedSpec: ApprovedProductionSpec
-): Promise<string | undefined> {
-  const sourceDraft = await store.getProductionDraft(actor, approvedSpec.sourceDraft.draftId);
+  approvedSpec: ApprovedProductionSpec,
+  scope?: ProductionCaseApplyScope
+): Promise<
+  { conflict: string } |
+  {
+    rootSpec: AcceptedEventSpec;
+    selectedOfferVariantId: string;
+    sourceAcceptedEventSpecSnapshot?: AcceptedEventSpec;
+  }
+> {
+  const getDraft = (draftId: string) => scope ? scope.getDraft(draftId) : store.getProductionDraft(actor, draftId);
+  const caseIdForDraft = async (draftId: string) => {
+    try { return await store.findCaseIdForArtifact(actor, draftId); }
+    catch { return undefined; }
+  };
+  const sourceDraft = await getDraft(approvedSpec.sourceDraft.draftId);
   const sourceRefHandoffId = offerHandoffIdFor(sourceDraft?.source.sourceRef);
-  const linkedCaseId = await store.findCaseIdForArtifact(actor, approvedSpec.sourceDraft.draftId);
-  const linkedCase = linkedCaseId ? await store.getCase(actor, linkedCaseId) : undefined;
+  const linkedCaseId = await caseIdForDraft(approvedSpec.sourceDraft.draftId);
+  const linkedCase = linkedCaseId ? await (scope ? scope.getCase(linkedCaseId) : store.getCase(actor, linkedCaseId)) : undefined;
   const caseHandoffId = linkedCase?.productionHandoffId;
   if (!sourceRefHandoffId && !caseHandoffId) {
-    return "Freigegebener Produktionssnapshot besitzt keine gültige Offer-/Handoff-Evidenz.";
+    return { conflict: "Freigegebener Produktionssnapshot besitzt keine gültige Offer-/Handoff-Evidenz." };
   }
   // The mutable draft may only corroborate the immutable case linkage; it
   // must never choose a different Handoff identity for Apply.
@@ -602,15 +731,15 @@ async function handoffSnapshotConsistencyError(
     sourceRefHandoffId !== caseHandoffId ||
     !linkedCase?.productionHandoffId
   ) {
-    return "Freigegebener Produktionssnapshot besitzt keine gültige Offer-/Handoff-Evidenz.";
+    return { conflict: "Freigegebener Produktionssnapshot besitzt keine gültige Offer-/Handoff-Evidenz." };
   }
-  if (!handoffReader) return "Freigegebener Produktionssnapshot besitzt keine lesbare Offer-/Handoff-Evidenz.";
+  if (!handoffReader) return { conflict: "Freigegebener Produktionssnapshot besitzt keine lesbare Offer-/Handoff-Evidenz." };
 
   let handoff: ProductionHandoff | undefined;
   try {
     handoff = await handoffReader.get(actor, caseHandoffId!);
   } catch {
-    return "Freigegebener Produktionssnapshot konnte nicht gegen den persistierten Offer-/Handoff-Snapshot geprüft werden.";
+    return { conflict: "Freigegebener Produktionssnapshot konnte nicht gegen den persistierten Offer-/Handoff-Snapshot geprüft werden." };
   }
   if (
     !handoff ||
@@ -622,16 +751,44 @@ async function handoffSnapshotConsistencyError(
     !Number.isInteger(handoff.source.revision) ||
     !handoff.source.selectedVariantId?.trim()
   ) {
-    return "Freigegebener Produktionssnapshot besitzt keine gültige Offer-/Handoff-Evidenz.";
+    return { conflict: "Freigegebener Produktionssnapshot besitzt keine gültige Offer-/Handoff-Evidenz." };
   }
-  if (!areJsonValuesEqual(handoff.eventSpecSnapshot, approvedSpec.artifacts.eventSpec)) {
-    return "Freigegebener Produktionssnapshot weicht vom persistierten Offer-/Handoff-Snapshot ab.";
+  const lineage: ProductionDraft[] = [];
+  let draft = sourceDraft;
+  while (draft) {
+    if (lineage.length >= 100 || lineage.some(item => item.draftId === draft!.draftId) ||
+      draft.businessId !== actor.businessId || draft.source.sourceRef !== `offer-handoff:${caseHandoffId}` ||
+      !draft.draftArtifacts.eventSpec || await caseIdForDraft(draft.draftId) !== linkedCaseId) {
+      return { conflict: "ProductionDraft-Lineage ist nicht vollständig an den Handoff-Ursprung gebunden." };
+    }
+    lineage.push(draft);
+    if (!draft.supersedesDraftId) break;
+    const predecessor = await getDraft(draft.supersedesDraftId);
+    if (!predecessor || predecessor.revision + 1 !== draft.revision ||
+      !areJsonValuesEqual(predecessor.source, draft.source) ||
+      !predecessor.draftArtifacts.eventSpec ||
+      !isAuthorizedProductionAmendment(predecessor.draftArtifacts.eventSpec, draft.draftArtifacts.eventSpec)) {
+      return { conflict: "ProductionDraft-Lineage enthält eine nicht autorisierte Änderung am Handoff-Snapshot." };
+    }
+    draft = predecessor;
+  }
+  const root = lineage.at(-1);
+  if (!root || root.revision !== 1 ||
+    !areJsonValuesEqual(root.draftArtifacts.eventSpec, handoff.eventSpecSnapshot) ||
+    !areJsonValuesEqual(sourceDraft?.draftArtifacts.eventSpec, approvedSpec.artifacts.eventSpec)) {
+    return { conflict: "Freigegebener Produktionssnapshot weicht vom persistierten Offer-/Handoff-Snapshot ab." };
   }
   const pricingSummary = approvedSpec.artifacts.eventSpec.budgetContext?.pricingSummary;
   if (!pricingSummary || !areJsonValuesEqual(handoff.pricingSnapshot, pricingSummary)) {
-    return "Freigegebener Produktionssnapshot besitzt eine inkonsistente Offer-Preisgrundlage.";
+    return { conflict: "Freigegebener Produktionssnapshot besitzt eine inkonsistente Offer-Preisgrundlage." };
   }
-  return undefined;
+  return {
+    rootSpec: structuredClone(handoff.eventSpecSnapshot),
+    selectedOfferVariantId: handoff.source.selectedVariantId,
+    ...(handoff.sourceAcceptedEventSpecSnapshot
+      ? { sourceAcceptedEventSpecSnapshot: structuredClone(handoff.sourceAcceptedEventSpecSnapshot) }
+      : {})
+  };
 }
 
 type ProductionDraftTimelineScope = {
@@ -1464,16 +1621,16 @@ export function registerProductionApprovalRoutes(
           errors: [snapshotConflict]
         });
       }
-      const handoffConflict = await handoffSnapshotConsistencyError(
+      const handoffValidation = await validateHandoffSnapshot(
         store,
         handoffReader,
         actor,
         approvedSpec
       );
-      if (handoffConflict) {
+      if ("conflict" in handoffValidation) {
         return reply.code(409).send({
           message: "ApprovedProductionSpec würde bestehende Produktobjekte überschreiben.",
-          errors: [handoffConflict]
+          errors: [handoffValidation.conflict]
         });
       }
 
@@ -1519,6 +1676,11 @@ export function registerProductionApprovalRoutes(
             message: "ApprovedProductionSpec würde bestehende Produktobjekte überschreiben.",
             errors: [caseConflict]
           });
+        }
+
+        const lockedHandoffValidation = await validateHandoffSnapshot(store, handoffReader, actor, approvedSpec, applyScope);
+        if ("conflict" in lockedHandoffValidation) {
+          return reply.code(409).send({ message: "ApprovedProductionSpec würde bestehende Produktobjekte überschreiben.", errors: [lockedHandoffValidation.conflict] });
         }
 
         if (
@@ -1633,9 +1795,20 @@ export function registerProductionApprovalRoutes(
 
         try {
           const canonicalEventSpec = await intakeRecords.getSpec(actor, eventSpec.specId);
+          const legacySourceReference = lockedHandoffValidation.rootSpec.sourceLineage.length === 1 &&
+            lockedHandoffValidation.rootSpec.sourceLineage[0]?.sourceType === "offer_service"
+            ? lockedHandoffValidation.rootSpec.sourceLineage[0].reference
+            : undefined;
+          const sourceRequest = legacySourceReference
+            ? await intakeRecords.getRequest(actor, legacySourceReference)
+            : undefined;
           const eventSpecConflict = acceptedEventSpecConsistencyError(
             canonicalEventSpec,
-            eventSpec
+            lockedHandoffValidation.rootSpec,
+            eventSpec,
+            sourceRequest,
+            lockedHandoffValidation.selectedOfferVariantId,
+            lockedHandoffValidation.sourceAcceptedEventSpecSnapshot
           );
           if (eventSpecConflict) conflicts.push(eventSpecConflict);
 

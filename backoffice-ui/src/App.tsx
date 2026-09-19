@@ -65,6 +65,7 @@ import { buildProductionConversationState } from "./production-conversation-stat
 import { buildProductionArtifactSelectionAppBoundary } from "./production-artifact-selection-app-boundary.js";
 import { buildProductionFocusState } from "./production-focus-state.js";
 import { buildProductionIntakeActionsAppBoundary } from "./production-intake-actions-app-boundary.js";
+import { canEditProductionDraftQuantities, type ProductionDraftEditContext } from "./production-spec-edit-persist-action.js";
 import type { StagedProductionDocument } from "./production-document-submit-action.js";
 import { buildMiniPilotCheckReportState } from "./mini-pilot-check-report-state.js";
 import { extractAcceptedSpecId } from "./production-api-response-ids.js";
@@ -728,6 +729,11 @@ function ProductWorkspaceView({
     ? undefined
     : loadedIntakeRequestDetailError;
 
+  const editingProductionDraftContext = useRef<ProductionDraftEditContext | undefined>(undefined);
+  const liveProductionDraftContext = useRef<ProductionDraftEditContext | undefined>(undefined);
+  liveProductionDraftContext.current = activeProductionCaseId && currentProductionDraft
+    ? { caseId: activeProductionCaseId, draft: currentProductionDraft }
+    : undefined;
   const {
     editingSpecId,
     dismissedProductionAnswerSpecId,
@@ -745,7 +751,7 @@ function ProductWorkspaceView({
     setEditingAttendeeCount,
     setEditingServiceForm,
     setEditingMenuItems,
-    loadSpecIntoEditor: loadSpecIntoEditorState,
+    loadSpecIntoEditor: loadSpecIntoEditorSnapshot,
     resetSpecEdit,
     updateEditingComponentState,
     buildCurrentSpecUpdateInput
@@ -754,6 +760,14 @@ function ProductWorkspaceView({
       ? buildRecordView(focusedProductionSpecRecord)
       : undefined
   });
+
+  function loadSpecIntoEditorState(spec: Record<string, unknown>): string {
+    editingProductionDraftContext.current = activeProductionCaseId && currentProductionDraft &&
+      currentProductionDraft.draftArtifacts?.eventSpec?.specId === spec.specId
+      ? { caseId: activeProductionCaseId, draft: structuredClone(currentProductionDraft) }
+      : undefined;
+    return loadSpecIntoEditorSnapshot(spec);
+  }
 
   const {
     currentProductionSpecId,
@@ -957,6 +971,13 @@ function ProductWorkspaceView({
     handleSaveSpecEdit
   } = buildProductionPlanningControls({
     editingSpecId,
+    productionDraftContext: editingSpecId && editingProductionDraftContext.current
+      ? editingProductionDraftContext.current
+      : activeProductionCaseId && currentProductionDraft
+        ? { caseId: activeProductionCaseId, draft: currentProductionDraft }
+        : undefined,
+    getCurrentProductionDraftContext: () => liveProductionDraftContext.current,
+    reviseProductionDraft,
     updateAcceptedSpec,
     buildCurrentSpecUpdateInput,
     loadSpecIntoEditorState,
@@ -1038,6 +1059,7 @@ function ProductWorkspaceView({
   const {
     productionRouteMainLayoutState
   } = buildAppProductionRouteAppBoundary({
+    canEditPurchasedQuantities: canEditProductionDraftQuantities(editingSpecId, editingProductionDraftContext.current),
     activeProductionCaseId,
     viewState: productionRouteViewState,
     submitting,

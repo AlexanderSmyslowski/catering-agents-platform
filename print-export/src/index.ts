@@ -32,6 +32,8 @@ import {
   recipeSourceReferenceLabel,
 } from "@catering/shared-core";
 import { renderProductionFolderHtml } from "./production-folder.js";
+import { resolveAppliedProductionSnapshot, type AppliedProductionSnapshot } from "./applied-production-snapshot.js";
+import { renderAppliedProductionContext, renderAppliedPurchaseQuantities, renderProductionKitchenSheets } from "./production-snapshot-html.js";
 
 export { renderProductionFolderHtml } from "./production-folder.js";
 
@@ -228,7 +230,7 @@ export function renderOfferHtml(draft: OfferDraft): string {
   ].join("");
 }
 
-export function renderProductionPlanHtml(plan: ProductionPlan, spec?: AcceptedEventSpec): string {
+export function renderProductionPlanHtml(plan: ProductionPlan, spec?: AcceptedEventSpec, appliedSnapshot?: AppliedProductionSnapshot): string {
   const unresolvedSection =
     plan.unresolvedItems.length > 0
       ? [`<section><h2>Offene Punkte</h2><ul>${plan.unresolvedItems.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></section>`]
@@ -236,6 +238,7 @@ export function renderProductionPlanHtml(plan: ProductionPlan, spec?: AcceptedEv
   return [
     "<html><body>",
     "<h1>Produktionsplan</h1>",
+    renderAppliedProductionContext(appliedSnapshot),
     `<p>Status: ${escapeHtml(formatProductionReadinessStatusLabel(plan.readiness.status))}</p>`,
     `<p>Rezeptauswahl: ${plan.recipeSelections.length}</p>`,
     ...renderSourceAnchorsSection(plan as unknown as Record<string, unknown>),
@@ -252,6 +255,8 @@ export function renderProductionPlanHtml(plan: ProductionPlan, spec?: AcceptedEv
           .join("")}</ol></section>`;
       }
     ),
+    renderProductionKitchenSheets(plan),
+    renderAppliedPurchaseQuantities(appliedSnapshot?.approvedSpec.artifacts.purchaseList),
     "<footer>Arbeitsdokument – Mengen, Allergene und Preise vor Produktion prüfen.</footer>",
     "</body></html>"
   ].join("");
@@ -455,7 +460,8 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
         return reply.code(404).send({ message: "ProductionPlan nicht gefunden." });
       }
 
-      const spec = await intakeStore.getSpec(actor, plan.eventSpecId);
+      const appliedSnapshot = await resolveAppliedProductionSnapshot(productionStore, actor, { planId: plan.planId, eventSpecId: plan.eventSpecId });
+      const spec = appliedSnapshot?.approvedSpec.artifacts.eventSpec ?? await intakeStore.getSpec(actor, plan.eventSpecId);
 
       reply.header(
         "content-disposition",
@@ -464,8 +470,9 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
       return reply
         .type("text/html; charset=utf-8")
         .send(renderProductionPlanHtml(
-          plan,
-          spec ? projectAcceptedEventSpecForActor(actor, spec) : undefined
+          appliedSnapshot?.approvedSpec.artifacts.productionPlan ?? plan,
+          spec ? projectAcceptedEventSpecForActor(actor, spec) : undefined,
+          appliedSnapshot
         ));
     }
   );
@@ -484,7 +491,8 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
         return reply.code(404).send({ message: "ProductionPlan nicht gefunden." });
       }
 
-      const spec = await intakeStore.getSpec(actor, plan.eventSpecId);
+      const appliedSnapshot = await resolveAppliedProductionSnapshot(productionStore, actor, { planId: plan.planId, eventSpecId: plan.eventSpecId });
+      const spec = appliedSnapshot?.approvedSpec.artifacts.eventSpec ?? await intakeStore.getSpec(actor, plan.eventSpecId);
       if (!spec) {
         return reply.code(404).send({ message: "AcceptedEventSpec zum ProductionPlan nicht gefunden." });
       }
@@ -496,11 +504,11 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
         ])
       ];
       const [purchaseLists, recipes, clarificationAnswers] = await Promise.all([
-        productionStore.listPurchaseLists(actor),
-        Promise.all(recipeIds.map((recipeId) => recipeLibrary.get(actor, recipeId))),
-        productionStore.listClarificationAnswers(actor)
+        appliedSnapshot ? [appliedSnapshot.approvedSpec.artifacts.purchaseList] : productionStore.listPurchaseLists(actor),
+        appliedSnapshot ? appliedSnapshot.approvedSpec.artifacts.recipes : Promise.all(recipeIds.map((recipeId) => recipeLibrary.get(actor, recipeId))),
+        appliedSnapshot ? [] : productionStore.listClarificationAnswers(actor)
       ]);
-      const linkedRecipes = recipes.filter((recipe): recipe is Recipe => Boolean(recipe));
+      const linkedRecipes: Recipe[] = recipes.flatMap(recipe => recipe ? [recipe] : []);
 
       reply.header(
         "content-disposition",
@@ -509,10 +517,11 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
       return reply
         .type("text/html; charset=utf-8")
         .send(renderProductionFolderHtml({
-          plan,
+          plan: appliedSnapshot?.approvedSpec.artifacts.productionPlan ?? plan,
           spec: projectAcceptedEventSpecForActor(actor, spec),
           purchaseLists: purchaseLists.filter((list) => list.eventSpecId === spec.specId),
           recipes: linkedRecipes,
+          appliedSnapshot,
           clarificationAnswers: clarificationAnswers.filter((answer) => answer.context.specId === spec.specId)
         }));
     }
@@ -526,10 +535,12 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
         return forbidden;
       }
 
-      const list = await productionStore.getPurchaseList(actorForRequest(request), request.params.purchaseListId);
+      const actor = actorForRequest(request);
+      const list = await productionStore.getPurchaseList(actor, request.params.purchaseListId);
       if (!list) {
         return reply.code(404).send({ message: "PurchaseList nicht gefunden." });
       }
+      const appliedSnapshot = await resolveAppliedProductionSnapshot(productionStore, actor, { purchaseListId: list.purchaseListId, eventSpecId: list.eventSpecId });
 
       reply.header(
         "content-disposition",
@@ -537,7 +548,7 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
       );
       return reply
         .type("text/csv; charset=utf-8")
-        .send(renderPurchaseListCsv(list));
+        .send(renderPurchaseListCsv(appliedSnapshot?.approvedSpec.artifacts.purchaseList ?? list));
     }
   );
 

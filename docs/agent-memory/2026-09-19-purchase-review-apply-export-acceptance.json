@@ -1,0 +1,343 @@
+{
+  "schemaVersion": "1.0",
+  "recordedAt": "2026-09-19T20:01:53.345Z",
+  "scope": "Retained D7 procurement, individual draft review, synthetic approval, apply, export and reopen acceptance",
+  "sourceComment": {
+    "pullRequest": 694,
+    "commentId": 5743734627,
+    "url": "https://github.com/AlexanderSmyslowski/catering-agents-platform/pull/694#issuecomment-5743734627",
+    "readExitCode": 0
+  },
+  "branch": "codex/gate-c-local-session-rehearsal-20260919",
+  "base": {
+    "head": "3deb5547910e2795388a62a04555a0811c40eb9c",
+    "tree": "76eb97f3e26e7c44a3dc902fd86093d07246d257",
+    "memoryVersion": "5.392"
+  },
+  "acceptedCode": {
+    "head": "571c1d4cb9ab87280ab5c9b29a09e34a579d1bfd",
+    "tree": "457ff3bc37f1dd432f634dd55cb3490a52717e34",
+    "independentReview": "PASS",
+    "contentFingerprintSha256": "9c2abf32ff6ffdb4f94a4ebec1f534d0db63aad9aac0e7caad60e1a347a01d76",
+    "reviewReportSha256": "76dd2019d4fa7edb9323d2f09412acfb7929982e2e7cf8d2a67f1361a0a206ce"
+  },
+  "rulings": [
+    "The detailed PR comment is the binding product specification; the ignored local execution plan only decomposes implementation and adds no product scope.",
+    "Synthetic procurement decisions are Croissants 1 Stück per person, producing 35 Stück, and Wasser 0.5 l per person, producing 17.5 l."
+  ],
+  "retainedRuntime": {
+    "root": "/tmp/catering-recipe-continuation-4ANJAV",
+    "originalD5RootUsed": false,
+    "newOfferOrReferenceCaseCreated": false,
+    "d7Baseline": {
+      "draftId": "production-draft-prepared-31f5a1cb7559da8fe3ac1bea4f7fe62e22e743a78be25e0f02b1f7c252f68a29",
+      "revision": 7,
+      "fileCount": 229,
+      "manifestSha256": "f7009d2d9956f4f01b6deb67f46ae9e5a014d1e1b1a05495f52f0a37ddcb4061"
+    },
+    "prePrintAcceptance": {
+      "fileCount": 514,
+      "manifestSha256": "0c7b8bb0450428c32476005d7c6134b5cc2f01dbd5ac56e6cdc125df4ec6ec10",
+      "dataRetained": true
+    },
+    "postPrintAcceptance": {
+      "fileCount": 542,
+      "manifestSha256": "034b4a995628cf7dfda976a635bb699042fc300f4cff3fbf5de6a6265e92e7c9",
+      "dataRetained": true
+    },
+    "providers": [
+      "fixture"
+    ],
+    "servicesStopped": true,
+    "ports": {
+      "3311": 1,
+      "3312": 1,
+      "3313": 1,
+      "3314": 1,
+      "3320": 1
+    }
+  },
+  "implementation": {
+    "procurementQuantities": "Existing canonical draft revision UI now captures complete, exact per-person purchased-element quantities and derives purchase totals once from attendee count; malformed, partial and unsupported inputs fail closed.",
+    "reviewContent": "Each existing draft review card renders its own frozen event, production plan, purchase list or recipe snapshot before the unchanged individual decision action.",
+    "applyAndExports": "Approval and Apply retain immutable Offer/Handoff authority, accept only the authorized canonical production descendant, publish exact applied snapshots transactionally and bind existing exports to the applied plan, purchase list and recipe identities.",
+    "legacyD7Compatibility": "The retained legacy Handoff without the newer source snapshot is accepted only through exact raw-request, selected-offer-variant and reviewed-label/category reconstruction; commercial, label, mode, budget, tenant and role drift remain rejected.",
+    "newRoutes": false,
+    "newPersistenceSystem": false,
+    "dependencyVersionUpdates": false
+  },
+  "runtimeProgression": [
+    {
+      "draftId": "production-draft-prepared-31f5a1cb7559da8fe3ac1bea4f7fe62e22e743a78be25e0f02b1f7c252f68a29",
+      "revision": 7,
+      "result": "retained prepared starting draft; later superseded"
+    },
+    {
+      "draftId": "production-draft-revision-429e40c9f71ff1548caf52034ae407886bcbb2177f668341d9d037489723abc7",
+      "revision": 8,
+      "result": "canonical successor saved through the UI with the two explicit procurement quantity decisions; earlier derived artifacts and reviews invalidated"
+    },
+    {
+      "draftId": "production-draft-prepared-92bfcfccedfcc6b518e7698314a2a4e28f754533abcdd6efe8165ed5817c921d",
+      "revision": 9,
+      "result": "freshly prepared successor, individually reviewed and technically approved by the synthetic proxy actor"
+    }
+  ],
+  "bindings": {
+    "caseId": "production-case-handoff-6e0bf64a6bafbc9f5e43b5af9e935b5a5474ff2749c394bcc54005bd0a9b0291",
+    "caseVersion": 3,
+    "caseStatus": "completed",
+    "handoffId": "handoff-c6118104258962aa50d11638df006a97e50207c2bf7d3a745df4931fda6a458e",
+    "eventSpecId": "spec-browser-rehearsal-offer-case",
+    "approvedProductionSpecId": "approved-production-spec-4b9e04e12d2f2038ec868fab74ee088f68afadf966b3b9247cc680a9e55290e4",
+    "approvalRequestId": "approval-926d227bc313c799aec258624e84887ac5a58a1b79527c11ad44dfa52b208281",
+    "planId": "plan-spec-browser-rehearsal-offer-case",
+    "purchaseListId": "purchase-spec-browser-rehearsal-offer-case",
+    "recipeId": "upload-kaffeepause-kompakt-synthetische-testfixture-3d824e6ef7"
+  },
+  "syntheticOperatorDecisions": [
+    {
+      "element": "Croissants",
+      "amountPerPerson": 1,
+      "unit": "Stück",
+      "attendees": 35,
+      "derivedPurchaseQuantity": 35
+    },
+    {
+      "element": "Wasser",
+      "amountPerPerson": 0.5,
+      "unit": "l",
+      "attendees": 35,
+      "derivedPurchaseQuantity": 17.5
+    }
+  ],
+  "individualDraftReviews": [
+    {
+      "cardId": "card-prepared-event-spec",
+      "kind": "event_data",
+      "decision": "fits",
+      "targetId": "spec-browser-rehearsal-offer-case"
+    },
+    {
+      "cardId": "card-prepared-production-plan",
+      "kind": "timeline",
+      "decision": "fits",
+      "targetId": "plan-spec-browser-rehearsal-offer-case"
+    },
+    {
+      "cardId": "card-prepared-purchase-list",
+      "kind": "purchase_item",
+      "decision": "fits",
+      "targetId": "purchase-spec-browser-rehearsal-offer-case"
+    },
+    {
+      "cardId": "card-prepared-recipe-1",
+      "kind": "recipe",
+      "decision": "fits",
+      "targetId": "upload-kaffeepause-kompakt-synthetische-testfixture-3d824e6ef7"
+    }
+  ],
+  "technicalApproval": {
+    "decision": "approved",
+    "decidedBy": {
+      "name": "Produktions-Mitarbeiter",
+      "role": "production_operator",
+      "source": "trusted-proxy:x-catering-actor-name",
+      "classification": "synthetic test actor"
+    },
+    "approvedAt": "2026-09-19T19:03:37.403Z",
+    "humanKitchenApproval": false
+  },
+  "apply": {
+    "appliedAt": "2026-09-19T19:41:25.545Z",
+    "firstSuccessfulUiPath": true,
+    "idempotentFinalHeadRetry": {
+      "status": 200,
+      "sameEventSpecId": true,
+      "samePlanId": true,
+      "samePurchaseListId": true,
+      "sameRecipeIds": true,
+      "duplicateArtifacts": false
+    }
+  },
+  "derivedArtifacts": {
+    "recipe": {
+      "baseYield": {
+        "amount": 10,
+        "unit": "servings"
+      },
+      "approvalState": "review_required",
+      "sourceReference": "upload:synthetic-kaffeepause-recipe.txt"
+    },
+    "productionPlan": {
+      "scaledYield": {
+        "amount": 35,
+        "unit": "servings"
+      },
+      "batchCount": 4,
+      "ingredients": [
+        "350 g Kaffeebohnen",
+        "70 g Tee",
+        "3.5 l Haferdrink"
+      ],
+      "kitchenSheets": 2,
+      "unresolvedItems": 0
+    },
+    "purchaseList": {
+      "itemCount": 5,
+      "duplicateIngredientIds": 0,
+      "items": [
+        "35 Stück Croissants",
+        "17.5 l Wasser",
+        "3.5 l Haferdrink",
+        "350 g Kaffeebohnen",
+        "70 g Tee"
+      ],
+      "bidirectionalCoverage": true,
+      "procurementLineagePresent": true,
+      "recipeLineagePresent": true
+    }
+  },
+  "exports": {
+    "productionPlanHtml": {
+      "openedInBrowser": true,
+      "contentInspected": true,
+      "containsExactBindingsAndQuantities": true,
+      "sha256": "a97a64eac71d4c2b1e1d285732ab92098009df09193d380c376ef7ccdf8d6afa",
+      "printView": {
+        "printMediaEmulated": true,
+        "pdfCreatedExitCode": 0,
+        "pdfSha256": "e52a5b5d55e5e8d81e166afff423de957cd5e8a665d4491305d172de041bad9c",
+        "pages": 2,
+        "renderedPagesVisuallyInspected": 2,
+        "expectedAnchorsPresent": true,
+        "glyphsInsideMediaBox": true,
+        "clippedEssentialContent": false,
+        "overlapOrUnreadableGlyphs": false
+      }
+    },
+    "productionFolderHtml": {
+      "openedInBrowser": true,
+      "contentInspected": true,
+      "containsExactBindingsAndQuantities": true,
+      "sha256": "a9a284be8cdb97b15583843951c48ba1e0b2e0cc0129d58ac8f291e4d193205e",
+      "printView": {
+        "printMediaEmulated": true,
+        "pdfCreatedExitCode": 0,
+        "pdfSha256": "da6f343e266c5b39844aa3b84683b56e5800bcd39f1e659aec27995b00d1be93",
+        "pages": 8,
+        "renderedPagesVisuallyInspected": 8,
+        "expectedAnchorsPresent": true,
+        "glyphsInsideMediaBox": true,
+        "clippedEssentialContent": false,
+        "overlapOrUnreadableGlyphs": false
+      }
+    },
+    "purchaseCsv": {
+      "browserDownloadObserved": true,
+      "suggestedFilename": "purchase-spec-browser-rehearsal-offer-case.csv",
+      "contentInspected": true,
+      "rowCount": 5,
+      "sha256": "29e3dbc16ac9b4e14b8c23b9f6b3ffc5478ffd5776937c411b88dd7675bd2171",
+      "downloadedFileMatchesEvidenceCopy": true,
+      "wrapperAttempts": [
+        {
+          "startedAt": "2026-09-19T19:49:52.369Z",
+          "exitCode": 1
+        },
+        {
+          "startedAt": "2026-09-19T19:50:58.481Z",
+          "exitCode": 0
+        }
+      ],
+      "finalWrapperExitCode": 0,
+      "wrapperLimit": "The first Playwright wrapper attempt returned 1 after logging download events; the identical browser download retry returned 0. The downloaded file and evidence copy are byte-identical and were parsed successfully."
+    },
+    "contentLimitsVisible": [
+      "recipe status remains review_required / Prüfung nötig",
+      "synthetic recipe instructions require real review before kitchen use",
+      "convenience source remains open",
+      "working-document note requires quantities, allergens and prices to be checked before production"
+    ]
+  },
+  "reopen": {
+    "browserReloadAndHistoryReopen": true,
+    "sameCaseId": true,
+    "sameApprovedProductionSpecId": true,
+    "samePlanId": true,
+    "samePurchaseListId": true,
+    "sameRecipeStatus": "review_required",
+    "caseShownAs": "completed · geöffnet"
+  },
+  "negativeChecks": [
+    {
+      "operation": "direct Apply without trusted production operator",
+      "status": 403,
+      "response": "Produktions-Operator erforderlich."
+    },
+    {
+      "operation": "direct applied export without trusted production operator",
+      "status": 403,
+      "response": "Produktions-Operator erforderlich."
+    },
+    {
+      "operation": "reviewer budget deletion and Handoff-root replacement diagnostics",
+      "status": 409,
+      "artifactsWritten": false
+    },
+    {
+      "operation": "reviewer legacy label and mode drift diagnostics",
+      "result": "rejected"
+    }
+  ],
+  "verification": [
+    {
+      "command": "npm test -- --run tests/production-draft-apply.test.ts tests/offer-accepted-event-spec-transport.test.ts tests/production-applied-snapshot.test.ts tests/production-commercial-access.test.ts tests/offer-production-handoff.test.ts tests/production-handoff-port.test.ts --maxWorkers=1",
+      "exitCode": 0,
+      "testFiles": 6,
+      "passed": 75,
+      "failed": 0,
+      "logSha256": "9d57acd30421780ca92071ea48d1358e63d9af5034a7e55e5324fd3205697f91"
+    },
+    {
+      "command": "npx --no-install tsc --noEmit",
+      "exitCode": 0,
+      "logSha256": "759c582d8258becaa967c5dc15f22c4618613f6a732963aa888752eb6d7ad774"
+    },
+    {
+      "command": "npm run build",
+      "exitCode": 0,
+      "logSha256": "16599c1d7d3b1a882abe37d1c0637507feae272dc0ea517a99e380119ea4d5b1"
+    },
+    {
+      "command": "python3 .runtime/acceptance-20260919/purchase-review-assert.py",
+      "exitCode": 0,
+      "checked": "stored identities, reviews, approval, Apply manifest, 35/4 batch separation, all five purchase rows, bidirectional lineage, both HTML contents and downloaded CSV"
+    },
+    {
+      "command": "Playwright emulate print media and create plan/folder PDFs; pdfinfo, pdftotext, pdftoppm and pdfplumber verification",
+      "exitCode": 0,
+      "checked": "2 plan pages and 8 folder pages rendered and visually inspected; all expected anchors present, every glyph inside the MediaBox, no clipped essential content, overlap or unreadable glyphs"
+    },
+    {
+      "command": "python3 .runtime/acceptance-20260919/purchase-review-stop-stack.py",
+      "exitCode": 0,
+      "result": "only owned fixture services stopped; all five ports returned lsof exit 1"
+    }
+  ],
+  "independentReview": {
+    "disposition": "PASS",
+    "boundHead": "571c1d4cb9ab87280ab5c9b29a09e34a579d1bfd",
+    "boundTree": "457ff3bc37f1dd432f634dd55cb3490a52717e34",
+    "focusedTests": 20,
+    "findings": []
+  },
+  "limits": [
+    "Technical synthetic approval and Apply were completed; no real human kitchen review or real production approval occurred.",
+    "The uploaded synthetic recipe remains review_required. Its empty declared allergen list is not a real allergen review or global house-recipe approval.",
+    "The exported Metro Convenience and Metro Fresh values are existing system working hints, not verified suppliers, prices, pack sizes, stock or purchase commitments.",
+    "Croissant and water product selection and package conversion remain open before a real order; this synthetic run needed no package conversion because the chosen purchase units were Stück and l.",
+    "No real order, customer data, paid provider, deployment, merge, server/AgenturOS change or external business effect occurred.",
+    "This evidence is not an overall Gate-C approval."
+  ]
+}

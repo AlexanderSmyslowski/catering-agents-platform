@@ -7,7 +7,6 @@ import {
   readFileSync,
   writeFileSync
 } from "node:fs";
-import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
@@ -105,11 +104,46 @@ async function waitForFileContent(filePath: string, content: string, timeoutMs =
   throw new Error(`Timed out waiting for ${content} in ${filePath}`);
 }
 
-afterEach(async () => {
-  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+afterEach(() => {
+  for (const root of roots.splice(0)) spawnSync("/usr/bin/trash", [root], { stdio: "ignore" });
 });
 
 describe("local stack migration guard", () => {
+  it.each([3101, 3102, 3104, 3200])("refuses migration when a foreign listener occupies service port %s", (port) => {
+    const harness = createLauncherHarness("catering-foreign-port-");
+    writeExecutable(path.join(harness.binDir, "lsof"), [
+      "#!/bin/sh",
+      `case "$*" in *"-iTCP:${port} "*) exit 0 ;; *) exit 1 ;; esac`
+    ].join("\n"));
+    const result = spawnSync("bash", [harness.startScript], {
+      cwd: harness.root,
+      env: launcherEnv(harness),
+      encoding: "utf8"
+    });
+    expect(result.status, result.stderr).toBe(1);
+    expect(result.stderr).toContain(`Port ${port}`);
+    expect(existsSync(harness.migrationMarker)).toBe(false);
+  });
+  it.each(["intake", "offer", "exports", "ui"])("refuses migration while a legacy %s session remains, without stopping it", (service) => {
+    const harness = createLauncherHarness("catering-legacy-writer-");
+    const screenActions = path.join(harness.root, "screen-actions");
+    writeExecutable(path.join(harness.binDir, "screen"), [
+      "#!/bin/sh",
+      'if [ "${1:-}" = "-ls" ]; then',
+      `  printf '123.catering-${service}\\t(Detached)\\n'`,
+      "else",
+      `  printf '%s\\n' "$*" >>${JSON.stringify(screenActions)}`,
+      "fi"
+    ].join("\n"));
+    const result = spawnSync("bash", [harness.startScript], {
+      cwd: harness.root,
+      env: launcherEnv(harness),
+      encoding: "utf8"
+    });
+    expect(result.status, result.stderr).toBe(1);
+    expect(existsSync(harness.migrationMarker)).toBe(false);
+    expect(existsSync(screenActions)).toBe(false);
+  });
   it("refuses to migrate while an existing local stack session can still write legacy data", () => {
     const root = mkdtempSync(path.join(tmpdir(), "catering-local-stack-migration-guard-"));
     roots.push(root);

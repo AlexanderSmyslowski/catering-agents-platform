@@ -391,6 +391,9 @@ export function registerOfferApprovalRoutes(app: FastifyInstance, deps: OfferApp
         ...structuredClone(approvedOffer.selectedVariant.proposedEventSpec),
         lifecycle: { commercialState: "accepted" }
       },
+      ...(approvedOffer.sourceAcceptedEventSpecSnapshot
+        ? { sourceAcceptedEventSpecSnapshot: structuredClone(approvedOffer.sourceAcceptedEventSpecSnapshot) }
+        : {}),
       pricingSnapshot: structuredClone(approvedOffer.selectedVariant.proposedEventSpec.budgetContext!.pricingSummary!),
       source: {
         draftId: approvedOffer.sourceDraft.draftId,
@@ -513,7 +516,10 @@ export function registerOfferApprovalRoutes(app: FastifyInstance, deps: OfferApp
       customerFacingText: draft.customerFacingText,
       serviceModules: structuredClone(draft.serviceModules),
       pricingSummary: structuredClone(pricingSummary),
-      selectedVariant: structuredClone(selectedVariant)
+      selectedVariant: structuredClone(selectedVariant),
+      ...(draft.sourceAcceptedEventSpecSnapshot
+        ? { sourceAcceptedEventSpecSnapshot: structuredClone(draft.sourceAcceptedEventSpecSnapshot) }
+        : {})
     });
   };
 
