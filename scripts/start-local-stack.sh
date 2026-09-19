@@ -305,7 +305,14 @@ production_writer_is_quiescent() {
     echo "Eine bestehende Production-screen-Sitzung verhindert den sicheren Protokollwechsel." >&2
     return 1
   fi
-  if ps -ax -o command= | awk -v root="${ROOT_DIR}/node_modules/" '
+  # Capture before starting awk: its own command line contains both search terms.
+  # A failed process-list read must not be mistaken for the absence of writers.
+  local process_snapshot
+  if ! process_snapshot="$(ps -ax -o command=)"; then
+    echo "Production-Prozesse konnten nicht sicher geprüft werden." >&2
+    return 1
+  fi
+  if printf '%s\n' "${process_snapshot}" | awk -v root="${ROOT_DIR}/node_modules/" '
     index($0, root) && index($0, "production-service/src/server.ts") { found=1 }
     END { exit !found }
   '; then
