@@ -67,6 +67,7 @@ export function ProductionStructuredAnswerEditor({
           setEditingMenuItems={setEditingMenuItems}
         />
         <ProductionComponentAnswerList
+          attendeeCount={Number(editingAttendeeCount)}
           menuPlan={focusedProductionSpec.menuPlan}
           editingComponentStates={editingComponentStates}
           recipes={recipes}

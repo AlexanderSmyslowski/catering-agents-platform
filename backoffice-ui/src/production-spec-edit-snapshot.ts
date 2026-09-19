@@ -23,6 +23,13 @@ export function componentEditStateFromMenuItem(item: Record<string, unknown>): C
     purchasedElements: Array.isArray(productionDecision?.purchasedElements)
       ? productionDecision.purchasedElements.map((entry) => String(entry)).join(", ")
       : "",
+    ...(Array.isArray(productionDecision?.purchasedQuantities) ? {
+      purchasedQuantities: productionDecision.purchasedQuantities.map(entry => ({
+        element: String(entry.element), amountPerPerson: String(entry.amountPerPerson), unit: String(entry.unit)
+      }))
+    } : {}),
+    ...(Array.isArray(productionDecision?.purchasedElements) && productionDecision.purchasedElements.some(entry => typeof entry === "string" && entry.includes(","))
+      ? { originalPurchasedElements: [...productionDecision.purchasedElements] as string[] } : {}),
     recipeOverrideId: String(item.recipeOverrideId ?? ""),
     notes: String(productionDecision?.notes ?? "")
   };
@@ -76,6 +83,7 @@ export function normalizedSpecEditSnapshot(snapshot: SpecEditSnapshot): string {
           menuCategory: state.menuCategory.trim(),
           productionMode: state.productionMode.trim(),
           purchasedElements: state.purchasedElements.trim(),
+          ...(state.purchasedQuantities !== undefined ? { purchasedQuantities: state.purchasedQuantities } : {}),
           recipeOverrideId: state.recipeOverrideId.trim(),
           notes: state.notes.trim()
         }

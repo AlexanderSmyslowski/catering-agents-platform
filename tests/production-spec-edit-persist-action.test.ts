@@ -191,3 +191,29 @@ it("never interprets omitted optional component fields as explicit clearing", as
   await buildProductionSpecEditPersistAction(actionInput)();
   expect(actionInput.reviseProductionDraft).toHaveBeenCalledWith("canonical-r4", { caseId: "case-1", expectedRevision: 4, componentClassifications: [], componentUpdates: [{ componentId: "coffee", notes: "neu" }] });
 });
+
+
+it("persists a quantity-only edit via canonical revise and reopens the stored decision", async () => {
+  const purchasedQuantities = [{ element: "Wasser", amountPerPerson: 0.5, unit: "l" }];
+  const source = { specId: "spec-lunch", attendees: { expected: 35 }, menuPlan: [{ componentId: "water", label: "Wasser", productionDecision: { mode: "convenience_purchase", purchasedElements: ["Wasser"], purchasedQuantities } }] };
+  const snapshot = specEditSnapshotFromSpec(source);
+  const componentStates = Object.fromEntries(snapshot.components);
+  componentStates.water = { ...componentStates.water!, purchasedQuantities: [{ element: "Wasser", amountPerPerson: "0.75", unit: "l" }] };
+  const stored = { ...source, menuPlan: [{ ...source.menuPlan[0]!, productionDecision: { ...source.menuPlan[0]!.productionDecision, purchasedQuantities: [{ element: "Wasser", amountPerPerson: 0.75, unit: "l" }] } }] };
+  const draft = { draftId: "canonical-r4", revision: 4, status: "pending_review" as const, createdAt: "2026-09-19", source: { sourceRef: "offer-handoff:handoff-1" }, reviewCards: [], draftArtifacts: { eventSpec: source } };
+  const actionInput = input({ productionDraftContext: { caseId: "case-1", draft },
+    reviseProductionDraft: vi.fn(async () => ({ draft: { ...draft, draftId: "canonical-r5", revision: 5, draftArtifacts: { eventSpec: stored } } })),
+    buildCurrentSpecUpdateInput: () => buildSpecEditUpdateInput({ ...snapshot, componentStates })
+  });
+  actionInput.getCurrentProductionDraftContext = () => actionInput.productionDraftContext;
+  const saved = await buildProductionSpecEditPersistAction(actionInput)();
+  expect(saved).toEqual(stored);
+  expect(actionInput.reviseProductionDraft).toHaveBeenCalledWith("canonical-r4", { caseId: "case-1", expectedRevision: 4, componentClassifications: [], componentUpdates: [{ componentId: "water", purchasedQuantities: [{ element: "Wasser", amountPerPerson: 0.75, unit: "l" }] }] });
+  expect(Object.fromEntries(specEditSnapshotFromSpec(saved!).components).water!.purchasedQuantities).toEqual(componentStates.water.purchasedQuantities);
+});
+
+it("refuses to silently lose structured quantities on the legacy intake save path", async () => {
+  const actionInput = input({ buildCurrentSpecUpdateInput: () => ({ componentUpdates: [{ componentId: "water", purchasedQuantities: [{ element: "Wasser", amountPerPerson: 0.5, unit: "l" }] }] }) });
+  await expect(buildProductionSpecEditPersistAction(actionInput)()).rejects.toThrow(/Produktionsentwurf/);
+  expect(actionInput.updateAcceptedSpec).not.toHaveBeenCalled();
+});

@@ -4584,6 +4584,72 @@ describe("explicit handoff classification revisions", () => {
     } finally { await app.close(); }
   });
 
+  it("revises quantities, invalidates derived reviews and regenerates exact totals in the same case", async () => {
+    const spec = purchaseEventSpec();
+    spec.attendees.expected = 35;
+    spec.menuPlan[0]!.servings = 35;
+    spec.menuPlan[0]!.productionDecision = { mode: "convenience_purchase", purchasedElements: ["Croissants", "Wasser"], notes: "synthetisch" };
+    const { app, store, draft, caseId } = await productionFixture(spec);
+    try {
+      const prepared = await app.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/prepare`, headers: actorHeaders, payload: {} });
+      expect(prepared.statusCode, prepared.body).toBe(201);
+      const source = prepared.json<{ draft: ProductionDraft }>().draft;
+      const review = await app.inject({ method: "PATCH", url: `/v1/production/drafts/${source.draftId}/review-cards/${source.reviewCards[0]!.cardId}`, headers: actorHeaders, payload: { decision: "fits" } });
+      expect(review.statusCode, review.body).toBe(200);
+      const storedSource = (await store.getProductionDraft({ businessId: "local" }, source.draftId))!;
+      expect(storedSource.reviewCards.some(card => card.decision === "fits")).toBe(true);
+      const quantities = [{ element: "Croissants", amountPerPerson: 1, unit: "Stück" }, { element: "Wasser", amountPerPerson: 0.5, unit: "l" }];
+      const command = { caseId, expectedRevision: source.revision, componentUpdates: [{ componentId: spec.menuPlan[0]!.componentId, purchasedQuantities: quantities }] };
+      const request = { method: "POST" as const, url: `/v1/production/drafts/${source.draftId}/revise`, headers: actorHeaders, payload: command };
+      expect((await app.inject({ ...request, headers: {} })).statusCode).toBe(403);
+      expect((await app.inject({ ...request, payload: { ...command, caseId: "wrong-case" } })).statusCode).toBe(409);
+      expect((await app.inject({ ...request, payload: { ...command, expectedRevision: source.revision - 1 } })).statusCode).toBe(409);
+      const saved = await app.inject(request);
+      expect(saved.statusCode, saved.body).toBe(201);
+      const revised = saved.json<{ draft: ProductionDraft }>().draft;
+      expect(revised.revision).toBe(source.revision + 1);
+      expect(revised.supersedesDraftId).toBe(source.draftId);
+      expect(revised.draftArtifacts.eventSpec).toEqual({ ...source.draftArtifacts.eventSpec, menuPlan: source.draftArtifacts.eventSpec!.menuPlan.map(component => ({ ...component, productionDecision: { ...component.productionDecision, purchasedQuantities: quantities } })) });
+      expect(revised.draftArtifacts.productionPlan).toBeUndefined();
+      expect(revised.draftArtifacts.purchaseList).toBeUndefined();
+      expect(revised.reviewCards.every(card => card.decision === "pending" && !card.decidedBy && !card.decidedAt)).toBe(true);
+      const regenerated = await app.inject({ method: "POST", url: `/v1/production/drafts/${revised.draftId}/prepare`, headers: actorHeaders, payload: {} });
+      expect(regenerated.statusCode, regenerated.body).toBe(201);
+      const result = regenerated.json<{ draft: ProductionDraft }>().draft;
+      expect(result.draftArtifacts.purchaseList!.items).toEqual(expect.arrayContaining([
+        expect.objectContaining({ purchaseQty: 35, purchaseUnit: "Stück", sourceRecipes: [`procurement:${spec.menuPlan[0]!.componentId}`] }),
+        expect.objectContaining({ purchaseQty: 17.5, purchaseUnit: "l", sourceRecipes: [`procurement:${spec.menuPlan[0]!.componentId}`] })
+      ]));
+      expect(await store.findCaseIdForArtifact({ businessId: "local" }, result.draftId)).toBe(caseId);
+      expect((await store.getProductionDraft({ businessId: "local" }, result.draftId))!.draftArtifacts.eventSpec).toEqual({
+        ...storedSource.draftArtifacts.eventSpec,
+        menuPlan: storedSource.draftArtifacts.eventSpec!.menuPlan.map(component => ({ ...component, productionDecision: { ...component.productionDecision, purchasedQuantities: quantities } }))
+      });
+      expect((await app.inject({ ...request, payload: { ...command, componentUpdates: [{ ...command.componentUpdates[0], purchasedQuantities: quantities.map(item => ({ ...item, amountPerPerson: 2 })) }] } })).statusCode).toBe(409);
+    } finally { await app.close(); }
+  });
+
+  it("rejects mismatched quantities and later element changes without mutating the canonical draft", async () => {
+    const spec = purchaseEventSpec();
+    spec.menuPlan[0]!.productionDecision = { mode: "convenience_purchase", purchasedElements: ["Wasser"], purchasedQuantities: [{ element: "Wasser", amountPerPerson: 0.5, unit: "l" }] };
+    const { app, store, draft, caseId } = await productionFixture(spec);
+    try {
+      const before = await store.listProductionDrafts({ businessId: "local" });
+      for (const patch of [
+        { purchasedElements: ["Croissants"] },
+        { purchasedQuantities: [] },
+        { purchasedQuantities: [{ element: "Wasser", amountPerPerson: 0, unit: "l" }] },
+        { purchasedQuantities: [{ element: "Wasser", amountPerPerson: [1], unit: "l" }] },
+        { purchasedQuantities: [{ element: "Wasser", amountPerPerson: 1, unit: {} }] },
+        { purchasedQuantities: [{ element: "Wasser", amountPerPerson: 1, unit: "l", extra: true }] }
+      ]) {
+        const response = await app.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/revise`, headers: actorHeaders, payload: { caseId, expectedRevision: draft.revision, componentUpdates: [{ componentId: spec.menuPlan[0]!.componentId, ...patch }] } });
+        expect(response.statusCode, response.body).toBe(422);
+        expect(await store.listProductionDrafts({ businessId: "local" })).toEqual(before);
+      }
+    } finally { await app.close(); }
+  });
+
   function manufacturingCommand(caseId: string, revision: number) {
     return { ...classificationCommand(caseId, revision),
       componentUpdates: [

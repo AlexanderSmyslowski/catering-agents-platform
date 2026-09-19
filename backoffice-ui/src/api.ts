@@ -1,3 +1,4 @@
+import type { PurchasedQuantity } from "../../shared-core/src/purchased-quantities.js";
 import type {
   ApprovedOffer,
   AcceptedEventSpec,
@@ -1095,6 +1096,7 @@ export type ProductionDraftClassificationUpdate = {
     componentId: string;
     productionMode?: "scratch" | "hybrid" | "convenience_purchase" | "external_finished";
     purchasedElements?: string[];
+    purchasedQuantities?: PurchasedQuantity[];
     recipeOverrideId?: string;
     notes?: string;
   }>;

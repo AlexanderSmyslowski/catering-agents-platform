@@ -1,3 +1,4 @@
+import { validPurchasedQuantities, type PurchasedQuantity } from "../../shared-core/src/purchased-quantities.js";
 import { formatEventSchedule } from "./production-spec-edit-snapshot.js";
 import type { ComponentEditState } from "./production-answer-types.js";
 
@@ -17,6 +18,7 @@ export type SpecEditComponentUpdate = {
   menuCategory?: "classic" | "vegetarian" | "vegan";
   productionMode?: "scratch" | "hybrid" | "convenience_purchase" | "external_finished";
   purchasedElements?: string[];
+  purchasedQuantities?: PurchasedQuantity[];
   recipeOverrideId?: string;
   notes?: string;
 };
@@ -72,14 +74,27 @@ function parseProductionMode(value: string): SpecEditComponentUpdate["production
 
 export function buildSpecEditUpdateInput(state: SpecEditUpdateFormState): SpecEditUpdateInput {
   const componentUpdates: SpecEditUpdateInput["componentUpdates"] = Object.entries(state.componentStates).map(
-    ([componentId, componentState]) => ({
-      componentId,
-      menuCategory: parseMenuCategory(componentState.menuCategory),
-      productionMode: parseProductionMode(componentState.productionMode),
-      purchasedElements: splitCommaList(componentState.purchasedElements),
-      recipeOverrideId: componentState.recipeOverrideId.trim() || "",
-      notes: componentState.notes.trim() || undefined
-    })
+    ([componentId, componentState]) => {
+      const originalElements = componentState.originalPurchasedElements ?? componentState.purchasedQuantities?.map(item => item.element);
+      // Commas inside an existing structured element are names, not separators.
+      const purchasedElements = originalElements?.join(", ") === componentState.purchasedElements
+        ? originalElements : splitCommaList(componentState.purchasedElements);
+      const purchasedQuantities = componentState.purchasedQuantities?.map(item => ({
+        element: item.element, amountPerPerson: Number(item.amountPerPerson), unit: item.unit
+      }));
+      if (purchasedQuantities !== undefined && !validPurchasedQuantities({ purchasedElements, purchasedQuantities })) {
+        throw new Error("Zukaufmengen benötigen je Bestandteil eine positive endliche Menge pro Person und eine Einheit.");
+      }
+      return {
+        componentId,
+        menuCategory: parseMenuCategory(componentState.menuCategory),
+        productionMode: parseProductionMode(componentState.productionMode),
+        purchasedElements,
+        ...(purchasedQuantities !== undefined ? { purchasedQuantities } : {}),
+        recipeOverrideId: componentState.recipeOverrideId.trim() || "",
+        notes: componentState.notes.trim() || undefined
+      };
+    }
   );
 
   return {

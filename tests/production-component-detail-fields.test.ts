@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, createElement } from "react";
+import { act, createElement, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ProductionComponentDetailFields } from "../backoffice-ui/src/production-component-detail-fields.js";
@@ -74,4 +74,26 @@ describe("production component detail fields", () => {
     expect(onPurchasedElementsChange).toHaveBeenCalledWith("fertiger Boden");
     expect(onNotesChange).toHaveBeenCalledWith("separat rueckfragen");
   });
+});
+
+
+it("edits operator quantities and derives totals from the current attendee count", () => {
+  function Editor() {
+    const [purchasedQuantities, setQuantities] = useState([{ element: "Croissants", amountPerPerson: "1", unit: "Stück" }, { element: "Wasser", amountPerPerson: "0.5", unit: "l" }]);
+    return createElement(ProductionComponentDetailFields, { purchasedElements: "Croissants, Wasser", notes: "", onNotesChange: () => {}, onPurchasedElementsChange: () => {}, purchasedQuantities, onPurchasedQuantitiesChange: setQuantities, attendeeCount: 35 });
+  }
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container); roots.push(root);
+  act(() => root.render(createElement(Editor)));
+  expect(container.textContent).toMatch(/Operatorentscheidung/);
+  expect(container.textContent).toContain("35 Stück");
+  expect(container.textContent).toContain("17.5 l");
+  const waterAmount = container.querySelector<HTMLInputElement>('input[aria-label="Wasser Menge pro Person"]');
+  expect(waterAmount).not.toBeNull();
+  act(() => setNativeValue(waterAmount!, "0.75"));
+  expect(container.textContent).toContain("26.25 l");
+  const waterUnit = container.querySelector<HTMLInputElement>('input[aria-label="Wasser Einheit"]');
+  act(() => setNativeValue(waterUnit!, "Liter"));
+  expect(container.textContent).toContain("26.25 Liter");
 });

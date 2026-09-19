@@ -1,3 +1,4 @@
+import { validPurchasedQuantities, type PurchasedQuantity } from "@catering/shared-core";
 import type { FastifyInstance } from "fastify";
 import { createHash, randomUUID } from "node:crypto";
 import {
@@ -2820,7 +2821,7 @@ export function registerProductionArtifactRoutes(
             Object.keys(item).some((key) => !["componentId", "menuCategory"].includes(key)) ||
             typeof item.componentId !== "string" || (typeof item.menuCategory !== "string" || !["classic", "vegetarian", "vegan"].includes(item.menuCategory))) ||
           componentUpdates.some((item) => !isRecord(item) ||
-            Object.keys(item).some((key) => !["componentId", "productionMode", "purchasedElements", "recipeOverrideId", "notes"].includes(key)) ||
+            Object.keys(item).some((key) => !["componentId", "productionMode", "purchasedElements", "purchasedQuantities", "recipeOverrideId", "notes"].includes(key)) ||
             Object.keys(item).length < 2 || typeof item.componentId !== "string" || !item.componentId.trim() ||
             (has(item, "productionMode") && (typeof item.productionMode !== "string" || !modes.includes(item.productionMode))) ||
             (has(item, "purchasedElements") && (!Array.isArray(item.purchasedElements) || item.purchasedElements.length > 100 ||
@@ -2841,7 +2842,7 @@ export function registerProductionArtifactRoutes(
         const categories = new Map<string, "classic" | "vegetarian" | "vegan">(
           classifications.map((item) => [item.componentId, item.menuCategory])
         );
-        type ComponentPatch = { componentId: string; productionMode?: NonNullable<AcceptedEventSpec["menuPlan"][number]["productionDecision"]>["mode"]; purchasedElements?: string[]; recipeOverrideId?: string; notes?: string };
+        type ComponentPatch = { componentId: string; productionMode?: NonNullable<AcceptedEventSpec["menuPlan"][number]["productionDecision"]>["mode"]; purchasedElements?: string[]; purchasedQuantities?: PurchasedQuantity[]; recipeOverrideId?: string; notes?: string };
         const patches = new Map<string, ComponentPatch>(componentUpdates.map(item => [item.componentId, item as ComponentPatch]));
         if (!eventSpec || categories.size !== classifications.length || patches.size !== componentUpdates.length ||
           [...categories.keys(), ...patches.keys()].some((id) => !eventSpec.menuPlan.some((component) => component.componentId === id))) {
@@ -2849,8 +2850,14 @@ export function registerProductionArtifactRoutes(
         }
         for (const [componentId, patch] of patches) {
           const component = eventSpec.menuPlan.find(item => item.componentId === componentId)!;
-          if ((has(patch, "purchasedElements") || has(patch, "notes")) && !(patch.productionMode ?? component.productionDecision?.mode)) {
+          if ((has(patch, "purchasedElements") || has(patch, "purchasedQuantities") || has(patch, "notes")) && !(patch.productionMode ?? component.productionDecision?.mode)) {
             return reply.code(422).send({ message: "Zukaufelemente und Herstellungsnotizen benötigen eine ausdrückliche Herstellungsentscheidung." });
+          }
+          if (!validPurchasedQuantities({ ...component.productionDecision,
+            ...(has(patch, "purchasedElements") ? { purchasedElements: patch.purchasedElements } : {}),
+            ...(has(patch, "purchasedQuantities") ? { purchasedQuantities: patch.purchasedQuantities } : {})
+          })) {
+            return reply.code(422).send({ message: "Zukaufmengen benötigen je Bestandteil genau eine positive endliche Menge pro Person und eine Einheit." });
           }
           if (patch.recipeOverrideId && !await repository.get(actor, patch.recipeOverrideId)) {
             return reply.code(422).send({ message: "Das ausgewählte Rezept ist in der Rezeptbibliothek dieses Betriebs nicht vorhanden." });
@@ -2911,7 +2918,7 @@ export function registerProductionArtifactRoutes(
           ...(remainingUncertainties ? { uncertainties: remainingUncertainties } : {}),
           menuPlan: eventSpec.menuPlan.map((component) => {
             const patch = patches.get(component.componentId);
-            const decisionChanged = patch && ["productionMode", "purchasedElements", "notes"].some(key => has(patch, key));
+            const decisionChanged = patch && ["productionMode", "purchasedElements", "purchasedQuantities", "notes"].some(key => has(patch, key));
             return {
               ...component,
               ...(categories.has(component.componentId) ? { menuCategory: categories.get(component.componentId) } : {}),
@@ -2920,6 +2927,7 @@ export function registerProductionArtifactRoutes(
                 ...component.productionDecision,
                 ...(has(patch, "productionMode") ? { mode: patch.productionMode } : {}),
                 ...(has(patch, "purchasedElements") ? { purchasedElements: patch.purchasedElements } : {}),
+                ...(has(patch, "purchasedQuantities") ? { purchasedQuantities: patch.purchasedQuantities } : {}),
                 ...(has(patch, "notes") ? { notes: patch.notes } : {})
               } } : {})
             };

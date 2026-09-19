@@ -235,6 +235,7 @@ export interface MenuComponent {
   productionDecision?: {
     mode?: "scratch" | "hybrid" | "convenience_purchase" | "external_finished";
     purchasedElements?: string[];
+    purchasedQuantities?: Array<{ element: string; amountPerPerson: number; unit: string }>;
     notes?: string;
   };
 }

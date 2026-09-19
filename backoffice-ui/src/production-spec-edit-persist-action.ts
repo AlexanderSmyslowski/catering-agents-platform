@@ -66,6 +66,7 @@ function buildClassificationUpdate(context: ProductionDraftEditContext, update: 
       patch.productionMode = component.productionMode;
     }
     if (changed("purchasedElements")) patch.purchasedElements = component.purchasedElements ?? [];
+    if (changed("purchasedQuantities")) patch.purchasedQuantities = component.purchasedQuantities;
     if (changed("recipeOverrideId")) patch.recipeOverrideId = component.recipeOverrideId ?? "";
     if (changed("notes")) patch.notes = component.notes ?? "";
     if (Object.keys(patch).length > 1) componentUpdates.push(patch);
@@ -133,6 +134,9 @@ export function buildProductionSpecEditPersistAction({
       assertCurrentProductionDraftContext(savedContext, getCurrentProductionDraftContext, productionDraftContext);
       onDraftRevised?.(response.draft);
     } else {
+      if (update.componentUpdates?.some(component => component.purchasedQuantities !== undefined)) {
+        throw new Error("Strukturierte Zukaufmengen benötigen einen kanonischen Produktionsentwurf. Bitte den Produktionsfall öffnen.");
+      }
       const response = await updateAcceptedSpec(editingSpecId, update);
       updatedSpec = response.acceptedEventSpec;
     }

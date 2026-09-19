@@ -2,6 +2,7 @@ import type { ComponentEditState } from "./production-answer-types.js";
 import { ProductionComponentAnswerCard } from "./production-component-answer-card.js";
 
 type ProductionComponentAnswerListProps = {
+  attendeeCount?: number;
   menuPlan: unknown;
   editingComponentStates: Record<string, ComponentEditState>;
   recipes: Array<Record<string, unknown>>;
@@ -9,6 +10,7 @@ type ProductionComponentAnswerListProps = {
 };
 
 export function ProductionComponentAnswerList({
+  attendeeCount,
   menuPlan,
   editingComponentStates,
   recipes,
@@ -41,6 +43,7 @@ export function ProductionComponentAnswerList({
           return (
             <ProductionComponentAnswerCard
               key={componentId}
+              attendeeCount={attendeeCount}
               componentId={componentId}
               componentLabel={componentLabel}
               recipes={recipes}
