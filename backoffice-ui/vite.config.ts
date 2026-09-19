@@ -18,7 +18,7 @@ export default defineConfig(({ command, mode }) => {
   // uses the aggregate local identity; ordinary API requests keep their roles.
   const intakeTarget = env.VITE_INTAKE_PROXY_TARGET ?? "http://localhost:3101";
   const devAuth = ["1", "true"].includes(env.CATERING_DEV_AUTH?.trim().toLowerCase() ?? "");
-  const localSessionProxy = command === "serve" && mode !== "production"
+  const localSessionProxy: Record<string, ReturnType<typeof proxyTarget>> = command === "serve" && mode !== "production"
     && process.env.NODE_ENV !== "production" && env.NODE_ENV !== "production"
     && devAuth && Boolean(env.CATERING_TRUSTED_ACTOR_SECRET?.trim())
     && /^http:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?\/?$/.test(intakeTarget)
