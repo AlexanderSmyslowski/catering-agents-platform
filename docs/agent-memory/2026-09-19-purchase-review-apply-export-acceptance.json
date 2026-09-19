@@ -35,9 +35,14 @@
       "fileCount": 229,
       "manifestSha256": "f7009d2d9956f4f01b6deb67f46ae9e5a014d1e1b1a05495f52f0a37ddcb4061"
     },
-    "postAcceptance": {
+    "prePrintAcceptance": {
       "fileCount": 514,
       "manifestSha256": "0c7b8bb0450428c32476005d7c6134b5cc2f01dbd5ac56e6cdc125df4ec6ec10",
+      "dataRetained": true
+    },
+    "postPrintAcceptance": {
+      "fileCount": 542,
+      "manifestSha256": "034b4a995628cf7dfda976a635bb699042fc300f4cff3fbf5de6a6265e92e7c9",
       "dataRetained": true
     },
     "providers": [
@@ -198,13 +203,35 @@
       "openedInBrowser": true,
       "contentInspected": true,
       "containsExactBindingsAndQuantities": true,
-      "sha256": "a97a64eac71d4c2b1e1d285732ab92098009df09193d380c376ef7ccdf8d6afa"
+      "sha256": "a97a64eac71d4c2b1e1d285732ab92098009df09193d380c376ef7ccdf8d6afa",
+      "printView": {
+        "printMediaEmulated": true,
+        "pdfCreatedExitCode": 0,
+        "pdfSha256": "e52a5b5d55e5e8d81e166afff423de957cd5e8a665d4491305d172de041bad9c",
+        "pages": 2,
+        "renderedPagesVisuallyInspected": 2,
+        "expectedAnchorsPresent": true,
+        "glyphsInsideMediaBox": true,
+        "clippedEssentialContent": false,
+        "overlapOrUnreadableGlyphs": false
+      }
     },
     "productionFolderHtml": {
       "openedInBrowser": true,
       "contentInspected": true,
       "containsExactBindingsAndQuantities": true,
-      "sha256": "a9a284be8cdb97b15583843951c48ba1e0b2e0cc0129d58ac8f291e4d193205e"
+      "sha256": "a9a284be8cdb97b15583843951c48ba1e0b2e0cc0129d58ac8f291e4d193205e",
+      "printView": {
+        "printMediaEmulated": true,
+        "pdfCreatedExitCode": 0,
+        "pdfSha256": "da6f343e266c5b39844aa3b84683b56e5800bcd39f1e659aec27995b00d1be93",
+        "pages": 8,
+        "renderedPagesVisuallyInspected": 8,
+        "expectedAnchorsPresent": true,
+        "glyphsInsideMediaBox": true,
+        "clippedEssentialContent": false,
+        "overlapOrUnreadableGlyphs": false
+      }
     },
     "purchaseCsv": {
       "browserDownloadObserved": true,
@@ -286,6 +313,11 @@
       "command": "python3 .runtime/acceptance-20260919/purchase-review-assert.py",
       "exitCode": 0,
       "checked": "stored identities, reviews, approval, Apply manifest, 35/4 batch separation, all five purchase rows, bidirectional lineage, both HTML contents and downloaded CSV"
+    },
+    {
+      "command": "Playwright emulate print media and create plan/folder PDFs; pdfinfo, pdftotext, pdftoppm and pdfplumber verification",
+      "exitCode": 0,
+      "checked": "2 plan pages and 8 folder pages rendered and visually inspected; all expected anchors present, every glyph inside the MediaBox, no clipped essential content, overlap or unreadable glyphs"
     },
     {
       "command": "python3 .runtime/acceptance-20260919/purchase-review-stop-stack.py",
