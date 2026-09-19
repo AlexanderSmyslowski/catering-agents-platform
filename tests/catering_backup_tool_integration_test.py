@@ -72,7 +72,7 @@ sys.exit(result.returncode)
                     postgres_container_id='a' * 64, postgres_dump=str(root / 'dump'),
                     DUMP_OBSERVATION=str(root / 'pg.json'), DOCKER_OBSERVATION=str(root / 'docker.json'))
 
-    def test_current_dump_removes_connection_environment_at_executed_pg_dump(self):
+    def test_current_dump_captures_full_database_without_connection_overrides(self):
         m = self.implementation()
         sources = {path: (ROOT / path).read_text() for path in m.SOURCE_HASHES}
         fragment = m.extract_components(sources)['dump']
@@ -84,8 +84,7 @@ sys.exit(result.returncode)
             self.assertEqual(result.returncode, 0)
             actual = json.loads((root / 'pg.json').read_text())
             self.assertEqual(actual['argv'], ['--username=catering', '--dbname=catering_agents',
-                '--format=custom', '--no-owner', '--no-privileges', '--strict-names',
-                '--table=public.catering_business_records', '--table=public.catering_source_documents'])
+                '--format=custom', '--no-owner', '--no-privileges'])
             self.assertEqual((root / 'dump').read_bytes(), b'PGDMP-synthetic')
             self.assertEqual(actual['environment'], dict.fromkeys(
                 ['PGHOST', 'PGHOSTADDR', 'PGPORT', 'PGSERVICE', 'PGSERVICEFILE']))
@@ -117,8 +116,40 @@ sys.exit(result.returncode)
                     self.assertEqual(actual['environment'], dict.fromkeys(
                         ['PGHOST', 'PGHOSTADDR', 'PGPORT', 'PGSERVICE', 'PGSERVICEFILE'], '' if legacy else None))
                     self.assertEqual(actual['argv'], ['--username=catering', '--dbname=catering_agents',
-                        '--format=custom', '--no-owner', '--no-privileges', '--strict-names',
-                        '--table=public.catering_business_records', '--table=public.catering_source_documents'])
+                        '--format=custom', '--no-owner', '--no-privileges'] + (['--strict-names',
+                        '--table=public.catering_business_records', '--table=public.catering_source_documents'] if legacy else []))
+
+    def test_restore_body_rejects_missing_legacy_data_or_migration_marker(self):
+        m = self.implementation()
+        sources = {path: (ROOT / path).read_text() for path in m.SOURCE_HASHES}
+        body = m.extract_components(sources)['restore_body']
+        # Execute the real restore body; replace only its PostgreSQL and OS
+        # commands, so the test never creates a database or touches /tmp paths.
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            helper = root / 'tool'
+            helper.write_text('#!' + sys.executable + '\n' + """import os, sys
+from pathlib import Path
+name = Path(sys.argv[0]).name
+if name == 'cat':
+    print('0' if sys.argv[1].endswith('swap.max') else os.environ['CATERING_PROBE_MEMORY_BYTES'])
+elif name == 'psql':
+    sql = next((x for x in sys.argv[1:] if x.startswith('--command=')), '')
+    if 'SELECT count(*)' in sql:
+        if os.environ.get('MISSING_TABLE') and ('public.' + os.environ['MISSING_TABLE']) in sql:
+            sys.exit(1)
+        print('0')
+""")
+            helper.chmod(0o700)
+            for name in ('cat', 'initdb', 'pg_ctl', 'mkdir', 'createdb', 'pg_restore', 'psql'):
+                (root / name).symlink_to(helper)
+            for missing in ('', 'catering_records', 'catering_schema_migrations'):
+                with self.subTest(missing=missing):
+                    env = dict(os.environ, PATH=str(root), MISSING_TABLE=missing,
+                               CATERING_PROBE_MEMORY_BYTES='16777216')
+                    result = subprocess.run(['/bin/sh', '-ceu', body], env=env, capture_output=True)
+                    self.assertEqual(result.returncode == 0, missing == '',
+                                     'restore must not succeed without every required table')
 
     def test_dump_diagnostics_retain_errexit_before_docker(self):
         m = self.implementation()
@@ -268,7 +299,7 @@ sys.exit(result.returncode)
 
     def test_workflow_keeps_the_unique_branch_and_event_bound_draft_source_guard(self):
         m = self.implementation()
-        self.assertEqual(m.BRANCH, 'codex/catering-betterstack-observer-20260913')
+        self.assertEqual(m.BRANCH, 'codex/catering-target-hel1-20260919')
         workflow = (ROOT / '.github/workflows/ci.yml').read_text()
         job = workflow.split('  synthetic-backup-tool-integration:\n', 1)[1]
         for binding in ['github.event.pull_request.number > 0 &&',
@@ -419,6 +450,8 @@ sys.exit(result.returncode)
         seed, expected = m.synthetic_fixture()
         self.assertEqual(len(expected['business']), 4)
         self.assertEqual(len(expected['documents']), 3)
+        self.assertEqual(len(expected['legacy']), 1)
+        self.assertEqual(expected['migrations'][0]['version_number'], 3)
         self.assertEqual(expected['documents'][0]['size_bytes'], 262147)
         self.assertEqual(expected['documents'][0]['content_sha256'],
                          hashlib.sha256(bytes(range(256)) * 1024 + b'\x00\xffZ').hexdigest())

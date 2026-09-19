@@ -20,9 +20,9 @@ from urllib.parse import urlsplit
 OWNER_UID, OWNER_GID = 0, 0
 COMMON = Path(__file__).resolve().with_name('catering-backup-common.sh')
 ENV = {'PATH': '/usr/bin:/bin', 'LANG': 'C', 'LC_ALL': 'C', 'TZ': 'UTC'}
-SCOPE = 'postgres,sites,platform-caddy,shared-edge-caddy'
+SCOPE = 'postgres-full,sites,platform-caddy,catering-edge-caddy'
 COMPONENTS = ('sites', 'platform_caddy_data', 'platform_caddy_config',
-              'shared_edge_caddyfile', 'shared_edge_caddy_data', 'shared_edge_caddy_config')
+              'catering_edge_caddyfile', 'catering_edge_caddy_data', 'catering_edge_caddy_config')
 CHILD_GROUPS = set()
 HELPER_SECONDS = 10
 

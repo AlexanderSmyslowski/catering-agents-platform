@@ -6,7 +6,7 @@ backup_started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 # The candidate is accepted by downstream evidence only within this age.
 # shellcheck disable=SC2034
 readonly RPO_SECONDS="21600"
-readonly BACKUP_SCOPE="postgres,sites,platform-caddy,shared-edge-caddy"
+readonly BACKUP_SCOPE="postgres-full,sites,platform-caddy,catering-edge-caddy"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly SCRIPT_DIR
 # shellcheck source=platform-infra/backup/catering-backup-common.sh
@@ -181,8 +181,8 @@ volume_mountpoint() {
 }
 platform_caddy_data_mount="$(volume_mountpoint platform-infra_caddy_data 'platform-infra_caddy_data|platform-infra|caddy_data')"
 platform_caddy_config_mount="$(volume_mountpoint platform-infra_caddy_config 'platform-infra_caddy_config|platform-infra|caddy_config')"
-shared_edge_caddy_data_mount="$(volume_mountpoint shared-edge_edge_caddy_data 'shared-edge_edge_caddy_data|shared-edge|edge_caddy_data')"
-shared_edge_caddy_config_mount="$(volume_mountpoint shared-edge_edge_caddy_config 'shared-edge_edge_caddy_config|shared-edge|edge_caddy_config')"
+catering_edge_caddy_data_mount="$(volume_mountpoint catering-edge_edge_caddy_data 'catering-edge_edge_caddy_data|catering-edge|edge_caddy_data')"
+catering_edge_caddy_config_mount="$(volume_mountpoint catering-edge_edge_caddy_config 'catering-edge_edge_caddy_config|catering-edge|edge_caddy_config')"
 
 # A volume name alone is not provenance.  Resolve each Caddy service once and
 # bind both inspected volume IDs to their exact destinations.  The only other
@@ -237,7 +237,7 @@ assert_caddy_container_mounts() {
 
 assert_caddy_container_mounts platform-infra web platform-infra-web-1 platform-infra_caddy_data platform-infra_caddy_config "$platform_caddy_data_mount" "$platform_caddy_config_mount" /opt/catering-agents-platform/platform-infra/sites /etc/caddy/sites
 caddy_binding_before="$CADDY_LAST_BINDING_DIGEST"
-assert_caddy_container_mounts shared-edge edge shared-edge-edge-1 shared-edge_edge_caddy_data shared-edge_edge_caddy_config "$shared_edge_caddy_data_mount" "$shared_edge_caddy_config_mount" /opt/shared-edge/Caddyfile /etc/caddy/Caddyfile
+assert_caddy_container_mounts catering-edge edge catering-edge-edge-1 catering-edge_edge_caddy_data catering-edge_edge_caddy_config "$catering_edge_caddy_data_mount" "$catering_edge_caddy_config_mount" /opt/catering-edge/Caddyfile /etc/caddy/Caddyfile
 caddy_binding_before="$caddy_binding_before|$CADDY_LAST_BINDING_DIGEST"
 
 run_id="$(date -u +%Y%m%dT%H%M%SZ)-$$"
@@ -289,12 +289,11 @@ capacity_admit backup "$work_root" || fail_state CAPACITY_UNAVAILABLE
 
 postgres_dump="$work_root/postgres_dump"
 if ! "$DOCKER_CMD" exec --user postgres "$postgres_container_id" /bin/sh -c 'unset PGHOST PGHOSTADDR PGPORT PGSERVICE PGSERVICEFILE && exec "$@"' catering-pg-dump "$PG_DUMP_CMD" \
-  --username=catering --dbname=catering_agents --format=custom --no-owner --no-privileges \
-  --strict-names --table=public.catering_business_records --table=public.catering_source_documents 2>/dev/null | bounded_backup_stream "$postgres_dump"; then
+  --username=catering --dbname=catering_agents --format=custom --no-owner --no-privileges 2>/dev/null | bounded_backup_stream "$postgres_dump"; then
   fail_state POSTGRES_DUMP_FAILED
 fi
 sites_path="/opt/catering-agents-platform/platform-infra/sites"
-shared_edge_caddyfile_path="/opt/shared-edge/Caddyfile"
+catering_edge_caddyfile_path="/opt/catering-edge/Caddyfile"
 # Secret-bearing Caddy data is never materialised locally.  The checksum is
 # derived from the exact stream, then that same source set is streamed directly
 # into the encrypted Restic snapshot under a generic filename.
@@ -308,7 +307,7 @@ manifest_path="$work_root/manifest"
   printf 'component_postgres_dump_checksum=%s\n' "$(sha256sum "$postgres_dump" | awk '{print $1}')"
 } >"$manifest_path"
 manifest_checksum="$(sha256sum "$manifest_path" | awk '{print $1}')"
-caddy_source_generation_before="$(capture_source_generation "$sites_path" "$platform_caddy_data_mount" "$platform_caddy_config_mount" "$shared_edge_caddyfile_path" "$shared_edge_caddy_data_mount" "$shared_edge_caddy_config_mount")" || fail_state CADDY_CAPTURE_INVALID
+caddy_source_generation_before="$(capture_source_generation "$sites_path" "$platform_caddy_data_mount" "$platform_caddy_config_mount" "$catering_edge_caddyfile_path" "$catering_edge_caddy_data_mount" "$catering_edge_caddy_config_mount")" || fail_state CADDY_CAPTURE_INVALID
 
 # Bind the repository before capture and compare it again after the only
 # snapshot/readback.  A repository change may leave an orphan artifact, but it
@@ -337,7 +336,7 @@ validate_backup_attestations "$repository_identity_before_snapshot" || fail_stat
 snapshot_stream() {
   # Python's streaming tar writer gives every secret-bearing source a unique
   # internal component ID without creating an intermediate local archive.
-  python3 - "$work_root" "$sites_path" "$platform_caddy_data_mount" "$platform_caddy_config_mount" "$shared_edge_caddyfile_path" "$shared_edge_caddy_data_mount" "$shared_edge_caddy_config_mount" <<'PY'
+  python3 - "$work_root" "$sites_path" "$platform_caddy_data_mount" "$platform_caddy_config_mount" "$catering_edge_caddyfile_path" "$catering_edge_caddy_data_mount" "$catering_edge_caddy_config_mount" <<'PY'
 import os, sys, tarfile
 work, sites, p_data, p_config, caddyfile, e_data, e_config = sys.argv[1:]
 maximum = int(os.environ["CATERING_BACKUP_MAX_BYTES"])
@@ -353,7 +352,7 @@ try:
     with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as archive:
         archive.add(os.path.join(work, "manifest"), arcname="manifest", recursive=False, filter=admit)
         archive.add(os.path.join(work, "postgres_dump"), arcname="postgres_dump", recursive=False, filter=admit)
-        for name, path in (("sites", sites), ("platform_caddy_data", p_data), ("platform_caddy_config", p_config), ("shared_edge_caddyfile", caddyfile), ("shared_edge_caddy_data", e_data), ("shared_edge_caddy_config", e_config)):
+        for name, path in (("sites", sites), ("platform_caddy_data", p_data), ("platform_caddy_config", p_config), ("catering_edge_caddyfile", caddyfile), ("catering_edge_caddy_data", e_data), ("catering_edge_caddy_config", e_config)):
             archive.add(path, arcname="components/" + name, recursive=True, filter=admit)
 except Exception:
     raise SystemExit(1)
@@ -364,10 +363,10 @@ snapshot_id="$(printf '%s' "$snapshot_json" | python3 -c 'import json,sys; rows=
 [[ "$snapshot_id" =~ ^[0-9a-f]{64}$ ]] || fail_state SNAPSHOT_INVALID
 assert_caddy_container_mounts platform-infra web platform-infra-web-1 platform-infra_caddy_data platform-infra_caddy_config "$platform_caddy_data_mount" "$platform_caddy_config_mount" /opt/catering-agents-platform/platform-infra/sites /etc/caddy/sites
 caddy_binding_after="$CADDY_LAST_BINDING_DIGEST"
-assert_caddy_container_mounts shared-edge edge shared-edge-edge-1 shared-edge_edge_caddy_data shared-edge_edge_caddy_config "$shared_edge_caddy_data_mount" "$shared_edge_caddy_config_mount" /opt/shared-edge/Caddyfile /etc/caddy/Caddyfile
+assert_caddy_container_mounts catering-edge edge catering-edge-edge-1 catering-edge_edge_caddy_data catering-edge_edge_caddy_config "$catering_edge_caddy_data_mount" "$catering_edge_caddy_config_mount" /opt/catering-edge/Caddyfile /etc/caddy/Caddyfile
 caddy_binding_after="$caddy_binding_after|$CADDY_LAST_BINDING_DIGEST"
 [[ "$caddy_binding_after" == "$caddy_binding_before" ]] || fail_state CADDY_CAPTURE_BINDING_DRIFT
-caddy_source_generation_after="$(capture_source_generation "$sites_path" "$platform_caddy_data_mount" "$platform_caddy_config_mount" "$shared_edge_caddyfile_path" "$shared_edge_caddy_data_mount" "$shared_edge_caddy_config_mount")" || fail_state CADDY_CAPTURE_INVALID
+caddy_source_generation_after="$(capture_source_generation "$sites_path" "$platform_caddy_data_mount" "$platform_caddy_config_mount" "$catering_edge_caddyfile_path" "$catering_edge_caddy_data_mount" "$catering_edge_caddy_config_mount")" || fail_state CADDY_CAPTURE_INVALID
 [[ "$caddy_source_generation_after" == "$caddy_source_generation_before" ]] || fail_state CADDY_CAPTURE_SOURCE_DRIFT
 bundle_checksums="$(restic_cmd dump "$snapshot_id" "$bundle_path" | python3 -c '
 import hashlib, os, sys, tarfile
@@ -411,9 +410,9 @@ spec = {
     "sites": ("components/sites", True),
     "platform_caddy_data": ("components/platform_caddy_data", True),
     "platform_caddy_config": ("components/platform_caddy_config", True),
-    "shared_edge_caddyfile": ("components/shared_edge_caddyfile", False),
-    "shared_edge_caddy_data": ("components/shared_edge_caddy_data", True),
-    "shared_edge_caddy_config": ("components/shared_edge_caddy_config", True),
+    "catering_edge_caddyfile": ("components/catering_edge_caddyfile", False),
+    "catering_edge_caddy_data": ("components/catering_edge_caddy_data", True),
+    "catering_edge_caddy_config": ("components/catering_edge_caddy_config", True),
 }
 files = {key: [] for key in spec}
 roots = set()
@@ -458,9 +457,9 @@ def component_digest(key):
     return value.hexdigest()
 print("\t".join([reader.whole.hexdigest()] + [component_digest(key) for key in spec]))
 ')" || fail_state BUNDLE_READBACK_FAILED
-IFS=$'\t' read -r stream_checksum component_postgres_dump_checksum component_sites_checksum component_platform_caddy_data_checksum component_platform_caddy_config_checksum component_shared_edge_caddyfile_checksum component_shared_edge_caddy_data_checksum component_shared_edge_caddy_config_checksum <<< "$bundle_checksums"
+IFS=$'\t' read -r stream_checksum component_postgres_dump_checksum component_sites_checksum component_platform_caddy_data_checksum component_platform_caddy_config_checksum component_catering_edge_caddyfile_checksum component_catering_edge_caddy_data_checksum component_catering_edge_caddy_config_checksum <<< "$bundle_checksums"
 require_digest "$stream_checksum" || fail_state BUNDLE_CHECKSUM_INVALID
-for component_checksum in "$component_postgres_dump_checksum" "$component_sites_checksum" "$component_platform_caddy_data_checksum" "$component_platform_caddy_config_checksum" "$component_shared_edge_caddyfile_checksum" "$component_shared_edge_caddy_data_checksum" "$component_shared_edge_caddy_config_checksum"; do
+for component_checksum in "$component_postgres_dump_checksum" "$component_sites_checksum" "$component_platform_caddy_data_checksum" "$component_platform_caddy_config_checksum" "$component_catering_edge_caddyfile_checksum" "$component_catering_edge_caddy_data_checksum" "$component_catering_edge_caddy_config_checksum"; do
   require_digest "$component_checksum" || fail_state COMPONENT_CHECKSUM_INVALID
 done
 repository_identity_after="$(read_repository_identity)"
@@ -484,9 +483,9 @@ component_caddy_stream_checksum=$stream_checksum
 component_sites_checksum=$component_sites_checksum
 component_platform_caddy_data_checksum=$component_platform_caddy_data_checksum
 component_platform_caddy_config_checksum=$component_platform_caddy_config_checksum
-component_shared_edge_caddyfile_checksum=$component_shared_edge_caddyfile_checksum
-component_shared_edge_caddy_data_checksum=$component_shared_edge_caddy_data_checksum
-component_shared_edge_caddy_config_checksum=$component_shared_edge_caddy_config_checksum
+component_catering_edge_caddyfile_checksum=$component_catering_edge_caddyfile_checksum
+component_catering_edge_caddy_data_checksum=$component_catering_edge_caddy_data_checksum
+component_catering_edge_caddy_config_checksum=$component_catering_edge_caddy_config_checksum
 "
 atomic_write_record "$artifact_path" "$artifact_payload"
 repository_identity="$repository_identity_after"

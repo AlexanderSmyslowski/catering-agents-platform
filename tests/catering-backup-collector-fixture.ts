@@ -41,7 +41,7 @@ export function runHelperWithActualRemote(mode: "complete" | "missing" | "contra
   const sshOutput = path.join(fixtureRoot, "ssh-output");
   const host = "fixture-host";
   const hostDigest = sha256(host);
-  const scope = "postgres,sites,platform-caddy,shared-edge-caddy";
+  const scope = "postgres-full,sites,platform-caddy,catering-edge-caddy";
   const repositoryId = "b".repeat(64);
   const snapshotId = "a".repeat(64);
   const componentChecksum = "c".repeat(64);
@@ -63,8 +63,8 @@ export function runHelperWithActualRemote(mode: "complete" | "missing" | "contra
       "postgres_dump_path=postgres_dump", "component_postgres_dump_checksum=" + componentChecksum,
       "component_caddy_stream_checksum=" + componentChecksum, "component_sites_checksum=" + componentChecksum,
       "component_platform_caddy_data_checksum=" + componentChecksum, "component_platform_caddy_config_checksum=" + componentChecksum,
-      "component_shared_edge_caddyfile_checksum=" + componentChecksum, "component_shared_edge_caddy_data_checksum=" + componentChecksum,
-      "component_shared_edge_caddy_config_checksum=" + componentChecksum, "",
+      "component_catering_edge_caddyfile_checksum=" + componentChecksum, "component_catering_edge_caddy_data_checksum=" + componentChecksum,
+      "component_catering_edge_caddy_config_checksum=" + componentChecksum, "",
     ].join("\n");
     const artifactChecksum = sha256(artifact);
     const receipt = [
@@ -74,8 +74,8 @@ export function runHelperWithActualRemote(mode: "complete" | "missing" | "contra
       "manifest_path=manifest", "manifest_checksum=" + componentChecksum, "secret_recovery_reference_sha256=" + secretReference,
       "restore_postgres_image=" + image, "component_sites_checksum=" + componentChecksum,
       "component_platform_caddy_data_checksum=" + componentChecksum, "component_platform_caddy_config_checksum=" + componentChecksum,
-      "component_shared_edge_caddyfile_checksum=" + componentChecksum, "component_shared_edge_caddy_data_checksum=" + componentChecksum,
-      "component_shared_edge_caddy_config_checksum=" + componentChecksum, "verified_at=" + createdAt, "",
+      "component_catering_edge_caddyfile_checksum=" + componentChecksum, "component_catering_edge_caddy_data_checksum=" + componentChecksum,
+      "component_catering_edge_caddy_config_checksum=" + componentChecksum, "verified_at=" + createdAt, "",
     ].join("\n");
     const receiptChecksum = sha256(receipt);
     const evidenceText = [
@@ -86,8 +86,8 @@ export function runHelperWithActualRemote(mode: "complete" | "missing" | "contra
       "repository_status=read-only-verified", "receipt_path=" + receiptPath, "receipt_checksum=" + receiptChecksum,
       "secret_recovery_reference_sha256=" + secretReference, "restore_postgres_image=" + image,
       "component_sites_checksum=" + componentChecksum, "component_platform_caddy_data_checksum=" + componentChecksum,
-      "component_platform_caddy_config_checksum=" + componentChecksum, "component_shared_edge_caddyfile_checksum=" + componentChecksum,
-      "component_shared_edge_caddy_data_checksum=" + componentChecksum, "component_shared_edge_caddy_config_checksum=" + componentChecksum,
+      "component_platform_caddy_config_checksum=" + componentChecksum, "component_catering_edge_caddyfile_checksum=" + componentChecksum,
+      "component_catering_edge_caddy_data_checksum=" + componentChecksum, "component_catering_edge_caddy_config_checksum=" + componentChecksum,
       "duration_seconds=100", "",
     ].join("\n");
     const statusText = "status=read-only-verified\nidentity=" + repositoryId + "\nhost_binding=" + hostDigest + "\nscope=" + scope + "\nverified_at=" + createdAt + "\n";
@@ -215,8 +215,8 @@ edge_id=2222222222222222222222222222222222222222222222222222222222222222
 postgres_id=3333333333333333333333333333333333333333333333333333333333333333
 platform_data=/srv/platform-caddy-data
 platform_config=/srv/platform-caddy-config
-edge_data=/srv/shared-edge-caddy-data
-edge_config=/srv/shared-edge-caddy-config
+edge_data=/srv/catering-edge-caddy-data
+edge_config=/srv/catering-edge-caddy-config
 case "$1" in
   ps)
     if [[ "$*" == *"no-trunc"* && "$*" == *"service=web"* ]]; then printf '%s\\n' "$project_id"
@@ -236,9 +236,9 @@ case "$1" in
           printf 'volume:platform-infra_caddy_config:%s:/config:true\\n' "$platform_config"
           printf 'bind::/opt/catering-agents-platform/platform-infra/sites:/etc/caddy/sites:false\\n'
         else
-          printf 'volume:shared-edge_edge_caddy_data:%s:/data:true\\n' "$edge_data"
-          printf 'volume:shared-edge_edge_caddy_config:%s:/config:true\\n' "$edge_config"
-          printf 'bind::/opt/shared-edge/Caddyfile:/etc/caddy/Caddyfile:false\\n'
+          printf 'volume:catering-edge_edge_caddy_data:%s:/data:true\\n' "$edge_data"
+          printf 'volume:catering-edge_edge_caddy_config:%s:/config:true\\n' "$edge_config"
+          printf 'bind::/opt/catering-edge/Caddyfile:/etc/caddy/Caddyfile:false\\n'
         fi ;;
       *'.NetworkSettings.Networks'*)
         expected_aliases='{{with index .NetworkSettings.Networks "platform-infra_default"}}{{printf "%s:%s" .NetworkID (join .Aliases ",")}}{{end}}'
@@ -252,8 +252,8 @@ case "$1" in
           printf 'volume:platform-infra_caddy_config:%s:/config\\n' "$platform_config"
           printf '%s\\n' "$FAKE_WEB_MOUNT"
         else printf 'volume:platform-infra_postgres_data:/srv/postgres:/var/lib/postgresql/data\\n'; fi ;;
-      *'.Name'*) [[ "$target" == "$project_id" ]] && printf '/platform-infra-web-1\\n' || printf '/shared-edge-edge-1\\n' ;;
-      *'compose.project'*) [[ "$target" == "$project_id" ]] && printf 'platform-infra\\n' || printf 'shared-edge\\n' ;;
+      *'.Name'*) [[ "$target" == "$project_id" ]] && printf '/platform-infra-web-1\\n' || printf '/catering-edge-edge-1\\n' ;;
+      *'compose.project'*) [[ "$target" == "$project_id" ]] && printf 'platform-infra\\n' || printf 'catering-edge\\n' ;;
       *'compose.service'*)
         if [[ "$target" == "$project_id" ]]; then printf 'web\\n'; elif [[ "$target" == "$edge_id" ]]; then printf 'edge\\n'; else printf 'postgres\\n'; fi ;;
       *'.State.Status'*) printf 'running\\n' ;;
@@ -266,7 +266,7 @@ case "$1" in
     esac ;;
   volume)
     if [[ "$2" == ls ]]; then
-      if [[ "$*" == *'project=shared-edge'* ]]; then printf 'shared-edge_edge_caddy_data\\nshared-edge_edge_caddy_config\\n'
+      if [[ "$*" == *'project=catering-edge'* ]]; then printf 'catering-edge_edge_caddy_data\\ncatering-edge_edge_caddy_config\\n'
       else printf 'platform-infra_postgres_data\\nplatform-infra_caddy_data\\nplatform-infra_caddy_config\\n'; fi
     else
       format= target= expect_format=false
@@ -279,16 +279,16 @@ case "$1" in
           platform-infra_postgres_data) printf 'platform-infra_postgres_data:local:/srv/postgres\\n' ;;
           platform-infra_caddy_data) printf 'platform-infra_caddy_data:local:%s\\n' "$platform_data" ;;
           platform-infra_caddy_config) printf 'platform-infra_caddy_config:local:%s\\n' "$platform_config" ;;
-          shared-edge_edge_caddy_data) printf 'shared-edge_edge_caddy_data:local:%s\\n' "$edge_data" ;;
-          shared-edge_edge_caddy_config) printf 'shared-edge_edge_caddy_config:local:%s\\n' "$edge_config" ;;
+          catering-edge_edge_caddy_data) printf 'catering-edge_edge_caddy_data:local:%s\\n' "$edge_data" ;;
+          catering-edge_edge_caddy_config) printf 'catering-edge_edge_caddy_config:local:%s\\n' "$edge_config" ;;
           *) exit 42 ;;
         esac
       elif [[ "$format" == *'Mountpoint'* ]]; then
         case "$target" in
           platform-infra_caddy_data) printf '%s\\n' "$platform_data" ;;
           platform-infra_caddy_config) printf '%s\\n' "$platform_config" ;;
-          shared-edge_edge_caddy_data) printf '%s\\n' "$edge_data" ;;
-          shared-edge_edge_caddy_config) printf '%s\\n' "$edge_config" ;;
+          catering-edge_edge_caddy_data) printf '%s\\n' "$edge_data" ;;
+          catering-edge_edge_caddy_config) printf '%s\\n' "$edge_config" ;;
           platform-infra_postgres_data) printf '/srv/postgres\\n' ;;
           *) exit 42 ;;
         esac
@@ -296,8 +296,8 @@ case "$1" in
         case "$target" in
           platform-infra_caddy_data) printf 'platform-infra_caddy_data|platform-infra|caddy_data\\n' ;;
           platform-infra_caddy_config) printf 'platform-infra_caddy_config|platform-infra|caddy_config\\n' ;;
-          shared-edge_edge_caddy_data) printf 'shared-edge_edge_caddy_data|shared-edge|%s\\n' "$FAKE_EDGE_DATA_LABEL" ;;
-          shared-edge_edge_caddy_config) printf 'shared-edge_edge_caddy_config|shared-edge|edge_caddy_config\\n' ;;
+          catering-edge_edge_caddy_data) printf 'catering-edge_edge_caddy_data|catering-edge|%s\\n' "$FAKE_EDGE_DATA_LABEL" ;;
+          catering-edge_edge_caddy_config) printf 'catering-edge_edge_caddy_config|catering-edge|edge_caddy_config\\n' ;;
           *) exit 43 ;;
         esac
       else

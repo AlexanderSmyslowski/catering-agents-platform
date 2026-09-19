@@ -15,8 +15,8 @@ from datetime import datetime, timezone
 ROOT = Path(__file__).resolve().parents[1]
 ENTRY = ROOT / 'platform-infra/backup/catering-backup-observer.py'
 NOW = 1789286400
-SCOPE = 'postgres,sites,platform-caddy,shared-edge-caddy'
-COMPONENTS = ['sites', 'platform_caddy_data', 'platform_caddy_config', 'shared_edge_caddyfile', 'shared_edge_caddy_data', 'shared_edge_caddy_config']
+SCOPE = 'postgres-full,sites,platform-caddy,catering-edge-caddy'
+COMPONENTS = ['sites', 'platform_caddy_data', 'platform_caddy_config', 'catering_edge_caddyfile', 'catering_edge_caddy_data', 'catering_edge_caddy_config']
 
 
 def digest(data):
@@ -152,6 +152,11 @@ class ObserverContracts(unittest.TestCase):
         self.assertEqual(outcome['backup_health'], 'healthy')
         self.assertFalse(outcome['delivery_accepted'])
         self.assertEqual(outcome['data_epoch'], self.created)
+
+    def test_historical_two_table_scope_cannot_authorize_target(self):
+        self.policy['bindings']['scope'] = 'postgres,sites,platform-caddy,shared-edge-caddy'
+        self.save_policy()
+        self.assertNotEqual(self.check()['backup_health'], 'healthy')
 
     def test_candidate_without_restore_is_not_success(self):
         (self.root / 'catering-backup-evidence').rename(self.root / 'old-evidence')

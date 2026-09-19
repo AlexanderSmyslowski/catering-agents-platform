@@ -606,8 +606,8 @@ capture_source_generation() {
   python3 - "$@" <<'PY'
 import hashlib, itertools, os, stat, sys
 labels = ("sites", "platform_caddy_data", "platform_caddy_config",
-          "shared_edge_caddyfile", "shared_edge_caddy_data",
-          "shared_edge_caddy_config")
+          "catering_edge_caddyfile", "catering_edge_caddy_data",
+          "catering_edge_caddy_config")
 value = hashlib.sha256()
 # Reserve manifest, dump and the implicit components directory within 10000 nodes.
 entries_seen = 0
@@ -757,7 +757,7 @@ validate_offhost_attestation() {
   require_digest "$record_production_host" || return 1
   [[ "$production_host_digest" == "$host_digest" && "$record_repository" == "$repository_id" && "$record_host" == "$host_digest" && "$record_production_host" == "$host_digest" ]] || return 1
   record_scope="$(attestation_field "$record" scope)" || return 1
-  [[ "$record_scope" == postgres,sites,platform-caddy,shared-edge-caddy ]] || return 1
+  [[ "$record_scope" == postgres-full,sites,platform-caddy,catering-edge-caddy ]] || return 1
   record_time="$(attestation_field "$record" verified_at)" || return 1
   valid_until="$(attestation_field "$record" valid_until)" || return 1
   attestation_time_allowed "$record_time" "$valid_until" "$minimum_remaining" || return 1
@@ -799,7 +799,7 @@ validate_secret_recovery_attestation() {
   require_digest "$record_host" || return 1
   [[ "$record_repository" == "$repository_id" && "$record_host" == "$host_digest" ]] || return 1
   record_scope="$(attestation_field "$record" scope)" || return 1
-  [[ "$record_scope" == postgres,sites,platform-caddy,shared-edge-caddy ]] || return 1
+  [[ "$record_scope" == postgres-full,sites,platform-caddy,catering-edge-caddy ]] || return 1
   record_time="$(attestation_field "$record" verified_at)" || return 1
   valid_until="$(attestation_field "$record" valid_until)" || return 1
   attestation_time_allowed "$record_time" "$valid_until" "$minimum_remaining" || return 1
@@ -858,7 +858,7 @@ validate_repository_status_record() {
   host_binding="$(printf '%s\n' "$record" | awk -F= '$1=="host_binding"{print substr($0,index($0,"=")+1)}')"
   scope="$(printf '%s\n' "$record" | awk -F= '$1=="scope"{print substr($0,index($0,"=")+1)}')"
   verified_at="$(printf '%s\n' "$record" | awk -F= '$1=="verified_at"{print substr($0,index($0,"=")+1)}')"
-  [[ "$status" == read-only-verified && "$identity" =~ ^[0-9a-f]{64}$ && "$host_binding" =~ ^[0-9a-f]{64}$ && "$scope" == postgres,sites,platform-caddy,shared-edge-caddy ]] || { fail_state REPOSITORY_STATUS_INVALID; return 1; }
+  [[ "$status" == read-only-verified && "$identity" =~ ^[0-9a-f]{64}$ && "$host_binding" =~ ^[0-9a-f]{64}$ && "$scope" == postgres-full,sites,platform-caddy,catering-edge-caddy ]] || { fail_state REPOSITORY_STATUS_INVALID; return 1; }
   require_timestamp "$verified_at" || { fail_state REPOSITORY_STATUS_INVALID; return 1; }
 }
 
@@ -867,7 +867,7 @@ validate_repository_status_binding() {
   validate_repository_status_record "$record" || return 1
   require_digest "$expected_identity" || { fail_state REPOSITORY_STATUS_INVALID; return 1; }
   require_digest "$expected_host" || { fail_state REPOSITORY_STATUS_INVALID; return 1; }
-  [[ "$expected_scope" == postgres,sites,platform-caddy,shared-edge-caddy ]] || { fail_state REPOSITORY_STATUS_INVALID; return 1; }
+  [[ "$expected_scope" == postgres-full,sites,platform-caddy,catering-edge-caddy ]] || { fail_state REPOSITORY_STATUS_INVALID; return 1; }
   while IFS= read -r line || [[ -n "$line" ]]; do
     key="${line%%=*}"; value="${line#*=}"
     case "$key" in
@@ -1374,10 +1374,10 @@ validate_record_schema() {
   case "$kind" in
     pointer) allowed='|status|candidate_path|candidate_checksum|created_at|'; required='status candidate_path candidate_checksum created_at' ;;
     candidate) allowed='|status|scope|host_binding|source_commit|source_tree|snapshot_id|repository_identity|artifact_path|artifact_checksum|bundle_path|bundle_checksum|secret_recovery_reference_sha256|restore_postgres_image|created_at|status_timestamp|'; required='status scope host_binding source_commit source_tree snapshot_id repository_identity artifact_path artifact_checksum bundle_path bundle_checksum secret_recovery_reference_sha256 restore_postgres_image created_at status_timestamp' ;;
-    artifact) allowed='|status|scope|host_binding|source_commit|source_tree|secret_recovery_reference_sha256|restore_postgres_image|bundle_path|bundle_checksum|manifest_path|manifest_checksum|postgres_dump_path|component_postgres_dump_checksum|component_caddy_stream_checksum|component_sites_checksum|component_platform_caddy_data_checksum|component_platform_caddy_config_checksum|component_shared_edge_caddyfile_checksum|component_shared_edge_caddy_data_checksum|component_shared_edge_caddy_config_checksum|'; required='status scope host_binding source_commit source_tree secret_recovery_reference_sha256 restore_postgres_image bundle_path bundle_checksum manifest_path manifest_checksum postgres_dump_path component_postgres_dump_checksum component_caddy_stream_checksum component_sites_checksum component_platform_caddy_data_checksum component_platform_caddy_config_checksum component_shared_edge_caddyfile_checksum component_shared_edge_caddy_data_checksum component_shared_edge_caddy_config_checksum' ;;
-    receipt) allowed='|status|version|scope|host_binding|snapshot_id|repository_identity|artifact_path|artifact_checksum|bundle_path|bundle_checksum|manifest_path|manifest_checksum|secret_recovery_reference_sha256|restore_postgres_image|component_sites_checksum|component_platform_caddy_data_checksum|component_platform_caddy_config_checksum|component_shared_edge_caddyfile_checksum|component_shared_edge_caddy_data_checksum|component_shared_edge_caddy_config_checksum|verified_at|'; required='status version scope host_binding snapshot_id repository_identity artifact_path artifact_checksum bundle_path bundle_checksum manifest_path manifest_checksum secret_recovery_reference_sha256 restore_postgres_image component_sites_checksum component_platform_caddy_data_checksum component_platform_caddy_config_checksum component_shared_edge_caddyfile_checksum component_shared_edge_caddy_data_checksum component_shared_edge_caddy_config_checksum verified_at' ;;
+    artifact) allowed='|status|scope|host_binding|source_commit|source_tree|secret_recovery_reference_sha256|restore_postgres_image|bundle_path|bundle_checksum|manifest_path|manifest_checksum|postgres_dump_path|component_postgres_dump_checksum|component_caddy_stream_checksum|component_sites_checksum|component_platform_caddy_data_checksum|component_platform_caddy_config_checksum|component_catering_edge_caddyfile_checksum|component_catering_edge_caddy_data_checksum|component_catering_edge_caddy_config_checksum|'; required='status scope host_binding source_commit source_tree secret_recovery_reference_sha256 restore_postgres_image bundle_path bundle_checksum manifest_path manifest_checksum postgres_dump_path component_postgres_dump_checksum component_caddy_stream_checksum component_sites_checksum component_platform_caddy_data_checksum component_platform_caddy_config_checksum component_catering_edge_caddyfile_checksum component_catering_edge_caddy_data_checksum component_catering_edge_caddy_config_checksum' ;;
+    receipt) allowed='|status|version|scope|host_binding|snapshot_id|repository_identity|artifact_path|artifact_checksum|bundle_path|bundle_checksum|manifest_path|manifest_checksum|secret_recovery_reference_sha256|restore_postgres_image|component_sites_checksum|component_platform_caddy_data_checksum|component_platform_caddy_config_checksum|component_catering_edge_caddyfile_checksum|component_catering_edge_caddy_data_checksum|component_catering_edge_caddy_config_checksum|verified_at|'; required='status version scope host_binding snapshot_id repository_identity artifact_path artifact_checksum bundle_path bundle_checksum manifest_path manifest_checksum secret_recovery_reference_sha256 restore_postgres_image component_sites_checksum component_platform_caddy_data_checksum component_platform_caddy_config_checksum component_catering_edge_caddyfile_checksum component_catering_edge_caddy_data_checksum component_catering_edge_caddy_config_checksum verified_at' ;;
     status) allowed='|status|identity|host_binding|scope|verified_at|'; required='status identity host_binding scope verified_at' ;;
-    evidence) allowed='|status|project|scope|host_binding|created_at|snapshot_id|checksum|artifact_path|artifact_snapshot_id|artifact_checksum|artifact_host_binding|artifact_scope|artifact_created_at|repository_identity|repository_status|receipt_path|receipt_checksum|secret_recovery_reference_sha256|restore_postgres_image|component_sites_checksum|component_platform_caddy_data_checksum|component_platform_caddy_config_checksum|component_shared_edge_caddyfile_checksum|component_shared_edge_caddy_data_checksum|component_shared_edge_caddy_config_checksum|duration_seconds|'; required='status project scope host_binding created_at snapshot_id checksum artifact_path artifact_snapshot_id artifact_checksum artifact_host_binding artifact_scope artifact_created_at repository_identity repository_status receipt_path receipt_checksum secret_recovery_reference_sha256 restore_postgres_image component_sites_checksum component_platform_caddy_data_checksum component_platform_caddy_config_checksum component_shared_edge_caddyfile_checksum component_shared_edge_caddy_data_checksum component_shared_edge_caddy_config_checksum duration_seconds' ;;
+    evidence) allowed='|status|project|scope|host_binding|created_at|snapshot_id|checksum|artifact_path|artifact_snapshot_id|artifact_checksum|artifact_host_binding|artifact_scope|artifact_created_at|repository_identity|repository_status|receipt_path|receipt_checksum|secret_recovery_reference_sha256|restore_postgres_image|component_sites_checksum|component_platform_caddy_data_checksum|component_platform_caddy_config_checksum|component_catering_edge_caddyfile_checksum|component_catering_edge_caddy_data_checksum|component_catering_edge_caddy_config_checksum|duration_seconds|'; required='status project scope host_binding created_at snapshot_id checksum artifact_path artifact_snapshot_id artifact_checksum artifact_host_binding artifact_scope artifact_created_at repository_identity repository_status receipt_path receipt_checksum secret_recovery_reference_sha256 restore_postgres_image component_sites_checksum component_platform_caddy_data_checksum component_platform_caddy_config_checksum component_catering_edge_caddyfile_checksum component_catering_edge_caddy_data_checksum component_catering_edge_caddy_config_checksum duration_seconds' ;;
     observer) allowed='|status|last_seen_epoch|failure_epoch|delivery_accepted|backup_health|'; required='status last_seen_epoch failure_epoch delivery_accepted backup_health' ;;
     *) fail_state RECORD_UNKNOWN_KIND; return 1 ;;
   esac

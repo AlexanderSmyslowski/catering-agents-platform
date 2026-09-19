@@ -23,26 +23,26 @@ import tempfile
 REPOSITORY = 'AlexanderSmyslowski/catering-agents-platform'
 # Only Draft PR events for this unique authorized branch may acquire tools.
 # The actual event number is cross-checked and recorded, never guessed in advance.
-BRANCH = 'codex/catering-betterstack-observer-20260913'
+BRANCH = 'codex/catering-target-hel1-20260919'
 PROOF_BASE = 'f757ca44c0ae22bf00bbbbfd5e0f5742aacd9f86'
 PROOF_BASE_TREE = '63451cccb441c0f5403b9fd20660f9e3289e3354'
 PRODUCTION_IMAGE = 'postgres@sha256:778d0b486d6daa02b77434d0358ec57a1b21fd8b6d22ac2eef56a33e816928f6'
 PARENT = '34d71daba94ba227146300f69f1f7b2872dce58b'
 PARENT_TREE = 'fb5c57b369c45e4d2168f5586242325d5e3193bd'
 SOURCE_HASHES = {
-    'platform-infra/backup/catering-backup.sh': 'f08608144a70577d7486bb02002e11f4c2f4426b164b6a47b5baca0e89de45fb',
-    'platform-infra/backup/catering-restore-probe.sh': 'dff327382bf237af8ab23203c4be284fe8c3d7018161b283ef34c3571d8bde5a',
-    'platform-infra/backup/catering-backup-common.sh': '3191cf1103df60a148990fab480e68ee568b535501b3928d62ecb49278d3f633',
+    'platform-infra/backup/catering-backup.sh': '7681da16aaf106af1f55234ee82aa27c64c901bde9bc49af4c9e864ab55c0dff',
+    'platform-infra/backup/catering-restore-probe.sh': '6e15ba0d89154b07a99ba2f494cd1c0aa7151afcb87ee13fffa120cc99ede4bc',
+    'platform-infra/backup/catering-backup-common.sh': '326db3052174c560698f5e2aeed76a6e63259b933cb0de27156f8528635ff6d8',
     'shared-core/src/persistence.ts': 'fc9c03509db36052a4de0aa04d31e518913877b9736be39925561bfe6f5d547f',
     'intake-service/src/source-document-store.ts': 'b4923e5d1a0bc30ac59cfbbe1adf4a33c98a6e81ce4c257fe235645237f795d0',
 }
 FRAGMENT_HASHES = {'restore_limits': 'afa4b5829be89c981a8351185d870d5b84651f03fdba2793632d4fad6d62df9b',
- 'dump': 'fcd47b73b0ba846c45cc66eed3f624c0ccfface7f8e87216c6ade47ed4eba7f7',
- 'stream': 'eda6b25971ed3568085755afac91661e0294821ba06115ff8238788174b7dc03',
+ 'dump': 'c7596fa78eca52fc74c2b07d784368cdcefec846102bc6cb472b022a9a7d5a2b',
+ 'stream': 'c73e95a981a35b1f94b600939bbd036bcd3c3d8ee469b955af6ce352e476abc1',
  'snapshot': '54a84bd62940cd28b6c17b18b8ad7426a115261b42e3c1f60f25d22a440dbc20',
- 'checksums': '3f7c65b9cecb8f7a34cd73c149baa60f76d1a9c25037d47eccedf503bf3a91e8',
- 'extractor': 'c75ea15a66b66f093720baca0c7ead63a63a626be6a5774070abb121901aee19',
- 'restore_body': '9cf06f0452311f0b4965b5bb501e40fb4dce67a89c53095173b2ad371575b92d',
+ 'checksums': '173df5a4cc1b05f68c0fa05a4c0f322c0a74b867f4074bec06c24a3b61f20bf1',
+ 'extractor': '1cfce16bc672c68028f2f0c052095daadffaffe69647d7cd87b3d6abd3080bd3',
+ 'restore_body': 'f04b499a021e1d98d24d828cfc4466263f916942701b0f9857572370921c6c3d',
  'migration': '4be8b342a6e5bfdeb1a71a2449fc9405aae5c86011d7f01043043e4aeb83539b',
  'document_template': 'fbe66c402fead5a7fc2e58e25ac7c1921236337dafbdc6e2c180eafeb231c026',
  'document_ddl': '5931c3b92110424a5f7e951967d67a4c368705d1d8e57dffc854dd3f318aa13c'}
@@ -187,7 +187,7 @@ def validate_inspection(value, image, image_id, token, dump=None):
                     and mount['Destination'] == '/var/lib/postgresql/data', 'CONTAINER_VOLUME')
 
 
-TABLES = ['catering_business_records', 'catering_source_documents']
+TABLES = ['catering_business_records', 'catering_source_documents', 'catering_records', 'catering_schema_migrations']
 # All projected columns and defaults are independent of the extracted DDL.
 BUSINESS_COLUMNS = [('business_id', 'text', 'NO', None), ('collection_name', 'text', 'NO', None),
                     ('record_id', 'text', 'NO', None), ('payload', 'jsonb', 'NO', None),
@@ -197,6 +197,11 @@ DOCUMENT_COLUMNS = [('business_id', 'text', 'NO', None), ('document_id', 'text',
                     ('size_bytes', 'bigint', 'NO', None), ('sha256', 'text', 'NO', None),
                     ('data_class', 'text', 'NO', None), ('created_at', 'timestamp with time zone', 'NO', None),
                     ('content', 'bytea', 'NO', None)]
+
+LEGACY_COLUMNS = [('collection_name', 'text', 'NO', None), ('record_id', 'text', 'NO', None),
+                  ('payload', 'jsonb', 'NO', None), ('updated_at', 'timestamp with time zone', 'NO', 'now()')]
+MIGRATION_COLUMNS = [('unit_name', 'text', 'NO', None), ('version_number', 'integer', 'NO', None),
+                     ('completed_at', 'timestamp with time zone', 'NO', 'now()')]
 
 
 def sql_literal(value):
@@ -232,14 +237,28 @@ def synthetic_fixture():
         statements.append('INSERT INTO catering_source_documents VALUES (' + ','.join(map(sql_literal, row.values()))
                           + ",decode('" + content.hex() + "','hex'));")
         documents.append(dict(row, content_length=len(content), content_sha256=digest(content)))
+    legacy = [dict(collection_name='legacy-synthetic', record_id='preserve-me',
+                   payload={'legacy': True}, updated_at='2026-01-02T03:04:05.123456Z')]
+    migrations = [dict(unit_name='catering_business_records', version_number=3,
+                       completed_at='2026-01-02T03:04:05.123456Z')]
+    statements.append("CREATE TABLE catering_records (collection_name TEXT NOT NULL, record_id TEXT NOT NULL, "
+                      "payload JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), "
+                      "PRIMARY KEY (collection_name,record_id));")
+    statements.append('INSERT INTO catering_records VALUES (' + ','.join(map(sql_literal,
+                      [json.dumps(v) if isinstance(v, dict) else v for v in legacy[0].values()])) + ');')
+    statements.append("UPDATE catering_schema_migrations SET completed_at='2026-01-02T03:04:05.123456Z';")
     columns = []
-    for table, spec in zip(TABLES, [BUSINESS_COLUMNS, DOCUMENT_COLUMNS]):
+    for table, spec in zip(TABLES, [BUSINESS_COLUMNS, DOCUMENT_COLUMNS, LEGACY_COLUMNS, MIGRATION_COLUMNS]):
         for position, (name, kind, nullable, default) in enumerate(spec, 1):
             columns.append({'table_name': table, 'ordinal_position': position, 'column_name': name,
                             'data_type': kind, 'is_nullable': nullable, 'column_default': default})
     primary_keys = [{'table_name': TABLES[0], 'definition': 'PRIMARY KEY (business_id, collection_name, record_id)'},
                     {'table_name': TABLES[1], 'definition': 'PRIMARY KEY (business_id, document_id)'}]
-    return '\n'.join(statements), {'business': businesses, 'documents': documents, 'columns': columns, 'primary_keys': primary_keys}
+    primary_keys.extend([dict(table_name=TABLES[2], definition='PRIMARY KEY (collection_name, record_id)'),
+                         dict(table_name=TABLES[3], definition='PRIMARY KEY (unit_name)')])
+    return '\n'.join(statements), {'business': businesses, 'documents': documents, 'legacy': legacy,
+                                  'migrations': migrations, 'columns': sorted(columns, key=lambda r: (r['table_name'], r['ordinal_position'])),
+                                  'primary_keys': sorted(primary_keys, key=lambda r: r['table_name'])}
 
 
 PROJECTION_SQL = """
@@ -253,21 +272,29 @@ SELECT json_build_object(
  to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') AS created_at,
  octet_length(content) AS content_length,encode(sha256(content),'hex') AS content_sha256
  FROM public.catering_source_documents) r),
+'legacy', (SELECT json_agg(r ORDER BY collection_name,record_id) FROM
+ (SELECT collection_name,record_id,payload,
+ to_char(updated_at AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') AS updated_at
+ FROM public.catering_records) r),
+'migrations', (SELECT json_agg(r ORDER BY unit_name) FROM
+ (SELECT unit_name,version_number,
+ to_char(completed_at AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') AS completed_at
+ FROM public.catering_schema_migrations) r),
 'columns', (SELECT json_agg(r ORDER BY table_name,ordinal_position) FROM
  (SELECT table_name,ordinal_position,column_name,data_type,is_nullable,column_default
  FROM information_schema.columns WHERE table_schema='public'
- AND table_name IN ('catering_business_records','catering_source_documents')) r),
+ AND table_name IN ('catering_business_records','catering_source_documents','catering_records','catering_schema_migrations')) r),
 'primary_keys', (SELECT json_agg(r ORDER BY table_name) FROM
  (SELECT relname AS table_name,pg_get_constraintdef(c.oid) AS definition
  FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
  WHERE c.contype='p' AND n.nspname='public'
- AND relname IN ('catering_business_records','catering_source_documents')) r));
+ AND relname IN ('catering_business_records','catering_source_documents','catering_records','catering_schema_migrations')) r));
 """
 RESTORE_SUFFIX = "\n# Test-only oracle and observation barrier; original EXIT trap remains active.\n" + (
     "psql -X --no-password --username=catering --dbname=catering_agents -qAt -v ON_ERROR_STOP=1 <<'INTEGRATION_SQL'\n"
     + PROJECTION_SQL + "\nINTEGRATION_SQL\n"
     'test "$(psql -X --username=catering --dbname=catering_agents -qAt -c '
-    + shlex.quote("SELECT to_regclass('public.catering_schema_migrations') IS NULL") + ')" = t\n'
+    + shlex.quote("SELECT to_regclass('public.catering_schema_migrations') IS NOT NULL") + ')" = t\n'
     "printf 'INTEGRATION_READY\\n'\nIFS= read -r integration_release\ntest \"$integration_release\" = release\n")
 
 
@@ -688,7 +715,7 @@ def restore_case(resources, role, image, image_id, dump, body, expected=None, *,
     require(process.returncode == 0, 'RESTORE_EXIT_NONZERO')
     stop_process_group(process)
     require(resources.absent(resources.names[role]), 'RESTORE_CONTAINER_REMAINS')
-    return {'exit_code': 0, 'data_schema_equal': True, 'migration_bookkeeping_absent': True, 'container_absent': True}
+    return {'exit_code': 0, 'data_schema_equal': True, 'migration_bookkeeping_preserved': True, 'container_absent': True}
 
 
 def write_private(path, content, mode=0o600):
@@ -758,7 +785,7 @@ def execute(root, parent, identity):
         assert_projection(json.loads(psql(source, PROJECTION_SQL)), expected)
         require(psql(source, "SELECT unit_name || ':' || version_number FROM catering_schema_migrations") == 'catering_business_records:3', 'MIGRATION_BOOKKEEPING')
         evidence['source'] = {'data_schema_equal': True, 'business_rows': 4, 'document_rows': 3,
-                              'migration_bookkeeping': 'catering_business_records:3; excluded by exact two-table dump'}
+                              'migration_bookkeeping': 'catering_business_records:3; preserved by full database dump'}
         env.update(work_root=str(work), postgres_dump=str(work / 'postgres_dump'), postgres_container_id=source,
                    DOCKER_CMD='docker', PG_DUMP_CMD='pg_dump', bundle_path='synthetic-component-stream')
         evidence['stage'] = 'legacy-pg-dump-rejection'
@@ -776,9 +803,9 @@ def execute(root, parent, identity):
                 'CURRENT_DUMP_FAILED')
         write_private(work / 'manifest', b'version=1\nkind=synthetic-component-only\n')
         component_paths = {}
-        for name in ['sites', 'platform_caddy_data', 'platform_caddy_config', 'shared_edge_caddyfile', 'shared_edge_caddy_data', 'shared_edge_caddy_config']:
+        for name in ['sites', 'platform_caddy_data', 'platform_caddy_config', 'catering_edge_caddyfile', 'catering_edge_caddy_data', 'catering_edge_caddy_config']:
             path = resources.root / name
-            if name == 'shared_edge_caddyfile':
+            if name == 'catering_edge_caddyfile':
                 write_private(path, b'# synthetic Caddy fixture, never used as configuration\n')
             else:
                 path.mkdir(mode=0o700)
@@ -787,8 +814,8 @@ def execute(root, parent, identity):
                 write_private(nested / 'label.txt', ('synthetic ' + name + '\n').encode())
             component_paths[name] = path
         env.update(sites_path=str(component_paths['sites']), platform_caddy_data_mount=str(component_paths['platform_caddy_data']),
-                   platform_caddy_config_mount=str(component_paths['platform_caddy_config']), shared_edge_caddyfile_path=str(component_paths['shared_edge_caddyfile']),
-                   shared_edge_caddy_data_mount=str(component_paths['shared_edge_caddy_data']), shared_edge_caddy_config_mount=str(component_paths['shared_edge_caddy_config']))
+                   platform_caddy_config_mount=str(component_paths['platform_caddy_config']), catering_edge_caddyfile_path=str(component_paths['catering_edge_caddyfile']),
+                   catering_edge_caddy_data_mount=str(component_paths['catering_edge_caddy_data']), catering_edge_caddy_config_mount=str(component_paths['catering_edge_caddy_config']))
         evidence['stage'] = 'exact-stream-restic-backup'
         shell(prelude + 'restic_cmd init >/dev/null\n', env)
         repository_id = json.loads(shell(prelude + 'restic_cmd cat config\n', env).stdout)['id']
@@ -829,7 +856,7 @@ def execute(root, parent, identity):
             require(digest(actual_files[name].read_bytes()) == file_hashes[name], 'FILE_CHECKSUM_MISMATCH')
         measured_components = [file_hashes['postgres_dump']]
         for name in component_paths:
-            if name == 'shared_edge_caddyfile':
+            if name == 'catering_edge_caddyfile':
                 measured_components.append(file_hashes['components/' + name])
             else:
                 rows = sorted((key, value) for key, value in file_hashes.items() if key.startswith('components/' + name + '/'))

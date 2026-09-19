@@ -77,7 +77,7 @@ function createBackupEntrypointFixture() {
     const fakeBin = path.join(root, "bin");
     mkdirSync(fakeBin, { mode: 0o700 });
     const fakeVolumeRoot = path.join(root, "volumes");
-    for (const volume of ["platform-infra_caddy_data", "platform-infra_caddy_config", "shared-edge_edge_caddy_data", "shared-edge_edge_caddy_config"]) {
+    for (const volume of ["platform-infra_caddy_data", "platform-infra_caddy_config", "catering-edge_edge_caddy_data", "catering-edge_edge_caddy_config"]) {
       mkdirSync(path.join(fakeVolumeRoot, volume, "_data"), { recursive: true, mode: 0o700 });
     }
     const logPath = path.join(root, "commands.log");
@@ -96,8 +96,8 @@ function createBackupEntrypointFixture() {
     const secretSchema = "operator-secret-schema-v2|restic_encryption_password,offhost_repository_access,POSTGRES_PASSWORD,CATERING_TRUSTED_ACTOR_SECRET,CATERING_BASIC_AUTH_PASSWORD_HASH";
     const secretReference = sha256(secretSourceReference);
     const secretSchemaDigest = sha256(secretSchema);
-    const offhostAttestationText = `status=operator_attested\nlocator_digest=${sha256("s3:s3.example/catering")}\nendpoint_host=s3.example\nresolved_addresses_digest=${sha256("8.8.8.8")}\nproduction_addresses=${productionAddresses}\nproduction_external_addresses=none\nproduction_addresses_digest=${productionAddressesDigest}\nrepository_identity=${"b".repeat(64)}\nhost_binding=${hostDigest}\nproduction_host_binding=${hostDigest}\nscope=postgres,sites,platform-caddy,shared-edge-caddy\nverified_at=2026-09-04T00:00:00Z\nvalid_until=2026-09-05T00:00:00Z\nattestation_id=${"a".repeat(64)}\n`;
-    const secretAttestationText = `status=operator_attested\nsource_type=${secretSourceType}\nsource_reference=${secretSourceReference}\nsource_reference_digest=${secretReference}\nrequired_secret_schema_digest=${secretSchemaDigest}\nrepository_identity=${"b".repeat(64)}\nhost_binding=${hostDigest}\nscope=postgres,sites,platform-caddy,shared-edge-caddy\nverified_at=2026-09-04T00:00:00Z\nvalid_until=2026-09-05T00:00:00Z\nattestation_id=${"f".repeat(64)}\n`;
+    const offhostAttestationText = `status=operator_attested\nlocator_digest=${sha256("s3:s3.example/catering")}\nendpoint_host=s3.example\nresolved_addresses_digest=${sha256("8.8.8.8")}\nproduction_addresses=${productionAddresses}\nproduction_external_addresses=none\nproduction_addresses_digest=${productionAddressesDigest}\nrepository_identity=${"b".repeat(64)}\nhost_binding=${hostDigest}\nproduction_host_binding=${hostDigest}\nscope=postgres-full,sites,platform-caddy,catering-edge-caddy\nverified_at=2026-09-04T00:00:00Z\nvalid_until=2026-09-05T00:00:00Z\nattestation_id=${"a".repeat(64)}\n`;
+    const secretAttestationText = `status=operator_attested\nsource_type=${secretSourceType}\nsource_reference=${secretSourceReference}\nsource_reference_digest=${secretReference}\nrequired_secret_schema_digest=${secretSchemaDigest}\nrepository_identity=${"b".repeat(64)}\nhost_binding=${hostDigest}\nscope=postgres-full,sites,platform-caddy,catering-edge-caddy\nverified_at=2026-09-04T00:00:00Z\nvalid_until=2026-09-05T00:00:00Z\nattestation_id=${"f".repeat(64)}\n`;
     writeFileSync(offhostAttestation, offhostAttestationText, { mode: 0o600 });
     writeFileSync(secretAttestation, secretAttestationText, { mode: 0o600 });
     const previousEvidence = path.join(root, "catering-backup-evidence");
@@ -105,7 +105,7 @@ function createBackupEntrypointFixture() {
     writeFileSync(previousEvidence, previousEvidenceBytes, { mode: 0o600 });
     const pointer = path.join(root, "catering-backup-candidate");
     const fakeTar = path.join(root, "fake-stream.tar");
-    const fakeTarResult = spawnSync("python3", ["-c", "import io,tarfile,sys; out=sys.argv[1]; dirs=['components','components/sites','components/platform_caddy_data','components/platform_caddy_config','components/shared_edge_caddy_data','components/shared_edge_caddy_config']; files={'manifest':b'manifest\\n','postgres_dump':b'PGDUMP-FIXTURE\\n','components/shared_edge_caddyfile':b'caddy\\n'}; files.update({f'{name}/marker':name.encode()+b'\\n' for name in dirs[1:]}); archive=tarfile.open(out,'w'); [archive.addfile((lambda i: (setattr(i,'type',tarfile.DIRTYPE),setattr(i,'mode',0o700),i)[-1])(tarfile.TarInfo(name))) for name in dirs]; [archive.addfile((lambda i: (setattr(i,'size',len(data)),setattr(i,'mode',0o600),i)[-1])(tarfile.TarInfo(name)),io.BytesIO(data)) for name,data in files.items()]; archive.close()", fakeTar], { encoding: "utf8" });
+    const fakeTarResult = spawnSync("python3", ["-c", "import io,tarfile,sys; out=sys.argv[1]; dirs=['components','components/sites','components/platform_caddy_data','components/platform_caddy_config','components/catering_edge_caddy_data','components/catering_edge_caddy_config']; files={'manifest':b'manifest\\n','postgres_dump':b'PGDUMP-FIXTURE\\n','components/catering_edge_caddyfile':b'caddy\\n'}; files.update({f'{name}/marker':name.encode()+b'\\n' for name in dirs[1:]}); archive=tarfile.open(out,'w'); [archive.addfile((lambda i: (setattr(i,'type',tarfile.DIRTYPE),setattr(i,'mode',0o700),i)[-1])(tarfile.TarInfo(name))) for name in dirs]; [archive.addfile((lambda i: (setattr(i,'size',len(data)),setattr(i,'mode',0o600),i)[-1])(tarfile.TarInfo(name)),io.BytesIO(data)) for name,data in files.items()]; archive.close()", fakeTar], { encoding: "utf8" });
     expect(fakeTarResult.status, String(fakeTarResult.stderr)).toBe(0);
     const install = (name: string, lines: string[]): void => {
       writeFileSync(path.join(fakeBin, name), `${lines.join("\n")}\n`, { mode: 0o755 });
@@ -159,7 +159,7 @@ function createBackupEntrypointFixture() {
       "  inspect)",
       "    container=\"${@: -1}\"",
       "    if [[ \"$container\" == \"$web_id\" || \"$container\" == \"$edge_id\" ]]; then",
-      "      if [[ \"$container\" == \"$web_id\" ]]; then caddy_name=/platform-infra-web-1; caddy_project=platform-infra; caddy_service=web; caddy_mounts=\"volume|platform-infra_caddy_data|$FAKE_VOLUME_ROOT/platform-infra_caddy_data/_data|/data|true\\nvolume|platform-infra_caddy_config|$FAKE_VOLUME_ROOT/platform-infra_caddy_config/_data|/config|true\\nbind||/opt/catering-agents-platform/platform-infra/sites|/etc/caddy/sites|false\"; else caddy_name=/shared-edge-edge-1; caddy_project=shared-edge; caddy_service=edge; caddy_mounts=\"volume|shared-edge_edge_caddy_data|$FAKE_VOLUME_ROOT/shared-edge_edge_caddy_data/_data|/data|true\\nvolume|shared-edge_edge_caddy_config|$FAKE_VOLUME_ROOT/shared-edge_edge_caddy_config/_data|/config|true\\nbind||/opt/shared-edge/Caddyfile|/etc/caddy/Caddyfile|false\"; fi",
+      "      if [[ \"$container\" == \"$web_id\" ]]; then caddy_name=/platform-infra-web-1; caddy_project=platform-infra; caddy_service=web; caddy_mounts=\"volume|platform-infra_caddy_data|$FAKE_VOLUME_ROOT/platform-infra_caddy_data/_data|/data|true\\nvolume|platform-infra_caddy_config|$FAKE_VOLUME_ROOT/platform-infra_caddy_config/_data|/config|true\\nbind||/opt/catering-agents-platform/platform-infra/sites|/etc/caddy/sites|false\"; else caddy_name=/catering-edge-edge-1; caddy_project=catering-edge; caddy_service=edge; caddy_mounts=\"volume|catering-edge_edge_caddy_data|$FAKE_VOLUME_ROOT/catering-edge_edge_caddy_data/_data|/data|true\\nvolume|catering-edge_edge_caddy_config|$FAKE_VOLUME_ROOT/catering-edge_edge_caddy_config/_data|/config|true\\nbind||/opt/catering-edge/Caddyfile|/etc/caddy/Caddyfile|false\"; fi",
       "      case \"$*\" in",
       "        *'.Id'*) printf '%s\\n' \"$container\" ;;",
       "        *'.Mounts'*) printf '%b\\n' \"$caddy_mounts\" ;;",
@@ -187,7 +187,7 @@ function createBackupEntrypointFixture() {
       "      *'Config.Env'*) printf 'POSTGRES_DB=catering_agents\\nPOSTGRES_USER=catering\\n' ;;",
       "      *) exit 1 ;;",
       "    esac ;;",
-      "  volume) volume=\"${@: -1}\"; case \"$volume\" in platform-infra_postgres_data) printf 'platform-infra_postgres_data|platform-infra|postgres_data\\n' ;; platform-infra_caddy_data) printf 'platform-infra_caddy_data|platform-infra|caddy_data|%s\\n' \"$FAKE_VOLUME_ROOT/$volume/_data\" ;; platform-infra_caddy_config) printf 'platform-infra_caddy_config|platform-infra|caddy_config|%s\\n' \"$FAKE_VOLUME_ROOT/$volume/_data\" ;; shared-edge_edge_caddy_data) printf 'shared-edge_edge_caddy_data|shared-edge|edge_caddy_data|%s\\n' \"$FAKE_VOLUME_ROOT/$volume/_data\" ;; shared-edge_edge_caddy_config) printf 'shared-edge_edge_caddy_config|shared-edge|edge_caddy_config|%s\\n' \"$FAKE_VOLUME_ROOT/$volume/_data\" ;; *) exit 1 ;; esac ;;",
+      "  volume) volume=\"${@: -1}\"; case \"$volume\" in platform-infra_postgres_data) printf 'platform-infra_postgres_data|platform-infra|postgres_data\\n' ;; platform-infra_caddy_data) printf 'platform-infra_caddy_data|platform-infra|caddy_data|%s\\n' \"$FAKE_VOLUME_ROOT/$volume/_data\" ;; platform-infra_caddy_config) printf 'platform-infra_caddy_config|platform-infra|caddy_config|%s\\n' \"$FAKE_VOLUME_ROOT/$volume/_data\" ;; catering-edge_edge_caddy_data) printf 'catering-edge_edge_caddy_data|catering-edge|edge_caddy_data|%s\\n' \"$FAKE_VOLUME_ROOT/$volume/_data\" ;; catering-edge_edge_caddy_config) printf 'catering-edge_edge_caddy_config|catering-edge|edge_caddy_config|%s\\n' \"$FAKE_VOLUME_ROOT/$volume/_data\" ;; *) exit 1 ;; esac ;;",
       "  image) printf 'registry.example/postgres@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\\n' ;;",
       "  exec) printf 'PGDUMP-FIXTURE\\n' ;;",
       "  *) exit 1 ;;",
@@ -305,8 +305,8 @@ function createRestoreEntrypointFixture() {
       "sites",
       "platform_caddy_data",
       "platform_caddy_config",
-      "shared_edge_caddy_data",
-      "shared_edge_caddy_config",
+      "catering_edge_caddy_data",
+      "catering_edge_caddy_config",
     ]) {
       mkdirSync(path.join(tree, "components", component), { recursive: true, mode: 0o700 });
       writeFileSync(path.join(tree, "components", component, "marker"), `${component}\n`, { mode: 0o600 });
@@ -314,8 +314,8 @@ function createRestoreEntrypointFixture() {
     mkdirSync(path.join(tree, "components"), { recursive: true, mode: 0o700 });
     writeFileSync(path.join(tree, "manifest"), "manifest\n", { mode: 0o600 });
     writeFileSync(path.join(tree, "postgres_dump"), "custom-dump\n", { mode: 0o600 });
-    writeFileSync(path.join(tree, "components", "shared_edge_caddyfile"), "caddy\n", { mode: 0o600 });
-    const tarResult = spawnSync("python3", ["-c", `import io, tarfile, sys\nout=sys.argv[1]\ndirs=['components','components/sites','components/platform_caddy_data','components/platform_caddy_config','components/shared_edge_caddy_data','components/shared_edge_caddy_config']\nfiles={'manifest':b'manifest\\n','postgres_dump':b'custom-dump\\n','components/shared_edge_caddyfile':b'caddy\\n'}\nfor name in dirs:\n  if name != 'components': files[f'{name}/marker']=name.encode()+b'\\n'\nwith tarfile.open(out,'w') as archive:\n  for name in dirs:\n    info=tarfile.TarInfo(name); info.type=tarfile.DIRTYPE; info.mode=0o700; archive.addfile(info)\n  for name,data in files.items():\n    info=tarfile.TarInfo(name); info.size=len(data); info.mode=0o600; archive.addfile(info,io.BytesIO(data))\n`, tarPath], { encoding: "utf8" });
+    writeFileSync(path.join(tree, "components", "catering_edge_caddyfile"), "caddy\n", { mode: 0o600 });
+    const tarResult = spawnSync("python3", ["-c", `import io, tarfile, sys\nout=sys.argv[1]\ndirs=['components','components/sites','components/platform_caddy_data','components/platform_caddy_config','components/catering_edge_caddy_data','components/catering_edge_caddy_config']\nfiles={'manifest':b'manifest\\n','postgres_dump':b'custom-dump\\n','components/catering_edge_caddyfile':b'caddy\\n'}\nfor name in dirs:\n  if name != 'components': files[f'{name}/marker']=name.encode()+b'\\n'\nwith tarfile.open(out,'w') as archive:\n  for name in dirs:\n    info=tarfile.TarInfo(name); info.type=tarfile.DIRTYPE; info.mode=0o700; archive.addfile(info)\n  for name,data in files.items():\n    info=tarfile.TarInfo(name); info.size=len(data); info.mode=0o600; archive.addfile(info,io.BytesIO(data))\n`, tarPath], { encoding: "utf8" });
     expect(tarResult.status, String(tarResult.stderr)).toBe(0);
     const filteredTarPath = path.join(root, "stream-filtered.tar");
     const filterResult = spawnSync("python3", ["-c", "import sys,tarfile\nsrc,dst=sys.argv[1:]\nwith tarfile.open(src,'r:') as inp, tarfile.open(dst,'w') as out:\n  for member in inp:\n    if member.name == 'components':\n      continue\n    data=inp.extractfile(member) if member.isfile() else None\n    out.addfile(member,data)", tarPath, filteredTarPath], { encoding: "utf8" });
@@ -328,8 +328,8 @@ function createRestoreEntrypointFixture() {
     const productionAddressesDigest = sha256(productionAddresses);
     const offhostAttestation = path.join(root, "offhost-attestation");
     const secretAttestation = path.join(root, "secret-attestation");
-    const offhostAttestationText = `status=operator_attested\nlocator_digest=${sha256("s3:s3.example/catering")}\nendpoint_host=s3.example\nresolved_addresses_digest=${sha256("8.8.8.8")}\nproduction_addresses=${productionAddresses}\nproduction_external_addresses=none\nproduction_addresses_digest=${productionAddressesDigest}\nrepository_identity=${repositoryId}\nhost_binding=${hostDigest}\nproduction_host_binding=${hostDigest}\nscope=postgres,sites,platform-caddy,shared-edge-caddy\nverified_at=2026-09-04T00:00:00Z\nvalid_until=2026-09-05T00:00:00Z\nattestation_id=${"a".repeat(64)}\n`;
-    const secretAttestationText = `status=operator_attested\nsource_type=${sourceType}\nsource_reference=${sourceReference}\nsource_reference_digest=${sha256(sourceReference)}\nrequired_secret_schema_digest=${secretSchemaDigest}\nrepository_identity=${repositoryId}\nhost_binding=${hostDigest}\nscope=postgres,sites,platform-caddy,shared-edge-caddy\nverified_at=2026-09-04T00:00:00Z\nvalid_until=2026-09-05T00:00:00Z\nattestation_id=${"f".repeat(64)}\n`;
+    const offhostAttestationText = `status=operator_attested\nlocator_digest=${sha256("s3:s3.example/catering")}\nendpoint_host=s3.example\nresolved_addresses_digest=${sha256("8.8.8.8")}\nproduction_addresses=${productionAddresses}\nproduction_external_addresses=none\nproduction_addresses_digest=${productionAddressesDigest}\nrepository_identity=${repositoryId}\nhost_binding=${hostDigest}\nproduction_host_binding=${hostDigest}\nscope=postgres-full,sites,platform-caddy,catering-edge-caddy\nverified_at=2026-09-04T00:00:00Z\nvalid_until=2026-09-05T00:00:00Z\nattestation_id=${"a".repeat(64)}\n`;
+    const secretAttestationText = `status=operator_attested\nsource_type=${sourceType}\nsource_reference=${sourceReference}\nsource_reference_digest=${sha256(sourceReference)}\nrequired_secret_schema_digest=${secretSchemaDigest}\nrepository_identity=${repositoryId}\nhost_binding=${hostDigest}\nscope=postgres-full,sites,platform-caddy,catering-edge-caddy\nverified_at=2026-09-04T00:00:00Z\nvalid_until=2026-09-05T00:00:00Z\nattestation_id=${"f".repeat(64)}\n`;
     writeFileSync(offhostAttestation, offhostAttestationText, { mode: 0o600 });
     writeFileSync(secretAttestation, secretAttestationText, { mode: 0o600 });
     const bundleChecksum = sha256(readFileSync(tarPath));
@@ -342,16 +342,16 @@ function createRestoreEntrypointFixture() {
     const componentSitesChecksum = componentTreeChecksum("sites");
     const componentPlatformCaddyDataChecksum = componentTreeChecksum("platform_caddy_data");
     const componentPlatformCaddyConfigChecksum = componentTreeChecksum("platform_caddy_config");
-    const componentSharedEdgeCaddyDataChecksum = componentTreeChecksum("shared_edge_caddy_data");
-    const componentSharedEdgeCaddyConfigChecksum = componentTreeChecksum("shared_edge_caddy_config");
+    const componentSharedEdgeCaddyDataChecksum = componentTreeChecksum("catering_edge_caddy_data");
+    const componentSharedEdgeCaddyConfigChecksum = componentTreeChecksum("catering_edge_caddy_config");
     const componentSharedEdgeCaddyfileChecksum = sha256("caddy\n");
     const artifactPath = path.join(root, "snapshots", "catering-backup-artifact-1");
     const candidatePath = path.join(root, "candidates", "catering-backup-candidate-1");
     mkdirSync(path.dirname(artifactPath), { mode: 0o700 });
     mkdirSync(path.dirname(candidatePath), { mode: 0o700 });
-    const artifact = `status=artifact\nscope=postgres,sites,platform-caddy,shared-edge-caddy\nhost_binding=${hostDigest}\nsource_commit=${sourceCommit}\nsource_tree=${sourceTree}\nsecret_recovery_reference_sha256=${secretReference}\nrestore_postgres_image=${image}\nbundle_path=catering-backup-stream-1\nbundle_checksum=${bundleChecksum}\nmanifest_path=manifest\nmanifest_checksum=${manifestChecksum}\npostgres_dump_path=postgres_dump\ncomponent_postgres_dump_checksum=${dumpChecksum}\ncomponent_caddy_stream_checksum=${bundleChecksum}\ncomponent_sites_checksum=${componentSitesChecksum}\ncomponent_platform_caddy_data_checksum=${componentPlatformCaddyDataChecksum}\ncomponent_platform_caddy_config_checksum=${componentPlatformCaddyConfigChecksum}\ncomponent_shared_edge_caddyfile_checksum=${componentSharedEdgeCaddyfileChecksum}\ncomponent_shared_edge_caddy_data_checksum=${componentSharedEdgeCaddyDataChecksum}\ncomponent_shared_edge_caddy_config_checksum=${componentSharedEdgeCaddyConfigChecksum}\n`;
+    const artifact = `status=artifact\nscope=postgres-full,sites,platform-caddy,catering-edge-caddy\nhost_binding=${hostDigest}\nsource_commit=${sourceCommit}\nsource_tree=${sourceTree}\nsecret_recovery_reference_sha256=${secretReference}\nrestore_postgres_image=${image}\nbundle_path=catering-backup-stream-1\nbundle_checksum=${bundleChecksum}\nmanifest_path=manifest\nmanifest_checksum=${manifestChecksum}\npostgres_dump_path=postgres_dump\ncomponent_postgres_dump_checksum=${dumpChecksum}\ncomponent_caddy_stream_checksum=${bundleChecksum}\ncomponent_sites_checksum=${componentSitesChecksum}\ncomponent_platform_caddy_data_checksum=${componentPlatformCaddyDataChecksum}\ncomponent_platform_caddy_config_checksum=${componentPlatformCaddyConfigChecksum}\ncomponent_catering_edge_caddyfile_checksum=${componentSharedEdgeCaddyfileChecksum}\ncomponent_catering_edge_caddy_data_checksum=${componentSharedEdgeCaddyDataChecksum}\ncomponent_catering_edge_caddy_config_checksum=${componentSharedEdgeCaddyConfigChecksum}\n`;
     const artifactChecksum = sha256(artifact);
-    const candidate = `status=candidate\nscope=postgres,sites,platform-caddy,shared-edge-caddy\nhost_binding=${hostDigest}\nsource_commit=${sourceCommit}\nsource_tree=${sourceTree}\nsnapshot_id=${snapshotId}\nrepository_identity=${repositoryId}\nartifact_path=${artifactPath}\nartifact_checksum=${artifactChecksum}\nbundle_path=catering-backup-stream-1\nbundle_checksum=${bundleChecksum}\nsecret_recovery_reference_sha256=${secretReference}\nrestore_postgres_image=${image}\ncreated_at=2026-09-04T00:00:00Z\nstatus_timestamp=2026-09-04T00:00:00Z\n`;
+    const candidate = `status=candidate\nscope=postgres-full,sites,platform-caddy,catering-edge-caddy\nhost_binding=${hostDigest}\nsource_commit=${sourceCommit}\nsource_tree=${sourceTree}\nsnapshot_id=${snapshotId}\nrepository_identity=${repositoryId}\nartifact_path=${artifactPath}\nartifact_checksum=${artifactChecksum}\nbundle_path=catering-backup-stream-1\nbundle_checksum=${bundleChecksum}\nsecret_recovery_reference_sha256=${secretReference}\nrestore_postgres_image=${image}\ncreated_at=2026-09-04T00:00:00Z\nstatus_timestamp=2026-09-04T00:00:00Z\n`;
     writeFileSync(artifactPath, artifact, { mode: 0o600 });
     writeFileSync(candidatePath, candidate, { mode: 0o600 });
     writeFileSync(path.join(root, "catering-backup-candidate"), `status=pointer\ncandidate_path=${candidatePath}\ncandidate_checksum=${sha256(candidate)}\ncreated_at=2026-09-04T00:00:00Z\n`, { mode: 0o600 });
@@ -455,6 +455,8 @@ case "$*" in
   *"CREATE ROLE catering LOGIN"*) [[ "\${FAKE_PG_FAIL:-}" == role ]] && exit 74 || true ;;
   *"public.catering_business_records"*) [[ "\${FAKE_PG_FAIL:-}" == table1 ]] && exit 75; printf '0\\n' ;;
   *"public.catering_source_documents"*) [[ "\${FAKE_PG_FAIL:-}" == table2 ]] && exit 76; printf '0\\n' ;;
+  *"public.catering_records"*) [[ "\${FAKE_PG_FAIL:-}" == table3 ]] && exit 76; printf '0\\n' ;;
+  *"public.catering_schema_migrations"*) [[ "\${FAKE_PG_FAIL:-}" == table4 ]] && exit 76; printf '0\\n' ;;
 esac`);
     install("createdb", `#!/usr/bin/env bash
 set -euo pipefail
@@ -572,7 +574,7 @@ describe("Catering backup and isolated restore repository contract", () => {
   test("backup binds the fixed six-hour RPO, scope, host and source identity", () => {
     const backup = source(files.backup);
     expect(backup).toContain('readonly RPO_SECONDS="21600"');
-    expect(backup).toContain('readonly BACKUP_SCOPE="postgres,sites,platform-caddy,shared-edge-caddy"');
+    expect(backup).toContain('readonly BACKUP_SCOPE="postgres-full,sites,platform-caddy,catering-edge-caddy"');
     expect(backup).toContain("CATERING_BACKUP_EXPECTED_HOST_SHA256");
     expect(backup).toContain("CATERING_BACKUP_SOURCE_COMMIT");
     expect(backup).toContain("CATERING_BACKUP_SOURCE_TREE");
@@ -589,13 +591,13 @@ describe("Catering backup and isolated restore repository contract", () => {
     for (const volume of [
       "platform-infra_caddy_data",
       "platform-infra_caddy_config",
-      "shared-edge_edge_caddy_data",
-      "shared-edge_edge_caddy_config",
+      "catering-edge_edge_caddy_data",
+      "catering-edge_edge_caddy_config",
     ]) {
       expect(backup).toContain(volume);
     }
     expect(backup).toContain("sites_path=\"/opt/catering-agents-platform/platform-infra/sites\"");
-    expect(backup).toContain("/opt/shared-edge/Caddyfile");
+    expect(backup).toContain("/opt/catering-edge/Caddyfile");
     expect(backup).not.toMatch(/\bdocker\s+compose\b/);
   });
 
@@ -650,22 +652,20 @@ describe("Catering backup and isolated restore repository contract", () => {
     expect(backup).toContain("--format=custom");
     expect(backup).toContain("--no-owner");
     expect(backup).toContain("--no-privileges");
-    expect(backup).toContain("--strict-names");
-    expect(backup).toContain("--table=public.catering_business_records");
-    expect(backup).toContain("--table=public.catering_source_documents");
+    expect(backup).not.toContain("--strict-names");
+    expect(backup).not.toContain("--table=");
     expect(backup).toContain('unset PGHOST PGHOSTADDR PGPORT PGSERVICE PGSERVICEFILE && exec "$@"');
     expect(backup).toContain('catering-pg-dump "$PG_DUMP_CMD"');
-    expect(backup).toContain("catering_business_records");
-    expect(backup).toContain("catering_source_documents");
+    expect(backup).toContain("postgres-full,sites,platform-caddy,catering-edge-caddy");
     expect(backup).toContain('arcname="components/"');
     for (const component of [
       "postgres_dump",
       "sites",
       "platform_caddy_data",
       "platform_caddy_config",
-      "shared_edge_caddyfile",
-      "shared_edge_caddy_data",
-      "shared_edge_caddy_config",
+      "catering_edge_caddyfile",
+      "catering_edge_caddy_data",
+      "catering_edge_caddy_config",
     ]) {
       expect(backup).toContain(component);
     }
@@ -674,16 +674,16 @@ describe("Catering backup and isolated restore repository contract", () => {
   test("backup and restore bind the four-name scope to component checksums", () => {
     const backup = source(files.backup);
     const restore = source(files.restore);
-    const expectedScope = "postgres,sites,platform-caddy,shared-edge-caddy";
+    const expectedScope = "postgres-full,sites,platform-caddy,catering-edge-caddy";
     expect(backup).toContain(`readonly BACKUP_SCOPE="${expectedScope}"`);
     expect(restore).toContain(`readonly BACKUP_SCOPE="${expectedScope}"`);
     for (const field of [
       "component_sites_checksum",
       "component_platform_caddy_data_checksum",
       "component_platform_caddy_config_checksum",
-      "component_shared_edge_caddyfile_checksum",
-      "component_shared_edge_caddy_data_checksum",
-      "component_shared_edge_caddy_config_checksum",
+      "component_catering_edge_caddyfile_checksum",
+      "component_catering_edge_caddy_data_checksum",
+      "component_catering_edge_caddy_config_checksum",
     ]) {
       expect(backup).toContain(field);
       expect(restore).toContain(field);
@@ -740,7 +740,7 @@ describe("Catering backup and isolated restore repository contract", () => {
     expect(backup).toContain("bundle_path=\"catering-backup-stream-");
     expect(backup).not.toMatch(/bundle_path=\"\$snapshot_dir/);
     expect(backup).toContain("platform-infra_caddy_data");
-    expect(backup).toContain("shared-edge_edge_caddy_data");
+    expect(backup).toContain("catering-edge_edge_caddy_data");
     expect(backup).not.toMatch(/tar .*--file \"\$work_root/);
     expect(backup).toContain("secret_recovery_reference_sha256");
     expect(backup).toContain("cleanup_work_root");
@@ -920,7 +920,7 @@ describe("Catering backup and isolated restore repository contract", () => {
 
   for (const [project, service, name, prefix, bindSource, bindTarget] of [
     ["platform-infra", "web", "platform-infra-web-1", "platform-infra_caddy", "/opt/catering-agents-platform/platform-infra/sites", "/etc/caddy/sites"],
-    ["shared-edge", "edge", "shared-edge-edge-1", "shared-edge_edge_caddy", "/opt/shared-edge/Caddyfile", "/etc/caddy/Caddyfile"],
+    ["catering-edge", "edge", "catering-edge-edge-1", "catering-edge_edge_caddy", "/opt/catering-edge/Caddyfile", "/etc/caddy/Caddyfile"],
   ]) {
     test(`Caddy mount order is immaterial while full bindings stay strict: ${service}`, () => {
       const backup = source(files.backup);
@@ -1028,9 +1028,9 @@ case "$1" in
     id="$4"
     case "$*" in
       *'.Id'*) printf '%s\\n' "$id" ;;
-      *'.Mounts'*) if [[ "$CADDY_MOUNT_MODE" == swapped ]]; then [[ "$id" == "$web_id" ]] && printf 'volume|platform-infra_caddy_data|%s|/wrong|true\\nvolume|platform-infra_caddy_config|%s|/config|true\\nbind||/opt/catering-agents-platform/platform-infra/sites|/etc/caddy/sites|false\\n' "$FAKE_VOLUME_ROOT/platform-infra_caddy_data/_data" "$FAKE_VOLUME_ROOT/platform-infra_caddy_config/_data" || printf 'volume|shared-edge_edge_caddy_data|%s|/wrong|true\\nvolume|shared-edge_edge_caddy_config|%s|/config|true\\nbind||/opt/shared-edge/Caddyfile|/etc/caddy/Caddyfile|false\\n' "$FAKE_VOLUME_ROOT/shared-edge_edge_caddy_data/_data" "$FAKE_VOLUME_ROOT/shared-edge_edge_caddy_config/_data"; else [[ "$id" == "$web_id" ]] && printf 'volume|platform-infra_caddy_data|%s|/data|true\\nvolume|platform-infra_caddy_config|%s|/config|true\\nbind||/opt/catering-agents-platform/platform-infra/sites|/etc/caddy/sites|false\\n' "$FAKE_VOLUME_ROOT/platform-infra_caddy_data/_data" "$FAKE_VOLUME_ROOT/platform-infra_caddy_config/_data" || printf 'volume|shared-edge_edge_caddy_data|%s|/data|true\\nvolume|shared-edge_edge_caddy_config|%s|/config|true\\nbind||/opt/shared-edge/Caddyfile|/etc/caddy/Caddyfile|false\\n' "$FAKE_VOLUME_ROOT/shared-edge_edge_caddy_data/_data" "$FAKE_VOLUME_ROOT/shared-edge_edge_caddy_config/_data"; fi ;;
-      *'.Name'*) [[ "$id" == "$web_id" ]] && printf '/platform-infra-web-1\\n' || printf '/shared-edge-edge-1\\n' ;;
-      *'compose.project'*) [[ "$id" == "$web_id" ]] && printf 'platform-infra\\n' || printf 'shared-edge\\n' ;;
+      *'.Mounts'*) if [[ "$CADDY_MOUNT_MODE" == swapped ]]; then [[ "$id" == "$web_id" ]] && printf 'volume|platform-infra_caddy_data|%s|/wrong|true\\nvolume|platform-infra_caddy_config|%s|/config|true\\nbind||/opt/catering-agents-platform/platform-infra/sites|/etc/caddy/sites|false\\n' "$FAKE_VOLUME_ROOT/platform-infra_caddy_data/_data" "$FAKE_VOLUME_ROOT/platform-infra_caddy_config/_data" || printf 'volume|catering-edge_edge_caddy_data|%s|/wrong|true\\nvolume|catering-edge_edge_caddy_config|%s|/config|true\\nbind||/opt/catering-edge/Caddyfile|/etc/caddy/Caddyfile|false\\n' "$FAKE_VOLUME_ROOT/catering-edge_edge_caddy_data/_data" "$FAKE_VOLUME_ROOT/catering-edge_edge_caddy_config/_data"; else [[ "$id" == "$web_id" ]] && printf 'volume|platform-infra_caddy_data|%s|/data|true\\nvolume|platform-infra_caddy_config|%s|/config|true\\nbind||/opt/catering-agents-platform/platform-infra/sites|/etc/caddy/sites|false\\n' "$FAKE_VOLUME_ROOT/platform-infra_caddy_data/_data" "$FAKE_VOLUME_ROOT/platform-infra_caddy_config/_data" || printf 'volume|catering-edge_edge_caddy_data|%s|/data|true\\nvolume|catering-edge_edge_caddy_config|%s|/config|true\\nbind||/opt/catering-edge/Caddyfile|/etc/caddy/Caddyfile|false\\n' "$FAKE_VOLUME_ROOT/catering-edge_edge_caddy_data/_data" "$FAKE_VOLUME_ROOT/catering-edge_edge_caddy_config/_data"; fi ;;
+      *'.Name'*) [[ "$id" == "$web_id" ]] && printf '/platform-infra-web-1\\n' || printf '/catering-edge-edge-1\\n' ;;
+      *'compose.project'*) [[ "$id" == "$web_id" ]] && printf 'platform-infra\\n' || printf 'catering-edge\\n' ;;
       *'compose.service'*) [[ "$id" == "$web_id" ]] && printf 'web\\n' || printf 'edge\\n' ;;
       *'.State.Status'*) printf 'running\\n' ;;
       *'.State.Health'*) printf 'healthy\\n' ;;
@@ -1047,7 +1047,7 @@ esac
 DOCKER_CMD=${JSON.stringify(docker)}
 fail_state() { printf '%s\\n' "$1" >&2; return 1; }
 assert_caddy_container_mounts platform-infra web platform-infra-web-1 platform-infra_caddy_data platform-infra_caddy_config "$FAKE_VOLUME_ROOT/platform-infra_caddy_data/_data" "$FAKE_VOLUME_ROOT/platform-infra_caddy_config/_data" /opt/catering-agents-platform/platform-infra/sites /etc/caddy/sites
-assert_caddy_container_mounts shared-edge edge shared-edge-edge-1 shared-edge_edge_caddy_data shared-edge_edge_caddy_config "$FAKE_VOLUME_ROOT/shared-edge_edge_caddy_data/_data" "$FAKE_VOLUME_ROOT/shared-edge_edge_caddy_config/_data" /opt/shared-edge/Caddyfile /etc/caddy/Caddyfile
+assert_caddy_container_mounts catering-edge edge catering-edge-edge-1 catering-edge_edge_caddy_data catering-edge_edge_caddy_config "$FAKE_VOLUME_ROOT/catering-edge_edge_caddy_data/_data" "$FAKE_VOLUME_ROOT/catering-edge_edge_caddy_config/_data" /opt/catering-edge/Caddyfile /etc/caddy/Caddyfile
 `,
         { CADDY_MOUNT_MODE: mode, FAKE_VOLUME_ROOT: path.join(root, "volumes") },
       );
@@ -1067,9 +1067,9 @@ assert_caddy_container_mounts shared-edge edge shared-edge-edge-1 shared-edge_ed
       path.join(root, "sites"),
       path.join(root, "platform-caddy-data"),
       path.join(root, "platform-caddy-config"),
-      path.join(root, "shared-edge-caddyfile"),
-      path.join(root, "shared-edge-caddy-data"),
-      path.join(root, "shared-edge-caddy-config"),
+      path.join(root, "catering-edge-caddyfile"),
+      path.join(root, "catering-edge-caddy-data"),
+      path.join(root, "catering-edge-caddy-config"),
     ];
     for (const sourcePath of sources) {
       if (sourcePath.endsWith("caddyfile")) writeFileSync(sourcePath, "caddy\n", { mode: 0o600 });
@@ -1110,17 +1110,17 @@ after="$(capture_source_generation ${sources.map((value) => JSON.stringify(value
     const root = mkdtempSync(path.join(tmpdir(), "catering-caddy-restore-"));
     const tree = path.join(root, "tree");
     mkdirSync(path.join(tree, "components/sites"), { recursive: true, mode: 0o700 });
-    for (const component of ["platform_caddy_data", "platform_caddy_config", "shared_edge_caddy_data", "shared_edge_caddy_config"]) {
+    for (const component of ["platform_caddy_data", "platform_caddy_config", "catering_edge_caddy_data", "catering_edge_caddy_config"]) {
       mkdirSync(path.join(tree, `components/${component}`), { recursive: true, mode: 0o700 });
     }
     mkdirSync(path.join(tree, "components"), { recursive: true, mode: 0o700 });
     writeFileSync(path.join(tree, "manifest"), "manifest\n");
     writeFileSync(path.join(tree, "postgres_dump"), "dump\n");
-    writeFileSync(path.join(tree, "components/shared_edge_caddyfile"), "caddy\n");
+    writeFileSync(path.join(tree, "components/catering_edge_caddyfile"), "caddy\n");
     const run = () => runShell(`python3 - ${JSON.stringify(tree)} <<'PY'\n${python}\nPY\n`);
     try {
       expect(run().status).not.toBe(0);
-      for (const component of ["platform_caddy_data", "platform_caddy_config", "shared_edge_caddy_data", "shared_edge_caddy_config"]) {
+      for (const component of ["platform_caddy_data", "platform_caddy_config", "catering_edge_caddy_data", "catering_edge_caddy_config"]) {
         writeFileSync(path.join(tree, `components/${component}/sentinel`), "x");
       }
       writeFileSync(path.join(tree, "components/sites/sentinel"), "x");
@@ -1314,6 +1314,8 @@ exec ${quote(discovered.stdout.trim())} "$@"
         "pg_restore",
         "psql",
         "psql",
+        "psql",
+        "psql",
         "pg_ctl",
       ]);
       expect(String(readFileSync(log))).toContain("--repository-file /proc/self/fd/9");
@@ -1327,6 +1329,8 @@ exec ${quote(discovered.stdout.trim())} "$@"
         ["pg_restore", ["initdb", "pg_ctl", "psql", "createdb", "pg_restore", "pg_ctl"]],
         ["table1", ["initdb", "pg_ctl", "psql", "createdb", "pg_restore", "psql", "pg_ctl"]],
         ["table2", ["initdb", "pg_ctl", "psql", "createdb", "pg_restore", "psql", "psql", "pg_ctl"]],
+        ["table3", ["initdb", "pg_ctl", "psql", "createdb", "pg_restore", "psql", "psql", "psql", "pg_ctl"]],
+        ["table4", ["initdb", "pg_ctl", "psql", "createdb", "pg_restore", "psql", "psql", "psql", "psql", "pg_ctl"]],
       ] as const) {
         writeFileSync(pgLog, "", { mode: 0o600 });
         const failed = invoke({ FAKE_PG_FAIL: failure });
@@ -1466,7 +1470,7 @@ exec ${quote(discovered.stdout.trim())} "$@"
     expect(restore).toContain("host_binding");
     expect(restore).toContain("source_commit");
     expect(restore).toContain("source_tree");
-    expect(restore).toContain('readonly BACKUP_SCOPE="postgres,sites,platform-caddy,shared-edge-caddy"');
+    expect(restore).toContain('readonly BACKUP_SCOPE="postgres-full,sites,platform-caddy,catering-edge-caddy"');
     expect(restore).toContain('readonly RTO_SECONDS="14400"');
   });
 
@@ -1488,7 +1492,7 @@ exec ${quote(discovered.stdout.trim())} "$@"
     expect(restore).toContain("--network none");
     expect(restore).toContain("--pull never");
     expect(restore).toContain("--rm");
-    expect(restore).not.toMatch(/--network[ =](?:host|platform-infra_default|catering_|shared-edge|zeiterfassung)/);
+    expect(restore).not.toMatch(/--network[ =](?:host|platform-infra_default|catering_|catering-edge|zeiterfassung)/);
     const dockerStart = restore.indexOf('"$DOCKER_CMD" run');
     const dockerEnd = restore.indexOf("-ceu '", dockerStart);
     expect(dockerStart).toBeGreaterThanOrEqual(0);
@@ -1608,9 +1612,9 @@ rto_elapsed_allowed 14400
     expect(recordStart).toBeGreaterThanOrEqual(0);
     expect(bindingStart).toBeGreaterThanOrEqual(0);
     const functions = `${common.slice(recordStart, recordEnd)}\n${common.slice(bindingStart, bindingEnd)}`;
-    const run = (record: string): ReturnType<typeof runShell> => runShell(`fail_state() { return 1; }\nrequire_timestamp() { [[ \"$1\" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]; }\nrequire_digest() { [[ \"$1\" =~ ^[0-9a-f]{64}$ ]]; }\n${functions}\nvalidate_repository_status_binding \"$STATUS_RECORD\" ${"b".repeat(64)} ${"c".repeat(64)} postgres,sites,platform-caddy,shared-edge-caddy`, { CATERING_BACKUP_EXPECTED_UID: "501", STATUS_RECORD: record });
+    const run = (record: string): ReturnType<typeof runShell> => runShell(`fail_state() { return 1; }\nrequire_timestamp() { [[ \"$1\" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]; }\nrequire_digest() { [[ \"$1\" =~ ^[0-9a-f]{64}$ ]]; }\n${functions}\nvalidate_repository_status_binding \"$STATUS_RECORD\" ${"b".repeat(64)} ${"c".repeat(64)} postgres-full,sites,platform-caddy,catering-edge-caddy`, { CATERING_BACKUP_EXPECTED_UID: "501", STATUS_RECORD: record });
     const now = String(spawnSync("date", ["-u", "+%Y-%m-%dT%H:%M:%SZ"], { encoding: "utf8" }).stdout).trim();
-    const valid = `status=read-only-verified\nidentity=${"b".repeat(64)}\nhost_binding=${"c".repeat(64)}\nscope=postgres,sites,platform-caddy,shared-edge-caddy\nverified_at=${now}`;
+    const valid = `status=read-only-verified\nidentity=${"b".repeat(64)}\nhost_binding=${"c".repeat(64)}\nscope=postgres-full,sites,platform-caddy,catering-edge-caddy\nverified_at=${now}`;
     const validResult = run(valid);
     expect(validResult.status, String(validResult.stderr)).toBe(0);
     expect(run(valid.replace(/host_binding=c+/, `host_binding=${"x".repeat(64)}`)).status).not.toBe(0);
@@ -1803,7 +1807,7 @@ rto_elapsed_allowed 14400
   test("atomic writer publishes an exact record with restrictive mode and full readback", () => {
     const root = mkdtempSync(path.join(tmpdir(), "catering-backup-writer-"));
     const target = path.join(root, "record.json");
-    const payload = "status=candidate\nscope=postgres,sites,platform-caddy,shared-edge-caddy\n";
+    const payload = "status=candidate\nscope=postgres-full,sites,platform-caddy,catering-edge-caddy\n";
     const common = path.join(repoRoot, files.common);
     const result = runShell(
       `source ${JSON.stringify(common)}\n` +
@@ -1831,7 +1835,7 @@ rto_elapsed_allowed 14400
     const root = mkdtempSync(path.join(tmpdir(), "catering-backup-replace-"));
     const sourcePath = path.join(root, "source-record");
     const target = path.join(root, "record.json");
-    const payload = "status=candidate\nscope=postgres,sites,platform-caddy,shared-edge-caddy\n";
+    const payload = "status=candidate\nscope=postgres-full,sites,platform-caddy,catering-edge-caddy\n";
     const common = path.join(repoRoot, files.common);
     writeFileSync(sourcePath, payload, { mode: 0o600 });
     const result = runShell(
@@ -1878,7 +1882,7 @@ rto_elapsed_allowed 14400
       "        raise InterruptedError()",
       "    return real_write(fd, data)",
       "os.write = short_write",
-      `sys.argv = ['writer', ${JSON.stringify(target)}, '65536', 'payload', '', 'status=candidate\\nscope=postgres,sites,platform-caddy,shared-edge-caddy\\n']`,
+      `sys.argv = ['writer', ${JSON.stringify(target)}, '65536', 'payload', '', 'status=candidate\\nscope=postgres-full,sites,platform-caddy,catering-edge-caddy\\n']`,
       `exec(compile(base64.b64decode(${JSON.stringify(encoded)}), '<writer>', 'exec'), {})`,
     ].join("\n");
     try {
@@ -1887,7 +1891,7 @@ rto_elapsed_allowed 14400
         env: { ...process.env, CATERING_BACKUP_ROOT: root },
       });
       expect(result.status, String(result.stderr)).toBe(0);
-      expect(readFileSync(target, "utf8")).toBe("status=candidate\nscope=postgres,sites,platform-caddy,shared-edge-caddy\n");
+      expect(readFileSync(target, "utf8")).toBe("status=candidate\nscope=postgres-full,sites,platform-caddy,catering-edge-caddy\n");
       expect(statSync(target).mode & 0o777).toBe(0o600);
     } finally {
       removeFixture(root);
@@ -2779,10 +2783,10 @@ count=0
     const secretSchema = "operator-secret-schema-v2|restic_encryption_password,offhost_repository_access,POSTGRES_PASSWORD,CATERING_TRUSTED_ACTOR_SECRET,CATERING_BASIC_AUTH_PASSWORD_HASH";
     const secretReference = sha256(sourceReference);
     const nowEpoch = String(Math.floor(Date.parse("2026-09-04T01:00:00Z") / 1000));
-    const offhostText = `status=operator_attested\nlocator_digest=${locatorDigest}\nendpoint_host=s3.example\nresolved_addresses_digest=${resolvedDigest}\nproduction_addresses=1.1.1.1\nproduction_external_addresses=none\nproduction_addresses_digest=${productionAddressesDigest}\nrepository_identity=${repositoryId}\nhost_binding=${hostDigest}\nproduction_host_binding=${productionHostDigest}\nscope=postgres,sites,platform-caddy,shared-edge-caddy\nverified_at=2026-09-04T00:00:00Z\nvalid_until=2026-09-05T00:00:00Z\nattestation_id=${"a".repeat(64)}\n`;
+    const offhostText = `status=operator_attested\nlocator_digest=${locatorDigest}\nendpoint_host=s3.example\nresolved_addresses_digest=${resolvedDigest}\nproduction_addresses=1.1.1.1\nproduction_external_addresses=none\nproduction_addresses_digest=${productionAddressesDigest}\nrepository_identity=${repositoryId}\nhost_binding=${hostDigest}\nproduction_host_binding=${productionHostDigest}\nscope=postgres-full,sites,platform-caddy,catering-edge-caddy\nverified_at=2026-09-04T00:00:00Z\nvalid_until=2026-09-05T00:00:00Z\nattestation_id=${"a".repeat(64)}\n`;
     const sourceReferenceDigest = secretReference;
     const secretSchemaDigest = sha256(secretSchema);
-    const secretText = `status=operator_attested\nsource_type=${sourceType}\nsource_reference=${sourceReference}\nsource_reference_digest=${sourceReferenceDigest}\nrequired_secret_schema_digest=${secretSchemaDigest}\nrepository_identity=${repositoryId}\nhost_binding=${hostDigest}\nscope=postgres,sites,platform-caddy,shared-edge-caddy\nverified_at=2026-09-04T00:00:00Z\nvalid_until=2026-09-05T00:00:00Z\nattestation_id=${"f".repeat(64)}\n`;
+    const secretText = `status=operator_attested\nsource_type=${sourceType}\nsource_reference=${sourceReference}\nsource_reference_digest=${sourceReferenceDigest}\nrequired_secret_schema_digest=${secretSchemaDigest}\nrepository_identity=${repositoryId}\nhost_binding=${hostDigest}\nscope=postgres-full,sites,platform-caddy,catering-edge-caddy\nverified_at=2026-09-04T00:00:00Z\nvalid_until=2026-09-05T00:00:00Z\nattestation_id=${"f".repeat(64)}\n`;
     writeFileSync(offhost, offhostText, { mode: 0o600 });
     writeFileSync(secret, secretText, { mode: 0o600 });
     const env = {
@@ -2973,7 +2977,7 @@ count=0
     const schema = "operator-secret-schema-v2|restic_encryption_password,offhost_repository_access,POSTGRES_PASSWORD,CATERING_TRUSTED_ACTOR_SECRET,CATERING_BASIC_AUTH_PASSWORD_HASH";
     const sourceDigest = sha256(sourceReference);
     const schemaDigest = sha256(schema);
-    const text = `status=operator_attested\nsource_type=${sourceType}\nsource_reference=${sourceReference}\nsource_reference_digest=${sourceDigest}\nrequired_secret_schema_digest=${schemaDigest}\nrepository_identity=${repositoryId}\nhost_binding=${hostDigest}\nscope=postgres,sites,platform-caddy,shared-edge-caddy\nverified_at=2026-09-04T00:00:00Z\nvalid_until=2026-09-05T00:00:00Z\nattestation_id=${"f".repeat(64)}\n`;
+    const text = `status=operator_attested\nsource_type=${sourceType}\nsource_reference=${sourceReference}\nsource_reference_digest=${sourceDigest}\nrequired_secret_schema_digest=${schemaDigest}\nrepository_identity=${repositoryId}\nhost_binding=${hostDigest}\nscope=postgres-full,sites,platform-caddy,catering-edge-caddy\nverified_at=2026-09-04T00:00:00Z\nvalid_until=2026-09-05T00:00:00Z\nattestation_id=${"f".repeat(64)}\n`;
     writeFileSync(secret, text, { mode: 0o600 });
     const result = runShell(
       `source ${JSON.stringify(common)}\nvalidate_secret_recovery_attestation ${JSON.stringify(secret)} ${repositoryId} ${hostDigest} ${sourceDigest}`,

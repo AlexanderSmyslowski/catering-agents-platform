@@ -1,0 +1,12 @@
+# Private rehearsal TLS uses this target's own CA, never a public ACME issuer.
+{
+	skip_install_trust
+	auto_https disable_redirects
+}
+:8080 {
+	reverse_proxy http://web:8081
+}
+https://catering-target.invalid:8443 {
+	tls internal
+	reverse_proxy http://web:8081
+}

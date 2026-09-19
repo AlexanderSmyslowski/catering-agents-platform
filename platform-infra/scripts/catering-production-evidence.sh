@@ -5,7 +5,7 @@ readonly EXPECTED_PROJECT="catering-agents-platform"
 readonly BACKUP_EVIDENCE_PATH="/var/lib/catering-backup/catering-backup-evidence"
 readonly BACKUP_RPO_SECONDS="21600"
 # shellcheck disable=SC2034 # consumed by the quoted collector heredoc
-readonly BACKUP_SCOPE="postgres,sites,platform-caddy,shared-edge-caddy"
+readonly BACKUP_SCOPE="postgres-full,sites,platform-caddy,catering-edge-caddy"
 # These are fixed, root-owned path bindings on the production host.  Their
 # contents are never printed; Restic receives only the descriptor-validated
 # repository value and password-file path.
@@ -207,7 +207,7 @@ emit_classifications() {
   printf 'CLASSIFICATION\tpersistence\t%s\n' "$PERSISTENCE_STATUS"
   printf 'CLASSIFICATION\tdata_root\t%s\n' "$DATA_ROOT_STATUS"
   classify_backup_evidence
-  printf 'CLASSIFICATION\tcaddy_shared_edge\t%s\n' "$CADDY_STATUS"
+  printf 'CLASSIFICATION\tcaddy_catering_edge\t%s\n' "$CADDY_STATUS"
   printf 'CLASSIFICATION\tconfig_secrets\t%s\n' "$SECRETS_STATUS"
 }
 
@@ -235,7 +235,7 @@ classify_remote_failure() {
     printf '%s' REMOTE_OUTPUT_INVALID
     return 0
   fi
-  if ! [[ "$record_key" =~ ^(persistence|data_root|backup_channel|caddy_shared_edge|config_secrets)$ ]]; then
+  if ! [[ "$record_key" =~ ^(persistence|data_root|backup_channel|caddy_catering_edge|config_secrets)$ ]]; then
     printf '%s' REMOTE_OUTPUT_INVALID
     return 0
   fi
@@ -260,7 +260,7 @@ emit_failure_class() {
   case "$failure_class" in
     REMOTE_TRANSPORT_FAILED|REMOTE_OUTPUT_EMPTY|REMOTE_OUTPUT_INVALID) ;;
     REMOTE_PROBE_FAILED:*)
-      [[ "${failure_class#REMOTE_PROBE_FAILED:}" =~ ^(persistence|data_root|backup_channel|caddy_shared_edge|config_secrets)$ ]] || failure_class=REMOTE_OUTPUT_INVALID
+      [[ "${failure_class#REMOTE_PROBE_FAILED:}" =~ ^(persistence|data_root|backup_channel|caddy_catering_edge|config_secrets)$ ]] || failure_class=REMOTE_OUTPUT_INVALID
       ;;
     *) failure_class=REMOTE_OUTPUT_INVALID ;;
   esac
@@ -286,7 +286,7 @@ readonly BACKUP_REPOSITORY_FILE="$4"
 readonly BACKUP_PASSWORD_FILE="$5"
 readonly BACKUP_AUTH_FILE="$6"
 readonly BACKUP_RPO_SECONDS=21600
-readonly BACKUP_SCOPE="postgres,sites,platform-caddy,shared-edge-caddy"
+readonly BACKUP_SCOPE="postgres-full,sites,platform-caddy,catering-edge-caddy"
 backup_age_allowed() {
   local age="${BACKUP_AGE_SECONDS:-}"
   [[ "$age" =~ ^[0-9]+$ && "$age" -le "$BACKUP_RPO_SECONDS" ]]
@@ -310,12 +310,12 @@ probe_error() {
 }
 canonical_probe_key() {
   case "${1-}" in
-    persistence|data_root|backup_channel|caddy_shared_edge|config_secrets)
+    persistence|data_root|backup_channel|caddy_catering_edge|config_secrets)
       printf '%s' "$1" ;;
     data-root:*)
       printf '%s' data_root ;;
     edge_volumes|edge-volume:*)
-      printf '%s' caddy_shared_edge ;;
+      printf '%s' caddy_catering_edge ;;
     timers|services|service-state:*|host_identity|backup_clock|backup_evidence|backup_artifact|backup_repository|command_sha256sum|command_hostname|command_date|command_restic)
       printf '%s' backup_channel ;;
     command_docker|command_systemctl|command_findmnt|command_mount|command_ss|command_stat|command_realpath|command_readlink|command_find|command_base64|command_tr|command_python3|containers|platform_volumes|inspect:*|service:*|mounts:*|volume:*|network_list|network:*|members:*)
@@ -495,10 +495,10 @@ assert_caddy_container() {
 }
 
 if ! assert_caddy_container platform-infra web platform-infra-web-1 platform-infra_caddy_data platform-infra_caddy_config /opt/catering-agents-platform/platform-infra/sites /etc/caddy/sites caddy_data caddy_config; then
-  probe_error caddy_shared_edge invalid_platform_mount_matrix
+  probe_error caddy_catering_edge invalid_platform_mount_matrix
 fi
-if ! assert_caddy_container shared-edge edge shared-edge-edge-1 shared-edge_edge_caddy_data shared-edge_edge_caddy_config /opt/shared-edge/Caddyfile /etc/caddy/Caddyfile edge_caddy_data edge_caddy_config; then
-  probe_error caddy_shared_edge invalid_edge_mount_matrix
+if ! assert_caddy_container catering-edge edge catering-edge-edge-1 catering-edge_edge_caddy_data catering-edge_edge_caddy_config /opt/catering-edge/Caddyfile /etc/caddy/Caddyfile edge_caddy_data edge_caddy_config; then
+  probe_error caddy_catering_edge invalid_edge_mount_matrix
 fi
 emit FACT caddy_matrix_bound true
 
@@ -596,7 +596,7 @@ while IFS= read -r volume_name; do
 done <<< "$volumes"
 emit FACT platform_expected_volume_count "$expected_volumes"
 
-if ! edge_volumes="$(docker volume ls --filter label=com.docker.compose.project=shared-edge --format '{{.Name}}' 2>/dev/null)"; then
+if ! edge_volumes="$(docker volume ls --filter label=com.docker.compose.project=catering-edge --format '{{.Name}}' 2>/dev/null)"; then
   probe_error edge_volumes command_failed
 fi
 emit PROBE_STATUS edge_volumes success
@@ -610,7 +610,7 @@ while IFS= read -r volume_name; do
   fi
   emit PROBE_STATUS "edge-volume:$volume_name" success
   [[ -n "$volume_line" && "$volume_line" != *$'\n'* && "$volume_line" != *$'\r'* ]] || probe_error "edge-volume:$volume_name" malformed
-  emit VOLUME shared_edge "$volume_line"
+  emit VOLUME catering_edge "$volume_line"
 done <<< "$edge_volumes"
 emit FACT edge_volume_count "$edge_volume_count"
 
@@ -736,7 +736,7 @@ if bind_readonly_source "$BACKUP_EVIDENCE_PATH" 0 600; then
     field=${line%%=*}
     value=${line#*=}
     case "$field" in
-      status|project|scope|host_binding|created_at|snapshot_id|checksum|artifact_path|artifact_snapshot_id|artifact_checksum|artifact_host_binding|artifact_scope|artifact_created_at|repository_identity|repository_status|receipt_path|receipt_checksum|secret_recovery_reference_sha256|restore_postgres_image|component_sites_checksum|component_platform_caddy_data_checksum|component_platform_caddy_config_checksum|component_shared_edge_caddyfile_checksum|component_shared_edge_caddy_data_checksum|component_shared_edge_caddy_config_checksum|duration_seconds)
+      status|project|scope|host_binding|created_at|snapshot_id|checksum|artifact_path|artifact_snapshot_id|artifact_checksum|artifact_host_binding|artifact_scope|artifact_created_at|repository_identity|repository_status|receipt_path|receipt_checksum|secret_recovery_reference_sha256|restore_postgres_image|component_sites_checksum|component_platform_caddy_data_checksum|component_platform_caddy_config_checksum|component_catering_edge_caddyfile_checksum|component_catering_edge_caddy_data_checksum|component_catering_edge_caddy_config_checksum|duration_seconds)
         record_field_put evidence "$field" "$value"
         ;;
       *) probe_error backup_evidence unexpected_field ;;
@@ -753,7 +753,7 @@ if bind_readonly_source "$BACKUP_EVIDENCE_PATH" 0 600; then
     probe_error backup_evidence identity_drift
   }
   eval "exec ${evidence_fd}<&-"
-  for field in status project scope host_binding created_at snapshot_id checksum artifact_path artifact_snapshot_id artifact_checksum artifact_host_binding artifact_scope artifact_created_at repository_identity repository_status receipt_path receipt_checksum secret_recovery_reference_sha256 restore_postgres_image component_sites_checksum component_platform_caddy_data_checksum component_platform_caddy_config_checksum component_shared_edge_caddyfile_checksum component_shared_edge_caddy_data_checksum component_shared_edge_caddy_config_checksum duration_seconds; do
+  for field in status project scope host_binding created_at snapshot_id checksum artifact_path artifact_snapshot_id artifact_checksum artifact_host_binding artifact_scope artifact_created_at repository_identity repository_status receipt_path receipt_checksum secret_recovery_reference_sha256 restore_postgres_image component_sites_checksum component_platform_caddy_data_checksum component_platform_caddy_config_checksum component_catering_edge_caddyfile_checksum component_catering_edge_caddy_data_checksum component_catering_edge_caddy_config_checksum duration_seconds; do
     [[ "$(record_field_count evidence "$field")" == 1 ]] || probe_error backup_evidence missing_field
   done
   backup_status="$(record_field_value evidence status)"
@@ -765,7 +765,7 @@ if bind_readonly_source "$BACKUP_EVIDENCE_PATH" 0 600; then
   backup_checksum="$(record_field_value evidence checksum)"
   backup_duration="$(record_field_value evidence duration_seconds)"
   backup_restore_image="$(record_field_value evidence restore_postgres_image)"
-  for field in component_sites_checksum component_platform_caddy_data_checksum component_platform_caddy_config_checksum component_shared_edge_caddyfile_checksum component_shared_edge_caddy_data_checksum component_shared_edge_caddy_config_checksum; do
+  for field in component_sites_checksum component_platform_caddy_data_checksum component_platform_caddy_config_checksum component_catering_edge_caddyfile_checksum component_catering_edge_caddy_data_checksum component_catering_edge_caddy_config_checksum; do
     component_value="$(record_field_value evidence "$field")"
     [[ "$component_value" =~ ^[0-9a-f]{64}$ ]] || probe_error backup_evidence invalid_component_checksum
   done
@@ -843,7 +843,7 @@ if bind_readonly_source "$BACKUP_EVIDENCE_PATH" 0 600; then
       [[ "$line" == *=* && "$line" != *$'\t'* && "$line" != *$'\n'* && "$line" != *$'\r'* ]] || { eval "exec ${receipt_fd}<&-"; probe_error backup_artifact receipt_malformed; }
       field=${line%%=*}; value=${line#*=}
       case "$field" in
-        status|version|scope|host_binding|snapshot_id|repository_identity|artifact_path|artifact_checksum|bundle_path|bundle_checksum|manifest_path|manifest_checksum|secret_recovery_reference_sha256|restore_postgres_image|component_sites_checksum|component_platform_caddy_data_checksum|component_platform_caddy_config_checksum|component_shared_edge_caddyfile_checksum|component_shared_edge_caddy_data_checksum|component_shared_edge_caddy_config_checksum|verified_at)
+        status|version|scope|host_binding|snapshot_id|repository_identity|artifact_path|artifact_checksum|bundle_path|bundle_checksum|manifest_path|manifest_checksum|secret_recovery_reference_sha256|restore_postgres_image|component_sites_checksum|component_platform_caddy_data_checksum|component_platform_caddy_config_checksum|component_catering_edge_caddyfile_checksum|component_catering_edge_caddy_data_checksum|component_catering_edge_caddy_config_checksum|verified_at)
           record_field_put receipt "$field" "$value" ;;
         *) eval "exec ${receipt_fd}<&-"; probe_error backup_artifact receipt_unknown_field ;;
       esac
@@ -854,10 +854,10 @@ if bind_readonly_source "$BACKUP_EVIDENCE_PATH" 0 600; then
     fi
     [[ "$receipt_meta_readback" == "$receipt_meta" ]] || { eval "exec ${receipt_fd}<&-"; probe_error backup_artifact receipt_identity_drift; }
     eval "exec ${receipt_fd}<&-"
-    for field in status version scope host_binding snapshot_id repository_identity artifact_path artifact_checksum bundle_path bundle_checksum manifest_path manifest_checksum secret_recovery_reference_sha256 restore_postgres_image component_sites_checksum component_platform_caddy_data_checksum component_platform_caddy_config_checksum component_shared_edge_caddyfile_checksum component_shared_edge_caddy_data_checksum component_shared_edge_caddy_config_checksum verified_at; do
+    for field in status version scope host_binding snapshot_id repository_identity artifact_path artifact_checksum bundle_path bundle_checksum manifest_path manifest_checksum secret_recovery_reference_sha256 restore_postgres_image component_sites_checksum component_platform_caddy_data_checksum component_platform_caddy_config_checksum component_catering_edge_caddyfile_checksum component_catering_edge_caddy_data_checksum component_catering_edge_caddy_config_checksum verified_at; do
       [[ "$(record_field_count receipt "$field")" == 1 ]] || probe_error backup_artifact receipt_missing_field
     done
-    for field in component_sites_checksum component_platform_caddy_data_checksum component_platform_caddy_config_checksum component_shared_edge_caddyfile_checksum component_shared_edge_caddy_data_checksum component_shared_edge_caddy_config_checksum; do
+    for field in component_sites_checksum component_platform_caddy_data_checksum component_platform_caddy_config_checksum component_catering_edge_caddyfile_checksum component_catering_edge_caddy_data_checksum component_catering_edge_caddy_config_checksum; do
       component_value="$(record_field_value receipt "$field")"
       [[ "$component_value" =~ ^[0-9a-f]{64}$ && "$component_value" == "$(record_field_value evidence "$field")" ]] || probe_error backup_artifact receipt_component_binding
     done
@@ -1218,7 +1218,7 @@ while IFS=$'\t' read -r record_type record_key record_value extra || [[ -n "$rec
       esac
       ;;
     PROBE_ERROR)
-      if [[ "${remote_status:-0}" == 0 || -n "${probe_error_key:-}" || ! "$record_key" =~ ^(persistence|data_root|backup_channel|caddy_shared_edge|config_secrets)$ ]]; then
+      if [[ "${remote_status:-0}" == 0 || -n "${probe_error_key:-}" || ! "$record_key" =~ ^(persistence|data_root|backup_channel|caddy_catering_edge|config_secrets)$ ]]; then
         ambiguous=true
         continue
       fi

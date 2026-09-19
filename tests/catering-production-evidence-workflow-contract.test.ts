@@ -600,9 +600,9 @@ describe("Catering production evidence workflow contract", () => {
       "component_sites_checksum",
       "component_platform_caddy_data_checksum",
       "component_platform_caddy_config_checksum",
-      "component_shared_edge_caddyfile_checksum",
-      "component_shared_edge_caddy_data_checksum",
-      "component_shared_edge_caddy_config_checksum",
+      "component_catering_edge_caddyfile_checksum",
+      "component_catering_edge_caddy_data_checksum",
+      "component_catering_edge_caddy_config_checksum",
     ]) {
       expect(remoteScript).toContain(field);
     }
@@ -610,7 +610,7 @@ describe("Catering production evidence workflow contract", () => {
 
   test("helper emits only redacted classifications and safe identity fields", () => {
     const helper = source(helperRelativePath);
-    for (const area of ["persistence", "data_root", "backup_channel", "caddy_shared_edge", "config_secrets"]) {
+    for (const area of ["persistence", "data_root", "backup_channel", "caddy_catering_edge", "config_secrets"]) {
       expect(helper).toContain(`CLASSIFICATION\\t${area}\\t`);
     }
     for (const status of ["BELEGT", "NICHT BELEGT", "BETREIBERENTSCHEIDUNG NÖTIG"]) {
@@ -629,7 +629,7 @@ describe("Catering production evidence workflow contract", () => {
     expect(helper).toContain("postgres");
     expect(helper).toContain("caddy_data");
     expect(helper).toContain("caddy_config");
-    expect(helper).toContain("shared-edge");
+    expect(helper).toContain("catering-edge");
     expect(helper).toContain("volume inspect");
     expect(helper).not.toContain("docker inspect --format '{{json .Config.Env}}'");
     expect(helper).not.toContain("docker inspect --format '{{json .Config}}'");

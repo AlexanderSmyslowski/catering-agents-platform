@@ -224,3 +224,8 @@ Beobachter nur seinen Cron deaktivieren und ausschließlich eigene gesicherte
 Artefakte kontrolliert zurücknehmen; fehlende Überwachung ausdrücklich melden.
 Keine globale Bereinigung, kein Ersatzlauf. **HOLD BEFORE TIMER ACTIVATION
 AND PHASE 3** bleibt bis zur separaten Betriebsentscheidung bestehen.
+
+
+## Zusätzlicher Zielserver ab19.09.2026
+
+Der Kandidat für VarianteB verwendet den eigenen Scope `postgres-full,sites,platform-caddy,catering-edge-caddy`. Die obigen In-place-/Shared-Host-Nachweise sind historisch und nicht auf das neue Ziel übertragbar. Für Aufbau, neue Host-/Sourcebindungen und Haltepunkte gilt [TARGET-REHEARSAL.md](TARGET-REHEARSAL.md). Der Beobachter wird dadurch nicht automatisch aktiviert. Produktivzählung3878/3911, Rest33 (ein Nettozuwachs durch vollständigen Dump und vier Tabellenprüfungen); die historischen Basen bleiben erhalten. Die bestehende synthetische Werkzeug-CI ist jetzt ausschließlich an `codex/catering-target-hel1-20260919` gebunden; frühere PR-/Fragmentnachweise bleiben unverändert historisch.

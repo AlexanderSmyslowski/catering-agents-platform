@@ -73,3 +73,6 @@ Aktueller Handoff-Override – 2026-08-15
  • PR #612 auf `loop/stage-a-complete-chain` wurde als `5393363fd5a0d7453461eca9bc141655c232b21a` in `main` aufgenommen. Er umfasste lokale Business-Scope-Migration, die unveränderliche Angebots-zu-Produktionskette, Business-Isolation, UI-Reload-/Search-/Revision-/Copy-Verträge und die nach Ersatztests entfernten Kompatibilitätspfade.
  • `hostedMultiBusinessReady` ist im gemergten Stage-A-Stand codefest `true`, weil Route-, Store-, Audit- und HTML-/CSV-Export-Matrix geprüft wurden. Kein Umgebungsflag kann dieses Gate umgehen.
  • Der historische PR-Head `bf255be310aadca56bc0b5cfbff2c7cd1da46097` wurde mit Tree `c9fbab19a70426c9c461356b75953304b41e5761` gemergt; der alleinige aktuelle Main-Commit ist `5393363fd5a0d7453461eca9bc141655c232b21a`. Main-CI Run `31897217407` ist mit `build-and-test` und `browser-rehearsal` terminal erfolgreich. Frühere Aussagen über einen offenen PR oder ausstehende Mergeentscheidung sind historische Handoff-Stände; Deployment und produktive Migration bleiben nicht freigegeben.
+
+
+Aktueller Zusatzauftrag 19.09.2026: Isolierter Catering-Zielaufbau, siehe [versionierte Übergabe](2026-09-19-catering-target-build.md). Die dort ausdrücklich erteilte begrenzte Infrastrukturfreigabe ergänzt historische Out-of-Scope-Aussagen dieses Dokuments. Keine Produktionsumschaltung.

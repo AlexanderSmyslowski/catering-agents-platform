@@ -1,7 +1,7 @@
 # memory.md
 
-version: 5.387
-date: 2026-09-13
+version: 5.388
+date: 2026-09-19
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
 
@@ -1967,3 +1967,25 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 - Die letzte Abfrage verwendet nun ebenfalls `service_failure` und den vorhandenen Publisher: Fehlerzeitpunkt und bereits gespeicherte Uhrmarke bleiben monoton, ein erkannter Fehler wird vor dem Abbruch kritisch gespeichert. Publisherfehler bleiben fehlgeschlagene Laeufe ohne Signal oder Dauerhaftigkeitsbehauptung. Zwei bestehende Tests wurden erweitert; RED/GREEN mit echten lokalen Validatoren und Publisher prueft persistierten Zustand, verschwundenen/geaenderten Dienstfehler, gebundene neue Recovery und Schreibfehler vor/nach Zustandsersatz. Keine neue Testplattform oder Zustandsmaschine.
 - Produktivzaehlung3877/3911, Rest34: +7 gegenueber3870, +366 seit3511, +696 seit3181. Historische Basen bleiben erhalten. Bestehender Branch/PR und unveraenderte Workflows; genaue Folgecommit-/Review-/Pruef-/CI-Bindung im lokalen `observer-final-guard-report.md`. Uebergabe: `docs/agent-memory/2026-09-13-catering-observer-final-guard.md`.
 - Better-Stack-Kontozuordnung, numerische Anbieter-/Uhr-Fristannahmen und gemeinsamer Ressourcen-Spitzenbedarf bleiben eigene Betriebsinputs. Keine Monitormutation, Signale, Installation, Aktivierung oder weitere Backup-/Restorelaeufe; ZeiterfassungPR82 unveraendert. **HOLD BEFORE INSTALLATION, TIMER ACTIVATION AND PHASE 3.**
+
+
+### 5.388 - 2026-09-19 — Catering-Zielserver: freigegebener isolierter Aufbau
+
+- STR-001 und Variante B: genau ein zusätzlicher CPX32 HEL1, Ubuntu24.04,
+  IPv4, 35,99EUR netto monatlich. Ressource catering-prod-1/166533273 im
+  Hetzner-Projekt13344062 bereits angelegt; bei Wiederaufnahme niemals erneut
+  bestellen. Alter Host und öffentliche Routen bleiben unverändert.
+- Branch codex/catering-target-hel1-20260919 basiert auf8ccdfd4. Die tatsächlich
+  laufenden sieben Image-IDs sind in den beiden target-Compose-Dateien gebunden;
+  PG17.9 bleibt unverändert, kein App-main-Deployment oder Schemawechsel.
+- Betreiber hat vollständigen konsistenten logischen Dump ausdrücklich
+  zusätzlich freigegeben: vier vorhandene Tabellen statt bisher zwei.
+  Neuer Backup-Scope/Edge-Bindung; historische Zweitabellennachweise sind keine
+  Zielnachweise. Keine Installation auf dem Altbetrieb.
+- Aktueller nicht-sensitiver Übergabestand:
+  [Zielaufbau](docs/agent-memory/2026-09-19-catering-target-build.md).
+  Ausführungsgrenzen und Reihenfolge:
+  [Zielprobe](platform-infra/backup/TARGET-REHEARSAL.md).
+- Kein DNS-/Proxy-Cutover, keine produktiven Zielwriter, kein Zielscheduler,
+  keine Phase3. Abschluss ist erst mit echten Ziel-/Backup-/Restore-/Alarm-
+  Nachweisen möglich. Die bisherigen Erfolge nicht erneut als Zielproof ausgeben.

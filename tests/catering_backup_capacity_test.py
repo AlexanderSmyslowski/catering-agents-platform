@@ -158,12 +158,12 @@ class CapacityContracts(unittest.TestCase):
             env = {**os.environ, **CAPACITY, 'work_root': str(work)}
             paths = {'sites_path': 'sites', 'platform_caddy_data_mount': 'platform_caddy_data',
                      'platform_caddy_config_mount': 'platform_caddy_config',
-                     'shared_edge_caddyfile_path': 'shared_edge_caddyfile',
-                     'shared_edge_caddy_data_mount': 'shared_edge_caddy_data',
-                     'shared_edge_caddy_config_mount': 'shared_edge_caddy_config'}
+                     'catering_edge_caddyfile_path': 'catering_edge_caddyfile',
+                     'catering_edge_caddy_data_mount': 'catering_edge_caddy_data',
+                     'catering_edge_caddy_config_mount': 'catering_edge_caddy_config'}
             for name, component in paths.items():
                 target = root / component
-                if component == 'shared_edge_caddyfile':
+                if component == 'catering_edge_caddyfile':
                     target.write_bytes(b'# synthetic')
                 else:
                     target.mkdir(); (target / 'binary').write_bytes(bytes(range(256)))
