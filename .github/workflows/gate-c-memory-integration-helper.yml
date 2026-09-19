@@ -1,0 +1,283 @@
+name: Gate C integration object preparation
+
+on:
+  push:
+    branches:
+      - codex/gate-c-memory-integration-helper-20260920
+    paths:
+      - .github/workflows/gate-c-memory-integration-helper.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: gate-c-integration-objects-20260920
+  cancel-in-progress: false
+
+jobs:
+  prepare-objects-only:
+    if: github.repository == 'AlexanderSmyslowski/catering-agents-platform' && github.ref == 'refs/heads/codex/gate-c-memory-integration-helper-20260920' && github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Reconcile pinned Git data without changing any ref
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PYTHON'
+          """Append-only, source-preserving resolver for the explicitly bounded memory conflict."""
+          import difflib
+          import hashlib
+          import re
+          
+          
+          def merge_paths(base, product, main):
+              desired, conflicts = {}, []
+              for path in sorted(set(base) | set(product) | set(main)):
+                  b, p, m = base.get(path), product.get(path), main.get(path)
+                  if p == m:
+                      value = p
+                  elif p == b:
+                      value = m
+                  elif m == b:
+                      value = p
+                  elif path == 'memory.md' and b and p and m and all(x[:2] == ('100644', 'blob') for x in (b,p,m)):
+                      conflicts.append(path)
+                      value = p  # Replaced only after the append-only resolver has passed.
+                  else:
+                      raise ValueError('Unreviewed non-memory conflict: ' + path)
+                  if value is not None:
+                      desired[path] = value
+              for path in desired:
+                  parent = path.rpartition('/')[0]
+                  while parent:
+                      if parent in desired:
+                          raise ValueError('File/directory collision: ' + path)
+                      parent = parent.rpartition('/')[0]
+              return desired, conflicts
+          
+          
+          def normalize_header(text):
+              if '\r' in text or not text.endswith('\n'):
+                  raise ValueError('Unexpected newline format')
+              lines = text.splitlines(keepends=True)
+              vi = [i for i, s in enumerate(lines[:8]) if re.fullmatch(r'version: \d+\.\d+\n', s)]
+              di = [i for i, s in enumerate(lines[:8]) if re.fullmatch(r'date: \d{4}-\d{2}-\d{2}\n', s)]
+              if len(vi) != 1 or len(di) != 1 or not lines or lines[0] != '# memory.md\n':
+                  raise ValueError('Unexpected memory header')
+              version = tuple(int(x) for x in lines[vi[0]].strip().split(': ')[1].split('.'))
+              lines[vi[0]] = 'version: RESOLVED\n'
+              lines[di[0]] = 'date: RESOLVED\n'
+              return lines, version, vi[0], di[0]
+          
+          
+          def inserted_blocks(base, source):
+              blocks = {}
+              for kind, a, b, c, d in difflib.SequenceMatcher(None, base, source, autojunk=False).get_opcodes():
+                  if kind == 'equal':
+                      continue
+                  if kind != 'insert' or a < 8:
+                      raise ValueError(f'Memory change is not a reviewed append-only addition: {kind}@{a}:{b}')
+                  blocks[a] = source[c:d]
+              return blocks
+          
+          
+          def is_subsequence(needle, haystack):
+              iterator = iter(haystack)
+              return all(any(line == candidate for candidate in iterator) for line in needle)
+          
+          
+          def merge_memory(base_text, product_text, main_text, product_sha, main_sha):
+              base, bv, vi, di = normalize_header(base_text)
+              product, pv, pvi, pdi = normalize_header(product_text)
+              main, mv, mvi, mdi = normalize_header(main_text)
+              if (vi,di) != (pvi,pdi) or (vi,di) != (mvi,mdi):
+                  raise ValueError('Memory header structure drift')
+              pi, mi = inserted_blocks(base,product), inserted_blocks(base,main)
+              result, collisions = [], []
+              for index in range(len(base)+1):
+                  p, m = pi.get(index,[]), mi.get(index,[])
+                  if p and m and p != m:
+                      if index != len(base):
+                          raise ValueError('Parallel non-tail insertion needs manual review')
+                      collisions.append(index)
+                      result.extend(['\n## Übernommene parallele Historie: main\n\n',
+                          f'Quelle: `{main_sha}`. Die folgenden Einträge behalten ihre ursprünglichen Versionsnummern und Aussagen; gleiche Versionsnummern im Produktstrang sind davon getrennte historische Stände.\n\n'])
+                      result.extend(m)
+                      result.extend(['\n## Übernommene parallele Historie: Produktintegration\n\n',
+                          f'Quelle: `{product_sha}`. Die folgenden Einträge werden vollständig und unverändert neben der main-Historie erhalten.\n\n'])
+                      result.extend(p)
+                  else:
+                      result.extend(p or m)
+                  if index < len(base):
+                      result.append(base[index])
+              if not all(is_subsequence(source,result) for source in (base,product,main)):
+                  raise ValueError('Source conservation check failed')
+              newest=max(bv,pv,mv)
+              version=f'{newest[0]}.{newest[1]+1}'
+              result[vi]=f'version: {version}\n'
+              result[di]='date: 2026-09-20\n'
+              result.extend([f'\n### {version} - 2026-09-20\n\n',
+                  f'- Auf Alexanders begrenztes Integrations-GO werden Produktelternstand `{product_sha}` und main `{main_sha}` zusammengeführt. Beide vollständigen Memory-Historien bleiben mit Herkunft und ursprünglichen Versionsnummern erhalten.\n',
+                  '- Alle übrigen Dateiinhalte stammen unverändert aus einem der beiden Elternstände; unerwartete beidseitige Dateikonflikte werden nicht automatisch gelöst. Dies ist ein Integrationskandidat, keine erneute fachliche Abnahme.\n',
+                  '- Der Merge von #694 in #682 bleibt erledigt. Vor einem Merge von #682 nach main gilt HALT. Erforderliche nicht deployende CI-/Integrationsprüfungen sind für diesen neuen Baum noch gesondert nachzuweisen. Kein Deployment, Servereingriff, Echtdaten- oder Providerlauf und kein Gate-C-Gesamt-GO.\n'])
+              merged=''.join(result)
+              normalized,_,_,_=normalize_header(merged)
+              if not all(is_subsequence(source,normalized) for source in (base,product,main)):
+                  raise ValueError('Final source conservation check failed')
+              detail={'version':version,'both_histories_preserved':True,'base_lines':len(base),'product_lines':len(product),'main_lines':len(main),'merged_lines':len(merged.splitlines()),'parallel_tail_insertions':collisions,'product_inserted_lines':sum(map(len,pi.values())),'main_inserted_lines':sum(map(len,mi.values()))}
+              return merged, detail
+          
+          
+          def git_hash(kind, payload):
+              return hashlib.sha1(kind.encode()+b' '+str(len(payload)).encode()+b'\0'+payload).hexdigest()
+          
+          
+          def tree_hash(entries):
+              root={}
+              for path, value in entries.items():
+                  node=root
+                  parts=path.split('/')
+                  for part in parts[:-1]:
+                      node=node.setdefault(part,{})
+                  node[parts[-1]]=value
+              def visit(node):
+                  chunks=[]
+                  for name,value in sorted(node.items(),key=lambda pair:(pair[0]+('/' if isinstance(pair[1],dict) else '')).encode()):
+                      if isinstance(value,dict):
+                          mode,sha='40000',visit(value)
+                      else:
+                          mode,_,sha=value
+                      chunks.append(mode.encode()+b' '+name.encode()+b'\0'+bytes.fromhex(sha))
+                  return git_hash('tree',b''.join(chunks))
+              return visit(root)
+          
+          import base64
+          import json
+          import os
+          import urllib.request
+          import urllib.error
+          from pathlib import Path
+          
+          REPO='AlexanderSmyslowski/catering-agents-platform'
+          PRODUCT='5b72de905a155763570ff15c0a7cea98a7c3a0aa'
+          MAIN='3c5f6076bf04a88c13f8c10fa6779c4f57c3b65c'
+          BASE='55d595e7e1426b348ae4bc6d252721e0dc74bcd1'
+          BRANCH='codex/gate-c-ab-integration-20260830'
+          HELPER='codex/gate-c-memory-integration-helper-20260920'
+          WORKFLOW='.github/workflows/gate-c-memory-integration-helper.yml'
+          
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self,*args,**kwargs):
+                  raise RuntimeError('Unexpected API redirect rejected')
+          
+          def api(path, payload=None):
+              allowed_post={'/git/blobs','/git/trees'}
+              if payload is not None and path not in allowed_post:
+                  raise ValueError('This helper cannot write commits, refs, PRs, workflows or settings')
+              if payload is None and not path.startswith(('/git/','/compare/')):
+                  raise ValueError('Read endpoint outside bounded Git scope')
+              request=urllib.request.Request('https://api.github.com/repos/'+REPO+path,
+                  data=None if payload is None else json.dumps(payload).encode(),
+                  headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json','Content-Type':'application/json','X-GitHub-Api-Version':'2022-11-28'},
+                  method='GET' if payload is None else 'POST')
+              try:
+                  with urllib.request.build_opener(NoRedirect()).open(request,timeout=40) as response:
+                      return json.load(response)
+              except urllib.error.HTTPError as error:
+                  raise RuntimeError(f'Git API request failed: {error.code} {path}') from None
+          
+          def sha(value):
+              if not isinstance(value,str) or not re.fullmatch('[0-9a-f]{40}',value):
+                  raise ValueError('Invalid Git object id')
+              return value
+          
+          def get_tree(commit):
+              meta=api('/git/commits/'+sha(commit))
+              tree_sha=sha(meta['tree']['sha'])
+              reply=api('/git/trees/'+tree_sha+'?recursive=1')
+              if reply.get('truncated') or reply['sha']!=tree_sha:
+                  raise ValueError('Incomplete Git tree')
+              entries={}
+              for item in reply['tree']:
+                  if item['type']=='tree': continue
+                  path=item['path']
+                  if path in entries or path.startswith('/') or '..' in path.split('/'):
+                      raise ValueError('Unexpected path')
+                  entries[path]=(item['mode'],item['type'],sha(item['sha']))
+              if tree_hash(entries)!=tree_sha:
+                  raise ValueError('Source tree rehash failed')
+              return tree_sha,entries
+          
+          def get_memory(entry):
+              blob=api('/git/blobs/'+sha(entry[2]))
+              if blob['encoding']!='base64': raise ValueError('Unexpected blob encoding')
+              data=base64.b64decode(blob['content'])
+              if len(data)!=blob['size'] or git_hash('blob',data)!=entry[2]:
+                  raise ValueError('Source memory blob hash failed')
+              return data.decode('utf-8')
+          
+          def check_refs():
+              if api('/git/ref/heads/'+BRANCH)['object']['sha']!=PRODUCT:
+                  raise ValueError('Product branch advanced; nothing may be overwritten')
+              if api('/git/ref/heads/main')['object']['sha']!=MAIN:
+                  raise ValueError('main advanced; rebuild against the actual latest main')
+          
+          def run():
+              if os.environ.get('GITHUB_REPOSITORY')!=REPO or os.environ.get('GITHUB_REF')!='refs/heads/'+HELPER or os.environ.get('GITHUB_EVENT_NAME')!='push':
+                  raise ValueError('Not the exact approved helper event/repository/branch')
+              check_refs()
+              comparison=api('/compare/'+PRODUCT+'...'+MAIN+'?per_page=1')
+              if comparison['merge_base_commit']['sha']!=BASE:
+                  raise ValueError('Unexpected merge base')
+              bt,b=get_tree(BASE); pt,p=get_tree(PRODUCT); mt,m=get_tree(MAIN)
+              desired,conflicts=merge_paths(b,p,m)
+              if conflicts!=['memory.md']: raise ValueError('Expected exactly the known memory conflict')
+              originals={'base':get_memory(b['memory.md']),'product':get_memory(p['memory.md']),'main':get_memory(m['memory.md'])}
+              merged,checks=merge_memory(originals['base'],originals['product'],originals['main'],PRODUCT,MAIN)
+              memory_data=merged.encode('utf-8')
+              memory_sha=git_hash('blob',memory_data)
+              desired['memory.md']=('100644','blob',memory_sha)
+              if WORKFLOW in desired: raise ValueError('Helper must never enter the integration tree')
+              expected_tree=tree_hash(desired)
+              # In addition to three-way construction, verify every unchanged or one-sided path.
+              for path in set(b)|set(p)|set(m):
+                  if path=='memory.md': continue
+                  expected=p.get(path) if m.get(path)==b.get(path) else m.get(path)
+                  if p.get(path)==m.get(path): expected=p.get(path)
+                  if desired.get(path)!=expected:
+                      raise ValueError('Parent-content preservation failed: '+path)
+              changes=[]
+              for path in sorted(set(p)|set(desired)):
+                  if p.get(path)==desired.get(path): continue
+                  entry=desired.get(path)
+                  mode,kind,_=entry or p[path]
+                  changes.append({'path':path,'mode':mode,'type':kind,'sha':entry[2] if entry else None})
+              output=Path('integration-evidence');output.mkdir(exist_ok=True)
+              for key,value in originals.items(): (output/(key+'-memory.md')).write_text(value,encoding='utf-8')
+              (output/'merged-memory.md').write_bytes(memory_data)
+              (output/'memory-product-delta.patch').write_text(''.join(difflib.unified_diff(originals['product'].splitlines(keepends=True),merged.splitlines(keepends=True),fromfile='product/memory.md',tofile='integration/memory.md')),encoding='utf-8')
+              check_refs()
+              stored=api('/git/blobs',{'content':merged,'encoding':'utf-8'})
+              if stored['sha']!=memory_sha: raise ValueError('Created memory blob differs')
+              created=api('/git/trees',{'base_tree':pt,'tree':changes})
+              if created['sha']!=expected_tree: raise ValueError('Created integration tree differs')
+              actual=api('/git/trees/'+expected_tree+'?recursive=1')
+              actual_map={x['path']:(x['mode'],x['type'],x['sha']) for x in actual['tree'] if x['type']!='tree'}
+              if actual.get('truncated') or actual_map!=desired: raise ValueError('Remote tree verification failed')
+              check_refs()
+              result={'status':'verified_tree_candidate_only','product':PRODUCT,'main':MAIN,'merge_base':BASE,'product_tree':pt,'main_tree':mt,'integration_tree':expected_tree,'memory_blob':memory_sha,'memory_sha256':hashlib.sha256(memory_data).hexdigest(),'memory_checks':checks,'changed_paths_vs_product':[x['path'] for x in changes],'changed_paths_vs_main':[x for x in sorted(set(m)|set(desired)) if m.get(x)!=desired.get(x)],'all_other_files_exactly_parent_owned':True,'commits_created':False,'refs_updated':False,'product_tests_executed':False,'deployment_performed':False}
+              (output/'result.json').write_text(json.dumps(result,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
+              print('INTEGRATION_TREE_RESULT '+json.dumps(result,ensure_ascii=False))
+          
+          if __name__=='__main__':
+              run()
+          PYTHON
+      - name: Preserve reconciliation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-c-memory-integration-evidence
+          path: integration-evidence/
+          if-no-files-found: warn
+          retention-days: 7
