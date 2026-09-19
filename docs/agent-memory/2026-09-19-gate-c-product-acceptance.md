@@ -1,6 +1,6 @@
 # Gate C – lokale Produktabnahme am 19.09.2026
 
-Status: Angebotsstart, Handoff-Vorbereitung und Klassifikationsblock zuvor abgenommen. Herstellung und Zeitfenster desselben synthetischen Falls jetzt gemeinsam als Revision 5 gespeichert und nach Wiederöffnung erhalten; Z1–Z3 und M-R1 korrigiert. Erneute Vorbereitung bleibt mit HTTP 409 wegen fehlender Planungs-Evidenz blockiert. Keine vollständige Abnahme dieses Folgeübergangs, keine menschliche Küchenprüfung und kein Gate-C-Gesamt-GO.
+Status: Der zusammenhängende technische Operatorweg ist auf der erhaltenen isolierten Kopie desselben synthetischen Falls bis Revision 9, vier Einzelreviews, simulierter Freigabe, idempotenter Übernahme, drei tatsächlich geprüften Exportformaten und Wiederöffnung abgeschlossen. Rezeptstatus, Zukaufquelle sowie reale Küchen-, Allergen-, Lieferanten-, Preis-, Gebinde- und Bestandsprüfung bleiben ausdrücklich offen. Keine reale Produktionsfreigabe und kein Gate-C-Gesamt-GO.
 
 ## Übernommener Stand
 
@@ -274,3 +274,57 @@ Keine unveränderte Vollsuite wurde wiederholt. Abhängigkeiten blieben am vorha
 Kuratierter Nachweis einschließlich Befehlen, Exitcodes, Hashbindungen und Laufzeitgrenzen: `docs/agent-memory/2026-09-19-recipe-planning-evidence-acceptance.json`. Rohantworten und Browser-Snapshots bleiben lokal unter `.runtime/acceptance-20260919/` beziehungsweise `.playwright-cli/`. Eigener Browser und eigener Stack wurden beendet; Ports 3311–3314 und 3320 sind wieder frei. Fremde Prozesse wurden nicht gestoppt, Daten wurden nicht gelöscht.
 
 Der vorherige technische 409-Blocker ist damit für diesen synthetischen Fall über den vorgesehenen Operatorweg geschlossen. Offen bleiben die reale menschliche Küchenprüfung, die vier Entwurfsreviews, belastbare Zukaufspezifikation, Übernahme/Freigabe und Exportabnahme. Kein Gate-C-Gesamt-GO.
+
+
+## Folgeauftrag: Zukauf-, Review-, Übernahme- und Exportblock ab D7
+
+- Maßgeblicher Kommentar [#5743734627](https://github.com/AlexanderSmyslowski/catering-agents-platform/pull/694#issuecomment-5743734627) vollständig gelesen. Arbeitsbasis `3deb5547910e2795388a62a04555a0811c40eb9c`, Tree `76eb97f3e26e7c44a3dc902fd86093d07246d257`; weiter im vorhandenen isolierten Produkt-Worktree und ausschließlich auf der erhaltenen D7-Kopie `/tmp/catering-recipe-continuation-4ANJAV`. Der ursprüngliche D5-Datenroot, Angebotsstart, Referenzfall und bereits abgenommene D5→D7-Arbeit wurden nicht wiederholt oder zurückgesetzt.
+- Ruling: Der ausführliche PR-Kommentar ist die bindende Produktspezifikation; der ignorierte lokale Ausführungsplan zerlegt nur die Umsetzung und fügt keinen Produktscope hinzu.
+- Ruling: Die ausdrücklich synthetischen Beschaffungsentscheidungen sind **Croissants 1 Stück je Person → 35 Stück** und **Wasser 0,5 l je Person → 17,5 l**. Sie sind keine Aussage einer echten Küche und enthalten keine bestätigten Lieferanten-, Preis-, Gebinde- oder Bestandsdaten.
+
+### Begrenzte Produktkorrekturen
+
+- Der bestehende kanonische Draft-Revisionsweg erfasst für jede Zukaufkomponente eine vollständige, namensgenau gebundene Menge je Person. Der Server validiert positive endliche Mengen, Einheiten, Vollständigkeit, Eindeutigkeit und die bestehende Komponenten-/Fall-/Revisionsbindung; die Einkaufsliste multipliziert genau einmal mit 35 Teilnehmern. Legacy-Kontexte ohne diesen kanonischen Speicherweg zeigen keinen nicht speicherbaren Mengeneditor. Änderungen erzeugen eine Folgerevision und invalidieren frühere abgeleitete Artefakte, Planungs-Evidenz und Draft-Reviews wie vorgesehen.
+- Die vier vorhandenen Reviewkarten zeigen vor der Einzelentscheidung ihren jeweils eingefrorenen Zielinhalt: Eventdaten, Produktionsplan mit Batch/Küchenblättern, Einkaufsliste mit Herkunft sowie Rezept-Snapshot mit Quelle, Status und Skalierung. Keine Karte wird automatisch entschieden oder auf eine Folgerevision übertragen.
+- Approval, Apply und die vorhandenen Exporte sind an den freigegebenen kanonischen Produktionssnapshot sowie die exakten Plan-, Einkaufslisten- und Rezeptidentitäten gebunden. Apply publiziert File-backed Artefakte erst gemeinsam mit abgeschlossenem Audit/Manifest; Rollback und Wiederholung erzeugen keine sichtbar halbfertigen oder doppelten Exporte.
+- Der erste Laufzeit-Apply blieb mit 409 bei fehlender lesbarer Offer-/Handoff-Evidenz stehen; der nächste enge Kandidat blieb mit 409 bei inkonsistenter `sourceLineage` stehen. Die tatsächliche Ursache war der ältere erhaltene Handoff: Er besitzt noch keinen neu eingeführten Intake-Quellsnapshot, während der fachlich zulässige Produktionsnachfolger Kategorien, Herstellungsangaben, Zeit, Rezept und Zukaufmenge enthält. Der endgültige Kompatibilitätspfad akzeptiert diesen Altfall nur durch exakte Rekonstruktion aus Rohrequest, ausgewählter Offer-Variante und den belegten Reviewfeldern. Neu erzeugte Handoffs transportieren den unveränderlichen Intake-Quellsnapshot und prüfen ihn vor jedem Fallback. Budget-, Label-, Modus-, Handoff-Root-, Rollen- und Tenant-Abweichungen bleiben fail-closed. Ein zuvor zu breiter Kandidat wurde nach unabhängiger Prüfung nicht akzeptiert.
+
+### Tatsächlicher Bedienweg auf der erhaltenen D7-Kopie
+
+1. In der vorhandenen Oberfläche wurden für die Convenience-Komponente Croissants `1 Stück` und Wasser `0,5 l` je Person eingetragen. **Antworten speichern** erzeugte Revision 8 `production-draft-revision-429e40c9f71ff1548caf52034ae407886bcbb2177f668341d9d037489723abc7` aus D7. Kategorien, `scratch`-/`convenience_purchase`-Entscheidungen, Rezeptzuordnung und Service 09:00–12:00 blieben erhalten.
+2. Der erste Prepare-Versuch auf D8 antwortete korrekt 409, weil die D6-Planungs-Evidenz nach der mengenändernden Folgerevision nicht still weitergalt. Über denselben vorgesehenen Operatorweg wurde die synthetische Mengen-/Eventprüfung frisch an D8 gebunden (`planning-evidence` 201); danach erzeugte Prepare 201 die Revision 9 `production-draft-prepared-92bfcfccedfcc6b518e7698314a2a4e28f754533abcdd6efe8165ed5817c921d`.
+3. Eventdaten, Produktionsplan, Einkaufsliste und Rezept-Snapshot/Skalierung wurden sichtbar und einzeln geprüft; alle vier Review-PATCHes antworteten 200. Der angemeldete Fixture-Akteur `Produktions-Mitarbeiter` entschied jede Karte einzeln als `fits`. Diese technische Testhandlung ist keine tatsächliche menschliche Küchenprüfung.
+4. Die vorhandene Entscheidungsschaltfläche erzeugte die technische Freigabe `approved-production-spec-4b9e04e12d2f2038ec868fab74ee088f68afadf966b3b9247cc680a9e55290e4` mit Approval `approval-926d227bc313c799aec258624e84887ac5a58a1b79527c11ad44dfa52b208281` (201). Nach der begrenzten Apply-Korrektur führte **Entwurf übernehmen** im Browser zu 200 und genau den bestehenden IDs `plan-spec-browser-rehearsal-offer-case`, `purchase-spec-browser-rehearsal-offer-case` und `upload-kaffeepause-kompakt-synthetische-testfixture-3d824e6ef7`. Das Manifest bindet sie an denselben Event-Spec; der Fall steht in Version 3 auf `completed`.
+5. Ein identischer Apply-Retry am abschließend geprüften Code-Head antwortete 200 mit exakt denselben IDs; keine zweiten Pläne, Einkaufslisten oder Rezepte entstanden. Direkte Apply- und Exportzugriffe ohne vertrauenswürdigen Produktionsoperator antworteten jeweils 403.
+6. Reload, Historie und Wiederöffnung zeigten denselben Fall als `completed · geöffnet`, dieselbe freigegebene Revision, genau einen Plan, eine Einkaufsliste mit fünf Zeilen, dieselben Exportlinks und den weiterhin prüfpflichtigen Rezeptkandidaten.
+
+### Inhalt der übernommenen Artefakte und Exporte
+
+| Gegenstand | Geprüfter Inhalt |
+| --- | --- |
+| Rezept / Skalierung | Synthetischer Upload, Grundausbeute 10 Portionen, Zielausbeute **35 Portionen**, **vier Chargen**. Die Chargenzahl vervielfacht weder Zielausbeute noch Zutaten. Status bleibt `review_required`. |
+| Produktionsbatch | Genau ein Eigenproduktionsbatch: 350 g Kaffeebohnen, 70 g Tee und 3,5 l Haferdrink. |
+| Küchenblätter | Zwei Blätter: rezeptgebundene Kaffeepause und Convenience-Zukauf. Der Zukauf nennt weiter die Prüfung von Lieferquelle/Gebinde; kein Rezept dafür erfunden. |
+| Einkauf | Genau fünf eindeutige Zeilen: **35 Stück Croissants**, **17,5 l Wasser**, 3,5 l Haferdrink, 350 g Kaffeebohnen und 70 g Tee. Alle drei Rezeptzutaten besitzen Rezeptlineage; beide Zukäufe besitzen Komponentenlineage. Es gibt keine unbelegte oder doppelte Zeile. |
+| Produktionsplan-HTML | Tatsächlich im Browser geöffnet und Text geprüft: Fall-, Approved-Spec-, Quelldraft-/Revision-, Apply-, Plan- und Einkaufslistenanker; 35 Portionen, vier Chargen, alle fünf Mengen, beide Küchenblätter und `Prüfung nötig`. |
+| Produktionsmappe-HTML | Tatsächlich im Browser geöffnet und Text geprüft: dieselben Anker, Rezeptkarte, Küchenblätter, Zutatenabgleich und fünf Einkaufszeilen. Die Unterlage nennt sie als Arbeitsdokument und fordert Mengen-, Allergen- und Preisprüfung vor Produktion. |
+| Einkaufs-CSV | Browser meldete Start und Abschluss des Downloads `purchase-spec-browser-rehearsal-offer-case.csv`; heruntergeladene Datei und Belegkopie sind bytegleich, SHA256 `29e3dbc16ac9b4e14b8c23b9f6b3ffc5478ffd5776937c411b88dd7675bd2171`, fünf geparste Datenzeilen. Der Playwright-Wrapper beendete genau diesen Befehl trotz abgeschlossenen Downloads mit Exit 1; dieses Werkzeugergebnis wird nicht als Exit 0 umgedeutet. |
+
+Die in der Produktionsmappe vorhandenen Hinweise `Metro Convenience` und `Metro Fresh` sind bestehende System-Arbeitshinweise. Sie belegen keinen realen Lieferanten, keine Preise, Gebinde, Bestände oder Bestellung. Für den synthetischen Lauf war keine Gebindeumrechnung nötig, weil die gewählten Beschaffungseinheiten Stück und Liter sind; konkrete Produktauswahl und Gebinde bleiben vor einer echten Beschaffung offen.
+
+### Prüfungen und unabhängige Abnahme
+
+| Befehl / Nachweis | Ergebnis |
+| --- | --- |
+| Task-1-Korridor für Schema, Editor, Revision und Einkauf | initial 216/216; nach zwei Important-Befunden 97/97; unabhängiger Abschlussreview PASS. |
+| Task-2-Korridor für eingefrorene Reviewinhalte | 47 UI-Tests sowie 15/15 präzisierte Mengenfixture-Tests; unabhängiger Abschlussreview PASS. |
+| Task-3-Korridor für Apply, Transaktion, Exporte, Auth und Vertraulichkeit | 9 Dateien / 307 Tests; unabhängiger Abschlussreview nach Transaktionskorrektur GO. |
+| Abschließender aktueller Delta-Korridor: `npm test -- --run tests/production-draft-apply.test.ts tests/offer-accepted-event-spec-transport.test.ts tests/production-applied-snapshot.test.ts tests/production-commercial-access.test.ts tests/offer-production-handoff.test.ts tests/production-handoff-port.test.ts --maxWorkers=1` | 6 Dateien, **75/75 Tests**, Exit 0. |
+| `npx --no-install tsc --noEmit` | Exit 0. |
+| `npm run build` | Exit 0. |
+| `python3 .runtime/acceptance-20260919/purchase-review-assert.py` | Nach einer korrigierten rein lokalen Formatannahme Exit 0; IDs, Reviews, Manifest, 35/4-Trennung, fünf Einkaufszeilen, beidseitige Herkunft, beide HTML-Inhalte und CSV geprüft. |
+| Unabhängiger abschließender Auth-/Datenintegritätsreview | **PASS**, keine offenen materiellen Befunde; gebunden an Code-Head `571c1d4cb9ab87280ab5c9b29a09e34a579d1bfd`, Tree `457ff3bc37f1dd432f634dd55cb3490a52717e34`, Inhaltsfingerabdruck `9c2abf32ff6ffdb4f94a4ebec1f534d0db63aad9aac0e7caad60e1a347a01d76`. |
+
+Keine unveränderte Vollsuite wurde wiederholt. Eigener Browser und ausschließlich eigener Fixture-Stack wurden beendet; Ports 3311–3314 und 3320 sind frei. Die erhaltene D7-Kopie bleibt mit 514 Dateien und Manifest `0c7b8bb0450428c32476005d7c6134b5cc2f01dbd5ac56e6cdc125df4ec6ec10` bestehen. Kuratierter maschinenlesbarer Beleg: `docs/agent-memory/2026-09-19-purchase-review-apply-export-acceptance.json`.
+
+Der technische Zukauf-/Review-/Freigabe-/Apply-/Exportweg ist für diesen isolierten synthetischen Fall vollständig durchlaufen. Weiter offen bleiben echte menschliche Küchenprüfung, fachliche Rezept-/Allergenfreigabe, reale Produktauswahl und Gebinde, verifizierte Lieferanten/Preise/Bestände sowie jede tatsächliche Bestellung oder Produktionsfreigabe. Kein Merge, Deployment, Server-/AgenturOS-Eingriff, Echtdatenlauf, kostenpflichtiger Provider und kein Gate-C-Gesamt-GO.
