@@ -16,6 +16,8 @@ import {
   type Recipe,
   type RecipeStep
 } from "@catering/shared-core";
+import type { AppliedProductionSnapshot } from "./applied-production-snapshot.js";
+import { renderAppliedProductionContext, renderProductionKitchenSheets } from "./production-snapshot-html.js";
 
 export interface RenderProductionFolderInput {
   plan: ProductionPlan;
@@ -23,6 +25,7 @@ export interface RenderProductionFolderInput {
   purchaseLists?: PurchaseList[];
   recipes?: Recipe[];
   clarificationAnswers?: ProductionClarificationAnswer[];
+  appliedSnapshot?: AppliedProductionSnapshot;
 }
 
 function escapeHtml(value: string | number | undefined): string {
@@ -483,9 +486,9 @@ function renderSection9(plan: ProductionPlan, purchaseList: PurchaseList | undef
 }
 
 function primaryPurchaseListFor(spec: AcceptedEventSpec, purchaseLists: PurchaseList[]): PurchaseList | undefined {
-  return [...purchaseLists]
-    .filter((listItem) => listItem.eventSpecId === spec.specId)
-    .sort((left, right) => left.purchaseListId.localeCompare(right.purchaseListId, "de"))[0];
+  const matching = purchaseLists.filter(listItem => listItem.eventSpecId === spec.specId);
+  if (matching.length > 1) throw Object.assign(new Error("Einkaufsliste ist ohne Apply-Anker nicht eindeutig."), { statusCode: 409 });
+  return matching[0];
 }
 
 function headerMeta(spec: AcceptedEventSpec): string {
@@ -532,6 +535,7 @@ footer { border-top: 1px solid #cbd5df; color: #52616f; margin-top: 24px; paddin
   .recipe-card, .purchase-group { break-after: page; page-break-after: always; }
 }
 </style></head><body><header class="document-header"><h1>Produktionsmappe – Rezeptkarten und aufsummierte Einkaufsliste</h1><p>${escapeHtml(headerMeta(input.spec))}</p></header>${[
+    renderAppliedProductionContext(input.appliedSnapshot),
     renderSection1(input.spec),
     renderSection2(input, recipeById),
     renderSection3(input),
@@ -539,6 +543,7 @@ footer { border-top: 1px solid #cbd5df; color: #52616f; margin-top: 24px; paddin
     renderSection5(input.spec),
     renderSection6(input, recipeById),
     renderSection7(input, recipeById),
+    renderProductionKitchenSheets(input.plan),
     renderSection8(purchaseList, recipeById, input.spec),
     renderSection9(input.plan, purchaseList, input.spec.event.date)
   ].join("")}<footer>Arbeitsdokument – Mengen, Allergene und Preise vor Produktion prüfen.</footer></body></html>`;
