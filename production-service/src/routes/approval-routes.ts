@@ -10,7 +10,6 @@ import {
   createApprovalRequestRecord,
   createCuratedOfferDraft,
   createOfferDraft,
-  createOfferDraftFromAcceptedEventSpec,
   createProductionApplyManifest,
   normalizeEventRequestToSpec,
   resolveMinimalMvpRoleFromTrustedActor,
@@ -209,19 +208,10 @@ function acceptedEventSpecConsistencyError(
     return `AcceptedEventSpec ${candidate.specId} ist archiviert und nicht mehr für Apply freigegeben.`;
   }
   if (sourceAcceptedEventSpecSnapshot) {
-    const sourceOfferDraft = createOfferDraftFromAcceptedEventSpec(sourceAcceptedEventSpecSnapshot);
-    const sourceOfferVariant = sourceOfferDraft.variantSet.find(
-      (variant) => variant.variantId === selectedOfferVariantId
-    );
-    const expectedAcceptedSourceOfferSnapshot = sourceOfferVariant
-      ? {
-          ...structuredClone(sourceOfferVariant.proposedEventSpec),
-          lifecycle: { commercialState: "accepted" as const }
-        }
-      : undefined;
-    return areJsonValuesEqual(canonical, sourceAcceptedEventSpecSnapshot) &&
-      Boolean(expectedAcceptedSourceOfferSnapshot) &&
-      areJsonValuesEqual(candidate, expectedAcceptedSourceOfferSnapshot)
+    // The immutable Offer/Handoff chain already owns its reviewed commercial
+    // snapshot. This additional snapshot anchors the live Intake record to the
+    // exact pre-offer state, including fields that offer pricing may replace.
+    return areJsonValuesEqual(canonical, sourceAcceptedEventSpecSnapshot)
       ? undefined
       : `AcceptedEventSpec ${candidate.specId} weicht vom unveränderlichen Intake-Ursprung ab.`;
   }
