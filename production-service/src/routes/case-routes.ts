@@ -8,6 +8,7 @@ import {
   formatCaseDisplayName,
   formatEventTypeLabel,
   summarizeCase,
+  validateRecipeEventUseReview,
   type QuantityDecisionInput,
   type RecipeEventUseReview,
   type RecipeOutputMapping,
@@ -130,6 +131,7 @@ function planningEvidenceBody(value: unknown): {
   draftRevision: number;
   componentId: string;
   recipeId: string;
+  expectedRecipeSnapshotHash?: string;
   quantityDecision: QuantityDecisionInput;
   recipeEventUseReview?: RecipeEventUseReview;
   outputMapping?: RecipeOutputMapping;
@@ -139,11 +141,14 @@ function planningEvidenceBody(value: unknown): {
     "draftRevision",
     "componentId",
     "recipeId",
+    "expectedRecipeSnapshotHash",
     "quantityDecision",
     "recipeEventUseReview",
     "outputMapping"
   ])) return undefined;
   const body = value as Record<string, unknown>;
+  if (body.expectedRecipeSnapshotHash !== undefined &&
+    (typeof body.expectedRecipeSnapshotHash !== "string" || !/^sha256:[0-9a-f]{64}$/u.test(body.expectedRecipeSnapshotHash))) return undefined;
   if (
     typeof body.draftId !== "string" || !body.draftId.trim() ||
     !Number.isSafeInteger(body.draftRevision) || (body.draftRevision as number) < 1 ||
@@ -153,11 +158,38 @@ function planningEvidenceBody(value: unknown): {
     (body.recipeEventUseReview !== undefined && !isRecord(body.recipeEventUseReview))
   ) return undefined;
   if (body.outputMapping !== undefined && !isRecord(body.outputMapping)) return undefined;
+  const quantity = body.quantityDecision;
+  const textFields = ["decisionId", "eventSpecId", "componentId", "serviceFormat", "targetUnit", "rationale"];
+  if (textFields.some((field) => typeof quantity[field] !== "string" || !quantity[field].trim()) ||
+    !Number.isSafeInteger(quantity.guestCount) || (quantity.guestCount as number) <= 0 ||
+    typeof quantity.targetAmount !== "number" || !Number.isFinite(quantity.targetAmount) || quantity.targetAmount <= 0 ||
+    typeof quantity.basis !== "string" || !["per_person_weight", "pieces_per_person", "servings_per_person", "fixed_total"].includes(quantity.basis) ||
+    typeof quantity.dishRole !== "string" || !["main", "side", "starter", "dessert", "snack", "fingerfood", "condiment", "beverage_food_component", "other"].includes(quantity.dishRole) ||
+    typeof quantity.reviewStatus !== "string" || !["provisional", "kitchen_review_required", "approved", "rejected"].includes(quantity.reviewStatus) ||
+    !isRecord(quantity.evidence) ||
+    typeof quantity.evidence.kind !== "string" || !["internal_rule", "professional_reference", "operator_instruction", "ai_candidate", "explicit_assumption"].includes(quantity.evidence.kind) ||
+    (quantity.evidence.reference !== undefined && typeof quantity.evidence.reference !== "string") ||
+    (quantity.perUnitAmount !== undefined && typeof quantity.perUnitAmount !== "number") ||
+    (quantity.perUnitUnit !== undefined && typeof quantity.perUnitUnit !== "string")
+  ) return undefined;
+  if (body.recipeEventUseReview !== undefined) {
+    try { validateRecipeEventUseReview(body.recipeEventUseReview as unknown as RecipeEventUseReview); }
+    catch { return undefined; }
+  }
+  const mapping = body.outputMapping;
+  if (isRecord(mapping) && (
+    ["recipeId", "outputUnit", "reviewedBy", "reviewedAt"].some((field) =>
+      typeof mapping[field] !== "string" || !mapping[field].trim()) ||
+    !Number.isFinite(Date.parse(mapping.reviewedAt as string)) ||
+    typeof mapping.outputAmount !== "number" || !Number.isFinite(mapping.outputAmount) || mapping.outputAmount <= 0 ||
+    typeof mapping.recipeServings !== "number" || !Number.isFinite(mapping.recipeServings) || mapping.recipeServings <= 0
+  )) return undefined;
   return {
     draftId: body.draftId.trim(),
     draftRevision: body.draftRevision as number,
     componentId: body.componentId.trim(),
     recipeId: body.recipeId.trim(),
+    ...(typeof body.expectedRecipeSnapshotHash === "string" ? { expectedRecipeSnapshotHash: body.expectedRecipeSnapshotHash } : {}),
     quantityDecision: body.quantityDecision as unknown as QuantityDecisionInput,
     ...(body.recipeEventUseReview
       ? { recipeEventUseReview: body.recipeEventUseReview as unknown as RecipeEventUseReview }
@@ -332,6 +364,16 @@ export function registerProductionCaseRoutes(
         if (component.recipeOverrideId !== input.recipeId) {
           return { kind: "conflict" as const, message: "Planungs-Evidenz referenziert nicht das freigegebene Rezept der Komponente." };
         }
+        if (input.quantityDecision.guestCount !== eventSpec.attendees.expected ||
+          ![eventSpec.servicePlan.eventType, eventSpec.servicePlan.serviceForm].some(format =>
+            format?.normalize("NFKC").trim().toLowerCase() === input.quantityDecision.serviceFormat.normalize("NFKC").trim().toLowerCase())) {
+          return { kind: "unprocessable" as const, message: "Mengenentscheidung passt nicht zu Gästezahl und Serviceformat des aktuellen Events." };
+        }
+        const eventReview = input.recipeEventUseReview;
+        if (!eventReview || eventReview.eventSpecId !== eventSpec.specId || eventReview.recipeId !== input.recipeId ||
+          eventReview.decision !== "accepted_for_event" || !Object.values(eventReview.confirmations).every(value => value === true)) {
+          return { kind: "unprocessable" as const, message: "RecipeEventUseReview benötigt die exakte Event-/Rezeptbindung und alle vier ausdrücklichen Bestätigungen." };
+        }
         if (input.recipeEventUseReview && input.recipeEventUseReview.reviewedBy !== trustedActor.name) {
           return { kind: "unprocessable" as const, message: "RecipeEventUseReview muss durch den vertrauenswürdigen menschlichen Prüfer bestätigt sein." };
         }
@@ -340,6 +382,10 @@ export function registerProductionCaseRoutes(
         }
         const recipe = await repository.get(trustedActor, input.recipeId);
         if (!recipe) return { kind: "unprocessable" as const, message: "Das referenzierte Rezept ist nicht im aktuellen Betriebskontext vorhanden." };
+        const recipeSnapshotHash = `sha256:${createHash("sha256").update(stableJson(recipe)).digest("hex")}`;
+        if (input.expectedRecipeSnapshotHash !== undefined && input.expectedRecipeSnapshotHash !== recipeSnapshotHash) {
+          return { kind: "conflict" as const, message: "Die Rezeptgrundlage hat sich seit der Prüfung geändert. Bitte neu laden und erneut prüfen." };
+        }
         const bridge = evaluateQuantityRecipeProductionBridge({
           eventSpecId: eventSpec.specId,
           componentId: input.componentId,
@@ -361,7 +407,6 @@ export function registerProductionCaseRoutes(
         if (!input.recipeEventUseReview) {
           return { kind: "unprocessable" as const, message: "RecipeEventUseReview ist für diese Event-/Rezeptbindung erforderlich." };
         }
-        const recipeSnapshotHash = `sha256:${createHash("sha256").update(stableJson(recipe)).digest("hex")}`;
         const evidenceId = productionPlanningEvidenceId({
           businessId: trustedActor.businessId,
           caseId: productionCase.caseId,

@@ -11,6 +11,10 @@ import type {
   ProductionPlan,
   ProductionHandoff,
   PurchaseList,
+  QuantityDecisionInput,
+  RecipeEventUseReview,
+  RecipeOutputMapping,
+  QuantityRecipeProductionBridgeResult,
   Recipe
 } from "@catering/shared-core";
 import {
@@ -205,6 +209,34 @@ export interface ApprovedProductionSpecProjection {
 export interface ProductionDraftListResponse {
   items: ProductionDraft[];
   approvedProductionSpecs?: ApprovedProductionSpecProjection[];
+  planningEvidence?: ProductionPlanningEvidence[];
+  planningRecipes?: Array<{ recipe: Record<string, unknown>; recipeSnapshotHash: string }>;
+}
+
+export interface ProductionPlanningEvidenceInput {
+  draftId: string;
+  draftRevision: number;
+  componentId: string;
+  recipeId: string;
+  expectedRecipeSnapshotHash?: string;
+  quantityDecision: QuantityDecisionInput;
+  recipeEventUseReview: RecipeEventUseReview;
+  outputMapping?: RecipeOutputMapping;
+}
+
+export interface ProductionPlanningEvidence extends ProductionPlanningEvidenceInput {
+  evidenceId: string;
+  caseId: string;
+  eventSpecId: string;
+  recipeSnapshotHash: string;
+  bridge: QuantityRecipeProductionBridgeResult;
+}
+
+export async function saveProductionPlanningEvidence(caseId: string, input: ProductionPlanningEvidenceInput) {
+  return fetchJson<{ evidence: ProductionPlanningEvidence }>(
+    `/api/production/v1/production/cases/${encodeURIComponent(caseId)}/planning-evidence`,
+    { method: "POST", body: JSON.stringify(input) }
+  );
 }
 
 export interface ServiceHealth {
@@ -267,6 +299,12 @@ async function responseErrorMessage(response: Response): Promise<string> {
   return `${response.status} ${response.statusText}`.trim();
 }
 
+export class ApiResponseError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+  }
+}
+
 async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
   const requestInit = buildCateringBrowserRequestInit(init, {
     includeJsonContentType: true,
@@ -276,7 +314,7 @@ async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
   assertCateringSessionBoundResponse(response, requestInit.signal);
 
   if (!response.ok) {
-    throw new Error(await responseErrorMessage(response));
+    throw new ApiResponseError(await responseErrorMessage(response), response.status);
   }
 
   return (await response.json()) as T;
@@ -1025,6 +1063,10 @@ export async function loadProductionDrafts(caseId?: string) {
     `/api/production/v1/production/drafts${query}`,
     undefined
   );
+}
+
+export async function loadProductionRecipeLibrary() {
+  return fetchJson<{ items: Array<Record<string, unknown>> }>("/api/production/v1/production/recipes", undefined);
 }
 
 export async function decideProductionDraftReviewCard(

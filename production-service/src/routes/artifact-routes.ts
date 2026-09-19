@@ -1978,8 +1978,22 @@ export function registerProductionArtifactRoutes(
       ? undefined
       : new Set(items.map((draft) => draft.draftId));
     const appliedIds = new Set(applyManifests.map((manifest) => manifest.approvedProductionSpecId));
+    // Evidence remains attached to its immutable source revision, even after Prepare.
+    const planningEvidence = requestedCaseId === undefined ? [] : (await Promise.all(
+      items.map((draft) => store.listProductionPlanningEvidence(actor, draft.draftId, draft.revision))
+    )).flat().filter((evidence) => evidence.caseId === requestedCaseId);
+    const assignedRecipeIds = requestedCaseId === undefined ? [] : [...new Set(items.flatMap(draft =>
+      (draft.draftArtifacts.eventSpec?.menuPlan ?? []).flatMap(component =>
+        (component.productionDecision?.mode === "scratch" || component.productionDecision?.mode === "hybrid") && component.recipeOverrideId
+          ? [component.recipeOverrideId] : [])))];
+    const planningRecipes = (await Promise.all(assignedRecipeIds.map(async recipeId => {
+      const recipe = await repository.get(actor, recipeId);
+      return recipe ? { recipe, recipeSnapshotHash: `sha256:${createHash("sha256").update(stableJson(recipe)).digest("hex")}` } : undefined;
+    }))).filter(item => item !== undefined);
     return reply.send({
       items: items.map((item) => projectProductionDraft(actor, item)),
+      planningEvidence,
+      planningRecipes,
       approvedProductionSpecs: approvedProductionSpecs
         .filter((spec) => scopedDraftIds === undefined || scopedDraftIds.has(spec.sourceDraft.draftId))
         .map((spec) => ({

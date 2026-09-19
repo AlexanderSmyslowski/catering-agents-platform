@@ -2,6 +2,7 @@ import type { MiniPilotCheckReportState } from "./mini-pilot-check-report-state.
 import { shouldShowMiniPilotPanel } from "./mini-pilot-panel-gate.js";
 import { buildProductionMiniPilotActionState } from "./production-mini-pilot-action-state.js";
 import { ProductionQuantityWorkflowPanel } from "./production-quantity-workflow-panel.js";
+import { ProductionPlanningEvidencePanel } from "./production-planning-evidence-panel.js";
 import {
   ProductionHandoffPanel,
   type ProductionHandoffState
@@ -142,6 +143,8 @@ export function ProductionRouteMainLayout({
         ),
         questionsSlot: (
           <div className="production-column production-column--questions">
+            <ProductionPlanningEvidencePanel caseId={activeProductionCaseId}
+              submitting={submitting} onChanged={questionActions.refreshAfterDraftDecision} />
             <ProductionQuestionPanel
               activeCaseId={activeProductionCaseId}
               questionState={questionState}

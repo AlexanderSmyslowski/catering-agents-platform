@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import { EventEmitter } from "node:events";
 import type { ConfigEnv, ProxyOptions } from "vite";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTrustedActorResolver } from "../shared-core/src/access-control.js";
@@ -49,7 +50,7 @@ async function sessionFor(headers: Record<string, string>) {
   try {
     const response = await app.inject({ method: "GET", url: "/v1/auth/session", headers });
     expect(response.statusCode).toBe(200);
-    return response.json<{ authenticated: boolean; access: { capabilities: string[] } }>();
+    return response.json<{ authenticated: boolean; user: { userId: string }; access: { capabilities: string[] } }>();
   } finally {
     await app.close();
   }
@@ -63,6 +64,94 @@ function headersFor(proxy: ProxyOptions): Record<string, string> {
   }
   return headers;
 }
+
+const planningEvidenceUrl = "/api/production/v1/production/cases/synthetic-case/planning-evidence";
+
+async function productionActorFor(
+  url = planningEvidenceUrl,
+  env: Record<string, string> = localEnvironment,
+  configEnv?: ConfigEnv,
+  method = "POST"
+) {
+  const proxy = await proxyFor(url, env, configEnv);
+  const headers = headersFor(proxy);
+  const events = new EventEmitter();
+  proxy.configure?.(events as Parameters<NonNullable<ProxyOptions["configure"]>>[0], proxy);
+  events.emit("proxyReq", {
+    setHeader: (name: string, value: string) => { headers[name] = value; }
+  }, { method, url });
+  return createTrustedActorResolver({
+    fallbackActorName: "Produktions-Mitarbeiter",
+    fallbackBusinessId: "local",
+    trustedActorSecret: secret
+  })({ headers });
+}
+
+describe("local rehearsal planning-evidence identity", () => {
+  it.each([planningEvidenceUrl, `${planningEvidenceUrl}?probe=1`])(
+    "uses the authenticated session identity for the exact planning-evidence write %s", async (url) => {
+      const session = await sessionFor(headersFor(await proxyFor("/api/intake/v1/auth/session")));
+      const actor = await productionActorFor(url);
+      expect(session.user.userId).toBe("Administrator");
+      expect(actor.trusted).toBe(true);
+      expect(actor.name).toBe(session.user.userId);
+      expect((await proxyFor(url)).rewrite?.(url)).toBe(url.replace("/api/production", ""));
+    }
+  );
+
+  it.each(["GET", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"])(
+    "does not elevate the %s method", async (method) => {
+      expect((await productionActorFor(undefined, undefined, undefined, method)).name).toBe("Produktions-Mitarbeiter");
+    }
+  );
+
+  it.each([
+    `${planningEvidenceUrl}-evil`, `${planningEvidenceUrl}/extra`, `${planningEvidenceUrl}/`,
+    "/api/production/v1/production/cases/synthetic-case/recipes",
+    "/api/production/v1/production/cases//planning-evidence",
+    "/api/production/v1/production/cases/outer/inner/planning-evidence",
+    "/api/production/v1/production/cases?next=/synthetic-case/planning-evidence",
+    "/api/production/v1/production/cases/synthetic-case/draft"
+  ])("preserves the production identity for neighboring path %s", async (url) => {
+    expect((await productionActorFor(url)).name).toBe("Produktions-Mitarbeiter");
+  });
+
+  it.each(["localhost", "127.0.0.1", "[::1]"])("supports loopback host %s for both services", async (host) => {
+    expect((await productionActorFor(undefined, {
+      ...localEnvironment,
+      VITE_INTAKE_PROXY_TARGET: `http://${host}:3101`,
+      VITE_PRODUCTION_PROXY_TARGET: `http://${host}:3103`
+    })).name).toBe("Administrator");
+  });
+
+  it.each(["VITE_INTAKE_PROXY_TARGET", "VITE_PRODUCTION_PROXY_TARGET"])(
+    "does not elevate when %s is non-loopback or malformed", async (key) => {
+      for (const target of ["https://example.invalid", "http://192.0.2.1:3103", "http://localhost.example.invalid:3103", "http://localhost:3103/remote", "http://localhost:3103?remote=1", "not-a-url"]) {
+        expect((await productionActorFor(undefined, { ...localEnvironment, [key]: target })).name).toBe("Produktions-Mitarbeiter");
+      }
+    }
+  );
+
+  it("does not elevate without the explicit dev-auth flag and nonempty secret", async () => {
+    const { CATERING_DEV_AUTH: _flag, ...withoutFlag } = localEnvironment;
+    const { CATERING_TRUSTED_ACTOR_SECRET: _secret, ...withoutSecret } = localEnvironment;
+    for (const env of [withoutFlag, withoutSecret,
+      ...["", "0", "false", "enabled"].map((value) => ({ ...localEnvironment, CATERING_DEV_AUTH: value })),
+      { ...localEnvironment, CATERING_TRUSTED_ACTOR_SECRET: "   " }
+    ]) {
+      expect((await productionActorFor(undefined, env)).name).toBe("Produktions-Mitarbeiter");
+    }
+  });
+
+  it("preserves the production identity for build and production environments", async () => {
+    for (const configEnv of [{ command: "build", mode: "development" }, { command: "serve", mode: "production" }] as ConfigEnv[]) {
+      expect((await productionActorFor(undefined, undefined, configEnv)).name).toBe("Produktions-Mitarbeiter");
+    }
+    expect((await productionActorFor(undefined, { ...localEnvironment, NODE_ENV: "production" })).name).toBe("Produktions-Mitarbeiter");
+    vi.stubEnv("NODE_ENV", "production");
+    expect((await productionActorFor()).name).toBe("Produktions-Mitarbeiter");
+  });
+});
 
 async function capabilitiesFor(
   url = "/api/intake/v1/auth/session",

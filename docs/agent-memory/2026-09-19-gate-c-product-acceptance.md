@@ -225,3 +225,52 @@ M-R1-Nachbesserung: Ein unabhängiges Prüfziel unter `event.schedule` darf bei 
 | Menschliche Küchenprüfung | Nicht erfolgt und ausdrücklich offen. Kein pauschales Bestätigen von Reviewkarten und keine reale Freigabe. |
 
 Damit sind sämtliche Korrekturen aus dem Kommentar und M-R1 sowie gemeinsame Speicherung/Wiederöffnung konkret geprüft. Der vollständige Übergang zur erneuten Vorbereitung ist weiterhin am benannten Rezept-/Mengen-/menschlichen Evidenz-Gate und dessen fehlendem bestehenden Operator-Anschluss blockiert. Kein pauschales Abschluss-GO für den Folgeblock und kein Gate-C-Gesamt-GO. Die fehlende Fachbasis wird nicht durch neue Testdaten, eine neue Funktion oder Änderungen an fremder Rezept-/Allergenarbeit ersetzt.
+
+
+## Folgeauftrag: Rezept-, Mengen- und Prüfungsanschluss
+
+- Maßgeblicher Kommentar [#5743033256](https://github.com/AlexanderSmyslowski/catering-agents-platform/pull/694#issuecomment-5743033256) vollständig gelesen. Ausgangshead `24519660988db8970a7c84db58a39c0e979ba557`, Tree `79ef97b995e0aa8b0761ace4707903d63ae2fea0`; keine Rücksetzung, kein neuer Angebots- oder Referenzfall. Die unveröffentlichte Rezept-/Allergenarbeit blieb außerhalb dieses Scopes. Der Lauf verwendete eine isolierte Kopie des erhaltenen synthetischen Falls, Fixture-Provider und freie Alternativports; der ursprüngliche Datenroot blieb unverändert.
+- Das bestehende Backoffice führt jetzt im vorhandenen Produktionsarbeitsbereich durch den Backend-Vertrag: vorhandene Rezeptbibliothek laden beziehungsweise ausdrücklich synthetischen Kandidaten über den bestehenden Upload anlegen, Rezeptzuordnung als kanonische Folgerevision speichern, diese Revision frisch lesen, konkrete Mengenentscheidung und vier Event-Prüfbestätigungen erfassen, exakt gebundene Planungs-Evidenz speichern und danach erneut vorbereiten. Es gibt keine neue Route, keine zweite Datenhaltung und keine zweite Mengen-/Freigabewahrheit.
+- Die GET-Projektion für fallgebundene Produktionsentwürfe liefert die vorhandenen Planungs-Evidenzen und die zugehörigen Rezept-Snapshots samt serverberechnetem Hash. Schreibzugriffe prüfen Fall, Komponente, aktuelle Draft-ID und Revision, zugewiesene Rezept-ID, unveränderten Snapshot-Hash, `ready_for_scaling`, den aktuellen vertrauenswürdigen Actor und alle vier Eventbestätigungen. Zukauf bleibt von der Eigenproduktions-Evidenz ausgenommen. Fremde, veraltete, doppelte, malformed oder durch Rezeptänderung stale gewordene Daten bleiben fail-closed.
+- Der lokale Vite-Proxy setzt die Administrator-Sitzungsidentität nur für den exakten Planning-Evidence-POST und nur bei DevAuth, nichtleerem Trusted-Secret sowie Loopback-Zielen für Intake und Produktion. Alle anderen Methoden/Pfade behalten die vorhandene lokale Produktionsidentität; Hosted-/Session-/Capability-Grenzen wurden nicht geöffnet.
+
+### Implementierungs- und Prüfnachweise
+
+Unabhängiger Scope-Review: **GO**. Der erste unabhängige Code-Review hielt zwei Important-Befunde an: nicht-stringförmige Mengen-Enums konnten die Provenienzprüfung umgehen oder einen 500 auslösen; endgültige 409/422-Antworten behielten eine veraltete Retry-Nutzlast. Beide wurden mit gezielten RED→GREEN-Prüfungen korrigiert. Abschließender unabhängiger Code-Review, separater Import-/Build-Delta-Review und Gesamtprüfung der Laufzeit-/Dokumentationsbelege: **GO**, keine offenen Critical-/Important-/Minor-Befunde. Dies gilt ausschließlich für diesen begrenzten technischen Block, nicht für Merge, Deployment oder Gate-C insgesamt. Vollständiger geprüfter Zehn-Dateien-Inhaltsfingerabdruck `1624621f9f442f4fcfc30e75e4127b511b0e09a230b19645a20b795a17c10f2e`.
+
+| Ausgeführter Befehl / Nachweis | Ergebnis / Exitcode |
+| --- | --- |
+| Gezielter Review-Fix-RED über Backend/API/Panel mit fünf Namensfiltern | 12 fehlgeschlagen, 2 bestanden, Exit 1. |
+| Derselbe Review-Fix-Korridor nach Korrektur | 14/14 bestanden, Exit 0. |
+| `npx vitest run` über 15 betroffene Planning-Evidence-, UI-, Session-, Proxy-, Mengenbridge-, Rezeptreview- und Login-Dateien mit `--maxWorkers=1` | 15 Dateien, **286/286 Tests**, Exit 0. |
+| `npx tsc --noEmit` | Exit 0. |
+| `npm run build` | Exit 0; 196 Vite-Module, Browserbundle ohne serverseitigen `node:crypto`-Import. |
+| `git diff --check` | Exit 0. |
+| `python3 .runtime/acceptance-20260919/recipe-evidence-assert.py` | Exit 0; Bindungen, Snapshot-Hash, Revisionen und sämtliche abgeleiteten Artefakte geprüft. |
+
+Keine unveränderte Vollsuite wurde wiederholt. Abhängigkeiten blieben am vorhandenen Lockfile; `package-lock.json` SHA256 `9e87460f1cdf88a68dbce46798655ffa6f5ebd9766bcc33ce17fc7ee79165a46`.
+
+### Tatsächlicher Browserlauf am erhaltenen Fall
+
+- **Rezeptupload** über die vorhandene Produktionsbibliothek: `POST …/recipes/upload` → **201**. Kandidat `upload-kaffeepause-kompakt-synthetische-testfixture-3d824e6ef7`, Grundausbeute 10 Portionen, Status weiter `review_required`, Fixture-SHA256 `1724211e7bc330be4d2972343bbd7e45078f240c52999259fa24d4d9ccd44e95`. Keine Hausrezept-, Allergen- oder globale Rezeptfreigabe erzeugt.
+- **Rezeptzuordnung speichern**: `POST …/drafts/production-draft-revision-fe73…/revise` → **201**. Kanonische Revision **6** `production-draft-revision-8cb13f68d61e99bdb9c2a91595e3c5b849086e4a7e331e95cbfd65ddfa327aa9`, Vorgänger Revision 5 danach `superseded`. Fall, Handoff, Event-Spec, Kategorien, Herstellungsentscheidungen, Zukauf und Service 09:00–12:00 unverändert.
+- Nach frischem Lesen von Revision 6 wurde sichtbar und ausdrücklich synthetisch entschieden: Rolle `snack`, eine Portion pro Person, Ziel **35 servings**, Herkunft `synthetic:browser-rehearsal-2026-09-19`. Alle vier Eventbestätigungen wurden durch den angemeldeten synthetischen Testakteur `Administrator` betätigt; dies ist keine reale Küchenprüfung.
+- **Menge und Eventprüfung speichern**: `POST …/cases/:caseId/planning-evidence` → **201**. Evidenz exakt an Fall, `kaffeepause-1`, Revision 6, Event-Spec und Rezept gebunden; Bridge `ready_for_scaling`; Rezept-Snapshot `sha256:9d27f077525ef5e05a08fe4e0b485f3dfce99df07a1f9174eca7d7f2ab0a6c6e` unabhängig nachgerechnet.
+- **Entwurf vorbereiten**: `POST …/drafts/production-draft-revision-8cb13…/prepare` → **201**. Kanonische Revision **7** `production-draft-prepared-31f5a1cb7559da8fe3ac1bea4f7fe62e22e743a78be25e0f02b1f7c252f68a29`, `pending_review`, Revision 6 `superseded`.
+- **Reload und Wiederöffnung**: Revision 7 wird als aktueller Entwurf desselben Falls mit derselben Handoff-/Spec-Bindung und derselben Rezeptzuordnung angezeigt. Sie enthält Eventdaten, Produktionsplan, Einkaufsliste und eine Rezeptkarte. Die Evidenz von Revision 6 wird nur als Vorgängerherkunft gezeigt und nicht still als Prüfung der neuen Revision übernommen. Vier neue erforderliche Reviewkarten bleiben `pending`; **Entwurf freigeben** bleibt gesperrt.
+- Browser-Netzwerk: alle vier Mutationen 201; danach fallgebundene GETs 200. Browserkonsole: **0 Errors**. Direkter Planning-Evidence-Zugriff ohne vertrauenswürdigen Operator → **403**. Wiederholung der D6-Evidenz nach Erzeugung von D7 → **409**. Damit bleiben Auth- und Stale-Revision-Grenzen am Laufzeitstand geschlossen.
+
+### Tatsächlich entstandene Artefakte und Grenzen
+
+| Gegenstand nach Revision 7 | Belegter Stand |
+| --- | --- |
+| Rezept-Snapshot | Ein synthetischer Snapshot mit Grundausbeute 10 Portionen; Status `review_required`, keine reale oder globale Rezeptfreigabe. |
+| Menge / Produktionsbatch | Ein Batch für `kaffeepause-1`, Ziel 35 Portionen, vier Chargen; 350 g Kaffeebohnen, 70 g Tee, 3,5 l Haferdrink. Keine automatischen Zuschläge als Operatorentscheidung behauptet. |
+| Küchenunterlagen | Zwei Küchenblätter: ein rezeptgebundenes Eigenproduktionsblatt und ein Zukaufblatt für Croissants/Wasser. Beide liegen nur im offenen Entwurf. |
+| Einkaufsliste | Fünf Positionen: drei Rezeptzutaten mit Rezeptlineage sowie Croissants und Wasser mit Zukauflinie, jeweils 35 Portionen. Produktspezifikation, Gebinde, Lieferant und reale Einkaufsdeckung für den Zukauf bleiben offen. |
+| Review / Freigabe | Vier Karten offen: Eventdaten, Produktionsplan, Einkaufsliste, Rezept-Snapshot/Skalierung. `approvedProductionSpecs=[]`; kein Plan angewendet, kein Export als vollständig gewertet. |
+| Menschliche Grenze | Die Testbestätigungen belegen ausschließlich den technischen Operatorweg. Echte Küchenprüfung von Ausbeute, Methode/Ausstattung, Allergenen/Ernährung sowie Warmhaltung/Regeneration ist nicht erfolgt. |
+
+Kuratierter Nachweis einschließlich Befehlen, Exitcodes, Hashbindungen und Laufzeitgrenzen: `docs/agent-memory/2026-09-19-recipe-planning-evidence-acceptance.json`. Rohantworten und Browser-Snapshots bleiben lokal unter `.runtime/acceptance-20260919/` beziehungsweise `.playwright-cli/`. Eigener Browser und eigener Stack wurden beendet; Ports 3311–3314 und 3320 sind wieder frei. Fremde Prozesse wurden nicht gestoppt, Daten wurden nicht gelöscht.
+
+Der vorherige technische 409-Blocker ist damit für diesen synthetischen Fall über den vorgesehenen Operatorweg geschlossen. Offen bleiben die reale menschliche Küchenprüfung, die vier Entwurfsreviews, belastbare Zukaufspezifikation, Übernahme/Freigabe und Exportabnahme. Kein Gate-C-Gesamt-GO.

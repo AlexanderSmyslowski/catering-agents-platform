@@ -24,7 +24,8 @@ import {
   type LlmReadinessProviderAdapter,
   type ProductionHandoff,
   type ProductionDraft,
-  type Recipe
+  type Recipe,
+  type RecipeEventUseReview
 } from "@catering/shared-core";
 import { InMemoryIntakeRecordsPort } from "./support/in-memory-intake-records-port.js";
 import { buildIntakeApp } from "../intake-service/src/app.js";
@@ -39,6 +40,95 @@ const actorHeaders = {
   "x-catering-actor-name": "Produktions-Mitarbeiter",
   "x-catering-trusted-secret": "planning-evidence-p1-test-secret"
 };
+
+describe("planning evidence operator readback", () => {
+  it.each(["basis", "dishRole", "reviewStatus", "evidence.kind"].flatMap(field =>
+    ["array", "object"].map(shape => ({ field, shape }))
+  ))("rejects non-string quantity enums without coercion or persistence: $field $shape", async ({ field, shape }) => {
+    const { app, draft, spec, caseId, store } = await productionFixture();
+    try {
+      const input = planningEvidence(spec);
+      const allowed = { basis: "servings_per_person", dishRole: "other", reviewStatus: "approved", "evidence.kind": "ai_candidate" }[field]!;
+      const malformed = shape === "array" ? [allowed] : { toString: null };
+      const quantity = input.quantityDecision as unknown as Record<string, unknown>;
+      if (field === "evidence.kind") (quantity.evidence as Record<string, unknown>).kind = malformed;
+      else quantity[field] = malformed;
+      const response = await app.inject({ method: "POST", url: `/v1/production/cases/${caseId}/planning-evidence`,
+        headers: actorHeaders, payload: { draftId: draft.draftId, draftRevision: draft.revision, ...input } });
+      expect(response.statusCode).toBe(422);
+      expect(await store.listProductionPlanningEvidence({ businessId: "local" })).toEqual([]);
+    } finally { await app.close(); }
+  });
+  it("binds an initial operator review to the freshly read recipe snapshot and rejects recipe drift", async () => {
+    const { app, repository, draft, spec, caseId, store } = await productionFixture();
+    try {
+      const read = await app.inject({ method: "GET", url: `/v1/production/drafts?caseId=${caseId}`, headers: actorHeaders });
+      const snapshot = read.json().planningRecipes?.[0];
+      expect(snapshot?.recipe.recipeId).toBe(recipe().recipeId);
+      expect(snapshot?.recipeSnapshotHash).toMatch(/^sha256:[0-9a-f]{64}$/);
+      await repository.save({ businessId: "local" }, { ...recipe(), name: "Changed synthetic recipe" });
+      const response = await app.inject({ method: "POST", url: `/v1/production/cases/${caseId}/planning-evidence`, headers: actorHeaders,
+        payload: { draftId: draft.draftId, draftRevision: draft.revision, expectedRecipeSnapshotHash: snapshot.recipeSnapshotHash, ...planningEvidence(spec) } });
+      expect(response.statusCode).toBe(409);
+      expect(await store.listProductionPlanningEvidence({ businessId: "local" })).toEqual([]);
+    } finally { await app.close(); }
+  });
+  it.each(["quantitiesAndYield", "methodAndEquipment", "allergensAndDiet", "holdingAndRegeneration", "eventSpecId", "recipeId", "guestCount", "serviceFormat"])(
+    "rejects unconfirmed or foreign event evidence even for a durable library recipe: %s", async (field) => {
+      const { app, repository, draft, spec, caseId, store } = await productionFixture();
+      try {
+        await repository.save({ businessId: "local" }, { ...recipe(), source: { ...recipe().source, approvalState: "approved_internal" },
+          knowledge: { artifactKind: "transcribed_recipe", sourceCitation: { title: "Synthetic test" }, derivation: { method: "direct_transcription" },
+            production: {}, verification: { sourceStatus: "verified", allergenStatus: "verified", productionStatus: "verified",
+              verifiedBy: "synthetic-reviewer", verifiedAt: "2026-09-19T12:00:00Z" }, version: { revision: 1 } } });
+        const input = planningEvidence(spec);
+        if (field === "guestCount") { input.quantityDecision.guestCount = 30; input.quantityDecision.targetAmount = 30; }
+        else if (field === "serviceFormat") input.quantityDecision.serviceFormat = "foreign-event-format";
+        else if (field === "eventSpecId" || field === "recipeId") input.recipeEventUseReview![field] = "foreign";
+        else input.recipeEventUseReview!.confirmations[field as keyof RecipeEventUseReview["confirmations"]] = false;
+        const response = await app.inject({ method: "POST", url: `/v1/production/cases/${caseId}/planning-evidence`, headers: actorHeaders,
+          payload: { draftId: draft.draftId, draftRevision: draft.revision, ...input } });
+        expect(response.statusCode).toBe(422);
+        expect(await store.listProductionPlanningEvidence({ businessId: "local" })).toEqual([]);
+      } finally { await app.close(); }
+    }
+  );
+  it("projects canonical evidence only for exact case draft revisions, including predecessor provenance", async () => {
+    const { app, draft, spec, caseId } = await productionFixture();
+    try {
+      const saved = await app.inject({ method: "POST", url: `/v1/production/cases/${caseId}/planning-evidence`,
+        headers: actorHeaders, payload: { draftId: draft.draftId, draftRevision: draft.revision, ...planningEvidence(spec) } });
+      expect(saved.statusCode).toBe(201);
+      const read = await app.inject({ method: "GET", url: `/v1/production/drafts?caseId=${caseId}`, headers: actorHeaders });
+      expect(read.json().planningEvidence).toEqual([saved.json().evidence]);
+      const foreign = await app.inject({ method: "GET", url: "/v1/production/drafts?caseId=foreign", headers: actorHeaders });
+      expect(foreign.json().planningEvidence).toEqual([]);
+      const unscoped = await app.inject({ method: "GET", url: "/v1/production/drafts", headers: actorHeaders });
+      expect(unscoped.json().planningEvidence).toEqual([]);
+      const prepared = await app.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/prepare`, headers: actorHeaders, payload: {} });
+      expect(prepared.statusCode).toBe(201);
+      const reopened = await app.inject({ method: "GET", url: `/v1/production/drafts?caseId=${caseId}`, headers: actorHeaders });
+      expect(reopened.json().planningEvidence).toEqual([saved.json().evidence]);
+      expect(reopened.json().planningEvidence[0].draftId).not.toBe(prepared.json().draft.draftId);
+    } finally { await app.close(); }
+  });
+
+  it.each([
+    { quantityDecision: {} },
+    { quantityDecision: { rationale: 42 } },
+    { quantityDecision: { evidence: null } },
+    { outputMapping: { outputUnit: 4 } },
+    { recipeEventUseReview: { confirmations: null } }
+  ])("rejects malformed nested operator input without 500 or persistence: %j", async (malformed) => {
+    const { app, draft, spec, caseId, store } = await productionFixture();
+    try {
+      const response = await app.inject({ method: "POST", url: `/v1/production/cases/${caseId}/planning-evidence`,
+        headers: actorHeaders, payload: { draftId: draft.draftId, draftRevision: draft.revision, ...planningEvidence(spec), ...malformed } });
+      expect(response.statusCode).toBe(422);
+      expect(await store.listProductionPlanningEvidence({ businessId: "local" })).toEqual([]);
+    } finally { await app.close(); }
+  });
+});
 
 function eventSpec(): AcceptedEventSpec {
   const normalized = normalizeEventRequestToSpec(
