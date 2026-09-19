@@ -208,28 +208,27 @@ function acceptedEventSpecConsistencyError(
   if (canonical.operationalArchive?.status === "archived") {
     return `AcceptedEventSpec ${candidate.specId} ist archiviert und nicht mehr für Apply freigegeben.`;
   }
+  if (sourceAcceptedEventSpecSnapshot) {
+    const sourceOfferDraft = createOfferDraftFromAcceptedEventSpec(sourceAcceptedEventSpecSnapshot);
+    const sourceOfferVariant = sourceOfferDraft.variantSet.find(
+      (variant) => variant.variantId === selectedOfferVariantId
+    );
+    const expectedAcceptedSourceOfferSnapshot = sourceOfferVariant
+      ? {
+          ...structuredClone(sourceOfferVariant.proposedEventSpec),
+          lifecycle: { commercialState: "accepted" as const }
+        }
+      : undefined;
+    return areJsonValuesEqual(canonical, sourceAcceptedEventSpecSnapshot) &&
+      Boolean(expectedAcceptedSourceOfferSnapshot) &&
+      areJsonValuesEqual(candidate, expectedAcceptedSourceOfferSnapshot)
+      ? undefined
+      : `AcceptedEventSpec ${candidate.specId} weicht vom unveränderlichen Intake-Ursprung ab.`;
+  }
   if (areJsonValuesEqual(canonical, candidate)) return undefined;
 
   const canonicalSourceReferences = canonical.sourceLineage.map((source) => source.reference);
   const candidateSourceReferences = candidate.sourceLineage.map((source) => source.reference);
-  const sourceOfferDraft = sourceAcceptedEventSpecSnapshot
-    ? createOfferDraftFromAcceptedEventSpec(sourceAcceptedEventSpecSnapshot)
-    : undefined;
-  const sourceOfferVariant = sourceOfferDraft?.variantSet.find(
-    (variant) => variant.variantId === selectedOfferVariantId
-  );
-  const expectedAcceptedSourceOfferSnapshot = sourceOfferVariant
-    ? {
-        ...structuredClone(sourceOfferVariant.proposedEventSpec),
-        lifecycle: { commercialState: "accepted" as const }
-      }
-    : undefined;
-  const isCanonicalIntakeSnapshotAcceptedByOffer =
-    Boolean(sourceAcceptedEventSpecSnapshot) &&
-    areJsonValuesEqual(canonical, sourceAcceptedEventSpecSnapshot) &&
-    Boolean(expectedAcceptedSourceOfferSnapshot) &&
-    areJsonValuesEqual(candidate, expectedAcceptedSourceOfferSnapshot);
-  if (isCanonicalIntakeSnapshotAcceptedByOffer) return undefined;
 
   // Older offer drafts were derived from the Intake request rather than its
   // AcceptedEventSpec. Rebuild the only historical Intake edit shape used by

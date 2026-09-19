@@ -371,6 +371,20 @@ describe("AcceptedEventSpec production decision transport", () => {
       expect(await intakeStore.replaceSpec(
         { businessId: "local" },
         intakeWithoutBudget,
+        handoff.eventSpecSnapshot
+      )).toBe("updated");
+      const rejectedHandoffRootReplacement = await productionApp.inject({
+        method: "POST",
+        url: `/v1/production/approved-specs/${approvedProductionSpecId}/apply`,
+        headers: productionHeaders,
+        payload: {}
+      });
+      expectStatus(rejectedHandoffRootReplacement, 409);
+      expect(await productionStore.listPlans({ businessId: "local" })).toEqual([]);
+      expect(await productionStore.listApplyManifests({ businessId: "local" })).toEqual([]);
+      expect(await intakeStore.replaceSpec(
+        { businessId: "local" },
+        handoff.eventSpecSnapshot,
         intakeSpecBeforeApply
       )).toBe("updated");
       const applyResponse = await productionApp.inject({
