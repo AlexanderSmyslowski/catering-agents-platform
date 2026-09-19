@@ -96,3 +96,48 @@ describe("production spec edit persist action", () => {
     expect(actionInput.setFocusedProductionSpecId).toHaveBeenCalledWith("spec-lunch");
   });
 });
+
+
+it("saves handoff classifications through the pinned canonical draft and preserves unrelated fields", async () => {
+  const source = { specId: "spec-lunch", event: { type: "meeting", date: "2026-09-22" }, attendees: { expected: 35 },
+    menuPlan: [{ componentId: "coffee", label: "Coffee" }] };
+  const draft = { draftId: "canonical-r2", revision: 2, status: "pending_review" as const, createdAt: "2026-09-19", source: { sourceRef: "offer-handoff:handoff-1" }, reviewCards: [], draftArtifacts: { eventSpec: source } };
+  const updated = { ...source, menuPlan: [{ ...source.menuPlan[0], menuCategory: "classic" }] };
+  const actionInput = input({
+    productionDraftContext: { caseId: "case-1", draft },
+    reviseProductionDraft: vi.fn(async () => ({ draft: { ...draft, draftId: "canonical-r3", revision: 3, draftArtifacts: { eventSpec: updated } } })),
+    buildCurrentSpecUpdateInput: () => ({ eventType: "meeting", eventDate: "2026-09-22", attendeeCount: 35, menuItems: ["Coffee"], componentUpdates: [{ componentId: "coffee", menuCategory: "classic", purchasedElements: [], recipeOverrideId: "" }] })
+  });
+  actionInput.getCurrentProductionDraftContext = () => actionInput.productionDraftContext;
+  const result = await buildProductionSpecEditPersistAction(actionInput)();
+  expect(result).toEqual(updated);
+  expect(actionInput.updateAcceptedSpec).not.toHaveBeenCalled();
+  expect(actionInput.reviseProductionDraft).toHaveBeenCalledWith("canonical-r2", { caseId: "case-1", expectedRevision: 2, componentClassifications: [{ componentId: "coffee", menuCategory: "classic" }] });
+});
+
+it("does not report success or discard nonclassification edits in a handoff answer form", async () => {
+  const actionInput = input({
+    productionDraftContext: { caseId: "case-1", draft: { draftId: "draft-1", revision: 2, status: "pending_review", createdAt: "2026-09-19", source: { sourceRef: "offer-handoff:handoff-1" }, reviewCards: [], draftArtifacts: { eventSpec: { specId: "spec-lunch", attendees: { expected: 35 }, menuPlan: [] } } } },
+    reviseProductionDraft: vi.fn(),
+    buildCurrentSpecUpdateInput: () => ({ attendeeCount: 99, menuItems: [], componentUpdates: [] })
+  });
+  actionInput.getCurrentProductionDraftContext = () => actionInput.productionDraftContext;
+  await expect(buildProductionSpecEditPersistAction(actionInput)()).rejects.toThrow(/Klassifikationen/);
+  expect(actionInput.updateAcceptedSpec).not.toHaveBeenCalled();
+  expect(actionInput.reviseProductionDraft).not.toHaveBeenCalled();
+  expect(actionInput.setNotice).not.toHaveBeenCalled();
+});
+
+
+it("rejects an unchanged canonical save when its pinned case is no longer active", async () => {
+  const source = { specId: "spec-lunch", menuPlan: [] };
+  const draft = { draftId: "old-draft", revision: 2, status: "pending_review" as const, createdAt: "2026-09-19", source: { sourceRef: "offer-handoff:handoff-1" }, reviewCards: [], draftArtifacts: { eventSpec: source } };
+  const actionInput = input({ productionDraftContext: { caseId: "old-case", draft },
+    getCurrentProductionDraftContext: () => ({ caseId: "new-case", draft: { ...draft, draftId: "new-draft" } }),
+    reviseProductionDraft: vi.fn(), buildCurrentSpecUpdateInput: () => ({ menuItems: [], componentUpdates: [] })
+  });
+  await expect(buildProductionSpecEditPersistAction(actionInput)()).rejects.toThrow(/Produktionsfall/);
+  expect(actionInput.reviseProductionDraft).not.toHaveBeenCalled();
+  expect(actionInput.updateAcceptedSpec).not.toHaveBeenCalled();
+  expect(actionInput.resetSpecEdit).not.toHaveBeenCalled();
+});

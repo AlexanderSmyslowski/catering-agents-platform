@@ -4280,3 +4280,218 @@ describe("persisted production planning evidence", () => {
     }
   });
 });
+
+
+describe("explicit handoff classification revisions", () => {
+  async function preparedClassificationFixture() {
+    const spec = eventSpec();
+    spec.menuPlan = ["coffee", "croissant"].map((id, index) => ({
+      ...spec.menuPlan[0]!, componentId: id, label: index ? "Croissant" : "Kaffeepause",
+      menuCategory: undefined, productionDecision: undefined, recipeOverrideId: undefined
+    }));
+    const fixture = await productionFixture(spec);
+    const response = await fixture.app.inject({ method: "POST", url: `/v1/production/drafts/${fixture.draft.draftId}/prepare`, headers: actorHeaders, payload: {} });
+    expect(response.statusCode, response.body).toBe(201);
+    return { ...fixture, draft: response.json<{ draft: ProductionDraft }>().draft };
+  }
+
+  function classificationCommand(caseId: string, revision: number) {
+    return { caseId, expectedRevision: revision, componentClassifications: [
+      { componentId: "coffee", menuCategory: "classic" },
+      { componentId: "croissant", menuCategory: "vegetarian" }
+    ] };
+  }
+
+  it("saves categories in a new canonical revision and prepares only its updated snapshot", async () => {
+    const { app, store, draft, caseId } = await preparedClassificationFixture();
+    try {
+      const review = await app.inject({ method: "PATCH", url: `/v1/production/drafts/${draft.draftId}/review-cards/${draft.reviewCards[0]!.cardId}`, headers: actorHeaders, payload: { decision: "fits" } });
+      expect(review.statusCode, review.body).toBe(200);
+      const original = (await store.getProductionDraft({ businessId: "local" }, draft.draftId))!;
+      const response = await app.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/revise`, headers: actorHeaders, payload: classificationCommand(caseId, draft.revision) });
+      expect(response.statusCode, response.body).toBe(201);
+      const revised = response.json<{ draft: ProductionDraft }>().draft;
+      const stored = (await store.getProductionDraft({ businessId: "local" }, revised.draftId))!;
+      expect(stored).toMatchObject({ revision: draft.revision + 1, supersedesDraftId: draft.draftId, status: "pending_review", source: original.source });
+      expect(stored.draftArtifacts.eventSpec).toEqual({ ...original.draftArtifacts.eventSpec, menuPlan: original.draftArtifacts.eventSpec!.menuPlan.map((component, index) => ({ ...component, menuCategory: index ? "vegetarian" : "classic" })) });
+      expect(stored.draftArtifacts.productionPlan).toBeUndefined();
+      expect(stored.draftArtifacts.purchaseList).toBeUndefined();
+      expect(stored.reviewCards.every(card => card.decision === "pending" && !card.decidedAt && !card.decidedBy)).toBe(true);
+      expect(await store.getProductionDraft({ businessId: "local" }, draft.draftId)).toEqual({ ...original, status: "superseded" });
+      expect(await store.findCaseIdForArtifact({ businessId: "local" }, revised.draftId)).toBe(caseId);
+      const preparedResponse = await app.inject({ method: "POST", url: `/v1/production/drafts/${revised.draftId}/prepare`, headers: actorHeaders, payload: {} });
+      expect(preparedResponse.statusCode, preparedResponse.body).toBe(201);
+      const prepared = preparedResponse.json<{ draft: ProductionDraft }>().draft;
+      expect(prepared.draftArtifacts.eventSpec).toEqual(revised.draftArtifacts.eventSpec);
+      expect(prepared.draftArtifacts.productionPlan!.blockingIssues!.length).toBeGreaterThan(0);
+      expect(prepared.reviewCards.every(card => card.decision === "pending")).toBe(true);
+      const reopened = await app.inject({ method: "GET", url: `/v1/production/drafts?caseId=${caseId}`, headers: actorHeaders });
+      expect(reopened.json<{ items: ProductionDraft[] }>().items.find(item => item.draftId === prepared.draftId)).toEqual(prepared);
+      expect(await store.findCaseIdForArtifact({ businessId: "local" }, prepared.draftId)).toBe(caseId);
+    } finally { await app.close(); }
+  });
+
+  it.each([
+    ["wrong case", (body: any) => ({ ...body, caseId: "other-case" }), 409],
+    ["stale revision", (body: any) => ({ ...body, expectedRevision: body.expectedRevision - 1 }), 409],
+    ["unknown component", (body: any) => ({ ...body, componentClassifications: [{ componentId: "foreign", menuCategory: "classic" }] }), 422],
+    ["duplicate component", (body: any) => ({ ...body, componentClassifications: [body.componentClassifications[0], body.componentClassifications[0]] }), 422],
+    ["invalid category", (body: any) => ({ ...body, componentClassifications: [{ componentId: "coffee", menuCategory: "unknown" }] }), 422],
+    ["additional field", (body: any) => ({ ...body, attendeeCount: 99 }), 422]
+  ])("rejects %s without superseding the canonical source", async (_label, mutate, status) => {
+    const { app, store, draft, caseId } = await preparedClassificationFixture();
+    try {
+      const before = await store.listProductionDrafts({ businessId: "local" });
+      const response = await app.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/revise`, headers: actorHeaders, payload: mutate(classificationCommand(caseId, draft.revision)) });
+      expect(response.statusCode, response.body).toBe(status);
+      expect(await store.listProductionDrafts({ businessId: "local" })).toEqual(before);
+    } finally { await app.close(); }
+  });
+
+  it("retries a classification save after a timeline failure without creating a second revision", async () => {
+    const { app, store, draft, caseId } = await preparedClassificationFixture();
+    const originalScope = store.withPlanningEvidenceCriticalSection.bind(store);
+    let failOnce = true;
+    vi.spyOn(store, "withPlanningEvidenceCriticalSection").mockImplementation((actor, scopeCaseId, draftId, revision, operation) =>
+      originalScope(actor, scopeCaseId, draftId, revision, async scope => {
+        const append = scope.appendRevisionEvent;
+        scope.appendRevisionEvent = async (...args) => {
+          if (failOnce) { failOnce = false; throw new Error("synthetic timeline interruption"); }
+          return append(...args);
+        };
+        return operation(scope);
+      }));
+    try {
+      const request = { method: "POST" as const, url: `/v1/production/drafts/${draft.draftId}/revise`, headers: actorHeaders, payload: classificationCommand(caseId, draft.revision) };
+      expect((await app.inject(request)).statusCode).toBe(500);
+      const retry = await app.inject(request);
+      expect(retry.statusCode, retry.body).toBe(201);
+      const retried = await app.inject(request);
+      expect(retried.statusCode, retried.body).toBe(201);
+      expect(retried.json().draft).toEqual(retry.json().draft);
+      const revisions = (await store.listProductionDrafts({ businessId: "local" })).filter(item => item.supersedesDraftId === draft.draftId);
+      expect(revisions).toHaveLength(1);
+      const events = await store.listEvents({ businessId: "local" }, caseId);
+      expect(events.filter(event => event.revisionRef?.artifactId === revisions[0]!.draftId)).toHaveLength(1);
+    } finally { await app.close(); }
+  });
+
+  it("does not inherit prior card decisions or allow a source without its review event", async () => {
+    const { app, store, draft, caseId } = await preparedClassificationFixture();
+    try {
+      const before = (await store.getProductionDraft({ businessId: "local" }, draft.draftId))!;
+      const changed = validateProductionDraft({ ...before, reviewCards: before.reviewCards.map((card, index) => index === 0 ? { ...card, decision: "fits", decidedAt: "2026-09-19T10:00:00.000Z", decidedBy: "Produktions-Mitarbeiter" } : card) });
+      await productionDecisionRepositoryFor(store).withTargetCriticalSection({ businessId: "local" }, { kind: "production_draft", artifactId: draft.draftId, revision: draft.revision }, async scope => { await scope.setDraft(changed); });
+      const response = await app.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/revise`, headers: actorHeaders, payload: classificationCommand(caseId, draft.revision) });
+      expect(response.statusCode, response.body).toBe(409);
+      expect(await store.getProductionDraft({ businessId: "local" }, draft.draftId)).toEqual(changed);
+    } finally { await app.close(); }
+  });
+
+  it("allows only one conflicting classification command to supersede the source", async () => {
+    const { app, store, draft, caseId } = await preparedClassificationFixture();
+    try {
+      const request = { method: "POST" as const, url: `/v1/production/drafts/${draft.draftId}/revise`, headers: actorHeaders };
+      const first = classificationCommand(caseId, draft.revision);
+      const second = classificationCommand(caseId, draft.revision);
+      second.componentClassifications[0]!.menuCategory = "vegan";
+      const responses = await Promise.all([app.inject({ ...request, payload: first }), app.inject({ ...request, payload: second })]);
+      expect(responses.map(item => item.statusCode).sort()).toEqual([201, 409]);
+      expect((await store.listProductionDrafts({ businessId: "local" })).filter(item => item.supersedesDraftId === draft.draftId)).toHaveLength(1);
+    } finally { await app.close(); }
+  });
+
+  it("rejects classification saves after a final draft decision", async () => {
+    const { app, store, draft, caseId } = await preparedClassificationFixture();
+    try {
+      const before = (await store.getProductionDraft({ businessId: "local" }, draft.draftId))!;
+      await productionDecisionRepositoryFor(store).withTargetCriticalSection({ businessId: "local" }, { kind: "production_draft", artifactId: draft.draftId, revision: draft.revision }, async scope => { await scope.setDraft(validateProductionDraft({ ...before, status: "rejected" })); });
+      const response = await app.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/revise`, headers: actorHeaders, payload: classificationCommand(caseId, draft.revision) });
+      expect(response.statusCode).toBe(409);
+      expect((await store.listProductionDrafts({ businessId: "local" })).filter(item => item.supersedesDraftId === draft.draftId)).toHaveLength(0);
+    } finally { await app.close(); }
+  });
+
+
+  it.each([
+    ["missing actor", {}, 403],
+    ["other business", { ...actorHeaders, "x-catering-business-id": "other-business" }, 403]
+  ])("rejects %s for classification writes", async (_label, headers, status) => {
+    const { app, store, draft, caseId } = await preparedClassificationFixture();
+    try {
+      const before = await store.listProductionDrafts({ businessId: "local" });
+      const response = await app.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/revise`, headers, payload: classificationCommand(caseId, draft.revision) });
+      expect(response.statusCode, response.body).toBe(status);
+      expect(await store.listProductionDrafts({ businessId: "local" })).toEqual(before);
+    } finally { await app.close(); }
+  });
+
+
+  it("preserves independent source review obligations and notes through save and prepare", async () => {
+    const { app, store, draft, caseId } = await preparedClassificationFixture();
+    try {
+      const original = (await store.getProductionDraft({ businessId: "local" }, draft.draftId))!;
+      const independentQuestion = { field: "source.temperature", message: "Transporttemperatur bestätigen.", severity: "high" as const };
+      const sourceDraft = validateProductionDraft({ ...original,
+        reviewCards: [...original.reviewCards, { cardId: "source-risk", kind: "risk", title: "Quellhinweis prüfen", summary: "Transporttemperatur bestätigen.", decision: "pending", requiredApproval: true, riskLevel: "blocking", targetPath: `$.draftArtifacts.openQuestions[${original.draftArtifacts.openQuestions?.length ?? 0}]` }],
+        draftArtifacts: { ...original.draftArtifacts, notes: ["Unabhängiger Quellhinweis"], openQuestions: [...(original.draftArtifacts.openQuestions ?? []), independentQuestion] }
+      });
+      await productionDecisionRepositoryFor(store).withTargetCriticalSection({ businessId: "local" }, { kind: "production_draft", artifactId: draft.draftId, revision: draft.revision }, async scope => { await scope.setDraft(sourceDraft); });
+      const saved = await app.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/revise`, headers: actorHeaders, payload: classificationCommand(caseId, draft.revision) });
+      expect(saved.statusCode, saved.body).toBe(201);
+      const revision = saved.json<{ draft: ProductionDraft }>().draft;
+      expect(revision.reviewCards).toContainEqual(expect.objectContaining({ cardId: "source-risk", decision: "pending", requiredApproval: true, riskLevel: "blocking", targetPath: "$.draftArtifacts.openQuestions[0]" }));
+      expect(revision.draftArtifacts.openQuestions).toEqual([independentQuestion]);
+      const prepared = await app.inject({ method: "POST", url: `/v1/production/drafts/${revision.draftId}/prepare`, headers: actorHeaders, payload: {} });
+      expect(prepared.statusCode, prepared.body).toBe(201);
+      const result = prepared.json<{ draft: ProductionDraft }>().draft;
+      expect(result.reviewCards).toContainEqual(expect.objectContaining({ cardId: "source-risk", decision: "pending", requiredApproval: true, riskLevel: "blocking", targetPath: "$.draftArtifacts.openQuestions[0]" }));
+      expect(result.draftArtifacts.notes).toEqual(["Unabhängiger Quellhinweis"]);
+      expect(result.draftArtifacts.openQuestions![0]).toEqual(independentQuestion);
+    } finally { await app.close(); }
+  });
+
+
+  it("recovers a classification revision inserted before its source was superseded", async () => {
+    const { app, store, draft, caseId } = await preparedClassificationFixture();
+    const originalScope = store.withPlanningEvidenceCriticalSection.bind(store);
+    let failOnce = true;
+    vi.spyOn(store, "withPlanningEvidenceCriticalSection").mockImplementation((actor, scopeCaseId, draftId, revision, operation) =>
+      originalScope(actor, scopeCaseId, draftId, revision, async scope => {
+        const commit = scope.commitPreparedDraft;
+        scope.commitPreparedDraft = async (source, candidate) => {
+          if (failOnce) {
+            failOnce = false;
+            await store.insertProductionDraft(actor, candidate);
+            throw new Error("synthetic interruption after revision insert");
+          }
+          return commit(source, candidate);
+        };
+        return operation(scope);
+      }));
+    try {
+      const request = { method: "POST" as const, url: `/v1/production/drafts/${draft.draftId}/revise`, headers: actorHeaders, payload: classificationCommand(caseId, draft.revision) };
+      expect((await app.inject(request)).statusCode).toBe(500);
+      const retry = await app.inject(request);
+      expect(retry.statusCode, retry.body).toBe(201);
+      expect((await store.getProductionDraft({ businessId: "local" }, draft.draftId))!.status).toBe("superseded");
+      expect((await store.listProductionDrafts({ businessId: "local" })).filter(item => item.supersedesDraftId === draft.draftId)).toHaveLength(1);
+      expect(await store.findCaseIdForArtifact({ businessId: "local" }, retry.json().draft.draftId)).toBe(caseId);
+    } finally { await app.close(); }
+  });
+
+  it("does not discard an independent obligation targeting a removed plan artifact", async () => {
+    const { app, store, draft, caseId } = await preparedClassificationFixture();
+    try {
+      const original = (await store.getProductionDraft({ businessId: "local" }, draft.draftId))!;
+      const source = validateProductionDraft({ ...original, reviewCards: [...original.reviewCards, {
+        cardId: "independent-plan-risk", kind: "risk", title: "Unabhängiges Risiko", summary: "Manuell klären.", decision: "pending", riskLevel: "blocking", requiredApproval: true, targetPath: "$.draftArtifacts.productionPlan"
+      }] });
+      await productionDecisionRepositoryFor(store).withTargetCriticalSection({ businessId: "local" }, { kind: "production_draft", artifactId: draft.draftId, revision: draft.revision }, async scope => { await scope.setDraft(source); });
+      const response = await app.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/revise`, headers: actorHeaders, payload: classificationCommand(caseId, draft.revision) });
+      expect(response.statusCode, response.body).toBe(422);
+      expect(await store.getProductionDraft({ businessId: "local" }, draft.draftId)).toEqual(source);
+    } finally { await app.close(); }
+  });
+
+});

@@ -110,3 +110,94 @@ describe("production planning controls", () => {
     expect(actionInput.failPlanProgress).not.toHaveBeenCalled();
   });
 });
+
+
+it("prepares the canonical case revision without reimporting an accepted spec", async () => {
+  const actionInput = input({ editingSpecId: undefined, productionDraftContext: { caseId: "handoff-case", draft: {
+    draftId: "classification-revision-3", revision: 3, status: "pending_review", createdAt: "2026-09-19", source: { sourceRef: "offer-handoff:handoff-1" }, reviewCards: [], draftArtifacts: { eventSpec: spec }
+  } } });
+  actionInput.getCurrentProductionDraftContext = () => actionInput.productionDraftContext;
+  await buildProductionPlanningControls(actionInput).handleCreatePlan(spec);
+  expect(actionInput.prepareProductionDraft).toHaveBeenCalledWith("classification-revision-3");
+  expect(actionInput.createProductionDraftFromAcceptedEventSpec).not.toHaveBeenCalled();
+  expect(actionInput.createProductionCase).not.toHaveBeenCalled();
+});
+
+
+describe("canonical draft context across save and prepare", () => {
+  function context(caseId = "old-case", draftId = "old-case-draft", revision = 2) {
+    return { caseId, draft: { draftId, revision, status: "pending_review" as const, createdAt: "2026-09-19", source: { sourceRef: "offer-handoff:handoff-1" }, reviewCards: [],
+      draftArtifacts: { eventSpec: { specId: "spec-plan-submit-1", menuPlan: [{ componentId: "coffee", label: "Coffee", menuCategory: "classic" }] } }
+    } };
+  }
+  function form(menuCategory: "classic" | "vegetarian" = "classic") {
+    return { menuItems: ["Coffee"], componentUpdates: [{ componentId: "coffee", menuCategory, purchasedElements: [], recipeOverrideId: "" }] };
+  }
+
+  it.each(["changed case", "newer revision"])("rejects %s before an unchanged editor can prepare its stale draft", async change => {
+    const pinned = context();
+    const current = change === "changed case" ? context("new-case", "new-case-draft") : context("old-case", "newer-draft", 3);
+    const actionInput = input({ productionDraftContext: pinned, activeProductionCaseId: current.caseId,
+      getCurrentProductionDraftContext: () => current,
+      reviseProductionDraft: vi.fn(), buildCurrentSpecUpdateInput: () => form()
+    });
+    await buildProductionPlanningControls(actionInput).handleCreatePlan(pinned.draft.draftArtifacts.eventSpec);
+    expect(actionInput.prepareProductionDraft).not.toHaveBeenCalled();
+    expect(actionInput.reviseProductionDraft).not.toHaveBeenCalled();
+    expect(actionInput.updateAcceptedSpec).not.toHaveBeenCalled();
+    expect(actionInput.setError).toHaveBeenCalled();
+  });
+
+  it.each(["changed case", "newer revision"])("does not continue after %s while saving", async change => {
+    const pinned = context();
+    let current = pinned;
+    let releaseSave!: (response: { draft: ReturnType<typeof context>["draft"] }) => void;
+    const save = new Promise<{ draft: ReturnType<typeof context>["draft"] }>(resolve => { releaseSave = resolve; });
+    const actionInput = input({ productionDraftContext: pinned, activeProductionCaseId: pinned.caseId,
+      getCurrentProductionDraftContext: () => current,
+      reviseProductionDraft: vi.fn(() => save), buildCurrentSpecUpdateInput: () => form("vegetarian")
+    });
+    const pending = buildProductionPlanningControls(actionInput).handleCreatePlan(pinned.draft.draftArtifacts.eventSpec);
+    await Promise.resolve();
+    current = change === "changed case" ? context("new-case", "new-case-draft") : context("old-case", "unrelated-newer-draft", 4);
+    releaseSave({ draft: context("old-case", "saved-draft", 3).draft });
+    await pending;
+    expect(actionInput.prepareProductionDraft).not.toHaveBeenCalled();
+    expect(actionInput.showProductionDraftReview).not.toHaveBeenCalled();
+    expect(actionInput.resetSpecEdit).not.toHaveBeenCalled();
+    expect(actionInput.setFocusedProductionSpecId).not.toHaveBeenCalled();
+    expect(actionInput.setError).toHaveBeenCalled();
+  });
+
+  it("checks the live case again after refreshing the saved revision", async () => {
+    const pinned = context();
+    let current = pinned;
+    const actionInput = input({ productionDraftContext: pinned, activeProductionCaseId: pinned.caseId,
+      getCurrentProductionDraftContext: () => current,
+      reviseProductionDraft: vi.fn(async () => ({ draft: context("old-case", "saved-draft", 3).draft })),
+      buildCurrentSpecUpdateInput: () => form("vegetarian"),
+      refreshDashboard: vi.fn(async () => { current = context("new-case", "new-case-draft"); })
+    });
+    await buildProductionPlanningControls(actionInput).handleCreatePlan(pinned.draft.draftArtifacts.eventSpec);
+    expect(actionInput.prepareProductionDraft).not.toHaveBeenCalled();
+    expect(actionInput.showProductionDraftReview).not.toHaveBeenCalled();
+    expect(actionInput.resetSpecEdit).not.toHaveBeenCalled();
+    expect(actionInput.setFocusedProductionSpecId).not.toHaveBeenCalled();
+  });
+
+  it.each(["before render", "after render"])("prepares its own newly saved revision %s", async timing => {
+    const pinned = context();
+    let current = pinned;
+    const saved = context("old-case", "saved-draft", 3);
+    const actionInput = input({ productionDraftContext: pinned, activeProductionCaseId: pinned.caseId,
+      getCurrentProductionDraftContext: () => current,
+      reviseProductionDraft: vi.fn(async () => ({ draft: saved.draft })),
+      refreshDashboard: vi.fn(async () => { if (timing === "after render") current = saved; }),
+      buildCurrentSpecUpdateInput: () => form("vegetarian")
+    });
+    await buildProductionPlanningControls(actionInput).handleCreatePlan(pinned.draft.draftArtifacts.eventSpec);
+    expect(actionInput.prepareProductionDraft).toHaveBeenCalledWith("saved-draft");
+    expect(actionInput.updateAcceptedSpec).not.toHaveBeenCalled();
+    expect(actionInput.createProductionDraftFromAcceptedEventSpec).not.toHaveBeenCalled();
+  });
+});

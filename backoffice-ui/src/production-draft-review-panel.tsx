@@ -441,9 +441,10 @@ export function ProductionDraftReviewPanel({
     setLoading(true);
     try {
       const response = await prepareProductionDraft(draftId);
-      setFocusedDraftId(response.draft.draftId);
+      await onDraftChanged?.();
+      if (!panelRef.current || previousCaseId.current !== caseId) return;
       setMessage("Produktionsentwurf wurde vorbereitet.");
-      await reloadDrafts({ clearMessage: false });
+      announceProductionDraftReview(response.draft.draftId);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Produktionsentwurf konnte nicht vorbereitet werden.");
     } finally {

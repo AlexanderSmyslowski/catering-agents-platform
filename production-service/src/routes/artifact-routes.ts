@@ -279,6 +279,46 @@ function productionDraftIdForSpecImport(
   return `production-draft-spec-${fingerprint}`;
 }
 
+function independentDraftQuestions(draft: ProductionDraft) {
+  return (draft.draftArtifacts.openQuestions ?? []).filter((question) =>
+    !question.field.startsWith("productionPlan.blockingIssues.") &&
+    !(question.field.startsWith("recipe.") && question.message === "Vollständiger Rezept-Snapshot fehlt."));
+}
+
+function isGeneratedPreparationCard(card: ProductionDraftReviewCard): boolean {
+  return (
+    (["card-prepared-event-spec", "card-classification-event-spec"].includes(card.cardId) &&
+      card.kind === "event_data" && card.targetPath === "$.draftArtifacts.eventSpec") ||
+    (card.cardId === "card-prepared-production-plan" && card.kind === "timeline" && card.targetPath === "$.draftArtifacts.productionPlan") ||
+    (card.cardId === "card-prepared-purchase-list" && card.kind === "purchase_item" && card.targetPath === "$.draftArtifacts.purchaseList") ||
+    (/^card-prepared-recipe-\d+$/.test(card.cardId) && card.kind === "recipe" && /^\$\.draftArtifacts\.recipes\[\d+\]$/.test(card.targetPath ?? "")) ||
+    (/^card-missing-recipe-\d+$/.test(card.cardId) && card.kind === "recipe" && card.title === "Rezept-Snapshot fehlt" && !card.targetPath) ||
+    (/^card-planning-blocker-\d+$/.test(card.cardId) && card.kind === "risk" && /^\$\.draftArtifacts\.productionPlan\.blockingIssues\[\d+\]$/.test(card.targetPath ?? ""))
+  );
+}
+
+function independentDraftReviewCards(draft: ProductionDraft): ProductionDraftReviewCard[] | undefined {
+  const questions = independentDraftQuestions(draft);
+  const cards: ProductionDraftReviewCard[] = [];
+  for (const card of draft.reviewCards) {
+    if (isGeneratedPreparationCard(card)) continue;
+    // Only known generated checks can be replaced. An independent obligation
+    // with a removed artifact target cannot silently become an unrelated check.
+    if (/^\$\.draftArtifacts\.(productionPlan|purchaseList|recipes)(?:[.\[]|$)/.test(card.targetPath ?? "")) return undefined;
+    const { decidedAt: _at, decidedBy: _by, operatorComment: _comment,
+      operatorCommentVisibility: _visibility, ...retained } = card;
+    const questionTarget = card.targetPath?.match(/^\$\.draftArtifacts\.openQuestions\[(\d+)\](.*)$/);
+    if (questionTarget) {
+      const question = draft.draftArtifacts.openQuestions?.[Number(questionTarget[1])];
+      const newIndex = question ? questions.indexOf(question) : -1;
+      if (newIndex < 0) return undefined;
+      retained.targetPath = `$.draftArtifacts.openQuestions[${newIndex}]${questionTarget[2]}`;
+    }
+    cards.push({ ...retained, decision: "pending" });
+  }
+  return cards;
+}
+
 function preparedProductionDraftId(
   businessId: string,
   sourceDraft: Pick<ProductionDraft, "draftId" | "revision">
@@ -2281,6 +2321,11 @@ export function registerProductionArtifactRoutes(
         !recipes.some((recipe) => recipe.recipeId === recipeId)
       );
       const planningBlockingIssues = [...new Set(artifacts.productionPlan.blockingIssues ?? [])];
+      const sourceReviewCards = canonicalOfferHandoff ? independentDraftReviewCards(draft) : [];
+      if (!sourceReviewCards) {
+        return reply.code(422).send({ message: "Ein unabhängiger Prüfpunkt verweist auf ein zu ersetzendes Artefakt und muss zuerst geklärt werden." });
+      }
+      const sourceQuestions = canonicalOfferHandoff ? independentDraftQuestions(draft) : [];
       const prepared = validateProductionDraft({
         ...draft,
         draftId: preparedDraftId,
@@ -2292,6 +2337,7 @@ export function registerProductionArtifactRoutes(
         approvedBy: undefined,
         approvedAt: undefined,
         reviewCards: [
+          ...sourceReviewCards,
           {
             cardId: "card-prepared-event-spec",
             kind: "event_data",
@@ -2358,9 +2404,11 @@ export function registerProductionArtifactRoutes(
           productionPlan: artifacts.productionPlan,
           purchaseList: artifacts.purchaseList,
           recipes,
-          ...(missingRecipeIds.length > 0 || planningBlockingIssues.length > 0
+          ...(canonicalOfferHandoff && draft.draftArtifacts.notes ? { notes: draft.draftArtifacts.notes } : {}),
+          ...(sourceQuestions.length > 0 || missingRecipeIds.length > 0 || planningBlockingIssues.length > 0
             ? {
               openQuestions: [
+                ...sourceQuestions,
                 ...missingRecipeIds.map((recipeId) => ({
                   field: `recipe.${recipeId}`,
                   message: "Vollständiger Rezept-Snapshot fehlt.",
@@ -2733,6 +2781,123 @@ export function registerProductionArtifactRoutes(
       const draft = await store.getProductionDraft(actor, request.params.draftId);
       if (!draft) {
         return reply.code(404).send({ message: "ProductionDraft nicht gefunden." });
+      }
+
+      const command = request.body;
+      if (command !== undefined && (!command || typeof command !== "object" || Array.isArray(command))) {
+        return reply.code(422).send({ message: "Der Revisionsauftrag muss ein gültiges Objekt sein." });
+      }
+      if (command && typeof command === "object" && Object.keys(command).length > 0) {
+        const input = command as Record<string, unknown>;
+        const classifications = input.componentClassifications;
+        if (
+          Object.keys(input).some((key) => !["caseId", "expectedRevision", "componentClassifications"].includes(key)) ||
+          typeof input.caseId !== "string" || !input.caseId.trim() ||
+          !Number.isInteger(input.expectedRevision) ||
+          !Array.isArray(classifications) || classifications.length === 0 ||
+          classifications.some((item) => !item || typeof item !== "object" || Array.isArray(item) ||
+            Object.keys(item).some((key) => !["componentId", "menuCategory"].includes(key)) ||
+            typeof item.componentId !== "string" || !["classic", "vegetarian", "vegan"].includes(item.menuCategory))
+        ) {
+          return reply.code(422).send({ message: "Für die Klassifikationskorrektur sind nur Fall, Revision und eindeutige Komponentenkategorien zulässig." });
+        }
+        const eventSpec = draft.draftArtifacts.eventSpec;
+        const categories = new Map<string, "classic" | "vegetarian" | "vegan">(
+          classifications.map((item) => [item.componentId, item.menuCategory])
+        );
+        if (!eventSpec || categories.size !== classifications.length ||
+          [...categories.keys()].some((id) => !eventSpec.menuPlan.some((component) => component.componentId === id))) {
+          return reply.code(422).send({ message: "Die Klassifikationen müssen vorhandene Komponenten eindeutig benennen." });
+        }
+        if (!["pending_review", "superseded"].includes(draft.status) || input.expectedRevision !== draft.revision) {
+          return reply.code(409).send({ message: "Die Produktionsrevision ist nicht mehr offen oder wurde zwischenzeitlich geändert." });
+        }
+        const lineage = await productionDraftLineage(store, actor, draft);
+        const root = lineage?.at(-1);
+        const handoffId = offerHandoffIdFromSourceRef(root?.source.sourceRef);
+        if (!lineage || !handoffId) {
+          return reply.code(409).send({ message: "Die Klassifikationskorrektur benötigt einen kanonischen Handoff-Entwurf." });
+        }
+        const caseId = input.caseId;
+        const caseIds = await Promise.all(lineage.map((item) => store.findCaseIdForArtifact(actor, item.draftId)));
+        if (caseIds.some((id) => id !== caseId)) {
+          return reply.code(409).send({ message: "ProductionDraft ist nicht eindeutig an den angegebenen Produktionsauftrag gebunden." });
+        }
+        const sourceReviewCards = independentDraftReviewCards(draft);
+        if (!sourceReviewCards) {
+          return reply.code(422).send({ message: "Ein unabhängiger Prüfpunkt verweist auf ein zu ersetzendes Artefakt und muss zuerst geklärt werden." });
+        }
+        const revisedEventSpec = validateAcceptedEventSpec({
+          ...eventSpec,
+          menuPlan: eventSpec.menuPlan.map((component) => ({
+            ...component,
+            ...(categories.has(component.componentId) ? { menuCategory: categories.get(component.componentId) } : {})
+          }))
+        });
+        const commandHash = hashText(stableJson({ caseId, classifications: [...categories].sort(([left], [right]) => left.localeCompare(right)) }));
+        const revision = validateProductionDraft({
+          ...draft,
+          draftId: productionDraftRevisionCommandIdentity(actor.businessId, draft, commandHash).draftId,
+          revision: draft.revision + 1,
+          supersedesDraftId: draft.draftId,
+          createdAt: new Date().toISOString(),
+          status: "pending_review",
+          // Operator classifications amend the canonical snapshot, never the accepted offer.
+          // Derived artifacts and their decisions must be regenerated from this revision.
+          draftArtifacts: {
+            eventSpec: revisedEventSpec,
+            ...(draft.draftArtifacts.notes ? { notes: draft.draftArtifacts.notes } : {}),
+            ...(draft.draftArtifacts.openQuestions ? { openQuestions: independentDraftQuestions(draft) } : {})
+          },
+          reviewCards: [...sourceReviewCards, {
+            cardId: "card-classification-event-spec", kind: "event_data",
+            title: "Eventdaten und Klassifikationen prüfen",
+            summary: "Explizite Komponentenkategorien ergänzt. Produktionsentwurf erneut vorbereiten und prüfen.",
+            decision: "pending", requiredApproval: true,
+            targetPath: "$.draftArtifacts.eventSpec"
+          }]
+        });
+        const committed = await store.withPlanningEvidenceCriticalSection(
+          actor, caseId, draft.draftId, draft.revision, async (scope) => {
+            const currentCase = await scope.getCase(caseId);
+            if (!currentCase || currentCase.productionHandoffId !== handoffId ||
+              currentCase.sourceSpecId !== root?.draftArtifacts.eventSpec?.specId ||
+              currentCase.sourceSpecId !== eventSpec.specId ||
+              !await canonicalLineageProjectionIsValid(scope, caseId, draft.draftId, revision.draftId) ||
+              !await canonicalReviewProjectionIsValid(scope, draft)) return undefined;
+            const currentLineage = await scope.listDraftsInLineage(draft.draftId);
+            if (currentLineage.some((item) => item.draftId !== draft.draftId &&
+              item.draftId !== revision.draftId && item.revision >= draft.revision)) return undefined;
+            const existing = await scope.getDraft(revision.draftId);
+            if (existing) {
+              const currentSource = await scope.getDraft(draft.draftId);
+              if (!currentSource || !areJsonValuesEqual(existing, { ...revision, createdAt: existing.createdAt })) return undefined;
+              if (currentSource.status === "pending_review") {
+                if (!await scope.commitPreparedDraft(draft, existing)) return undefined;
+              } else if (!areJsonValuesEqual(currentSource, { ...draft, status: "superseded" })) {
+                return undefined;
+              }
+              await scope.appendRevisionEvent(draft, existing, "Komponentenkategorien ergänzt; neue Produktionsrevision zur Prüfung erstellt.");
+              return existing;
+            }
+            if (!await scope.commitPreparedDraft(draft, revision)) return undefined;
+            await scope.appendRevisionEvent(draft, revision, "Komponentenkategorien ergänzt; neue Produktionsrevision zur Prüfung erstellt.");
+            return revision;
+          }
+        );
+        if (!committed) {
+          return reply.code(409).send({ message: "ProductionDraft wurde verändert, entschieden oder ist nicht vollständig im Fallverlauf belegt." });
+        }
+        await auditLog.logFor(actor, {
+          action: "production.production_draft_revision_created", entityType: "ProductionDraft",
+          entityId: committed.draftId, actor, at: committed.createdAt,
+          idempotencyKey: `production-draft-revision:${committed.draftId}`,
+          summary: "Explizite Komponentenkategorien in neuer ProductionDraft-Revision gespeichert.",
+          details: compactAuditDetails({ draftId: committed.draftId, supersedesDraftId: draft.draftId,
+            classificationCount: categories.size, changeRequestHash: commandHash,
+            humanApprovalRequired: true, writesProductObject: false })
+        });
+        return reply.code(201).send({ draft: projectProductionDraft(actor, committed) });
       }
 
       const requestedChanges = draft.reviewCards.filter((card) => card.decision === "change_requested");

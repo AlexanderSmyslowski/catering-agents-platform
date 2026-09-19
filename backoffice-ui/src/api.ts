@@ -1045,12 +1045,18 @@ export async function decideProductionDraftReviewCard(
   );
 }
 
-export async function reviseProductionDraft(draftId: string) {
+export type ProductionDraftClassificationUpdate = {
+  caseId: string;
+  expectedRevision: number;
+  componentClassifications: Array<{ componentId: string; menuCategory: "classic" | "vegetarian" | "vegan" }>;
+};
+
+export async function reviseProductionDraft(draftId: string, input?: ProductionDraftClassificationUpdate) {
   return fetchJson<{ draft: ProductionDraft }>(
     `/api/production/v1/production/drafts/${encodeURIComponent(draftId)}/revise`,
     {
       method: "POST",
-      body: "{}"
+      body: JSON.stringify(input ?? {})
     }
   );
 }

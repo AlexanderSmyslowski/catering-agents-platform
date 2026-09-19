@@ -1,0 +1,225 @@
+{
+  "scope": "Same retained synthetic handoff case: classify, save, prepare and reopen; no overall Gate-C approval",
+  "baseHead": "d0ce78f93a0f77a553e804214f22b07430bcb34c",
+  "baseTree": "54e70dc9d33f8ebb2cf960da7540a989b3fcb774",
+  "acceptedSourceTestDiffSha256": "86d5888dbb639645996557e9538daf4704117e24191db1d30360f01781dd43a2",
+  "sourceTestFilesSha256": {
+    "backoffice-ui/src/App.tsx": "cf422d7efbb707229a1b7698bb19f94a5ce725e52bfeca7800b91c559b71464d",
+    "backoffice-ui/src/api.ts": "f5f354fbdf5fe239015701533c1ba6c972c9ce7745925751103ab28a74bb8ea8",
+    "backoffice-ui/src/production-draft-review-panel.tsx": "fda4d32f2d2cb82405bf16db9e0d77c079111a032107285319235ec7fad38547",
+    "backoffice-ui/src/production-plan-submission-action.ts": "2cbab97cedec4cbaad2c8801269e264555dd4e7352430026bd5e893c8dffcb2e",
+    "backoffice-ui/src/production-planning-controls.ts": "ad6998e59e2f98acdaa24f96ab1f5c8998519a771037c48917d92d30328fbac4",
+    "backoffice-ui/src/production-spec-edit-persist-action.ts": "8f24b85f8f0ccf9f3a5202e56094289ed91a014bc4bf642ee116d2b442ddf192",
+    "production-service/src/routes/artifact-routes.ts": "b32215553330bb65c2ac98905e63ba95cad991c5a6a3f71332a4850770010e6c",
+    "tests/production-draft-review-panel.test.tsx": "ed3fe286b64e69b33eab782410e94549a8593bd658b869999aeef99d34de19ba",
+    "tests/production-planning-controls.test.ts": "77d77f4dec47ab0bb502d3e0f632b8a129bee4464c6205996ad1d3fe61e94411",
+    "tests/production-planning-evidence-p1.test.ts": "2c1e08d544f132966dc84da5b5bfe1052fbffc046c8ed0fcb911c01cf3efd33f",
+    "tests/production-spec-edit-persist-action.test.ts": "a473edf70b3c7623bad7b3cdc4c8d06fb957553ae6d4918eb6a6cf5a33ccbd72"
+  },
+  "packageLockSha256": "9e87460f1cdf88a68dbce46798655ffa6f5ebd9766bcc33ce17fc7ee79165a46",
+  "syntheticOperatorDecisions": {
+    "kaffeepause-1": "classic",
+    "croissants-und-wasserservice-2": "vegetarian"
+  },
+  "caseId": "production-case-handoff-6e0bf64a6bafbc9f5e43b5af9e935b5a5474ff2749c394bcc54005bd0a9b0291",
+  "handoffId": "handoff-c6118104258962aa50d11638df006a97e50207c2bf7d3a745df4931fda6a458e",
+  "eventSpecId": "spec-browser-rehearsal-offer-case",
+  "revisionSequence": [
+    2,
+    3,
+    4
+  ],
+  "savedDraftId": "production-draft-revision-94a2e82e56a881df30dcdd499bc516d90b082f6d84530c5d8bddcfe280413a51",
+  "preparedDraftId": "production-draft-prepared-4826a6f5ae94d23e88c518b56cc4a42c5cf0f0f7779ba6d84c9cce43f2bc62f3",
+  "browser": {
+    "exitCode": 0,
+    "dom": {
+      "categories": [
+        "classic",
+        "vegetarian"
+      ],
+      "modes": [
+        "",
+        ""
+      ],
+      "panels": [
+        {
+          "oldCategoryBlocker": false,
+          "currentModeBlocker": true,
+          "reviewCount": true,
+          "approveDisabled": true
+        },
+        {
+          "oldCategoryBlocker": false,
+          "currentModeBlocker": true,
+          "reviewCount": true,
+          "approveDisabled": true
+        }
+      ],
+      "hasThreeQuestions": true
+    },
+    "consoleErrors": 0,
+    "caseId": "production-case-handoff-6e0bf64a6bafbc9f5e43b5af9e935b5a5474ff2749c394bcc54005bd0a9b0291",
+    "handoffId": "handoff-c6118104258962aa50d11638df006a97e50207c2bf7d3a745df4931fda6a458e",
+    "sourceSpecId": "spec-browser-rehearsal-offer-case",
+    "uniqueRevisionEvents": true,
+    "browserCommands": 33,
+    "allBrowserCommandExitCodes": 0,
+    "preparePhaseMutations": [
+      "197. [POST] http://127.0.0.1:3200/api/production/v1/production/drafts/production-draft-revision-94a2e82e56a881df30dcdd499bc516d90b082f6d84530c5d8bddcfe280413a51/prepare => [201] Created"
+    ],
+    "savePhaseMutationEvidence": "classification-fixed-save-requests.log; POST revise 201",
+    "approvedProductionSpecs": 0
+  },
+  "result": {
+    "exit_code": 0,
+    "draft_revisions": [
+      2,
+      3,
+      4
+    ],
+    "component_categories": {
+      "kaffeepause-1": "classic",
+      "croissants-und-wasserservice-2": "vegetarian"
+    },
+    "known_event_and_component_data_preserved": true,
+    "same_handoff_source": "offer-handoff:handoff-c6118104258962aa50d11638df006a97e50207c2bf7d3a745df4931fda6a458e",
+    "reopened_revision_identical": true,
+    "next_blockers": [
+      "Herstellungsentscheidung für Kaffeepause kompakt fehlt.",
+      "Herstellungsentscheidung für Croissants und Wasserservice. kompakt fehlt."
+    ],
+    "planning_readiness": "insufficient",
+    "recipes": 0,
+    "production_batches": 0,
+    "purchase_items": 0,
+    "open_review_cards": 5,
+    "human_kitchen_review": "not performed",
+    "foreign_recipe_allergen_work_unchanged": true
+  },
+  "kitchenSheets": [
+    {
+      "componentId": "kaffeepause-1",
+      "productionQty": {
+        "amount": 35,
+        "unit": "Portionen"
+      },
+      "ingredients": 0,
+      "steps": 0,
+      "blockingNotes": [
+        "Herstellungsentscheidung fehlt. Bitte Eigenproduktion, Hybrid, Convenience-Zukauf oder Fertigprodukt festlegen."
+      ]
+    },
+    {
+      "componentId": "croissants-und-wasserservice-2",
+      "productionQty": {
+        "amount": 35,
+        "unit": "Portionen"
+      },
+      "ingredients": 0,
+      "steps": 0,
+      "blockingNotes": [
+        "Herstellungsentscheidung fehlt. Bitte Eigenproduktion, Hybrid, Convenience-Zukauf oder Fertigprodukt festlegen."
+      ]
+    }
+  ],
+  "verification": {
+    "initialFocusedSuite": [
+      {
+        "command": "npx vitest run tests/production-planning-evidence-p1.test.ts tests/production-spec-edit-persist-action.test.ts tests/production-planning-controls.test.ts tests/production-plan-submission-action.test.ts tests/production-draft-review-panel.test.tsx tests/use-production-spec-editor.test.ts --maxWorkers=1",
+        "exitCode": 0,
+        "testFiles": 6,
+        "passed": 97,
+        "failed": 0,
+        "log": ".runtime/acceptance-20260919/classification-final-focused-tests.log"
+      },
+      {
+        "command": "npx tsc --noEmit",
+        "exitCode": 0,
+        "log": ".runtime/acceptance-20260919/classification-final-typecheck.log"
+      },
+      {
+        "command": "git diff --check",
+        "exitCode": 0
+      }
+    ],
+    "finalAffectedChecks": [
+      {
+        "command": "npx vitest run tests/production-draft-review-panel.test.tsx -t 'updates both review panels' --maxWorkers=1",
+        "exitCode": 1,
+        "failed": 1,
+        "skipped": 15,
+        "log": "classification-f2-red-tests.log",
+        "failure": "Saved dashboard revision 3 while both explicitly revision-2-focused panels still showed old classification blocker."
+      },
+      {
+        "command": "npx vitest run tests/production-draft-review-panel.test.tsx -t 'updates both review panels' --maxWorkers=1",
+        "exitCode": 1,
+        "failed": 1,
+        "skipped": 15,
+        "log": "classification-f2-prepare-red-tests.log",
+        "failure": "After fixing save invalidation, separate panel prepare left dashboard on revision 3."
+      },
+      {
+        "command": "npx vitest run tests/production-draft-review-panel.test.tsx tests/production-planning-controls.test.ts tests/production-spec-edit-persist-action.test.ts tests/production-plan-submission-action.test.ts tests/use-production-spec-editor.test.ts --maxWorkers=1",
+        "exitCode": 0,
+        "testFiles": 5,
+        "passed": 42,
+        "failed": 0,
+        "log": "classification-f2-green-tests.log"
+      },
+      {
+        "command": "npx tsc --noEmit",
+        "exitCode": 0,
+        "log": "classification-f2-typecheck.log"
+      },
+      {
+        "command": "git diff --check",
+        "exitCode": 0
+      }
+    ],
+    "finalBuild": {
+      "command": "npm run build",
+      "exitCode": 0
+    },
+    "independentReview": "F1 and F2 scoped code reviews GO; final runtime/document review is bound separately by the reviewer artifact.",
+    "reusedBackendEvidence": {
+      "log": "classification-final-focused-tests.log",
+      "boundFiles": {
+        "production-service/src/routes/artifact-routes.ts": "b32215553330bb65c2ac98905e63ba95cad991c5a6a3f71332a4850770010e6c",
+        "tests/production-planning-evidence-p1.test.ts": "2c1e08d544f132966dc84da5b5bfe1052fbffc046c8ed0fcb911c01cf3efd33f"
+      },
+      "reason": "Backend and P1 tests unchanged; only affected UI corridor rerun."
+    }
+  },
+  "localEvidenceSha256": {
+    "classification-save-check.json": "b729018a10d3f33adc50243bcadeacb9f60d999769f319b5de000bec099b0640",
+    "classification-browser-check.json": "a35f9a999b477b102ea75619d6138bb8ba75336a6a1a7907fbba96aa7a67fb94",
+    "classification-payload-check.json": "98ce6f6e6805e902845cd1d4ce3cf222d244711585516872369029ed406d26c0",
+    "classification-cleanup-check.json": "623c8d814101a06f2ec91c4ba2ea6e56b4c12c158285ca1a5975992745ea9b7d",
+    "classification-fixed-save-response.log": "85afdb1e3bba2c8658d2189efcffb5cb1ec62ee55cc99c30efc6c16af756abf8",
+    "classification-fixed-prepare-response.log": "02bc0d19e876c0ee2638c1e375a90db13fb0015ea7e007de28d7a87e251b8b9a",
+    "classification-fixed-reloaded-drafts.log": "0b70e405921454da33518a657b8903fd43be31eea08123beb246d76994d94ff2",
+    "classification-fixed-case-response.log": "734d788351b3bbfc329319f727bbcec775690c2f5a24dc8b1fb69b0bb03a3507",
+    "classification-fixed-dom.log": "6e98e6eb5927a60ffdb9cafba6de18d0b4d4b9e5d6b86b42d58d4a1a4ce4ae19",
+    "classification-fixed-console.log": "f663c55c47f8e1322ad29c3b1af1002fc76432bf9fd9d675529a1bcbc7395a14",
+    "classification-fixed-save-requests.log": "db921645eb21d8ad8ad6f142591926e36cbd9b8a2b4df8d9d8e71fa1e15342d7",
+    "classification-fixed-all-requests.log": "407df1079e3e5ca3682e5d656bb3ef413503d69035beaedf3ecb8754684a8f25",
+    "classification-final-focused-tests.log": "045f44751a7249bbcb9ea516882585bbbb63491bd567e865351a57d7f4c8362e",
+    "classification-f1-final-tests.log": "3bcb668f52324652f7d755f316cede18c80eee319fe96228d70ba43715e1b980",
+    "classification-f2-green-tests.log": "f3d9e1d5b4d7ad68d7685d0e1d3dc946d71581f3d1e795ab3a303691d07a8e2b",
+    "classification-f2-typecheck.log": "759c582d8258becaa967c5dc15f22c4618613f6a732963aa888752eb6d7ad774",
+    "classification-build-f2.log": "2f610dc6295a455bb7ddeacd3d0a28ace85ef1659e701e020ac12261260626f3",
+    "classification-f1-independent-review.json": "983cf0a2bfe36c15103948e01b1edbf3faa7748938cb9150c88b8d86d51c489f",
+    "classification-f2-independent-review.json": "a4d8e6a1f63d110269aa282a9ec03f14aebd10a1690db60bc550b94aca6c1539"
+  },
+  "limits": [
+    "Save was observed on the F1 code candidate; final F2 synchronizes review panels and is covered by a two-panel regression. Browser resumed from preserved revision 3 for prepare/reopen; no artificial recategorization.",
+    "Save request listing is filtered to production/drafts; prepare/reopen phase has a full dynamic request listing.",
+    "Raw browser responses are local synthetic evidence, not committed. This manifest records their hashes and checked outcomes.",
+    "No secrets, environment values, customer data or unrelated files were hashed. Foreign recipe/allergen files were only compared with their previously recorded hashes.",
+    "Handoff answer persistence in this bounded correction accepts categories only; other field edits are explicitly rejected. Manufacturing-mode/time/recipe editing is not accepted by this block.",
+    "No recipes, production batches or purchase items are complete; existing 35 portions per component are retained quantities, not newly validated production yields.",
+    "Human kitchen review not performed. No approval, apply, offer rerun, paid provider, deployment, merge or server/AgenturOS change."
+  ]
+}

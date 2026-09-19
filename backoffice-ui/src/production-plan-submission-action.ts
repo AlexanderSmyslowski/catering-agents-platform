@@ -1,3 +1,4 @@
+import type { ProductionDraft } from "./api.js";
 import { getSpecLabel } from "./production-language.js";
 import {
   completeProductionStateAfterDraftPreparation,
@@ -35,12 +36,14 @@ export type ProductionPlanSubmissionActionInput =
   ProductionPlanSubmissionServices &
   ProductionPlanSubmissionCallbacks & {
     editingSpecId?: string;
+    canonicalDraftForPreparation?: () => ProductionDraft | undefined;
     activeProductionCaseId?: string;
     activeProductionCaseSpecId?: string;
   };
 
 export function buildProductionPlanSubmissionAction({
   createProductionCase,
+  canonicalDraftForPreparation,
   createProductionDraftFromAcceptedEventSpec,
   activeProductionCaseId,
   activeProductionCaseSpecId,
@@ -69,6 +72,7 @@ export function buildProductionPlanSubmissionAction({
     setProductionWorkspaceCleared(false);
     clearMessages();
     try {
+      canonicalDraftForPreparation?.();
       const specForPlanning = await prepareProductionSpecForPlanning(spec, editingSpecId, {
         persistCurrentSpecEdit,
         setNotice
@@ -80,6 +84,19 @@ export function buildProductionPlanSubmissionAction({
         clearSelectedPlanId,
         setNotice
       });
+      if (canonicalDraftForPreparation) {
+        const canonicalDraft = canonicalDraftForPreparation();
+        if (!canonicalDraft || canonicalDraft.status !== "pending_review" ||
+          canonicalDraft.draftArtifacts?.eventSpec?.specId !== specForPlanning.specId) {
+          throw new Error("Der Produktionsentwurf passt nicht mehr zu den geöffneten Antworten. Bitte erneut öffnen.");
+        }
+        const prepared = await prepareProductionDraft(canonicalDraft.draftId);
+        canonicalDraftForPreparation();
+        await completeProductionStateAfterDraftPreparation(prepared, {
+          refreshDashboard, completePlanProgress, setNotice, showProductionDraftReview
+        });
+        return;
+      }
       const sourceSpecId = String(specForPlanning.specId ?? "").trim();
       const canReuseActiveCase = Boolean(
         activeProductionCaseId &&
