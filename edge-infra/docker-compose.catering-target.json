@@ -1,0 +1,31 @@
+{
+  "name": "catering-edge",
+  "services": {
+    "edge": {
+      "image": "sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648",
+      "pull_policy": "never",
+      "restart": "no",
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "networks": [
+        "catering_ingress"
+      ],
+      "volumes": [
+        "/opt/catering-edge/Caddyfile:/etc/caddy/Caddyfile:ro",
+        "edge_caddy_data:/data",
+        "edge_caddy_config:/config"
+      ]
+    }
+  },
+  "networks": {
+    "catering_ingress": {
+      "external": true,
+      "name": "catering_ingress"
+    }
+  },
+  "volumes": {
+    "edge_caddy_data": {},
+    "edge_caddy_config": {}
+  }
+}

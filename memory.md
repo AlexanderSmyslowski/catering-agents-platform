@@ -1,7 +1,7 @@
 # memory.md
 
-version: 5.387
-date: 2026-09-13
+version: 5.391
+date: 2026-09-19
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
 
@@ -1967,3 +1967,119 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
 - Die letzte Abfrage verwendet nun ebenfalls `service_failure` und den vorhandenen Publisher: Fehlerzeitpunkt und bereits gespeicherte Uhrmarke bleiben monoton, ein erkannter Fehler wird vor dem Abbruch kritisch gespeichert. Publisherfehler bleiben fehlgeschlagene Laeufe ohne Signal oder Dauerhaftigkeitsbehauptung. Zwei bestehende Tests wurden erweitert; RED/GREEN mit echten lokalen Validatoren und Publisher prueft persistierten Zustand, verschwundenen/geaenderten Dienstfehler, gebundene neue Recovery und Schreibfehler vor/nach Zustandsersatz. Keine neue Testplattform oder Zustandsmaschine.
 - Produktivzaehlung3877/3911, Rest34: +7 gegenueber3870, +366 seit3511, +696 seit3181. Historische Basen bleiben erhalten. Bestehender Branch/PR und unveraenderte Workflows; genaue Folgecommit-/Review-/Pruef-/CI-Bindung im lokalen `observer-final-guard-report.md`. Uebergabe: `docs/agent-memory/2026-09-13-catering-observer-final-guard.md`.
 - Better-Stack-Kontozuordnung, numerische Anbieter-/Uhr-Fristannahmen und gemeinsamer Ressourcen-Spitzenbedarf bleiben eigene Betriebsinputs. Keine Monitormutation, Signale, Installation, Aktivierung oder weitere Backup-/Restorelaeufe; ZeiterfassungPR82 unveraendert. **HOLD BEFORE INSTALLATION, TIMER ACTIVATION AND PHASE 3.**
+
+
+### 5.388 - 2026-09-19 — Catering-Zielserver: freigegebener isolierter Aufbau
+
+- STR-001 und Variante B: genau ein zusätzlicher CPX32 HEL1, Ubuntu24.04,
+  IPv4, 35,99EUR netto monatlich. Ressource catering-prod-1/166533273 im
+  Hetzner-Projekt13344062 bereits angelegt; bei Wiederaufnahme niemals erneut
+  bestellen. Alter Host und öffentliche Routen bleiben unverändert.
+- Branch codex/catering-target-hel1-20260919 basiert auf8ccdfd4. Die tatsächlich
+  laufenden sieben Image-IDs sind in den beiden target-Compose-Dateien gebunden;
+  PG17.9 bleibt unverändert, kein App-main-Deployment oder Schemawechsel.
+- Betreiber hat vollständigen konsistenten logischen Dump ausdrücklich
+  zusätzlich freigegeben: vier vorhandene Tabellen statt bisher zwei.
+  Neuer Backup-Scope/Edge-Bindung; historische Zweitabellennachweise sind keine
+  Zielnachweise. Keine Installation auf dem Altbetrieb.
+- Aktueller nicht-sensitiver Übergabestand:
+  [Zielaufbau](docs/agent-memory/2026-09-19-catering-target-build.md).
+  Ausführungsgrenzen und Reihenfolge:
+  [Zielprobe](platform-infra/backup/TARGET-REHEARSAL.md).
+- Kein DNS-/Proxy-Cutover, keine produktiven Zielwriter, kein Zielscheduler,
+  keine Phase3. Abschluss ist erst mit echten Ziel-/Backup-/Restore-/Alarm-
+  Nachweisen möglich. Die bisherigen Erfolge nicht erneut als Zielproof ausgeben.
+
+
+### 5.389 - 2026-09-19 — Isolierte Zielprobe abgeschlossen; HOLD vor Umschaltung
+
+- Server166533273 bereits beschafft und isoliert geprüft, keine zweite Bestellung.
+  Sieben unveränderte Produktionsimages/PG17.9; exakte vier Tabellen samt Daten-
+  und Schemavergleich aus Snapshot12:57:44UTC übernommen. Appgesundheit/Leserouten
+  erfolgreich, kein interaktiver Login oder schreibender Geschäftsdurchlauf behauptet.
+- Installierter Backupcode f6c0aee4b54209b30d7cb1cf36a4ea53908f1acb,
+  Tree56854bb7adcd8e08212d1c013967f0dd4faaa5c4. DraftPR693, CI35442024153/V1
+  alle4Jobs erfolgreich:2696Tests/14Skips, realer synthetischer Docker/Restic/Restore.
+- Genau ein Zielbackup und ein Offhost-Restore erfolgreich, jeExit0;
+  Snapshot6a96e397f8c25c2e4c713d3294c9e3ca9b774243578c20be9d80c6fe8ebdeab7,
+  finale gebundene Evidence und Cleanup validiert. Quellkopiezeit und
+  Zielbackupzeit getrennt halten. Attestationsfrist09.10.2026 unverändert.
+- Manueller Testalarm empfangsbestätigt und geschlossen; keine automatischen
+  Signale oder Scheduler. Ressourcen während echter Proben beobachtet,
+  keine Langzeit-/Spitzenlastgarantie. Vollständige Grenzen und Belege in
+  [versionierter Zielübergabe](docs/agent-memory/2026-09-19-catering-target-build.md).
+- Alter Host bleibt Writer. Kein Cutover, keine öffentlichen Zielports,
+  keine produktiven Zielschreibvorgänge, kein Merge oder Timerstart.
+  Daten-/Backup-/Restoreprobe nicht wegen Sessionwechsel wiederholen.
+
+
+### 5.390 - 2026-09-19 — Geschützte Bedienprobe, Persistenz grün/Reloadlücke offen
+
+- CateringOS ist noch nicht geschäftlich produktiv eingesetzt; alter Host hält
+  den maßgeblichen bisherigen Datenbestand. Ziel166533273 unverändert, keine
+  neue Bestellung, kein Appbuild, kein Backup-/Restore-/Alarmwiederholungslauf.
+- Betreiber-SSH/Unixsocket/localhost-TLS und echte Basic-Auth-Anmeldung geprüft.
+  Begrenzter Zugang endet spätestens19.09.2026 18:03:55UTC; kein Zielscheduler.
+  Chrome vertraut nur dem vom Betreiber importierten konkreten Endzertifikat,
+  keine breite CA-Ausnahme. Zugang/Hashes/Rücknahme in bestehender
+  [Zielübergabe](docs/agent-memory/2026-09-19-catering-target-build.md).
+- Aktiv sind unveränderte Images mit getrennter neuer Test-DB
+  catering_operator_probe_20260919/eigener nicht privilegierter Rolle.
+  Genau eine synthetische manuelle Anlage gespeichert; drei zugeordnete Records
+  (Anfrage/Spezifikation/Audit) erneut lesbar. Nach Browser-Reload geht der
+  UI-Bezug verloren, Historie0. Begrenzter Produktbefund übergeben, PR682 nicht
+  bearbeitet; keine vollständige fachliche oder End-to-End-Abnahme behaupten.
+- Bisherige kopierte DB/Daten/Schema/ACL unverändert nachgeprüft. Test-DB niemals
+  in finale Übernahme aufnehmen; aktive geschützte Compose-Overrides beachten.
+- Neun Advisories konkreten vier Node-Images/Paketversionen/Pfaden zugeordnet;
+  keine behoben, statische Grenzen erhalten. Bestehende CI35445643679/V1 am
+  Head7bed609 vollständig success. Kein neuer Produktcode, Budget3878/3911.
+- HOLD vor öffentlicher Umschaltung und automatischen Jobs. Kein Altserverzugriff.
+
+
+### 5.391 - 2026-09-19 — Begrenztes Catering-Betriebsübergangspaket
+
+- STR-001 v1.1 und die bestehende Zielübergabe wurden in einen ausführbaren
+  Übergangsablauf verdichtet; keine Host-, Daten-, DNS-, Zugangs-, Timer- oder
+  Monitoringmutation. Ziel bleibt Server166533273 mit denselben Images/PG17.9.
+- Finale Appbindung ist `catering_agents` ohne das aktive Operator-Override.
+  Die synthetische Test-DB bleibt getrennt und wird weder übernommen noch
+  gesichert. Finaler Vier-Tabellen-Dump, eindeutiger Writer und genau ein neuer
+  timergestarteter finaler Backup-/Restore-Nachweis ist festgelegt; kein
+  zusätzlicher manueller Ersatzstart. Vor Aktivierung sind Timerstempel und
+  bei möglichem Nachhollauf mindestens9300s bis zum nächsten Kalendertermin zu
+  prüfen; ohne Nachhollauf gilt die Reserve zum darauffolgenden Termin.
+- Kleinster Betriebsdelta: Restartpolicies für die vorhandenen Container,
+  eigener Edge auf 80/443 mit gültigem TLS, enger Betreiber-Quellbindung und nur
+  Edge auf einer Public-Bridge,
+  danach Heartbeat493066/Team569103 mit Cron300 und Provider300/300 sowie der
+  unveränderte Drei-Stunden-Timer. Die drei Betriebsartefakte sind noch nicht
+  implementiert; Probe-Compose bleibt Rücknahmebasis.
+- Der Reloadverlust ist image-/produktgebunden, nicht als DB-/Umzugsverlust
+  belegt und keine Aussage über PR682. Er bleibt Produktabnahmehindernis vor
+  geschäftlicher Nutzung, blockiert aber nicht diese technische Vorbereitung.
+- Rückweg vor Zielwrites darf den unveränderten Altstand reaktivieren; danach
+  nur nach geprüftem vollständigem Rücktransfer. PR693 bleibt Draft. CI
+  35449296866/V1 war bei Dokumentation noch laufend; Review und finaler CI-Head
+  bleiben zu binden. **HOLD vor Merge, Umschaltung und automatischen Jobs.**
+
+
+### 5.392 - 2026-09-19 — Catering-Betriebsartefakte im PR-Branch
+
+- Drei additive Dateien konkretisieren den Zielbetrieb, ohne die vorhandenen
+  Probe-Manifeste umzudeuten: Plattform-Restartoverride, Edge-Override mit
+  eigener Public-Bridge und ausschließlich 80/443 sowie finale Caddy-Route.
+- Der Edge verlangt Hostname, einzelne Betreiber-IPv4-Adresse, Basic Auth und
+  Writer-Modus ohne offene Defaults. Jeder Modus außer exakt `enabled` lässt ausschließlich benannte
+  GET-/HEAD-Pfade zum festen Upstream `web:8081`; Schreibmethoden enden mit 423,
+  unbekannte Leserouten mit 404. Nur `enabled` öffnet den Apppfad; unbekannte
+  Modi bleiben gesperrt. Rücknahme setzt wieder `locked` und erstellt nur Edge neu.
+- Gezielter Vertrag und Hosted-CI-Proof prüfen zusammengeführte Compose-
+  Identitäten/Netze/Ports/Mounts/DB-Bindung und echte Caddy-Source-/Auth-/
+  Lese-/Schreibsemantik. Die CI verwendet einen unveränderlich gepinnten
+  offiziellen Caddy-v2.11.4-Testbestand; der lokale Ziel-Imagebestand bleibt
+  Bestandteil des späteren frischen Preflights.
+- Reihenfolge bleibt: Artefakte/Test/Review/CI, danach gesondert freigegebener
+  Merge, frischer Betriebs-Preflight und erst danach gesondert freigegebener
+  technischer Übergang. PR693 bleibt Draft; keine Installation, DNS-, Daten-,
+  Zugangs-, Timer-, Cron- oder Monitormutation.

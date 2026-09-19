@@ -7,7 +7,7 @@ umask 077
 # work so a slow preflight cannot be omitted from the four-hour budget.
 started_epoch="$(date -u +%s)"
 
-readonly BACKUP_SCOPE="postgres,sites,platform-caddy,shared-edge-caddy"
+readonly BACKUP_SCOPE="postgres-full,sites,platform-caddy,catering-edge-caddy"
 readonly RTO_SECONDS="14400"
 readonly RPO_SECONDS="21600"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -247,10 +247,10 @@ directory_roots = {
     "components/sites",
     "components/platform_caddy_data",
     "components/platform_caddy_config",
-    "components/shared_edge_caddy_data",
-    "components/shared_edge_caddy_config",
+    "components/catering_edge_caddy_data",
+    "components/catering_edge_caddy_config",
 }
-file_roots = {"manifest", "postgres_dump", "components/shared_edge_caddyfile"}
+file_roots = {"manifest", "postgres_dump", "components/catering_edge_caddyfile"}
 required = directory_roots | file_roots
 seen = set()
 members = 0
@@ -380,9 +380,9 @@ expected = {
     "components/sites": True,
     "components/platform_caddy_data": True,
     "components/platform_caddy_config": True,
-    "components/shared_edge_caddyfile": False,
-    "components/shared_edge_caddy_data": True,
-    "components/shared_edge_caddy_config": True,
+    "components/catering_edge_caddyfile": False,
+    "components/catering_edge_caddy_data": True,
+    "components/catering_edge_caddy_config": True,
 }
 def has_content(path):
     for entry in os.scandir(path):
@@ -424,9 +424,9 @@ spec = {
     "sites": ("components/sites", True),
     "platform_caddy_data": ("components/platform_caddy_data", True),
     "platform_caddy_config": ("components/platform_caddy_config", True),
-    "shared_edge_caddyfile": ("components/shared_edge_caddyfile", False),
-    "shared_edge_caddy_data": ("components/shared_edge_caddy_data", True),
-    "shared_edge_caddy_config": ("components/shared_edge_caddy_config", True),
+    "catering_edge_caddyfile": ("components/catering_edge_caddyfile", False),
+    "catering_edge_caddy_data": ("components/catering_edge_caddy_data", True),
+    "catering_edge_caddy_config": ("components/catering_edge_caddy_config", True),
 }
 def digest_file(path):
     value = hashlib.sha256()
@@ -465,8 +465,8 @@ for relative, directory in spec.values():
 print("\t".join(result))
 PY
 )" || fail_state COMPONENT_CHECKSUM_INVALID
-IFS=$'\t' read -r actual_sites_checksum actual_platform_caddy_data_checksum actual_platform_caddy_config_checksum actual_shared_edge_caddyfile_checksum actual_shared_edge_caddy_data_checksum actual_shared_edge_caddy_config_checksum <<< "$component_checksums"
-[[ "$actual_sites_checksum" == "$(record_field "$artifact_record" component_sites_checksum)" && "$actual_platform_caddy_data_checksum" == "$(record_field "$artifact_record" component_platform_caddy_data_checksum)" && "$actual_platform_caddy_config_checksum" == "$(record_field "$artifact_record" component_platform_caddy_config_checksum)" && "$actual_shared_edge_caddyfile_checksum" == "$(record_field "$artifact_record" component_shared_edge_caddyfile_checksum)" && "$actual_shared_edge_caddy_data_checksum" == "$(record_field "$artifact_record" component_shared_edge_caddy_data_checksum)" && "$actual_shared_edge_caddy_config_checksum" == "$(record_field "$artifact_record" component_shared_edge_caddy_config_checksum)" ]] || fail_state COMPONENT_CHECKSUM_MISMATCH
+IFS=$'\t' read -r actual_sites_checksum actual_platform_caddy_data_checksum actual_platform_caddy_config_checksum actual_catering_edge_caddyfile_checksum actual_catering_edge_caddy_data_checksum actual_catering_edge_caddy_config_checksum <<< "$component_checksums"
+[[ "$actual_sites_checksum" == "$(record_field "$artifact_record" component_sites_checksum)" && "$actual_platform_caddy_data_checksum" == "$(record_field "$artifact_record" component_platform_caddy_data_checksum)" && "$actual_platform_caddy_config_checksum" == "$(record_field "$artifact_record" component_platform_caddy_config_checksum)" && "$actual_catering_edge_caddyfile_checksum" == "$(record_field "$artifact_record" component_catering_edge_caddyfile_checksum)" && "$actual_catering_edge_caddy_data_checksum" == "$(record_field "$artifact_record" component_catering_edge_caddy_data_checksum)" && "$actual_catering_edge_caddy_config_checksum" == "$(record_field "$artifact_record" component_catering_edge_caddy_config_checksum)" ]] || fail_state COMPONENT_CHECKSUM_MISMATCH
 restic_cmd dump "$snapshot_id" "$bundle_path" | bounded_backup_stream - | sha256sum | awk '{print $1}' | { read -r caddy_remote_checksum; [[ "$caddy_remote_checksum" == "$bundle_checksum" ]] || fail_state BUNDLE_READBACK_MISMATCH; }
 
 probe_name="catering-restore-probe-$run_id"
@@ -491,6 +491,8 @@ createdb --username=postgres --owner=catering catering_agents
 pg_restore --exit-on-error --no-owner --no-privileges --username=catering --dbname=catering_agents /restore/postgres.dump
 test "$(psql --no-password --username=catering --dbname=catering_agents --tuples-only --command="SELECT count(*) FROM public.catering_business_records")" -ge 0
 test "$(psql --no-password --username=catering --dbname=catering_agents --tuples-only --command="SELECT count(*) FROM public.catering_source_documents")" -ge 0
+test "$(psql --no-password --username=catering --dbname=catering_agents --tuples-only --command="SELECT count(*) FROM public.catering_records")" -ge 0
+test "$(psql --no-password --username=catering --dbname=catering_agents --tuples-only --command="SELECT count(*) FROM public.catering_schema_migrations")" -ge 0
 ' 2>/dev/null; then
   fail_state RESTORE_PROBE_FAILED
 fi
@@ -543,9 +545,9 @@ restore_postgres_image=$CATERING_RESTORE_POSTGRES_IMAGE
 component_sites_checksum=$(record_field "$artifact_record" component_sites_checksum)
 component_platform_caddy_data_checksum=$(record_field "$artifact_record" component_platform_caddy_data_checksum)
 component_platform_caddy_config_checksum=$(record_field "$artifact_record" component_platform_caddy_config_checksum)
-component_shared_edge_caddyfile_checksum=$(record_field "$artifact_record" component_shared_edge_caddyfile_checksum)
-component_shared_edge_caddy_data_checksum=$(record_field "$artifact_record" component_shared_edge_caddy_data_checksum)
-component_shared_edge_caddy_config_checksum=$(record_field "$artifact_record" component_shared_edge_caddy_config_checksum)
+component_catering_edge_caddyfile_checksum=$(record_field "$artifact_record" component_catering_edge_caddyfile_checksum)
+component_catering_edge_caddy_data_checksum=$(record_field "$artifact_record" component_catering_edge_caddy_data_checksum)
+component_catering_edge_caddy_config_checksum=$(record_field "$artifact_record" component_catering_edge_caddy_config_checksum)
 verified_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 "
 write_restore_receipt() { atomic_write_record "$receipt_path" "$receipt_payload"; }
@@ -572,9 +574,9 @@ evidence_created_at="$(record_field "$candidate_record" created_at)" || fail_sta
 evidence_component_sites_checksum="$(record_field "$artifact_record" component_sites_checksum)" || fail_state ARTIFACT_BINDING
 evidence_component_platform_caddy_data_checksum="$(record_field "$artifact_record" component_platform_caddy_data_checksum)" || fail_state ARTIFACT_BINDING
 evidence_component_platform_caddy_config_checksum="$(record_field "$artifact_record" component_platform_caddy_config_checksum)" || fail_state ARTIFACT_BINDING
-evidence_component_shared_edge_caddyfile_checksum="$(record_field "$artifact_record" component_shared_edge_caddyfile_checksum)" || fail_state ARTIFACT_BINDING
-evidence_component_shared_edge_caddy_data_checksum="$(record_field "$artifact_record" component_shared_edge_caddy_data_checksum)" || fail_state ARTIFACT_BINDING
-evidence_component_shared_edge_caddy_config_checksum="$(record_field "$artifact_record" component_shared_edge_caddy_config_checksum)" || fail_state ARTIFACT_BINDING
+evidence_component_catering_edge_caddyfile_checksum="$(record_field "$artifact_record" component_catering_edge_caddyfile_checksum)" || fail_state ARTIFACT_BINDING
+evidence_component_catering_edge_caddy_data_checksum="$(record_field "$artifact_record" component_catering_edge_caddy_data_checksum)" || fail_state ARTIFACT_BINDING
+evidence_component_catering_edge_caddy_config_checksum="$(record_field "$artifact_record" component_catering_edge_caddy_config_checksum)" || fail_state ARTIFACT_BINDING
 refresh_repository_identity
 validate_restore_attestations || fail_state ATTESTATION_INVALID
 assert_no_stale_restore_state
@@ -609,9 +611,9 @@ restore_postgres_image=$CATERING_RESTORE_POSTGRES_IMAGE
 component_sites_checksum=$evidence_component_sites_checksum
 component_platform_caddy_data_checksum=$evidence_component_platform_caddy_data_checksum
 component_platform_caddy_config_checksum=$evidence_component_platform_caddy_config_checksum
-component_shared_edge_caddyfile_checksum=$evidence_component_shared_edge_caddyfile_checksum
-component_shared_edge_caddy_data_checksum=$evidence_component_shared_edge_caddy_data_checksum
-component_shared_edge_caddy_config_checksum=$evidence_component_shared_edge_caddy_config_checksum
+component_catering_edge_caddyfile_checksum=$evidence_component_catering_edge_caddyfile_checksum
+component_catering_edge_caddy_data_checksum=$evidence_component_catering_edge_caddy_data_checksum
+component_catering_edge_caddy_config_checksum=$evidence_component_catering_edge_caddy_config_checksum
 duration_seconds=$duration_seconds
 "
 promote_final_evidence() { atomic_write_record "$EVIDENCE_PATH" "$evidence_payload"; }
