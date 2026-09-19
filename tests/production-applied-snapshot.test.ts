@@ -1,20 +1,21 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
+import { newDb } from "pg-mem";
 import { buildProductionApp, InMemoryRecipeRepository, ProductionStore, RecipeDiscoveryService, productionDecisionRepositoryFor } from "@catering/production-service";
 import { buildPrintExportApp } from "@catering/print-export";
-import { createEventRequestFromText, normalizeEventRequestToSpec, type AcceptedEventSpec, type ProductionDraft, type ProductionHandoff, type Recipe } from "@catering/shared-core";
+import { AuditLogStore, createEventRequestFromText, normalizeEventRequestToSpec, type AcceptedEventSpec, type CollectionStorageOptions, type ProductionDraft, type ProductionHandoff, type Recipe } from "@catering/shared-core";
 import { InMemoryIntakeRecordsPort } from "./support/in-memory-intake-records-port.js";
 
 const context = { businessId: "local" };
 const secret = "synthetic-applied-snapshot-test";
 const headers = { "x-catering-actor-name": "Produktions-Mitarbeiter", "x-catering-trusted-secret": secret };
 
-async function approvedDescendant() {
+async function approvedDescendant(pgPool?: CollectionStorageOptions["pgPool"]) {
   const rootDir = mkdtempSync(path.join(tmpdir(), "catering-applied-snapshot-"));
-  const store = new ProductionStore({ rootDir });
-  const repository = new InMemoryRecipeRepository({ rootDir });
+  const store = new ProductionStore({ rootDir, pgPool });
+  const repository = new InMemoryRecipeRepository({ rootDir, pgPool });
   const intakeRecords = new InMemoryIntakeRecordsPort();
   const normalized = normalizeEventRequestToSpec(createEventRequestFromText({ requestId: "synthetic-applied-source", channel: "text", rawText: "Lunch am 2026-09-22 für 35 Personen." }));
   const spec: AcceptedEventSpec = {
@@ -38,7 +39,7 @@ async function approvedDescendant() {
   }));
   for (const recipe of recipes) await repository.save(context, recipe);
   await intakeRecords.insertSpec(context, spec);
-  const app = buildProductionApp({ dataRoot: rootDir, store, repository, intakeRecords,
+  const app = buildProductionApp({ dataRoot: rootDir, pgPool, store, repository, intakeRecords,
     discoveryService: new RecipeDiscoveryService(repository, { searchRecipes: async () => [] }),
     trustedActorSecret: secret, env: { CATERING_DEV_AUTH: "1" }, handoffReader: { get: async (actor, id) => actor.businessId === "local" && id === handoff.handoffId ? handoff : undefined } });
   const createdCase = await app.inject({ method: "POST", url: `/v1/production/cases/from-handoff/${handoff.handoffId}`, headers, payload: {} });
@@ -81,6 +82,107 @@ async function approvedDescendant() {
 }
 
 describe("applied canonical snapshots", () => {
+  it("validates all applied exports on the checked-out PostgreSQL transaction client", async () => {
+    const { Pool } = newDb().adapters.createPg();
+    const base = new Pool();
+    let enforceTransactionReads = false;
+    let inTransaction = false;
+    let exportCommits = 0;
+    const pgPool = {
+      async query(sql: string, params?: unknown[]) {
+        if (enforceTransactionReads && inTransaction) throw new Error("Export escaped its publication transaction");
+        return base.query(sql, params);
+      },
+      async connect() {
+        const client = await base.connect();
+        return {
+          async query(sql: string, params?: unknown[]) {
+            if (sql === "BEGIN") inTransaction = true;
+            // pg-mem does not implement PostgreSQL advisory locks. Keeping this
+            // API selects the real transaction/client branch, not its fallback.
+            if (sql.startsWith("SELECT pg_catalog.pg_advisory_xact_lock") || sql.startsWith("SELECT pg_catalog.set_config")) return { rows: [] };
+            const result = await client.query(sql, params);
+            if (sql === "COMMIT" || sql === "ROLLBACK") {
+              if (sql === "COMMIT" && enforceTransactionReads) exportCommits++;
+              inTransaction = false;
+            }
+            return result;
+          },
+          release: () => client.release()
+        };
+      }
+    };
+    const fixture = await approvedDescendant(pgPool);
+    const exports = buildPrintExportApp({ rootDir: fixture.rootDir, pgPool, trustedActorSecret: secret, env: { CATERING_DEV_AUTH: "1" } });
+    try {
+      expect((await fixture.apply()).statusCode).toBe(200);
+      const manifest = (await fixture.store.getApplyManifest(context, fixture.approvedId))!;
+      enforceTransactionReads = true;
+      for (const url of [`/v1/exports/production-plans/${manifest.planId}/html`, `/v1/exports/production-folders/${manifest.planId}/html`, `/v1/exports/purchase-lists/${manifest.purchaseListId}/csv`]) {
+        const response = await exports.inject({ method: "GET", url, headers });
+        expect(response.statusCode, response.body).toBe(200);
+        expect(response.body).toContain("soup ingredient");
+      }
+      expect(exportCommits).toBe(3);
+    } finally { await exports.close(); await fixture.app.close(); await base.end(); }
+  });
+
+  it("holds all exports behind an in-progress Apply until rollback or committed success", async () => {
+    const fixture = await approvedDescendant();
+    const exports = buildPrintExportApp({ rootDir: fixture.rootDir, trustedActorSecret: secret, env: { CATERING_DEV_AUTH: "1" } });
+    const approved = (await fixture.store.getApprovedProductionSpec(context, fixture.approvedId))!;
+    const urls = [`/v1/exports/production-plans/${approved.artifacts.productionPlan.planId}/html`, `/v1/exports/production-folders/${approved.artifacts.productionPlan.planId}/html`, `/v1/exports/purchase-lists/${approved.artifacts.purchaseList.purchaseListId}/csv`];
+    let auditEntered!: () => void;
+    const paused = new Promise<void>(resolve => { auditEntered = resolve; });
+    let releaseAudit!: () => void;
+    const release = new Promise<void>(resolve => { releaseAudit = resolve; });
+    const originalAudit = AuditLogStore.prototype.logForWithResult;
+    const auditSpy = vi.spyOn(AuditLogStore.prototype, "logForWithResult").mockImplementation(async function (this: AuditLogStore, actor, input) {
+      if (input.action === "production.approved_spec_applied") {
+        auditEntered();
+        await release;
+        throw new Error("Synthetic audit failure after File publication");
+      }
+      return originalAudit.call(this, actor, input);
+    });
+    const application = fixture.apply().then(response => response);
+    const requests: Array<Promise<{ statusCode: number; body: string }>> = [];
+    try {
+      await paused;
+      // Queue tickets prove the readers reached the publication lock. This
+      // uses an observable barrier instead of assuming a timed sleep is enough.
+      const lockRoot = path.join(fixture.rootDir, "businesses/local/production/case-events/.decision-target-locks");
+      const ticketCount = () => readdirSync(lockRoot).filter(name => name.endsWith(".queue"))
+        .reduce((total, name) => total + readdirSync(path.join(lockRoot, name)).filter(file => /^ticket-\d{12}\.json$/.test(file)).length, 0);
+      const before = ticketCount();
+      const settled: number[] = [];
+      for (const url of urls) requests.push(exports.inject({ method: "GET", url, headers }).then(response => { settled.push(response.statusCode); return response; }));
+      await vi.waitFor(() => expect(settled.length === 3 || ticketCount() >= before + 3).toBe(true));
+      expect(settled, "No production content may escape before Apply finishes").toEqual([]);
+      releaseAudit();
+      expect((await application).statusCode).toBe(500);
+      for (const response of await Promise.all(requests)) {
+        expect(response.statusCode, response.body).toBe(409);
+        expect(response.body).not.toContain("soup ingredient");
+      }
+      expect(await fixture.store.listPlans(context)).toEqual([]);
+      expect(await fixture.store.listApplyManifests(context)).toEqual([]);
+      auditSpy.mockRestore();
+      expect((await fixture.apply()).statusCode).toBe(200);
+      for (const url of urls) {
+        const response = await exports.inject({ method: "GET", url, headers });
+        expect(response.statusCode, response.body).toBe(200);
+        expect(response.body).toContain("soup ingredient");
+      }
+    } finally {
+      releaseAudit();
+      await Promise.allSettled([application, ...requests]);
+      auditSpy.mockRestore();
+      await exports.close();
+      await fixture.app.close();
+    }
+  });
+
   it("exports exact applied artifacts and frozen recipe content despite same-spec and live-store drift", async () => {
     const fixture = await approvedDescendant();
     const exports = buildPrintExportApp({ rootDir: fixture.rootDir, trustedActorSecret: secret, env: { CATERING_DEV_AUTH: "1" } });
@@ -167,7 +269,7 @@ describe("applied canonical snapshots", () => {
       await assertStatuses(404, { ...headers, "x-catering-business-id": "foreign" } as typeof headers);
       await fixture.store.deleteApplyManifestIfExact(context, manifest);
       await assertStatuses(409);
-      for (const changed of [{ ...manifest, planId: "foreign-plan" }, { ...manifest, recipeIds: [] }, { ...manifest, purchaseListId: "foreign-list" }, { ...manifest, eventSpecId: "foreign-spec" }]) {
+      for (const changed of [{ ...manifest, planId: "foreign-plan" }, { ...manifest, recipeIds: [] }, { ...manifest, purchaseListId: "foreign-list" }, { ...manifest, eventSpecId: "foreign-spec" }, { ...manifest, appliedAt: "invalid-timestamp" }]) {
         await fixture.store.insertApplyManifest(context, changed);
         await assertStatuses(409);
         await fixture.store.deleteApplyManifestIfExact(context, changed);
