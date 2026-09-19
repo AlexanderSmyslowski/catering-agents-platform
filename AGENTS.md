@@ -3,6 +3,16 @@
 ## Zweck
 Diese Datei richtet die Arbeit fuer ChatGPT, Hermes Agent, Codex 5.4 mini und aehnliche Agenten auf einen konsistenten Repo-Workflow aus.
 
+## Strategische Leitentscheidung STR-001 (2026-09-19)
+
+Vor Priorisierung, weiterer Servertrennung oder neuer Härtung die [kanonische STR-001-Fassung in AgenturOS](https://github.com/AlexanderSmyslowski/agenturos/blob/main/docs/strategy/STR-001-agenturos-delivery-and-infrastructure.md) zusätzlich lesen. Diese Referenz ergänzt die folgende Lesereihenfolge; sie ersetzt weder `memory.md` als Betriebs-/Projektstand noch eingefrorene Verträge und Freigabegrenzen.
+
+AgenturOS bleibt das Hauptprojekt. Catering bleibt ein eigenständiges angebundenes Fachsystem. Infrastrukturarbeit nur für konkrete Betriebsrisiken oder notwendige Produkt-/Integrationsblocker vorziehen; keine vollständige Migration aller Anwendungen als pauschale Voraussetzung erfinden. Erfüllte Arbeitspakete abschließen, nicht durch theoretische Zusatzhärtung unbegrenzt erweitern. Sicherheits-, Datenintegritäts- und verbindliche Abnahmeprüfungen bleiben erhalten.
+
+Ein zusätzlicher Catering-Server ist eine bevorzugt zu prüfende Richtung, keine bereits freigegebene Beschaffung oder Migration. Aus STR-001 keine Server-, Netzwerk-, Timer-, Daten- oder Deploymentaktion ableiten. Bei älteren Arbeitsbranches die aktuelle Strategiefassung separat lesend laden; allein dafür keinen Rebase, Merge oder Wechsel des geprüften Arbeitsstands ausführen.
+
+Die vollständige Entscheidung wird nur in AgenturOS gepflegt. Dieser Abschnitt ist ein Einstiegshinweis, keine zweite Beschlussfassung und kein neuer Live-Status. Fehlt der Zugriff, die Grenze benennen, keine aktuelle Kenntnis erfinden und unabhängige freigegebene Arbeit fortsetzen. Lokale Hub-/Agenteninstallationen werden durch diesen Repositoryhinweis nicht automatisch aktualisiert.
+
 ## Central Agent Data Hub
 Dieses Repo ist im Central Agent Data Hub unter dem Projekt-Slug `catering-agents-platform` angebunden.
 
@@ -64,8 +74,8 @@ Keine Passwoerter, Tokens, FTP-Daten, privaten Kundendaten, rohen Rechnungsdaten
 ## Aktueller Governance-Anker
 - `ApprovalRequestRecord` bleibt fuehrende Freigabewahrheit.
 - `SpecGovernanceStateRecord` bleibt Statusspur.
-- `SpecChangeSetRecord` bleibt Aenderungseinheit.
 - Der Governance-Pfad ist bis einschliesslich Stufe 6c umgesetzt und fachlich gruen / abnahmefaehig.
+- `SpecChangeSetRecord` bleibt Aenderungseinheit.
 - Die aktuelle Phase ist eine Konsolidierungsphase ohne neue Fachlogik.
 - M1 Owned Memory Foundation ist im aktuellen Ausbaustand vorerst konsolidiert und abgeschlossen.
 - Keine neue Produktflaeche, keine neue Roadmap und keine Scope-Ausweitung ohne ausdruecklichen Auftrag.
