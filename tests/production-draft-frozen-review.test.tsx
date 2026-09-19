@@ -33,7 +33,8 @@ function frozenDraft(): ProductionDraft {
       ], recipeSelections: [{ componentId: "coffee", recipeId: "recipe-frozen" }], timeline: [{ label: "Ausgabe", at: "09:00" }], unresolvedItems: [] },
       purchaseList: { purchaseListId: "purchase-frozen", eventSpecId: "spec-frozen", items: [
         ...ingredients.map(line => ({ ingredientId: line.ingredientId, displayName: line.name, normalizedQty: line.quantity.amount, normalizedUnit: line.quantity.unit, purchaseQty: line.quantity.amount, purchaseUnit: line.quantity.unit, sourceRecipes: ["recipe-frozen"], sourceRecipeMetadata: [source] })),
-        ...["Croissants", "Wasser"].map(displayName => ({ displayName, purchaseQty: 35, purchaseUnit: "servings", normalizedQty: 35, normalizedUnit: "servings", sourceRecipes: ["procurement:purchase"] }))
+        { displayName: "Croissants", purchaseQty: 35, purchaseUnit: "Stück", normalizedQty: 35, normalizedUnit: "Stück", sourceRecipes: ["procurement:purchase"] },
+        { displayName: "Wasser", purchaseQty: 17.5, purchaseUnit: "l", normalizedQty: 17.5, normalizedUnit: "l", sourceRecipes: ["procurement:purchase"] }
       ] },
       recipes: [{ recipeId: "recipe-frozen", name: source.recipeName, source: { reference: source.reference, approvalState: "review_required", originType: "approved_import" }, baseYield: { servings: 10, unit: "servings" }, ingredients: ingredients.map(line => ({ ...line, quantity: { ...line.quantity, amount: line.quantity.amount / 3.5 } })) }]
     }
@@ -71,8 +72,10 @@ describe("frozen production review content", () => {
     await mount(frozenDraft());
     const rows = card("Einkauf prüfen").querySelectorAll("tbody tr");
     expect(rows).toHaveLength(5);
-    for (const [index, name, amount] of [[0, "Kaffeebohnen", "350 g"], [1, "Tee", "70 g"], [2, "Haferdrink", "3.5 l"], [3, "Croissants", "35 servings"], [4, "Wasser", "35 servings"]] as const) {
-      expect(rows[index]!.textContent).toContain(name); expect(rows[index]!.textContent).toContain(amount);
+    for (const [index, name, amount] of [[0, "Kaffeebohnen", "350 g"], [1, "Tee", "70 g"], [2, "Haferdrink", "3.5 l"], [3, "Croissants", "35 Stück"], [4, "Wasser", "17.5 l"]] as const) {
+      expect(rows[index]!.querySelectorAll("td")[0]!.textContent).toBe(name);
+      expect(rows[index]!.querySelectorAll("td")[1]!.textContent).toBe(amount);
+      expect(rows[index]!.querySelectorAll("td")[2]!.textContent).toBe(amount);
     }
     expect(rows[0]!.textContent).toContain("synthetic:coffee-fixture");
     expect(rows[3]!.textContent).toContain("procurement:purchase");
