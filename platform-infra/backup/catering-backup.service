@@ -1,0 +1,14 @@
+[Unit]
+Description=Catering production backup candidate
+OnSuccess=catering-restore-probe.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/catering-backup.sh
+EnvironmentFile=/etc/catering-backup/catering-backup.env
+TimeoutStartSec=1h
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/catering-backup

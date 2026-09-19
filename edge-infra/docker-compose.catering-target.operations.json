@@ -1,0 +1,40 @@
+{
+  "services": {
+    "edge": {
+      "restart": "unless-stopped",
+      "ports": [
+        {
+          "target": 80,
+          "published": "80",
+          "protocol": "tcp",
+          "mode": "host"
+        },
+        {
+          "target": 443,
+          "published": "443",
+          "protocol": "tcp",
+          "mode": "host"
+        }
+      ],
+      "environment": {
+        "CADDY_EMAIL": "${CADDY_EMAIL:?required}",
+        "CATERING_PUBLIC_HOST": "${CATERING_PUBLIC_HOST:?required}",
+        "CATERING_OPERATOR_SOURCE_IPV4": "${CATERING_OPERATOR_SOURCE_IPV4:?required}",
+        "CATERING_BASIC_AUTH_USER": "${CATERING_BASIC_AUTH_USER:?required}",
+        "CATERING_BASIC_AUTH_PASSWORD_HASH": "${CATERING_BASIC_AUTH_PASSWORD_HASH:?required}",
+        "CATERING_WRITER_MODE": "${CATERING_WRITER_MODE:?required}"
+      },
+      "networks": [
+        "catering_ingress",
+        "catering_public"
+      ]
+    }
+  },
+  "networks": {
+    "catering_public": {
+      "name": "catering_public",
+      "driver": "bridge",
+      "enable_ipv6": false
+    }
+  }
+}

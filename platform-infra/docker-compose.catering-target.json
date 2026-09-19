@@ -1,0 +1,199 @@
+{
+  "name": "platform-infra",
+  "services": {
+    "postgres": {
+      "image": "sha256:778d0b486d6daa02b77434d0358ec57a1b21fd8b6d22ac2eef56a33e816928f6",
+      "pull_policy": "never",
+      "restart": "no",
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "networks": [
+        "catering_private"
+      ],
+      "environment": {
+        "POSTGRES_DB": "catering_agents",
+        "POSTGRES_USER": "catering",
+        "POSTGRES_PASSWORD": "${POSTGRES_PASSWORD:?required}"
+      },
+      "volumes": [
+        "postgres_data:/var/lib/postgresql/data"
+      ],
+      "healthcheck": {
+        "test": [
+          "CMD-SHELL",
+          "pg_isready -U catering -d catering_agents"
+        ],
+        "interval": "10s",
+        "timeout": "5s",
+        "retries": 10
+      }
+    },
+    "intake": {
+      "image": "sha256:9c36d4e76aa99c12ae10b85d8dc22b705c023423b7606d0155f68935552758f5",
+      "pull_policy": "never",
+      "restart": "no",
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "networks": [
+        "catering_private"
+      ],
+      "environment": {
+        "CATERING_DATABASE_URL": "postgresql://catering:${POSTGRES_PASSWORD:?required}@postgres:5432/catering_agents",
+        "CATERING_DEFAULT_BUSINESS_ID": "${CATERING_DEFAULT_BUSINESS_ID:?required}",
+        "CATERING_TRUSTED_ACTOR_SECRET": "${CATERING_TRUSTED_ACTOR_SECRET:?required}",
+        "INTAKE_PORT": "3101",
+        "INTAKE_HOST": "0.0.0.0"
+      },
+      "command": [
+        "npm",
+        "run",
+        "dev:intake"
+      ],
+      "depends_on": {
+        "postgres": {
+          "condition": "service_healthy"
+        }
+      }
+    },
+    "offer": {
+      "image": "sha256:5aacae6ef7f96faf1e13f10722548995a4c9aff216c875dd69d0d7f250ad151c",
+      "pull_policy": "never",
+      "restart": "no",
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "networks": [
+        "catering_private"
+      ],
+      "environment": {
+        "CATERING_DATABASE_URL": "postgresql://catering:${POSTGRES_PASSWORD:?required}@postgres:5432/catering_agents",
+        "CATERING_DEFAULT_BUSINESS_ID": "${CATERING_DEFAULT_BUSINESS_ID:?required}",
+        "CATERING_TRUSTED_ACTOR_SECRET": "${CATERING_TRUSTED_ACTOR_SECRET:?required}",
+        "OFFER_PORT": "3102",
+        "OFFER_HOST": "0.0.0.0",
+        "CATERING_INTAKE_SERVICE_URL": "http://intake:3101"
+      },
+      "command": [
+        "npm",
+        "run",
+        "dev:offer"
+      ],
+      "depends_on": {
+        "postgres": {
+          "condition": "service_healthy"
+        }
+      }
+    },
+    "production": {
+      "image": "sha256:5933baa4308ea8f81759834f003da8e3c22c55662b9414be3c6e86cd8acf6898",
+      "pull_policy": "never",
+      "restart": "no",
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "networks": [
+        "catering_private"
+      ],
+      "environment": {
+        "CATERING_DATABASE_URL": "postgresql://catering:${POSTGRES_PASSWORD:?required}@postgres:5432/catering_agents",
+        "CATERING_DEFAULT_BUSINESS_ID": "${CATERING_DEFAULT_BUSINESS_ID:?required}",
+        "CATERING_TRUSTED_ACTOR_SECRET": "${CATERING_TRUSTED_ACTOR_SECRET:?required}",
+        "PRODUCTION_PORT": "3103",
+        "PRODUCTION_HOST": "0.0.0.0",
+        "CATERING_INTAKE_SERVICE_URL": "http://intake:3101",
+        "CATERING_OFFER_SERVICE_URL": "http://offer:3102",
+        "CATERING_ENABLE_WEB_RECIPE_SEARCH": "0"
+      },
+      "command": [
+        "npm",
+        "run",
+        "dev:production"
+      ],
+      "depends_on": {
+        "postgres": {
+          "condition": "service_healthy"
+        }
+      }
+    },
+    "exports": {
+      "image": "sha256:1028446050cc7d31625981700edf6d2695b607ac40bb006eeb3506ca3935cf10",
+      "pull_policy": "never",
+      "restart": "no",
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "networks": [
+        "catering_private"
+      ],
+      "environment": {
+        "CATERING_DATABASE_URL": "postgresql://catering:${POSTGRES_PASSWORD:?required}@postgres:5432/catering_agents",
+        "CATERING_DEFAULT_BUSINESS_ID": "${CATERING_DEFAULT_BUSINESS_ID:?required}",
+        "CATERING_TRUSTED_ACTOR_SECRET": "${CATERING_TRUSTED_ACTOR_SECRET:?required}",
+        "PRINT_EXPORT_PORT": "3104",
+        "PRINT_EXPORT_HOST": "0.0.0.0"
+      },
+      "command": [
+        "npm",
+        "run",
+        "dev:exports"
+      ],
+      "depends_on": {
+        "postgres": {
+          "condition": "service_healthy"
+        }
+      }
+    },
+    "web": {
+      "image": "sha256:4700fb3c4e05bebdc4a78d42acb032f6957d58d121d54297d628ad541fe7e801",
+      "pull_policy": "never",
+      "restart": "no",
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "networks": [
+        "catering_ingress",
+        "catering_private"
+      ],
+      "environment": {
+        "CATERING_SITE_ADDRESS": ":80",
+        "CATERING_DEFAULT_BUSINESS_ID": "${CATERING_DEFAULT_BUSINESS_ID:?required}",
+        "CADDY_EMAIL": "${CADDY_EMAIL:?required}",
+        "CATERING_BASIC_AUTH_USER": "${CATERING_BASIC_AUTH_USER:?required}",
+        "CATERING_BASIC_AUTH_PASSWORD_HASH": "${CATERING_BASIC_AUTH_PASSWORD_HASH:?required}",
+        "CATERING_TRUSTED_ACTOR_SECRET": "${CATERING_TRUSTED_ACTOR_SECRET:?required}"
+      },
+      "volumes": [
+        "caddy_data:/data",
+        "caddy_config:/config",
+        "/opt/catering-agents-platform/platform-infra/sites:/etc/caddy/sites:ro"
+      ]
+    }
+  },
+  "networks": {
+    "catering_private": {
+      "name": "catering_private",
+      "driver": "bridge",
+      "internal": true,
+      "enable_ipv6": false,
+      "driver_opts": {
+        "com.docker.network.bridge.gateway_mode_ipv4": "isolated"
+      }
+    },
+    "catering_ingress": {
+      "name": "catering_ingress",
+      "driver": "bridge",
+      "internal": true,
+      "enable_ipv6": false,
+      "driver_opts": {
+        "com.docker.network.bridge.gateway_mode_ipv4": "isolated"
+      }
+    }
+  },
+  "volumes": {
+    "postgres_data": {},
+    "caddy_data": {},
+    "caddy_config": {}
+  }
+}

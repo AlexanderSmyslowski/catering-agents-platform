@@ -1,0 +1,5 @@
+# Install only after the bound heartbeat, alarm route and resource gates pass.
+# timeout covers the whole invocation, including blocked DNS and validator children.
+SHELL=/bin/bash
+PATH=/usr/bin:/bin
+*/5 * * * * root /usr/bin/timeout --kill-after=5s 115s /usr/bin/python3 -I /usr/local/libexec/catering-backup-observer.py; code=$?; if [ "$code" -ne 0 ]; then /usr/bin/logger -t catering-backup-observer "OBSERVER_EXIT=$code"; fi

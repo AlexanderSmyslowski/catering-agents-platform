@@ -1,0 +1,22 @@
+{
+  "services": {
+    "postgres": {
+      "restart": "unless-stopped"
+    },
+    "intake": {
+      "restart": "unless-stopped"
+    },
+    "offer": {
+      "restart": "unless-stopped"
+    },
+    "production": {
+      "restart": "unless-stopped"
+    },
+    "exports": {
+      "restart": "unless-stopped"
+    },
+    "web": {
+      "restart": "unless-stopped"
+    }
+  }
+}

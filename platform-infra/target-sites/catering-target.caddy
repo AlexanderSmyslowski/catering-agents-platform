@@ -1,0 +1,5 @@
+# Actual private TLS route; no foreign site or production certificate is copied.
+https://catering-web.invalid:8443 {
+	tls internal
+	import catering_app_routes
+}
