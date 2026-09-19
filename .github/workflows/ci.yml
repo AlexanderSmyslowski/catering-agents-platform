@@ -231,5 +231,8 @@ jobs:
         run: |
           python3 -B tests/catering_backup_tool_integration_test.py
           python3 -B tests/catering_target_isolation_test.py
+          python3 -B tests/catering_target_operations_test.py
       - name: Run synthetic component proof and targeted cleanup
         run: python3 -B tests/integration/catering_backup_tools.py
+      - name: Run target operations Compose and Caddy proof
+        run: python3 -B tests/integration/catering_target_operations.py

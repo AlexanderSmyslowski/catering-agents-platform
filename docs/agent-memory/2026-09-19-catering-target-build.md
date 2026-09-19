@@ -373,14 +373,27 @@ Reload-/Wiederaufnahmepfad eigenständig abnehmen.
 | Sicherung | Der vollständige Vier-Tabellen-Scope sichert ausschließlich `catering_agents`. | Bestehende Backup-/Restore-Units bleiben bytegleich. Nach dem finalen Datenabgleich ist genau ein neuer vollständiger Backup-→Restore-Nachweis nötig, weil der historische Snapshot den finalen Datenstand und die Betriebsroute nicht belegt. |
 | Überwachung | Der lokale Beobachter bewertet die finale Evidence und Heartbeat 493066 ausschließlich als `backup_restore_health`. | Policy auf den Zielhost und den bestätigten Monitor binden; Cron exakt 300 Sekunden, Provider `period=300`, `grace=300`. Keine alte Shared-Host-Evidence und kein bloßes Lebenszeichen darf den Monitor grün halten. |
 
-Die noch nicht vorhandenen Betriebs-Overrides sind bewusst kleine
-Installationsartefakte, keine neue Orchestrierung: ein Plattform-Override für
-die Restartpolicies, ein Edge-Override für Restartpolicy/Public-Bridge/Ports
-und eine eigene Caddy-Datei für den bestätigten Host. Vor Installation müssen
-sie aus dem später akzeptierten Mergecommit gerendert und in einem synthetischen
-Compose-Gate auf exakte Images, Netzmitgliedschaften, Hostports und Mounts
-geprüft werden. PR #693 enthält diese drei Betriebsartefakte derzeit noch nicht;
-seine vorhandenen Target-Dateien bleiben die isolierte Probe- und Rücknahmebasis.
+Die drei additiven Betriebsartefakte sind jetzt getrennt von der unveränderten
+Probe- und Rücknahmebasis vorhanden:
+
+- `platform-infra/docker-compose.catering-target.operations.json` setzt nur die
+  sechs vorhandenen Restartpolicies auf `unless-stopped`.
+- `edge-infra/docker-compose.catering-target.operations.json` setzt die
+  Edge-Restartpolicy, ergänzt nur `catering_public` und veröffentlicht nur
+  TCP 80/443. Hostname, eine einzelne Betreiber-IPv4-Adresse, Basic-Auth-Daten
+  und Writer-Modus sind ohne Default erforderlich.
+- `edge-infra/Caddyfile.catering-target.operations` bindet genau den gesetzten
+  Hostnamen, `web:8081`, Betreiber-IP `/32` und Basic Auth. Modus `locked`
+  lässt nur die dokumentierten UI-/Health-/Fachlesepfade mit `GET`/`HEAD` zum
+  Upstream; andere Leserouten enden mit 404 und alle Schreibmethoden mit 423
+  am Edge. Nur der exakte Modus `enabled` öffnet den vollständigen Apppfad.
+  Ein fehlender oder unbekannter Modus macht die Caddy-Konfiguration ungültig.
+
+Vor Installation werden beide Base-/Override-Paare aus dem später akzeptierten
+Mergecommit gerendert. Der synthetische CI-Vertrag prüft exakte Images, Dienste,
+Netze, Ports, Mounts und DB-Bindung sowie Caddy-Konfiguration, Source-/Auth-
+Schranke, Leseallowlist, Writerfreigabe und erneute Sperre. Die vorhandenen
+Target-Dateien bleiben unverändert die isolierte Probe- und Rücknahmebasis.
 
 ### Ausführbare Übergangsreihenfolge
 
@@ -414,7 +427,8 @@ seine vorhandenen Target-Dateien bleiben die isolierte Probe- und Rücknahmebasi
    getrennt und unreferenziert; sie wird in diesem Übergang nicht gelöscht.
 4. **Zielkonfiguration zunächst ohne öffentlichen Verkehr.** App/Web/Edge stoppen,
    Operator-Override und temporären Relay aus der aktiven Kette nehmen. Den
-   Plattform-Restartoverride installieren und Plattform/DB mit den identischen
+   Plattform-Restartoverride aus dem akzeptierten Mergecommit installieren und
+   Plattform/DB mit den identischen
    Images starten. Den bestehenden Ziel-Edge weiterhin ausschließlich in seiner
    privaten, portlosen Basiskonfiguration starten; sein Caddy-Datenstand gehört
    zum vertraglichen Backupscope. Intern Health, exakte Image-/DB-/Business-
@@ -422,7 +436,9 @@ seine vorhandenen Target-Dateien bleiben die isolierte Probe- und Rücknahmebasi
    Mitgliedschaften prüfen. Public-Bridge, öffentlicher Edge-Override und DNS
    bleiben noch aus.
 5. **Finalen Edge und TLS bei weiter gesperrten Zielwrites herstellen.** Den
-   geprüften öffentlichen Edge-Override und die finale Caddy-Datei installieren,
+   geprüften öffentlichen Edge-Override und die finale Caddy-Datei aus demselben
+   akzeptierten Mergecommit installieren, den geschützten Writerwert explizit
+   auf `locked` setzen,
    ausschließlich Ziel-80/443 öffnen und den bestätigten Catering-DNS-Eintrag
    auf `2.29.43.174` umschalten. Der finale Caddy-Vertrag lässt App-/API-Zugriffe
    nur aus der frisch bestätigten engen Betreiber-Quelladresse und nach Basic
@@ -468,7 +484,9 @@ seine vorhandenen Target-Dateien bleiben die isolierte Probe- und Rücknahmebasi
    eine neue reale gesunde Beobachterauswertung als Recovery verwenden. Keine
    Backup-Evidence verändern.
 8. **Zielschreibhoheit freigeben und Nachzustand belegen.** Erst nach den
-   Schritten 1–7 den neuen Host als alleinigen Writer freigeben; der alte
+   Schritten 1–7 den geschützten Writerwert explizit von `locked` auf `enabled`
+   setzen und ausschließlich den Edge mit beiden finalen Compose-Dateien neu
+   erstellen. Danach den neuen Host als alleinigen Writer freigeben; der alte
    Catering-Schreibweg bleibt gesperrt. Authentisierte Anmeldung und vorhandene
    Leserouten nachprüfen, aber keinen synthetischen Ersatzdatensatz erzeugen.
    Single-writer-Nachweis, TLS/Auth/Routen,
@@ -482,7 +500,8 @@ seine vorhandenen Target-Dateien bleiben die isolierte Probe- und Rücknahmebasi
 
 ### Rückweg vor und nach neuen Zielschreibvorgängen
 
-Beide Rückwege beginnen gleich: Zielwriter sperren; künftige Timer- und
+Beide Rückwege beginnen gleich: Writerwert auf `locked` zurücksetzen und nur den
+Edge mit der gebundenen Konfigurationskette neu erstellen; Zielwriter sperren; künftige Timer- und
 Cronstarts verhindern; Heartbeat 493066 pausieren, damit der nicht autoritative
 Zielstand nicht weiter gesund gemeldet wird; aktive/queued Backup-, OnSuccess-
 und Restore-Invocations eindeutig zuordnen. Eine gesunde fast beendete Kette
@@ -521,25 +540,30 @@ vor Basic Auth ausgeliefertem Bundle kein neu belegter Advisorypfad.
 
 ### Benötigte nächste Betreiberfreigabe und echte Restblocker
 
-Die nächste Freigabe kann als ein zusammenhängendes Wartungsfenster erteilt
-werden. Sie muss exakt umfassen: (a) regulären Merge von PR #693 nach finaler
-CI/Reviewbindung; (b) Implementierung, Review und Installation der drei oben
-benannten Betriebsartefakte; (c) Stop/Freigabe der alten Catering-Writer;
-(d) finalen Vier-Tabellen-Dump, geschützten DB-Tausch und App-Rückbindung;
-(e) genau einen timergestarteten finalen Originalservice-Backup-/Restorezyklus;
-(f) Ziel-Firewall/DNS/TLS-
-Umschaltung; (g) Aktivierung von Heartbeat 493066, Cron und Drei-Stunden-Timer
+Es folgen zwei getrennte Betreiberentscheidungen. Zuerst darf nach gebundenem
+Review und grüner CI ausschließlich der reguläre Merge freigegeben werden.
+Danach folgt ein frischer Betriebs-Preflight; erst dessen Ergebnis trägt die
+gesonderte Freigabe für das technische Wartungsfenster. Diese spätere
+Betriebsfreigabe muss exakt umfassen:
+(a) Installation der drei aus dem Mergecommit gebundenen Betriebsartefakte;
+(b) Stop/Freigabe der alten Catering-Writer;
+(c) finalen Vier-Tabellen-Dump, geschützten DB-Tausch und App-Rückbindung;
+(d) genau einen timergestarteten finalen Originalservice-Backup-/Restorezyklus;
+(e) Ziel-Firewall/DNS/TLS-
+Umschaltung; (f) Aktivierung von Heartbeat 493066, Cron und Drei-Stunden-Timer
 samt vollständig gebundenem Ausbleibe-/Recoverytest; sowie
-(h) die beiden beschriebenen Rückwege. Fremde Anwendungen, Alt-Datenlöschung,
+(g) die beiden beschriebenen Rückwege. Fremde Anwendungen, Alt-Datenlöschung,
 Produktcode, PR #682, Schemaänderungen und zusätzliche Plattformen bleiben aus.
 
 Vor dieser Freigabe sind nur folgende echte Punkte offen:
 
-1. CI35449296866/V1 und der unabhängige Review dieses Übergangsdeltas müssen
-   terminal ausgewertet und an den finalen PR-Head gebunden werden.
-2. Die drei kleinen Betriebsartefakte sind noch nicht implementiert oder durch
-   Compose-Render/Review abgenommen; die Probe-Compose-Dateien dürfen dafür
-   nicht still umgedeutet werden.
+1. Der abschließende unabhängige Review und die automatisch ausgelöste CI müssen
+   an den finalen Implementierungs-Head gebunden und terminal grün sein; erst
+   danach kann ein gesondert freigegebener Merge erfolgen.
+2. Beim späteren Preflight muss der exakte Caddy-Imagebestand des Zielhosts die
+   finale Datei zusätzlich validieren. Die Hosted-CI prüft denselben Caddy-
+   Versionsvertrag synthetisch, kann aber den nur lokal vorhandenen Imagebestand
+   nicht als dessen Byteidentität ausgeben.
 3. Effektiver öffentlicher Catering-Hostname, DNS-Kontrolle/TTL, Firewallregel,
    ACME-Erreichbarkeit und die enge Betreiber-Quelladresse sind unmittelbar vor
    dem Wartungsfenster frisch zu bestätigen. Der Repositorydefault oder Basic

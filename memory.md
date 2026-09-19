@@ -2062,3 +2062,24 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
   nur nach geprüftem vollständigem Rücktransfer. PR693 bleibt Draft. CI
   35449296866/V1 war bei Dokumentation noch laufend; Review und finaler CI-Head
   bleiben zu binden. **HOLD vor Merge, Umschaltung und automatischen Jobs.**
+
+
+### 5.392 - 2026-09-19 — Catering-Betriebsartefakte im PR-Branch
+
+- Drei additive Dateien konkretisieren den Zielbetrieb, ohne die vorhandenen
+  Probe-Manifeste umzudeuten: Plattform-Restartoverride, Edge-Override mit
+  eigener Public-Bridge und ausschließlich 80/443 sowie finale Caddy-Route.
+- Der Edge verlangt Hostname, einzelne Betreiber-IPv4-Adresse, Basic Auth und
+  Writer-Modus ohne offene Defaults. `locked` lässt ausschließlich benannte
+  GET-/HEAD-Pfade zum festen Upstream `web:8081`; Schreibmethoden enden mit 423,
+  unbekannte Leserouten mit 404. Nur `enabled` öffnet den Apppfad; unbekannte
+  Modi sind ungültig. Rücknahme setzt wieder `locked` und erstellt nur Edge neu.
+- Gezielter Vertrag und Hosted-CI-Proof prüfen zusammengeführte Compose-
+  Identitäten/Netze/Ports/Mounts/DB-Bindung und echte Caddy-Source-/Auth-/
+  Lese-/Schreibsemantik. Die CI verwendet einen unveränderlich gepinnten
+  offiziellen Caddy-v2.11.4-Testbestand; der lokale Ziel-Imagebestand bleibt
+  Bestandteil des späteren frischen Preflights.
+- Reihenfolge bleibt: Artefakte/Test/Review/CI, danach gesondert freigegebener
+  Merge, frischer Betriebs-Preflight und erst danach gesondert freigegebener
+  technischer Übergang. PR693 bleibt Draft; keine Installation, DNS-, Daten-,
+  Zugangs-, Timer-, Cron- oder Monitormutation.
