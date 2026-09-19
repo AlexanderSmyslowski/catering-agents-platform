@@ -146,6 +146,7 @@ export interface ProductionDraftReviewCard {
   summary: string;
   decision: ProductionDraftReviewDecision;
   targetId?: string;
+  targetPath?: string;
   riskLevel?: "low" | "medium" | "high" | "blocking";
   requiredApproval?: boolean;
   operatorComment?: string;
