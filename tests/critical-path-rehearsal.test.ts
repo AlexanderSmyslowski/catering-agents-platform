@@ -297,7 +297,14 @@ describe("critical path rehearsal", () => {
         { businessId: "local" },
         negativePrepare.draftId!
       );
-      expect(negativeDraft?.status).toBe("pending_review");
+      expect(negativeDraft?.status).toBe("superseded");
+      const negativeLineage = await productionStore.listProductionDrafts({ businessId: "local" }, negativePrepare.caseId!);
+      const negativeCurrentDraft = negativeLineage
+        .filter((draft) => draft.status === "pending_review")
+        .sort((left, right) => right.revision - left.revision)[0];
+      expect(negativeCurrentDraft?.supersedesDraftId).toBe(negativeDraft?.draftId);
+      expect(negativeCurrentDraft?.draftArtifacts.productionPlan).toBeDefined();
+      expect(negativeCurrentDraft?.draftArtifacts.productionPlan?.blockingIssues).toContain("production readiness is insufficient");
       expect(negativeDraft?.draftArtifacts.productionPlan).toBeUndefined();
       expect(negativeDraft?.draftArtifacts.purchaseList).toBeUndefined();
       expect(negativeDraft?.draftArtifacts.recipes).toBeUndefined();
