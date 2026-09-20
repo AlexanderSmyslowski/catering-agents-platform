@@ -97,7 +97,27 @@ export async function runApprovedProductionWorkflow(
     });
     if (imported.statusCode !== 201) return imported;
 
-    const sourceDraft = imported.json().draft as ProductionDraft;
+    let sourceDraft = imported.json().draft as ProductionDraft;
+    if ((input.planningEvidence ?? []).length > 0 && input.handoffId) {
+      const revised = await app.inject({
+        method: "POST",
+        url: `/v1/production/drafts/${sourceDraft.draftId}/revise`,
+        headers,
+        payload: {
+          caseId,
+          expectedRevision: sourceDraft.revision,
+          componentUpdates: (input.planningEvidence ?? []).map((evidence) => ({
+            componentId: evidence.componentId,
+            productionMode: "scratch",
+            recipeOverrideId: evidence.recipeId,
+            notes: "Explizite Produktionsentscheidung der synthetischen Workflow-Fixture."
+          }))
+        }
+      });
+      if (revised.statusCode !== 201) return revised;
+      sourceDraft = revised.json().draft as ProductionDraft;
+    }
+
     const withWorkflowContext = (response: InjectResponse): InjectResponse => ({
       ...response,
       caseId,
