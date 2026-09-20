@@ -290,7 +290,7 @@ describe("critical path rehearsal", () => {
         payload: { eventSpec: negativeScenario.handoff.eventSpecSnapshot }
       });
       expect(negativePrepare.statusCode).toBe(409);
-      expect(negativePrepare.body).toContain("Planungs-Evidenz");
+      expect(negativePrepare.body).toContain("unzureichender Produktionsbereitschaft");
       expect(negativePrepare.caseId).toBeTruthy();
       expect(negativePrepare.draftId).toBeTruthy();
       const negativeDraft = await productionStore.getProductionDraft(
