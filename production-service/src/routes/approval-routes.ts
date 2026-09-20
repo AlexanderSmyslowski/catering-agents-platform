@@ -208,12 +208,16 @@ function acceptedEventSpecConsistencyError(
     return `AcceptedEventSpec ${candidate.specId} ist archiviert und nicht mehr für Apply freigegeben.`;
   }
   if (sourceAcceptedEventSpecSnapshot) {
-    // The immutable Offer/Handoff chain already owns its reviewed commercial
-    // snapshot. This additional snapshot anchors the live Intake record to the
-    // exact pre-offer state, including fields that offer pricing may replace.
-    return areJsonValuesEqual(canonical, sourceAcceptedEventSpecSnapshot)
+    // The immutable Offer/Handoff chain owns the reviewed commercial snapshot,
+    // while later production revisions may add only the explicitly authorized
+    // operational fields.  Intake itself must still equal the pre-offer source.
+    if (!areJsonValuesEqual(canonical, sourceAcceptedEventSpecSnapshot)) {
+      return `AcceptedEventSpec ${candidate.specId} weicht vom unveränderlichen Intake-Ursprung ab.`;
+    }
+    return areJsonValuesEqual(approvedCandidate, candidate) ||
+      isAuthorizedProductionAmendment(candidate, approvedCandidate)
       ? undefined
-      : `AcceptedEventSpec ${candidate.specId} weicht vom unveränderlichen Intake-Ursprung ab.`;
+      : `AcceptedEventSpec ${candidate.specId} enthält keine autorisierte Produktionsänderung.`;
   }
   if (areJsonValuesEqual(canonical, candidate)) return undefined;
 
