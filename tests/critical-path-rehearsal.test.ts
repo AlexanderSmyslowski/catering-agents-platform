@@ -135,22 +135,7 @@ async function createCanonicalHandoff(input: {
     eventRequest: ReturnType<typeof createEventRequestFromManualForm>;
     acceptedEventSpec: AcceptedEventSpec;
   }>(intakeResponse);
-  const decisionResponse = await input.intakeApp.inject({
-    method: "PATCH",
-    url: `/v1/intake/specs/${intakePayload.acceptedEventSpec.specId}`,
-    headers: trustedHeaders("intake_operator"),
-    payload: {
-      componentUpdates: intakePayload.acceptedEventSpec.menuPlan.map((component) => ({
-        componentId: component.componentId,
-        productionMode: "scratch",
-        ...(input.recipeOverrideIdFor?.(component)
-          ? { recipeOverrideId: input.recipeOverrideIdFor(component) }
-          : {}),
-        notes: "Operatorentscheidung aus dem Rehearsal: interne Rezeptbibliothek nutzen."
-      }))
-    }
-  });
-  const acceptedEventSpec = (await expectJsonResponse<{ acceptedEventSpec: AcceptedEventSpec }>(decisionResponse)).acceptedEventSpec;
+  const acceptedEventSpec = intakePayload.acceptedEventSpec;
   const offerCaseId = await expectJsonResponse<{ case: { caseId: string } }>(
     await input.offerApp.inject({
       method: "POST",
@@ -291,7 +276,7 @@ describe("critical path rehearsal", () => {
         menuItems: ["Vegetarische Tomatensuppe", "Mystery Bowl"]
       });
       expect(negativeScenario.eventRequest.rawInputs[0]?.content).toContain("Synthetischer Rehearsal-Fall");
-      expect(negativeScenario.acceptedEventSpec.menuPlan.every((component) => component.productionDecision?.mode === "scratch")).toBe(true);
+      expect(negativeScenario.acceptedEventSpec.menuPlan.every((component) => component.productionDecision === undefined)).toBe(true);
       expect(negativeScenario.draft.draftId).toMatch(/^draft-spec-critical-path-mystery-negative$/);
       expect(negativeScenario.draft.proposedEventSpec.menuPlan.map((component) => component.label)).toEqual(
         expect.arrayContaining(["Vegetarische Tomatensuppe", "Mystery Bowl"])
