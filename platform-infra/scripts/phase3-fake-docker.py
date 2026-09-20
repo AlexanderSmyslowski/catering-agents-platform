@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S python3 -S
 """Deterministic Docker command adapter for the Phase-3 contract harness.
 
 The production pilot remains the only transaction/state machine. This adapter
