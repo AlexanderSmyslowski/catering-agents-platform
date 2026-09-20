@@ -188,33 +188,56 @@ async function createCanonicalProductionDraft(rootDir: string) {
   const component = eventSpec?.menuPlan[0];
   expect(eventSpec?.specId).toBeTruthy();
   expect(component?.componentId).toBeTruthy();
+  const revised = await productionApp.inject({
+    method: "POST",
+    url: `/v1/production/drafts/${draft.draftId}/revise`,
+    headers: productionHeaders,
+    payload: {
+      caseId,
+      expectedRevision: draft.revision,
+      componentUpdates: [{
+        componentId: revisedComponent!.componentId,
+        productionMode: "scratch",
+        recipeOverrideId: "recipe-caesar-salad",
+        notes: "Explizite kanonische Rezeptentscheidung der Fixture."
+      }]
+    }
+  });
+  expectStatus(revised, 201);
+  const revisedDraft = revised.json<{
+    draft: { draftId: string; revision: number; draftArtifacts: { eventSpec?: AcceptedEventSpec } }
+  }>().draft;
+  const revisedEventSpec = revisedDraft.draftArtifacts.eventSpec;
+  const revisedComponent = revisedEventSpec?.menuPlan[0];
+  expect(revisedEventSpec?.specId).toBe(eventSpec!.specId);
+  expect(revisedComponent?.componentId).toBe(component!.componentId);
   const evidence = await productionApp.inject({
     method: "POST",
     url: `/v1/production/cases/${caseId}/planning-evidence`,
     headers: productionHeaders,
     payload: {
-      draftId: draft.draftId,
-      draftRevision: draft.revision,
-      componentId: component!.componentId,
+      draftId: revisedDraft.draftId,
+      draftRevision: revisedDraft.revision,
+      componentId: revisedComponent!.componentId,
       recipeId: "recipe-caesar-salad",
       quantityDecision: {
         decisionId: "admin-api-canonical-quantity",
-        eventSpecId: eventSpec!.specId,
-        componentId: component!.componentId,
-        guestCount: eventSpec!.attendees.expected,
-        serviceFormat: eventSpec!.servicePlan.serviceForm,
+        eventSpecId: revisedEventSpec!.specId,
+        componentId: revisedComponent!.componentId,
+        guestCount: revisedEventSpec!.attendees.expected,
+        serviceFormat: revisedEventSpec!.servicePlan.serviceForm,
         dishRole: "other",
         basis: "servings_per_person",
         perUnitAmount: 1,
         perUnitUnit: "servings",
-        targetAmount: eventSpec!.attendees.expected,
+        targetAmount: revisedEventSpec!.attendees.expected,
         targetUnit: "servings",
         rationale: "Explizite kanonische Mengenentscheidung der Fixture.",
         evidence: { kind: "operator_instruction", reference: "admin-api-canonical" },
         reviewStatus: "approved"
       },
       recipeEventUseReview: {
-        eventSpecId: eventSpec!.specId,
+        eventSpecId: revisedEventSpec!.specId,
         recipeId: "recipe-caesar-salad",
         reviewedBy: "Produktions-Mitarbeiter",
         reviewedAt: "2026-08-30T12:00:00.000Z",
@@ -231,7 +254,7 @@ async function createCanonicalProductionDraft(rootDir: string) {
   expectStatus(evidence, 201);
   const prepared = await productionApp.inject({
     method: "POST",
-    url: `/v1/production/drafts/${draft.draftId}/prepare`,
+    url: `/v1/production/drafts/${revisedDraft.draftId}/prepare`,
     headers: productionHeaders,
     payload: {}
   });
