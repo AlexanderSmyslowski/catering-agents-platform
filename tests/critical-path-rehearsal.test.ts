@@ -331,16 +331,16 @@ describe("critical path rehearsal", () => {
       expect(promotedSpec.menuPlan[0]?.recipeOverrideId).toBeUndefined();
 
       const productionSpec = promotedSpec;
-      const artifacts = await expectJsonResponse<ProductionArtifactsResponse>(
-        await runApprovedProductionWorkflow(productionApp, {
-          headers: trustedHeaders("production_operator"),
-          handoffId: positiveScenario.handoff.handoffId,
-          payload: {
-            eventSpec: productionSpec
-          },
-          planningEvidence: [tomatoPlanningEvidence(promotedSpec, tomatoComponentId!)]
-        })
-      );
+      const positiveWorkflow = await runApprovedProductionWorkflow(productionApp, {
+        headers: trustedHeaders("production_operator"),
+        handoffId: positiveScenario.handoff.handoffId,
+        payload: {
+          eventSpec: productionSpec
+        },
+        planningEvidence: [tomatoPlanningEvidence(promotedSpec, tomatoComponentId!)]
+      });
+      expect(positiveWorkflow.statusCode, positiveWorkflow.body).toBeLessThan(300);
+      const artifacts = positiveWorkflow.json() as ProductionArtifactsResponse;
 
       const { productionPlan, purchaseList } = artifacts;
       expect(productionPlan.eventSpecId).toBe(promotedSpec.specId);
