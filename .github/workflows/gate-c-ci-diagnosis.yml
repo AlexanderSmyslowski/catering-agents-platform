@@ -5,12 +5,9 @@ on:
 permissions:
   contents: read
 jobs:
-  reproduce-product-failures:
+  advisory-candidate:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    env:
-      CATERING_LLM_PROVIDER: fixture
-      CATERING_PRODUCTION_DRAFT_DATA_MODE: synthetic_or_demo_only
     steps:
       - uses: actions/checkout@v5
         with:
@@ -20,38 +17,42 @@ jobs:
         with:
           node-version: 22
           package-manager-cache: false
-      - name: Verify exact source and preserve inspection bundle
+      - name: Verify source and original manifest
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = 35a6926471b4985c6f3802c98407f5be2079bc2c
           test "$(git rev-parse HEAD^{tree})" = f2603dc3133899c3e89628ce1cb98602a90e44f2
           mkdir -p "$RUNNER_TEMP/gate-c-evidence"
-          git archive --format=tar HEAD > "$RUNNER_TEMP/gate-c-evidence/source.tar"
-          git cat-file commit HEAD > "$RUNNER_TEMP/gate-c-evidence/commit.txt"
-          git ls-tree -rz HEAD > "$RUNNER_TEMP/gate-c-evidence/tree.bin"
+          git show HEAD:package-lock.json > "$RUNNER_TEMP/gate-c-evidence/original-package-lock.json"
           printf '%s\n' "$(node --version)" "$(npm --version)" > "$RUNNER_TEMP/gate-c-evidence/runtime.txt"
-      - name: Install exact locked dependencies
-        run: npm ci
-      - name: Preserve installed dependencies for isolated offline product checks
+      - name: Resolve only named vulnerable packages within declared ranges
         run: |
           set -euo pipefail
-          # Only installed packages; no .git, npm credentials, caches or runtime data.
+          npm ci --ignore-scripts
+          npm update fastify fast-uri browserslist baseline-browser-mapping --ignore-scripts
+          git diff --exit-code -- package.json shared-core/package.json intake-service/package.json offer-service/package.json production-service/package.json print-export/package.json backoffice-ui/package.json
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import cp from 'node:child_process';
+          const before = JSON.parse(cp.execFileSync('git', ['show','HEAD:package-lock.json'], {encoding:'utf8'})).packages;
+          const after = JSON.parse(fs.readFileSync('package-lock.json','utf8')).packages;
+          const changes = Object.keys({...before,...after}).filter(k => JSON.stringify(before[k]) !== JSON.stringify(after[k])).map(path => ({path, before:before[path]?.version ?? null, after:after[path]?.version ?? null}));
+          for (const change of changes) {
+            if (change.before && change.after && change.before.split('.')[0] !== change.after.split('.')[0]) throw new Error(`Major change is not authorized: ${change.path}`);
+          }
+          fs.writeFileSync(`${process.env.RUNNER_TEMP}/gate-c-evidence/dependency-changes.json`, JSON.stringify(changes,null,2)+'\n');
+          JS
+          cp package-lock.json "$RUNNER_TEMP/gate-c-evidence/package-lock.json"
+          git diff -- package-lock.json > "$RUNNER_TEMP/gate-c-evidence/lockfile.patch"
+          npm ls --all --json > "$RUNNER_TEMP/gate-c-evidence/dependency-tree.json"
           find . -type d -name node_modules -prune -print0 | tar --null -T - -czf "$RUNNER_TEMP/gate-c-evidence/dependencies.tar.gz"
-      - name: Read audit without updating packages
+      - name: Audit candidate without automatic fixes
         run: |
           set +e
           npm audit --json > "$RUNNER_TEMP/gate-c-evidence/audit.json"
           echo "$?" > "$RUNNER_TEMP/gate-c-evidence/audit.exit"
           npm audit --omit=dev --json > "$RUNNER_TEMP/gate-c-evidence/audit-runtime.json"
           echo "$?" > "$RUNNER_TEMP/gate-c-evidence/audit-runtime.exit"
-          exit 0
-      - name: Reproduce only the seven failing product test files
-        run: |
-          set +e
-          npm test -- tests/admin-api-access.test.ts tests/app-typed-route-boundary.test.ts tests/approved-production-spec.test.ts tests/critical-path-rehearsal.test.ts tests/platform.test.ts tests/product-shell-data-boundary.test.tsx tests/production-case-routes.test.ts --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/gate-c-evidence/product-red.json" > "$RUNNER_TEMP/gate-c-evidence/product-red.log" 2>&1
-          status=$?
-          echo "$status" > "$RUNNER_TEMP/gate-c-evidence/product-red.exit"
-          tail -n 80 "$RUNNER_TEMP/gate-c-evidence/product-red.log"
           exit 0
       - name: Bind evidence files
         if: always()
@@ -62,7 +63,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: gate-c-ci-diagnosis-source-35a6926
+          name: gate-c-advisory-candidate-35a6926
           path: ${{ runner.temp }}/gate-c-evidence
           retention-days: 7
           if-no-files-found: error
