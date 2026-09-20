@@ -195,6 +195,10 @@ async function createCanonicalProductionDraft(rootDir: string) {
     payload: {
       caseId,
       expectedRevision: draft.revision,
+      componentClassifications: [{
+        componentId: component!.componentId,
+        menuCategory: "vegetarian"
+      }],
       componentUpdates: [{
         componentId: component!.componentId,
         productionMode: "scratch",
