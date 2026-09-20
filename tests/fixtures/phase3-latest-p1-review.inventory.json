@@ -1,0 +1,7 @@
+{
+  "source_path": "tests/phase3-latest-p1-review.test.ts",
+  "source_blob": "db3a5c4a8b7a8d8b2bdd3e43274013761e5d82f2",
+  "collected_case_count": 138,
+  "test_declaration_count": 90,
+  "collection_command": "npx vitest list tests/phase3-latest-p1-review.test.ts --json"
+}
