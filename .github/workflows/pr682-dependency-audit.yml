@@ -1,0 +1,66 @@
+name: PR682 dependency advisory readout
+on:
+  push:
+    branches: [codex/pr682-exact-head-ci-20260920]
+    paths: [.github/workflows/pr682-dependency-audit.yml]
+permissions:
+  contents: read
+jobs:
+  audit-locked-dependencies:
+    if: >-
+      github.repository == 'AlexanderSmyslowski/catering-agents-platform' &&
+      github.ref == 'refs/heads/codex/pr682-exact-head-ci-20260920' &&
+      github.event.head_commit.message == 'ci: remove integration helper and read known dependency advisories'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: 63c79ab8c2eb36bdbb512af3d014828139c0621d
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - name: Read advisory data without installation or package changes
+        shell: bash --noprofile --norc -euo pipefail {0}
+        run: |
+          umask 077
+          root="$RUNNER_TEMP/pr682-dependency-audit"
+          mkdir -p "$root"
+          test "$(git rev-parse HEAD)" = 63c79ab8c2eb36bdbb512af3d014828139c0621d
+          test "$(git rev-parse 'HEAD^{tree}')" = add88da7aab5fabe0e8b841dcd31750bfe39d596
+          git rev-parse HEAD 'HEAD^{tree}' > "$root/source.txt"
+          cp package-lock.json "$root/package-lock.json"
+          cp package.json "$root/package.json"
+          set +e
+          npm audit --json --ignore-scripts --registry=https://registry.npmjs.org > "$root/full.json" 2> "$root/full.stderr"
+          full=$?
+          npm audit --omit=dev --json --ignore-scripts --registry=https://registry.npmjs.org > "$root/runtime.json" 2> "$root/runtime.stderr"
+          runtime=$?
+          set -e
+          printf 'full=%s\nruntime=%s\n' "$full" "$runtime" > "$root/exits.txt"
+          test "$full" -le 1
+          test "$runtime" -le 1
+          python3 - "$root" <<'PY'
+          import hashlib,json,pathlib,sys
+          root=pathlib.Path(sys.argv[1])
+          for name in ['full','runtime']:
+              report=json.loads((root/(name+'.json')).read_text())
+              assert 'error' not in report, report.get('error')
+              assert 'metadata' in report and 'vulnerabilities' in report
+              print(name,json.dumps(report['metadata']['vulnerabilities']))
+              for package,item in report['vulnerabilities'].items():
+                  print(name,package,item['severity'],item.get('range'),json.dumps(item.get('fixAvailable')))
+          (root/'SHA256SUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name+'\n' for p in sorted(root.iterdir()) if p.is_file()))
+          PY
+          git diff --exit-code
+          git diff --cached --exit-code
+          test -z "$(git status --porcelain)"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pr682-dependency-audit-63c79ab8
+          path: ${{ runner.temp }}/pr682-dependency-audit/
+          retention-days: 7
+          if-no-files-found: error
