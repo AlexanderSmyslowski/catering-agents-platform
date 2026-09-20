@@ -1,7 +1,7 @@
 # memory.md
 
-version: 5.394
-date: 2026-09-20
+version: 5.395
+date: 2026-09-21
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
 
@@ -2165,3 +2165,42 @@ Quelle: `5b72de905a155763570ff15c0a7cea98a7c3a0aa`. Die folgenden Einträge werd
 - Auf Alexanders begrenztes Integrations-GO werden Produktelternstand `5b72de905a155763570ff15c0a7cea98a7c3a0aa` und main `3c5f6076bf04a88c13f8c10fa6779c4f57c3b65c` zusammengeführt. Beide vollständigen Memory-Historien bleiben mit Herkunft und ursprünglichen Versionsnummern erhalten.
 - Alle übrigen Dateiinhalte stammen unverändert aus einem der beiden Elternstände; unerwartete beidseitige Dateikonflikte werden nicht automatisch gelöst. Dies ist ein Integrationskandidat, keine erneute fachliche Abnahme.
 - Der Merge von #694 in #682 bleibt erledigt. Vor einem Merge von #682 nach main gilt HALT. Erforderliche nicht deployende CI-/Integrationsprüfungen sind für diesen neuen Baum noch gesondert nachzuweisen. Kein Deployment, Servereingriff, Echtdaten- oder Providerlauf und kein Gate-C-Gesamt-GO.
+
+## Übernommener main-Nachtrag: technischer Übergang
+
+Quelle: `8de2e96c8604f12da2ec14c39b187db04dfb61cf`. Der folgende Betriebsbericht bleibt unverändert; seine historische Version 5.393 ist vom Produkt-Eintrag 5.393 getrennt. Kein neuer Live-Nachweis dieses Produktstrangs.
+
+
+### 5.393 - 2026-09-20 — Catering technisch auf Zielserver umgestellt
+
+- Ausführungsquelle bleibt Mergecommit 3c5f6076bf04a88c13f8c10fa6779c4f57c3b65c,
+  Tree 53ef0acf1dd9d3c949d35069055f5e6c3ce9a76d. Ziel ist
+  catering-prod-1/Server166533273; alter Catering-Writer bleibt gestoppt.
+- Finaler Vier-Tabellen-Datenstand ist gebunden. Der natürliche Zyklus vom
+  20.09.2026 18:00:23UTC bestand Backup, externen Readback, OnSuccess-Restore
+  und Cleanup; Snapshot
+  b8fb0248db45e8c5b897c21a2fb6408c99461a2cb10227c7e3226f8ab6b8ec2f.
+  Timer bleibt enabled/active.
+- Better-Stack-Heartbeat493066/Team569103 läuft mit Cron300 und Provider300/300.
+  Kontrollierter Missed-heartbeat-Incident1018404670, tatsächlicher
+  Alarmempfang, natürlicher gesunder Recoverylauf und Recoverymail sind belegt.
+- Finale öffentliche Basic-Auth-Zugangsdaten wurden neu gebunden; Klartext
+  ausschließlich in geschützter lokaler Betreiberablage außerhalb Git
+  (Verzeichnis 0700, Datei 0600). Real geprüft: TLS, Quellfence, 401 ohne Auth, 200 mit Auth, im gesperrten
+  Zustand 404/423. Keine Secrets in Git oder Betriebsberichten.
+- Zielwriter seit 20.09.2026 19:13:35UTC enabled; nur der Edge wurde dafür neu
+  erstellt. Ziel ist alleiniger Writer, alter Datenstand/Backups bleiben
+  erhalten. Nach neuen Zielwrites kein Rückfall auf Altdaten ohne vollständigen
+  Rücktransfer und Vier-Tabellen-/Schema-/ACL-Vergleich.
+- Der bekannte Produkt-Reloadbefund bleibt getrennt offen und ist durch den
+  technischen Übergang nicht behoben. Vollständige Nachweise und Rücknahmen in
+  docs/agent-memory/2026-09-19-catering-target-build.md sowie lokal im
+  bestehenden Catering-Evidenzordner.
+
+### 5.395 - 2026-09-21 — PR682 main-Abgleich
+
+- Begrenzte Zusammenführung von Produkt `f6b04e43fec5a243b938cc6f3d01a00450288f87` und main `8de2e96c8604f12da2ec14c39b187db04dfb61cf`; vollständige Memory-Historien und ursprüngliche Versionsnummern mit getrennter Herkunft erhalten. Kein Reset auf main, keine erneute Übernahme von #694.
+- Der unveränderte Produktelternstand bestand den gezielten Actions-Lauf 35540397099: Typecheck/Build und 169 Tests in vier Dateien. Dies ersetzt keine reguläre CI des neuen Integrationsbaums; deren Ergebnis bleibt bis zum tatsächlichen Abschluss offen.
+- Versionierte Fortsetzung und Quellenbindung: `docs/agent-memory/2026-09-21-gate-c-main-integration.md`. Eingehende Betriebsdokumentation aus #697 wird nur als Quellenstand erhalten, nicht als neuer Serverzugriff oder Produktdeployment ausgegeben.
+- Vor Merge von #682 nach main weiterhin HALT. Weder Alt- noch Zielserver aktualisieren. Alter `Deploy production`-Weg mit `zeiterfassung_default`/alter Compose-Kette nicht für den neuen Server freigegeben; eigenständigen Updateweg vor erstem Produktdeployment gesondert prüfen und DB-, Netzwerk-, Zugangs- und Backupkonfiguration erhalten. Kein Gate-C-Gesamt-GO, Echtdaten- oder kostenpflichtiger Providerlauf.
+- Vier npm-Advisories bleiben paketbezogen ungeprüft. Reale Küchenprüfung und fachliche Freigaben bleiben offen. Kein separater Dokumentations-PR, keine zusätzliche Vollsuite allein für Dokumentation und kein behaupteter lokaler Hub-Writeback.
