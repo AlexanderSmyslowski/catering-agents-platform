@@ -24,17 +24,22 @@ jobs:
       github.event_name == 'push' &&
       github.repository == 'AlexanderSmyslowski/catering-agents-platform' &&
       github.ref == 'refs/heads/codex/pr682-exact-head-ci-20260920' &&
-      github.event.head_commit.message == 'ci: run isolated PR682 exact-head checks without deployment'
+      github.event.head_commit.message == 'ci: fix runner scope and start PR682 exact-head checks'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
       SOURCE_HEAD: f6b04e43fec5a243b938cc6f3d01a00450288f87
       SOURCE_TREE: 393414ace5f25976fd44c53acc103ad6a154c11a
       COMPARISON_MAIN: 8de2e96c8604f12da2ec14c39b187db04dfb61cf
-      EVIDENCE_DIR: ${{ runner.temp }}/pr682-exact-head-evidence
-      npm_config_cache: ${{ runner.temp }}/pr682-npm-cache
       CATERING_ENABLE_WEB_RECIPE_SEARCH: '0'
     steps:
+      - name: Initialize isolated runner paths
+        run: |
+          umask 077
+          mkdir -p "$RUNNER_TEMP/pr682-exact-head-evidence"
+          printf 'EVIDENCE_DIR=%s/pr682-exact-head-evidence\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+          printf 'npm_config_cache=%s/pr682-npm-cache\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+
       - name: Checkout unchanged product head, not the helper commit
         uses: actions/checkout@v5
         with:
