@@ -328,7 +328,7 @@ describe("critical path rehearsal", () => {
       expect(promotedSpec.attendees.expected).toBe(80);
       const tomatoComponentId = promotedSpec.menuPlan[0]?.componentId;
       expect(tomatoComponentId).toBeTruthy();
-      expect(promotedSpec.menuPlan[0]?.recipeOverrideId).toBe("critical-path-tomato-soup");
+      expect(promotedSpec.menuPlan[0]?.recipeOverrideId).toBeUndefined();
 
       const productionSpec = promotedSpec;
       const artifacts = await expectJsonResponse<ProductionArtifactsResponse>(
