@@ -139,7 +139,12 @@ async function createCanonicalOfferHandoff(rootDir: string) {
   });
   expectStatus(createdHandoff, 201);
   const handoff = createdHandoff.json<{
-    handoff: { handoffId: string; pricingSnapshot: unknown; eventSpecSnapshot: AcceptedEventSpec }
+    handoff: {
+      handoffId: string;
+      pricingSnapshot: unknown;
+      eventSpecSnapshot: AcceptedEventSpec;
+      sourceAcceptedEventSpecSnapshot?: AcceptedEventSpec;
+    }
   }>().handoff;
   expect(handoff.pricingSnapshot).toBeDefined();
 
