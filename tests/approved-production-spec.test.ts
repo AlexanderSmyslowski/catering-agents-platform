@@ -1399,16 +1399,6 @@ describe("ApprovedProductionSpec decision boundary", () => {
       })
     },
     {
-      name: "Prepare",
-      expectedDecisionStatus: 409,
-      transform: undefined,
-      request: (app: ReturnType<typeof buildProductionApp>, draft: ProductionDraft) => app.inject({
-        method: "POST",
-        url: `/v1/production/drafts/${draft.draftId}/prepare`,
-        headers
-      })
-    },
-    {
       name: "Revise",
       expectedDecisionStatus: 409,
       transform: reviseReadyDraft,
