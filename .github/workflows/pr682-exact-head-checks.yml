@@ -1,0 +1,126 @@
+name: CateringOS PR682 exact-head checks
+
+on:
+  push:
+    branches:
+      - codex/pr682-exact-head-ci-20260920
+    paths:
+      - .github/workflows/pr682-exact-head-checks.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr682-exact-head-f6b04e43-20260920
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash --noprofile --norc -euo pipefail {0}
+
+jobs:
+  exact-head-checks:
+    if: >-
+      github.event_name == 'push' &&
+      github.repository == 'AlexanderSmyslowski/catering-agents-platform' &&
+      github.ref == 'refs/heads/codex/pr682-exact-head-ci-20260920' &&
+      github.event.head_commit.message == 'ci: run isolated PR682 exact-head checks without deployment'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SOURCE_HEAD: f6b04e43fec5a243b938cc6f3d01a00450288f87
+      SOURCE_TREE: 393414ace5f25976fd44c53acc103ad6a154c11a
+      COMPARISON_MAIN: 8de2e96c8604f12da2ec14c39b187db04dfb61cf
+      EVIDENCE_DIR: ${{ runner.temp }}/pr682-exact-head-evidence
+      npm_config_cache: ${{ runner.temp }}/pr682-npm-cache
+      CATERING_ENABLE_WEB_RECIPE_SEARCH: '0'
+    steps:
+      - name: Checkout unchanged product head, not the helper commit
+        uses: actions/checkout@v5
+        with:
+          ref: f6b04e43fec5a243b938cc6f3d01a00450288f87
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Bind source and inspect merge conflict without changing refs
+        run: |
+          umask 077
+          mkdir -p "$EVIDENCE_DIR"
+          test "$(git rev-parse HEAD)" = "$SOURCE_HEAD"
+          test "$(git rev-parse 'HEAD^{tree}')" = "$SOURCE_TREE"
+          test -z "$(git status --porcelain)"
+          test ! -f .github/workflows/pr682-exact-head-checks.yml
+          git cat-file -e "${COMPARISON_MAIN}^{commit}"
+          printf 'source_head=%s\nsource_tree=%s\ncomparison_main=%s\nhelper_commit=%s\nrun_id=%s\n' \
+            "$SOURCE_HEAD" "$SOURCE_TREE" "$COMPARISON_MAIN" "$GITHUB_SHA" "$GITHUB_RUN_ID" \
+            | tee "$EVIDENCE_DIR/source.txt"
+          set +e
+          git merge-tree --write-tree "$SOURCE_HEAD" "$COMPARISON_MAIN" \
+            > "$EVIDENCE_DIR/merge-tree.txt" 2> "$EVIDENCE_DIR/merge-tree.stderr"
+          result=$?
+          set -e
+          printf '%s\n' "$result" > "$EVIDENCE_DIR/merge-tree.exit"
+          cat "$EVIDENCE_DIR/merge-tree.txt" "$EVIDENCE_DIR/merge-tree.stderr"
+          test "$result" -le 1
+          test "$(git rev-parse HEAD)" = "$SOURCE_HEAD"
+          test -z "$(git status --porcelain)"
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Install locked dependencies
+        run: |
+          set +e
+          npm ci 2>&1 | tee "$EVIDENCE_DIR/install.log"
+          result=${PIPESTATUS[0]}
+          set -e
+          printf '%s\n' "$result" > "$EVIDENCE_DIR/install.exit"
+          exit "$result"
+
+      - name: Typecheck and build
+        run: |
+          set +e
+          npm run build 2>&1 | tee "$EVIDENCE_DIR/build.log"
+          result=${PIPESTATUS[0]}
+          set -e
+          printf '%s\n' "$result" > "$EVIDENCE_DIR/build.exit"
+          exit "$result"
+
+      - name: Targeted platform, operator, critical path and P1 checks
+        run: |
+          set +e
+          ./node_modules/.bin/vitest run \
+            tests/admin-api-access.test.ts \
+            tests/critical-path-rehearsal.test.ts \
+            tests/platform.test.ts \
+            tests/production-planning-evidence-p1.test.ts \
+            --maxWorkers=2 2>&1 | tee "$EVIDENCE_DIR/tests.log"
+          result=${PIPESTATUS[0]}
+          set -e
+          printf '%s\n' "$result" > "$EVIDENCE_DIR/tests.exit"
+          exit "$result"
+
+      - name: Record unchanged tracked source
+        if: always()
+        run: |
+          mkdir -p "$EVIDENCE_DIR"
+          test "$(git rev-parse HEAD)" = "$SOURCE_HEAD"
+          test "$(git rev-parse 'HEAD^{tree}')" = "$SOURCE_TREE"
+          git diff --exit-code
+          git diff --cached --exit-code
+          git status --porcelain > "$EVIDENCE_DIR/worktree-status.txt"
+          printf '%s\n' 'This is an exact-head diagnostic run, not a main-integration or deployment approval.' \
+            >> "$EVIDENCE_DIR/source.txt"
+          (cd "$EVIDENCE_DIR" && sha256sum *.txt *.log *.exit 2>/dev/null) \
+            > "$EVIDENCE_DIR/SHA256SUMS"
+
+      - name: Preserve synthetic diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr682-exact-head-f6b04e43
+          path: ${{ runner.temp }}/pr682-exact-head-evidence/
+          retention-days: 7
+          if-no-files-found: error
