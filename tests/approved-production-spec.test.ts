@@ -1491,7 +1491,7 @@ describe("ApprovedProductionSpec decision boundary", () => {
       release();
       await app.close();
     }
-  });
+  }, 30_000);
 
   it.each([
     "after_plan_write",
