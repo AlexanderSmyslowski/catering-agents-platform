@@ -71,8 +71,14 @@ export async function runApprovedProductionWorkflow(
       ...input.headers
     };
     const businessId = headers["x-catering-business-id"] ?? "local";
+    const intakeRecords = testIntakeRecordsPortFor(app);
     if (!input.handoffId) {
-      await testIntakeRecordsPortFor(app).insertSpec({ businessId }, eventSpec);
+      await intakeRecords.insertSpec({ businessId }, eventSpec);
+    } else {
+      const existing = await intakeRecords.getSpec({ businessId }, eventSpec.specId);
+      if (!existing) {
+        await intakeRecords.insertSpec({ businessId }, eventSpec);
+      }
     }
     const caseResponse = await app.inject({
       method: "POST",
