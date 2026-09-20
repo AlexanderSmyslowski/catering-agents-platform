@@ -126,7 +126,7 @@ async function createCanonicalOfferHandoff(rootDir: string) {
     method: "POST",
     url: `/v1/offers/drafts/${draft.draftId}/decision`,
     headers: offerHeaders,
-    payload: { decision: "approved", revision: 1, variantId: selectedVariant!.variantId }
+    payload: { decision: "approved", revision: 1, variantId: "variant-2" }
   });
   expectStatus(approved, 201);
   const approvedOfferId = approved.json<{ approvedOffer: { approvedOfferId: string } }>().approvedOffer.approvedOfferId;
