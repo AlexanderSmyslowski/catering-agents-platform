@@ -761,7 +761,7 @@ function ProductWorkspaceView({
       : undefined
   });
 
-  function loadSpecIntoEditorState(spec: Record<string, unknown>): string {
+  function loadSpecIntoEditorState(spec: AcceptedEventSpec): string {
     editingProductionDraftContext.current = activeProductionCaseId && currentProductionDraft &&
       currentProductionDraft.draftArtifacts?.eventSpec?.specId === spec.specId
       ? { caseId: activeProductionCaseId, draft: structuredClone(currentProductionDraft) }
