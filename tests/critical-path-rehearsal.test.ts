@@ -114,7 +114,7 @@ async function createCanonicalHandoff(input: {
   eventRequest: ReturnType<typeof createEventRequestFromManualForm>;
   acceptedEventSpec: AcceptedEventSpec;
   draft: OfferDraft;
-  handoff: { handoffId: string; eventSpecSnapshot: AcceptedEventSpec };
+  handoff: { handoffId: string; eventSpecSnapshot: AcceptedEventSpec; sourceAcceptedEventSpecSnapshot?: AcceptedEventSpec };
 }> {
   const intakeResponse = await input.intakeApp.inject({
     method: "POST",
@@ -164,7 +164,7 @@ async function createCanonicalHandoff(input: {
       payload: { decision: "approved", revision: 1, variantId: "variant-2" }
     })
   );
-  const handoff = await expectJsonResponse<{ handoff: { handoffId: string; eventSpecSnapshot: AcceptedEventSpec } }>(
+  const handoff = await expectJsonResponse<{ handoff: { handoffId: string; eventSpecSnapshot: AcceptedEventSpec; sourceAcceptedEventSpecSnapshot?: AcceptedEventSpec } }>(
     await input.offerApp.inject({
       method: "POST",
       url: `/v1/offers/approved/${approval.approvedOffer.approvedOfferId}/handoffs`,
@@ -331,6 +331,9 @@ describe("critical path rehearsal", () => {
       expect(promotedSpec.menuPlan[0]?.recipeOverrideId).toBeUndefined();
 
       const productionSpec = promotedSpec;
+      const positiveIntakeOrigin = positiveScenario.handoff.sourceAcceptedEventSpecSnapshot;
+      expect(positiveIntakeOrigin).toBeDefined();
+      await intakeRecords.insertSpec({ businessId: "local" }, positiveIntakeOrigin!);
       const positiveWorkflow = await runApprovedProductionWorkflow(productionApp, {
         headers: trustedHeaders("production_operator"),
         handoffId: positiveScenario.handoff.handoffId,
