@@ -151,7 +151,9 @@ async function createCanonicalProductionDraft(rootDir: string) {
   const repository = new InMemoryRecipeRepository({ rootDir });
   await repository.seed({ businessId: "local" }, internalRecipes);
   const intakeRecords = new InMemoryIntakeRecordsPort();
-  await intakeRecords.insertSpec({ businessId: "local" }, handoff.eventSpecSnapshot);
+  const intakeOrigin = handoff.sourceAcceptedEventSpecSnapshot;
+  if (!intakeOrigin) throw new Error("Canonical admin handoff is missing its immutable Intake snapshot.");
+  await intakeRecords.insertSpec({ businessId: "local" }, intakeOrigin);
   const productionApp = buildProductionApp({
     dataRoot: rootDir,
     repository,
