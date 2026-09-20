@@ -26,6 +26,7 @@ export async function buildRecipeBranchPlanningArtifacts(input: {
   servings: number;
   bridgeResult?: QuantityRecipeProductionBridgeResult;
   recipeEventUseReview?: RecipeEventUseReview;
+  allowQuantityRecipeBridgeResolver?: boolean;
   discoveryService: RecipeDiscoveryService;
   context: BusinessContext;
   persistDiscoveredRecipes?: boolean;
@@ -36,6 +37,7 @@ export async function buildRecipeBranchPlanningArtifacts(input: {
     servings,
     bridgeResult,
     recipeEventUseReview,
+    allowQuantityRecipeBridgeResolver,
     discoveryService,
     context,
     persistDiscoveredRecipes = true
@@ -51,6 +53,7 @@ export async function buildRecipeBranchPlanningArtifacts(input: {
       servings,
       bridgeResult,
       recipeEventUseReview,
+      allowQuantityRecipeBridgeResolver,
       discoveryService,
       context,
       persistDiscoveredRecipes

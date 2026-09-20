@@ -14,10 +14,13 @@ import {
 } from "@catering/shared-core";
 import { buildOfferApp } from "@catering/offer-service";
 import { buildPrintExportApp } from "@catering/print-export";
+import { buildIntakeApp } from "../intake-service/src/app.js";
+import { IntakeStore } from "../intake-service/src/store.js";
 import {
   InMemoryRecipeRepository,
   buildProductionApp
 } from "@catering/production-service";
+import { OfferStore } from "../offer-service/src/store.js";
 import { runApprovedProductionWorkflow } from "./helpers/approved-production-workflow.js";
 import {
   InMemoryIntakeRecordsPort,
@@ -89,37 +92,6 @@ function createSoupRecipe(): Recipe {
   };
 }
 
-function withProductionDecisions(spec: AcceptedEventSpec): AcceptedEventSpec {
-  const servings = spec.attendees.expected ?? 0;
-  return {
-    ...spec,
-    menuPlan: [
-      {
-        componentId: "critical-path-tomato-soup",
-        label: "Vegetarische Tomatensuppe",
-        menuCategory: "vegetarian",
-        serviceStyle: "buffet",
-        servings,
-        productionDecision: {
-          mode: "scratch",
-          notes: "Operatorentscheidung aus dem Rehearsal: interne Rezeptbibliothek nutzen."
-        }
-      },
-      {
-        componentId: "critical-path-mystery-bowl",
-        label: "Mystery Bowl",
-        menuCategory: "vegetarian",
-        serviceStyle: "buffet",
-        servings,
-        productionDecision: {
-          mode: "scratch",
-          notes: "Operatorentscheidung aus dem Rehearsal: fachliche Spezifikation offen lassen."
-        }
-      }
-    ]
-  };
-}
-
 async function expectJsonResponse<T>(response: { statusCode: number; json: () => unknown }): Promise<T> {
   expect(response.statusCode).toBeGreaterThanOrEqual(200);
   expect(response.statusCode).toBeLessThan(300);
@@ -142,8 +114,21 @@ describe("critical path rehearsal", () => {
     const repository = new InMemoryRecipeRepository({ rootDir: dataRoot });
     await repository.save({ businessId: "local" }, createSoupRecipe());
 
+    const intakeStore = new IntakeStore({ rootDir: dataRoot });
+    const intakeApp = buildIntakeApp({
+      rootDir: dataRoot,
+      store: intakeStore,
+      trustedActorSecret: TRUSTED_SECRET,
+      env: { CATERING_DEFAULT_BUSINESS_ID: "local", CATERING_TRUSTED_ACTOR_SECRET: TRUSTED_SECRET }
+    });
+    const offerStore = new OfferStore({ rootDir: dataRoot });
     const offerApp = buildOfferApp({
       rootDir: dataRoot,
+      store: offerStore,
+      sourceDocumentReader: {
+        getMetadata: async () => undefined,
+        getSpec: (context, specId) => intakeStore.getSpec(context, specId)
+      },
       trustedActorSecret: TRUSTED_SECRET,
       env: {}
     });
@@ -152,6 +137,7 @@ describe("critical path rehearsal", () => {
       dataRoot,
       repository,
       intakeRecords,
+      handoffReader: { get: async (context, handoffId) => offerStore.getHandoff(context, handoffId) },
       trustedActorSecret: TRUSTED_SECRET,
       env: {
         CATERING_ENABLE_WEB_RECIPE_SEARCH: "0"
@@ -165,19 +151,40 @@ describe("critical path rehearsal", () => {
     });
 
     try {
-      const syntheticRequest = createEventRequestFromManualForm({
-        requestId: "critical-path-synthetic-lunch-1",
-        customerName: "Synthetic Demo Account",
-        eventType: "Business Lunch",
-        eventDate: "2026-09-18",
-        attendeeCount: 80,
-        serviceForm: "Buffet",
-        menuItems: ["Vegetarische Tomatensuppe", "Mystery Bowl"],
-        notes: "Synthetischer Rehearsal-Fall ohne echte Kundendaten."
+      const intakeResponse = await intakeApp.inject({
+        method: "POST",
+        url: "/v1/intake/specs/manual",
+        headers: trustedHeaders("intake_operator"),
+        payload: {
+          customerName: "Synthetic Demo Account",
+          eventType: "Business Lunch",
+          eventDate: "2026-09-18",
+          attendeeCount: 80,
+          serviceForm: "Buffet",
+          menuItems: ["Vegetarische Tomatensuppe", "Mystery Bowl"],
+          notes: "Synthetischer Rehearsal-Fall ohne echte Kundendaten."
+        }
       });
-
-      expect(syntheticRequest.requestId).toBe("critical-path-synthetic-lunch-1");
+      const intakePayload = await expectJsonResponse<{
+        eventRequest: ReturnType<typeof createEventRequestFromManualForm>;
+        acceptedEventSpec: AcceptedEventSpec;
+      }>(intakeResponse);
+      const decisionResponse = await intakeApp.inject({
+        method: "PATCH",
+        url: `/v1/intake/specs/${intakePayload.acceptedEventSpec.specId}`,
+        headers: trustedHeaders("intake_operator"),
+        payload: {
+          componentUpdates: intakePayload.acceptedEventSpec.menuPlan.map((component) => ({
+            componentId: component.componentId,
+            productionMode: "scratch",
+            notes: "Operatorentscheidung aus dem Rehearsal: interne Rezeptbibliothek nutzen."
+          }))
+        }
+      });
+      const acceptedEventSpec = (await expectJsonResponse<{ acceptedEventSpec: AcceptedEventSpec }>(decisionResponse)).acceptedEventSpec;
+      const syntheticRequest = intakePayload.eventRequest;
       expect(syntheticRequest.rawInputs[0]?.content).toContain("Synthetischer Rehearsal-Fall");
+      expect(acceptedEventSpec.menuPlan.every((component) => component.productionDecision?.mode === "scratch")).toBe(true);
 
       const offerCaseResponse = await offerApp.inject({
         method: "POST",
@@ -193,11 +200,11 @@ describe("critical path rehearsal", () => {
           method: "POST",
           url: "/v1/offers/drafts",
           headers: trustedHeaders("offer_operator"),
-          payload: { ...syntheticRequest, caseId: offerCaseId }
+          payload: { ...syntheticRequest, caseId: offerCaseId, acceptedEventSpecId: acceptedEventSpec.specId }
         })
       );
 
-      expect(draft.draftId).toBe("draft-critical-path-synthetic-lunch-1");
+      expect(draft.draftId).toMatch(/^draft-spec-manual-/);
       expect(draft.proposedEventSpec.attendees.expected).toBe(80);
       expect(draft.proposedEventSpec.menuPlan.map((component) => component.label)).toEqual(
         expect.arrayContaining(["Vegetarische Tomatensuppe", "Mystery Bowl"])
@@ -217,17 +224,22 @@ describe("critical path rehearsal", () => {
           }
         })
       );
-      const handoffResponse = await expectJsonResponse<{ handoff: { eventSpecSnapshot: AcceptedEventSpec } }>(
+      const handoffResponse = await expectJsonResponse<{ handoff: { handoffId: string; eventSpecSnapshot: AcceptedEventSpec } }>(
         await offerApp.inject({ method: "POST", url: `/v1/offers/approved/${approval.approvedOffer.approvedOfferId}/handoffs`, headers: trustedHeaders("offer_operator"), payload: {} })
       );
       const promotedSpec = handoffResponse.handoff.eventSpecSnapshot;
       expect(promotedSpec.lifecycle.commercialState).toBe("accepted");
       expect(promotedSpec.attendees.expected).toBe(80);
+      const tomatoComponentId = promotedSpec.menuPlan.find((component) => component.label === "Vegetarische Tomatensuppe")?.componentId;
+      const mysteryComponentId = promotedSpec.menuPlan.find((component) => component.label === "Mystery Bowl")?.componentId;
+      expect(tomatoComponentId).toBeTruthy();
+      expect(mysteryComponentId).toBeTruthy();
 
-      const productionSpec = withProductionDecisions(promotedSpec);
+      const productionSpec = promotedSpec;
       const artifacts = await expectJsonResponse<ProductionArtifactsResponse>(
         await runApprovedProductionWorkflow(productionApp, {
           headers: trustedHeaders("production_operator"),
+          handoffId: handoffResponse.handoff.handoffId,
           payload: {
             eventSpec: productionSpec
           }
@@ -238,23 +250,23 @@ describe("critical path rehearsal", () => {
       expect(productionPlan.eventSpecId).toBe(promotedSpec.specId);
       expect(productionPlan.productionBatches).toEqual([
         expect.objectContaining({
-          componentId: "critical-path-tomato-soup",
+          componentId: tomatoComponentId,
           recipeId: "critical-path-tomato-soup"
         })
       ]);
       expect(productionPlan.kitchenSheets.map((sheet) => sheet.componentId)).toEqual(
-        expect.arrayContaining(["critical-path-tomato-soup", "critical-path-mystery-bowl"])
+        expect.arrayContaining([tomatoComponentId, mysteryComponentId])
       );
       expect(productionPlan.recipeSelections).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
-            componentId: "critical-path-tomato-soup",
+            componentId: tomatoComponentId,
             recipeId: "critical-path-tomato-soup",
             sourceTier: "internal_verified",
             autoUsedInternetRecipe: false
           }),
           expect.objectContaining({
-            componentId: "critical-path-mystery-bowl",
+            componentId: mysteryComponentId,
             autoUsedInternetRecipe: false
           })
         ])
@@ -263,13 +275,13 @@ describe("critical path rehearsal", () => {
       expect(productionPlan.componentReadiness).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
-            componentId: "critical-path-tomato-soup",
+            componentId: tomatoComponentId,
             status: "operational",
             includedInPurchaseList: true
           }),
           expect.objectContaining({
-            componentId: "critical-path-mystery-bowl",
-            status: "needs_clarification",
+            componentId: mysteryComponentId,
+            status: "blocked",
             includedInPurchaseList: false
           })
         ])
@@ -361,6 +373,7 @@ describe("critical path rehearsal", () => {
       );
     } finally {
       await Promise.all([
+        intakeApp.close(),
         offerApp.close(),
         productionApp.close(),
         exportApp.close()

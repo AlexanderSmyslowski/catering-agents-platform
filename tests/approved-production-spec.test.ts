@@ -24,6 +24,7 @@ import {
   type LlmReadinessProviderAdapter,
   type LlmReadinessProviderAdapterRequest,
   type ProductionDraft,
+  type ProductionHandoff,
   type Recipe
 } from "@catering/shared-core";
 
@@ -34,6 +35,7 @@ const headers = {
   "x-catering-trusted-secret": TRUSTED_SECRET
 };
 const roots: string[] = [];
+const handoffsByStore = new WeakMap<ProductionStore, Map<string, ProductionHandoff>>();
 const externalTestProviderDescriptor = {
   providerKind: "openai" as const,
   dataLeavesInstallation: true,
@@ -109,11 +111,21 @@ async function completeDraft(
   status: ProductionDraft["status"] = "pending_review",
   reviewDecision: ProductionDraft["reviewCards"][number]["decision"] = "fits"
 ): Promise<ProductionDraft> {
-  const eventSpec = normalizeEventRequestToSpec(createEventRequestFromText({
+  const baseEventSpec = normalizeEventRequestToSpec(createEventRequestFromText({
     requestId: `request-${draftId}`,
     channel: "text",
     rawText: "Synthetisches Buffet fuer 20 Personen am 18.09.2026."
   }));
+  const eventSpec = {
+    ...baseEventSpec,
+    budgetContext: {
+      ...(baseEventSpec.budgetContext ?? {}),
+      pricingSummary: {
+        subtotal: { amount: 100, currency: "EUR" },
+        perPerson: { amount: 5, currency: "EUR" }
+      }
+    }
+  };
   const repository = new InMemoryRecipeRepository();
   const artifacts = await buildProductionArtifacts(
     eventSpec,
@@ -212,6 +224,8 @@ function buildHarness(options: {
   const rootDir = mkdtempSync(path.join(tmpdir(), "approved-production-spec-"));
   roots.push(rootDir);
   const store = new ProductionStore({ rootDir });
+  const handoffs = new Map<string, ProductionHandoff>();
+  handoffsByStore.set(store, handoffs);
   const repository = new InMemoryRecipeRepository({ rootDir });
   const intakeStore = new InMemoryIntakeRecordsPort();
   const auditLog = new AuditLogStore({ rootDir });
@@ -222,6 +236,7 @@ function buildHarness(options: {
     repository,
     intakeRecords: intakeStore,
     auditLog,
+    handoffReader: { get: async (_context, handoffId) => handoffs.get(handoffId) },
     llmAdapter: options.llmAdapter,
     llmProviderDescriptor: options.llmAdapter ? externalTestProviderDescriptor : undefined,
     trustedActorSecret: TRUSTED_SECRET,
@@ -235,6 +250,29 @@ function buildHarness(options: {
       : {}
   });
   return { app, auditLog, intakeStore, repository, store };
+}
+
+function testHandoffForDraft(draft: ProductionDraft): ProductionHandoff {
+  const eventSpecSnapshot = structuredClone(draft.draftArtifacts.eventSpec!);
+  const pricingSnapshot = eventSpecSnapshot.budgetContext?.pricingSummary ?? {
+    subtotal: { amount: 100, currency: "EUR" },
+    perPerson: { amount: 5, currency: "EUR" }
+  };
+  return {
+    schemaVersion: "1.0",
+    businessId: context.businessId,
+    handoffId: `handoff-test-${draft.draftId}`,
+    approvedOfferId: `approved-offer-test-${draft.draftId}`,
+    approvalRequestId: `approval-offer-test-${draft.draftId}`,
+    createdAt: draft.createdAt,
+    eventSpecSnapshot,
+    pricingSnapshot: structuredClone(pricingSnapshot),
+    source: {
+      draftId: draft.draftId,
+      revision: draft.revision,
+      selectedVariantId: `variant-test-${draft.draftId}`
+    }
+  };
 }
 
 function revisionAdapter(): LlmReadinessProviderAdapter {
@@ -306,8 +344,45 @@ function reviseReadyAndApprovalEligibleDraft(draft: ProductionDraft): Production
 }
 
 async function importDraft(store: ProductionStore, draft: ProductionDraft) {
-  await store.saveProductionDraft(context, draft);
+  const handoff = testHandoffForDraft(draft);
+  const persistedDraft: ProductionDraft = {
+    ...draft,
+    source: { ...draft.source, sourceRef: `offer-handoff:${handoff.handoffId}` }
+  };
+  await store.saveProductionDraft(context, persistedDraft);
+  handoffsByStore.get(store)?.set(handoff.handoffId, handoff);
+  const caseId = `production-case-test-${draft.draftId}`;
+  if (!await store.getCase(context, caseId)) {
+    await store.createCase(context, {
+      schemaVersion: "1.0",
+      businessId: context.businessId,
+      caseId,
+      product: "production",
+      displayName: draft.draftId,
+      status: "open",
+      version: 1,
+      createdAt: draft.createdAt,
+      updatedAt: draft.createdAt,
+      productionHandoffId: handoff.handoffId
+    });
+    await store.appendEvent(context, caseId, {
+      at: draft.createdAt,
+      role: "system",
+      kind: "draft_created",
+      text: "Synthetische Produktionsakte angelegt.",
+      artifactId: draft.draftId
+    });
+  }
   return { statusCode: 201, body: "" };
+}
+
+async function seedAcceptedEventSpec(
+  intakeStore: InMemoryIntakeRecordsPort,
+  draft: ProductionDraft
+): Promise<void> {
+  const eventSpec = draft.draftArtifacts.eventSpec;
+  if (!eventSpec) throw new Error("Test-Draft benötigt eine AcceptedEventSpec.");
+  await intakeStore.insertSpec(context, eventSpec);
 }
 
 async function decide(
@@ -750,6 +825,7 @@ describe("ApprovedProductionSpec decision boundary", () => {
     const draft = await completeDraft(`draft-apply-retry-${faultPhase}`);
     try {
       expect((await importDraft(store, draft)).statusCode).toBe(201);
+      await seedAcceptedEventSpec(intakeStore, draft);
       const decision = await decide(app, draft.draftId, "approved");
       expect(decision.statusCode, decision.body).toBe(201);
       const approvedProductionSpecId = decision.json().approvedProductionSpec.approvedProductionSpecId;
@@ -774,7 +850,7 @@ describe("ApprovedProductionSpec decision boundary", () => {
   });
 
   it("keeps the manifest actor authoritative when Apply audit retries under another actor", async () => {
-    const { app, auditLog, store } = buildHarness();
+    const { app, auditLog, intakeStore, store } = buildHarness();
     const firstActorHeaders = {
       "x-catering-actor-name": "PRODUKTIONS-MITARBEITER",
       "x-catering-trusted-secret": TRUSTED_SECRET
@@ -783,7 +859,8 @@ describe("ApprovedProductionSpec decision boundary", () => {
     const draft = await completeDraft("draft-apply-audit-first-actor");
 
     try {
-      await store.saveProductionDraft(context, draft);
+      await importDraft(store, draft);
+      await seedAcceptedEventSpec(intakeStore, draft);
       const decision = await app.inject({
         method: "POST",
         url: `/v1/production/drafts/${draft.draftId}/decision`,
@@ -825,11 +902,12 @@ describe("ApprovedProductionSpec decision boundary", () => {
   });
 
   it("applies only the immutable approved snapshot and removes draft apply", async () => {
-    const { app, store } = buildHarness();
+    const { app, intakeStore, store } = buildHarness();
     const draft = await completeDraft("draft-immutable");
     try {
       const imported = await importDraft(store, draft);
       expect(imported.statusCode, imported.body).toBe(201);
+      await seedAcceptedEventSpec(intakeStore, draft);
       const approvedResponse = await decide(app, draft.draftId, "approved");
       expect(approvedResponse.statusCode).toBe(201);
       const approved = approvedResponse.json().approvedProductionSpec;
