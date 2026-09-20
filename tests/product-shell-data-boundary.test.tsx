@@ -569,7 +569,7 @@ describe("independent product loader boundaries", () => {
     expect(activeCaseIds).toContain("case-a");
     expect(activeCaseIds.at(-1)).toBe("case-a");
     expect(loadDrafts).toHaveBeenCalledWith("case-a");
-    expect(loadDrafts.mock.calls.filter(([caseId]) => caseId === "case-a")).toHaveLength(2);
+    expect(loadDrafts.mock.calls.filter(([caseId]) => caseId === "case-a")).toHaveLength(3);
     expect(container.textContent).toContain("Fall A");
     expect(container.innerHTML).not.toContain("plan-b");
     expect(container.innerHTML).not.toContain("purchase-b");
