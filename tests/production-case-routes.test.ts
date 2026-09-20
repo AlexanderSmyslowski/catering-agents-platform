@@ -1248,9 +1248,9 @@ describe("production case routes", () => {
       headers: alphaHeaders
     });
     expect(emptyScoped.statusCode, emptyScoped.body).toBe(200);
-    expect(emptyScoped.json()).toEqual({ items: [], approvedProductionSpecs: [] });
+    expect(emptyScoped.json()).toEqual({ items: [], approvedProductionSpecs: [], planningEvidence: [], planningRecipes: [] });
     expect(unknownScoped.statusCode, unknownScoped.body).toBe(200);
-    expect(unknownScoped.json()).toEqual({ items: [], approvedProductionSpecs: [] });
+    expect(unknownScoped.json()).toEqual({ items: [], approvedProductionSpecs: [], planningEvidence: [], planningRecipes: [] });
     const firstApproval = await approveDraftForCase(app, intakeRecords, firstCase.caseId, firstSpec);
     const secondApproval = await approveDraftForCase(app, intakeRecords, secondCase.caseId, secondSpec);
 
