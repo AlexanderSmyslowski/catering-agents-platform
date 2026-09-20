@@ -1,0 +1,163 @@
+name: Prepare PR682 integration objects
+
+on:
+  push:
+    branches: [codex/pr682-exact-head-ci-20260920]
+    paths: [.github/workflows/pr682-integration-objects.yml]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pr682-memory-integration-20260921
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash --noprofile --norc -euo pipefail {0}
+
+jobs:
+  prepare-objects:
+    if: >-
+      github.repository == 'AlexanderSmyslowski/catering-agents-platform' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/codex/pr682-exact-head-ci-20260920' &&
+      github.event.head_commit.message == 'ci: prepare bounded PR682 integration objects without ref changes'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout immutable product source without persisted credentials
+        uses: actions/checkout@v5
+        with:
+          ref: f6b04e43fec5a243b938cc6f3d01a00450288f87
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify and prepare objects only, never update refs
+        env:
+          GH_OBJECT_TOKEN: ${{ github.token }}
+        run: |
+          umask 077
+          export EVIDENCE_DIR="$RUNNER_TEMP/pr682-integration-objects"
+          mkdir -p "$EVIDENCE_DIR"
+          git show "$GITHUB_SHA:.github/pr682-integration-resolver.py" > "$EVIDENCE_DIR/resolver.py"
+          git show "$GITHUB_SHA:.github/pr682-integration-input.md" > "$EVIDENCE_DIR/transition-note.md"
+          python3 - <<'PY'
+          import base64, hashlib, importlib.util, json, os, pathlib, re, subprocess, urllib.request
+          P='f6b04e43fec5a243b938cc6f3d01a00450288f87'
+          M='8de2e96c8604f12da2ec14c39b187db04dfb61cf'
+          B='3c5f6076bf04a88c13f8c10fa6779c4f57c3b65c'
+          PT='393414ace5f25976fd44c53acc103ad6a154c11a'
+          MT='1971727c18a3625b508614a665c4aab4a2121d9c'
+          D='docs/agent-memory/2026-09-21-gate-c-main-integration.md'
+          E=pathlib.Path(os.environ['EVIDENCE_DIR'])
+          def git(*args, data=None, env=None):
+              return subprocess.run(['git',*args],input=data,stdout=subprocess.PIPE,stderr=subprocess.PIPE,check=True,env=env).stdout
+          def text(*args): return git(*args).decode().strip()
+          def blob(data): return hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()
+          assert text('rev-parse','HEAD')==P
+          assert text('rev-parse','HEAD^{tree}')==PT
+          assert text('rev-parse',M+'^{tree}')==MT
+          assert text('merge-base',P,M)==B
+          assert not text('status','--porcelain')
+          assert text('rev-parse',P+':.github')==text('rev-parse',M+':.github')=='85f29af77398cd60b32863b8499d09287cce32b6'
+          assert blob((E/'resolver.py').read_bytes())=='0467e748c3bc85197f5e29b8499864df38e001b0'
+          note=(E/'transition-note.md').read_bytes()
+          assert blob(note)=='9cd03c983841e70f1a0c814ee34ee1fbfb060ba5'
+          module=importlib.util.spec_from_file_location('resolver',E/'resolver.py')
+          resolver=importlib.util.module_from_spec(module); module.loader.exec_module(resolver)
+          memory=[]
+          for label,sha in [('base',B),('product',P),('main',M)]:
+              data=git('show',sha+':memory.md');memory.append(data)
+              (E/(label+'-memory.md')).write_bytes(data)
+          assert not resolver.subsequence(resolver.normalized(memory[2]),resolver.normalized(memory[1]))
+          merged=resolver.resolve(*memory)
+          assert blob(merged)=='baec08c79e90b7cf58a83f399dfef9b96cbd1ceb'
+          (E/'resolved-memory.md').write_bytes(merged)
+          for i in range(3):
+              altered=list(memory);altered[i]+=b'Unexpected alteration\n'
+              try: resolver.resolve(*altered)
+              except ValueError: pass
+              else: raise AssertionError('source drift accepted')
+          def tree(rev):
+              items={}
+              for entry in git('ls-tree','-r','-z',rev).split(b'\0'):
+                  if not entry: continue
+                  meta,name=entry.split(b'\t',1)
+                  mode,kind,sha=meta.decode().split()
+                  items[name.decode()]=[mode,kind,sha]
+              return items
+          trees={label:tree(sha) for label,sha in [('base',B),('product',P),('main',M)]}
+          expected={};conflicts=[]
+          for path in sorted(set().union(*[set(x) for x in trees.values()])):
+              b,p,m=[trees[x].get(path) for x in ['base','product','main']]
+              if p==m: v=p
+              elif p==b: v=m
+              elif m==b: v=p
+              elif path=='memory.md': conflicts.append(path);v=p
+              else: raise AssertionError('unreviewed non-memory conflict: '+path)
+              if v is not None: expected[path]=v
+          assert conflicts==['memory.md']
+          native=subprocess.run(['git','merge-tree','--write-tree',P,M],capture_output=True)
+          (E/'merge-tree.txt').write_bytes(native.stdout)
+          (E/'merge-tree.stderr').write_bytes(native.stderr)
+          assert native.returncode==1
+          lines=native.stdout.decode().splitlines()
+          staged=[line.split('\t',1)[1] for line in lines if re.match(r'^\d{6} [0-9a-f]{40} [123]\t',line)]
+          assert staged==['memory.md']*3
+          native_tree=tree(lines[0])
+          assert {k:v for k,v in native_tree.items() if k!='memory.md'}=={k:v for k,v in expected.items() if k!='memory.md'}
+          assert D not in expected
+          for path,data in [('memory.md',merged),(D,note)]:
+              sha=git('hash-object','-w','--stdin',data=data).decode().strip()
+              assert sha==blob(data)
+              expected[path]=['100644','blob',sha]
+          index_env={**os.environ,'GIT_INDEX_FILE':str(E/'temporary-index')}
+          git('read-tree',lines[0],env=index_env)
+          for path in ['memory.md',D]:
+              mode,kind,sha=expected[path]
+              git('update-index','--add','--cacheinfo',mode+','+sha+','+path,env=index_env)
+          result_tree=git('write-tree',env=index_env).decode().strip()
+          assert tree(result_tree)==expected
+          git('diff','--check',P,result_tree)
+          for label,items in {**trees,'result':expected}.items():
+              (E/(label+'-tree.json')).write_text(json.dumps(items,sort_keys=True,indent=2)+'\n')
+          api_root='https://api.github.com/repos/AlexanderSmyslowski/catering-agents-platform'
+          def api(method,suffix,body=None):
+              if method=='POST': assert suffix in ['/git/blobs','/git/trees']
+              else: assert method=='GET' and suffix in ['/git/ref/heads/main','/git/ref/heads/codex/gate-c-ab-integration-20260830']
+              req=urllib.request.Request(api_root+suffix,data=None if body is None else json.dumps(body).encode(),method=method,headers={'Authorization':'Bearer '+os.environ['GH_OBJECT_TOKEN'],'Accept':'application/vnd.github+json','Content-Type':'application/json','X-GitHub-Api-Version':'2022-11-28'})
+              with urllib.request.urlopen(req,timeout=30) as response: return json.load(response)
+          def unchanged_remote():
+              assert api('GET','/git/ref/heads/main')['object']['sha']==M
+              assert api('GET','/git/ref/heads/codex/gate-c-ab-integration-20260830')['object']['sha']==P
+          unchanged_remote()
+          for data in [merged,note]:
+              response=api('POST','/git/blobs',{'content':base64.b64encode(data).decode(),'encoding':'base64'})
+              assert response['sha']==blob(data)
+          changes=[]
+          for path in sorted(set(trees['product'])|set(expected)):
+              old,new=trees['product'].get(path),expected.get(path)
+              if old==new: continue
+              mode,kind,sha=new if new is not None else [old[0],old[1],None]
+              changes.append({'path':path,'mode':mode,'type':kind,'sha':sha})
+          created=api('POST','/git/trees',{'base_tree':PT,'tree':changes})
+          assert created['sha']==result_tree
+          unchanged_remote()
+          assert text('rev-parse','HEAD')==P and not text('status','--porcelain')
+          (E/'temporary-index').unlink()
+          result={'product_head':P,'main_head':M,'base_head':B,'product_tree':PT,'main_tree':MT,'result_tree':result_tree,'memory_blob':blob(merged),'memory_sha256':hashlib.sha256(merged).hexdigest(),'handoff_blob':blob(note),'handoff_path':D,'changes_from_product':changes,'native_conflicts':conflicts,'both_histories_preserved':True,'native_and_independent_trees_equal':True,'refs_unchanged':True,'commit_created':False,'product_tests_rerun':False,'helper_commit':os.environ['GITHUB_SHA'],'run_id':os.environ['GITHUB_RUN_ID']}
+          (E/'result.json').write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n')
+          print(json.dumps(result,ensure_ascii=False,indent=2))
+          files=sorted(p for p in E.iterdir() if p.is_file() and p.name!='SHA256SUMS')
+          (E/'SHA256SUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name+'\n' for p in files))
+          PY
+
+      - name: Preserve integration evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr682-integration-objects-f6b04e43-main-8de2e96
+          path: ${{ runner.temp }}/pr682-integration-objects/
+          retention-days: 7
+          if-no-files-found: error
