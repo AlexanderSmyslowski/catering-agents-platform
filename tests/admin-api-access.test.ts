@@ -196,7 +196,7 @@ async function createCanonicalProductionDraft(rootDir: string) {
       caseId,
       expectedRevision: draft.revision,
       componentUpdates: [{
-        componentId: revisedComponent!.componentId,
+        componentId: component!.componentId,
         productionMode: "scratch",
         recipeOverrideId: "recipe-caesar-salad",
         notes: "Explizite kanonische Rezeptentscheidung der Fixture."
