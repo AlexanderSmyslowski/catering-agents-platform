@@ -211,11 +211,22 @@ async function createCanonicalProductionDraft(rootDir: string) {
   const revisedComponent = revisedEventSpec?.menuPlan[0];
   expect(revisedEventSpec?.specId).toBe(eventSpec!.specId);
   expect(revisedComponent?.componentId).toBe(component!.componentId);
+  const planningRead = await productionApp.inject({
+    method: "GET",
+    url: `/v1/production/drafts?caseId=${caseId}`,
+    headers: productionHeaders
+  });
+  expectStatus(planningRead, 200);
+  const planningRecipe = planningRead.json<{
+    planningRecipes: Array<{ recipe: { recipeId: string }; recipeSnapshotHash: string }>
+  }>().planningRecipes.find((item) => item.recipe.recipeId === "recipe-caesar-salad");
+  expect(planningRecipe?.recipeSnapshotHash).toMatch(/^sha256:[0-9a-f]{64}$/);
   const evidence = await productionApp.inject({
     method: "POST",
     url: `/v1/production/cases/${caseId}/planning-evidence`,
     headers: productionHeaders,
     payload: {
+      expectedRecipeSnapshotHash: planningRecipe!.recipeSnapshotHash,
       draftId: revisedDraft.draftId,
       draftRevision: revisedDraft.revision,
       componentId: revisedComponent!.componentId,
