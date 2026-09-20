@@ -2317,10 +2317,12 @@ export function registerProductionArtifactRoutes(
       const materializedRecipeById = new Map(artifacts.recipes.map((recipe) => [recipe.recipeId, recipe]));
       for (const evidence of planningEvidence) {
         const materializedRecipe = materializedRecipeById.get(evidence.recipeId);
-        const materializedRecipeHash = materializedRecipe
-          ? `sha256:${createHash("sha256").update(stableJson(materializedRecipe)).digest("hex")}`
-          : undefined;
-        if (!materializedRecipe || materializedRecipeHash !== evidence.recipeSnapshotHash) {
+        const currentRecipe = await repository.get(actor, evidence.recipeId);
+        if (
+          !materializedRecipe ||
+          !currentRecipe ||
+          !areJsonValuesEqual(materializedRecipe, currentRecipe)
+        ) {
           return reply.code(409).send({
             message: "Persistierte Planungs-Evidenz passt nicht zum tatsächlich materialisierten Rezept-Snapshot."
           });
