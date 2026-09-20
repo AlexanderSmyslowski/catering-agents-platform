@@ -1,5 +1,30 @@
 # Catering-Zielaufbau — geprüft am 19.09.2026
 
+## Aktueller Betriebsstatus und Quellenbindung
+
+**Stand 20.09.2026, 21:28 MESZ: TECHNISCHER ÜBERGANG ABGESCHLOSSEN – CATERING-PROD-1 IST
+ALLEINIGER WRITER.** Der alte Catering-Schreibweg bleibt gestoppt. Backup-/
+Restore-Regelbetrieb und der gebundene Better-Stack-Heartbeat sind aktiv; die
+vollständigen Ausführungsnachweise stehen im Abschlussabschnitt am Dateiende.
+
+- **Installierter Betriebsartefakt-Stand:** Mergecommit
+  3c5f6076bf04a88c13f8c10fa6779c4f57c3b65c, Tree
+  53ef0acf1dd9d3c949d35069055f5e6c3ce9a76d. Geschützte Laufzeitbindungen
+  einschließlich Zugangshash und Writerstatus wurden danach gemäß dem
+  dokumentierten Übergang aktualisiert; das ist kein neuer Produkt- oder
+  Repositorystand.
+- **Neuerer Repositorystand:** GitHub-main stand beim Abgleich auf
+  6e8074d5ee86879471e18fdd9eeb3daa88b2d086, Tree
+  a31070d4162bab0efba38f63e0baeb1e6d22099d. Dieser neuere Stand wurde in
+  diesem Übergang weder installiert noch als produktiver Betriebsstand
+  abgenommen.
+- **Dokumentationsstatus:** Der folgende historische Aufbau- und Prüfverlauf
+  bleibt unverändert nachvollziehbar. Frühere HOLD-Vermerke beschreiben den
+  jeweiligen damaligen Zustand und sind durch diesen aktuellen Kopf nicht
+  rückwirkend umgedeutet. Maßgeblich für den heutigen Nachzustand ist der
+  Abschlussabschnitt „2026-09-20 – technischer Übergang abgeschlossen“.
+
+
 ## Ergebnis und Grenze
 
 Der isolierte Zielstand ist aufgebaut; Datenkopie, externe Sicherung,
@@ -582,3 +607,77 @@ Vor dieser Freigabe sind nur folgende echte Punkte offen:
 Bis dahin gilt weiter: **HOLD BEFORE PRODUCTION CUTOVER, AUTOMATIC JOB
 ACTIVATION AND MERGE.** Dieser Abschnitt hat keine Betriebs-, Zugangs-, DNS-,
 Proxy-, Daten-, Timer- oder Monitoringänderung ausgeführt.
+
+## 2026-09-20 – technischer Übergang abgeschlossen
+
+**Ergebnis: TRANSITION COMPLETE – TARGET IS SOLE WRITER.** Der natürliche
+Drei-Stunden-Zyklus startete am 2026-09-20T18:00:23Z. Backup-Invocation
+8259cb4ce8a64b8baac0cbab6fda52d4 endete um 18:00:39Z mit Exit 0; der
+allein durch OnSuccess gestartete Restore hatte Invocation
+bbb61a17224649ae83ab6c11445bc50f und endete um 18:00:57Z mit Exit 0.
+Finale Evidence bindet Snapshot
+b8fb0248db45e8c5b897c21a2fb6408c99461a2cb10227c7e3226f8ab6b8ec2f,
+Datenzeitpunkt 18:00:23Z, vollständigen Scope
+postgres-full,sites,platform-caddy,catering-edge-caddy, externen Readback,
+isolierten Vier-Tabellen-Restore und Cleanup. Es wurde kein zusätzlicher
+Backup-/Restorelauf gestartet. Timer bleibt enabled/active; nächster regulärer
+Termin war bei Abschluss 2026-09-20T21:00:00Z.
+
+Der lokale Observer-Cron wurde aus dem gemergten Blob mit SHA-256
+8c5dafc6b1d5198ae609dc7cbfb24b86805a5bcea37ab55d6baacab40ce1ebbf
+als root:root/0644 installiert. Ein natürlicher gesunder Lauf um 18:20:03Z
+ankerte den kontrollierten Ausbleibetest. Cron war
+18:21:15Z–18:42:17Z ausgesetzt; Backup, Restore und Evidence blieben dabei
+unverändert. Better-Stack-Incident 1018404670 begann um 20:30 MESZ mit
+Missed heartbeat. Alexander bestätigte den tatsächlichen Empfang der
+Alarmmail. Der erste neue natürliche gesunde Observerlauf um 18:45:03Z
+löste den Incident automatisch; Alexander bestätigte auch die Recoverymail von
+20:45:06 MESZ. Nachfolgende natürliche Läufe, zuletzt 19:15:03Z, sind
+healthy, failure_epoch=0; Better Stack zeigte danach Up mit frischem
+Heartbeat. Monitor 493066/Team 569103 bleibt 300/300 aktiv; der installierte
+Cron ist sein alleiniger Sender.
+
+Da für die endgültige öffentliche Basic-Auth-Bindung kein verwendbares
+Klartextpasswort dokumentiert war, wurden mit nachträglicher Betreiberfreigabe
+neue finale Zugangsdaten erzeugt. Klartext liegt ausschließlich in einer
+geschützten lokalen Betreiberablage außerhalb Git (Verzeichnis 0700, Datei
+0600); auf dem Ziel wurden nur Benutzerbindung und bcrypt-Hash mit Cost 14
+installiert. Edge und interner Plattform-Webserver
+wurden dafür gezielt neu erstellt; die vier Fachcontainer und PostgreSQL
+blieben identisch. Im gesperrten Zustand belegte der reale öffentliche Vertrag:
+ohne Auth 401, mit Auth Start/Health 200, unbekannter Leseweg 404 und
+Schreibmethode 423. TLS wurde regulär verifiziert; keine Zugangswerte wurden
+protokolliert.
+
+Der Zielwriter wurde am 2026-09-20T19:13:35Z endgültig auf enabled gesetzt;
+nur der Ziel-Edge wurde neu erstellt. Finale Runtime SHA-256:
+dbeaa23bc8db7353a0e916ea75a407672b8e3f7af96d8410e13d8add9cc53072.
+Finale Edge-ID:
+6e41d851eb61121bf8845b6f5c797353f48a7cd247438131669259b9eb3a796d.
+Der Edge läuft mit Restart unless-stopped, nur auf
+catering_ingress/catering_public, veröffentlicht ausschließlich TCP 80/443
+und ist einziges Mitglied von catering_public. Alle vier authentisierten
+Healthrouten sowie die Startseite liefern 200. App-/DB-Container und Images
+blieben unverändert; PostgreSQL ist healthy. Der alte Host hat weiterhin alle
+fünf Catering-Web-/Writercontainer gestoppt. Seine PostgreSQL-Instanz, Shared
+Edge, Zeiterfassung und andere Anwendungen blieben unverändert in Betrieb.
+
+Zwei Schutzrücknahmen sind als Ausführungsevidence erhalten: Ein erster
+Writer-Postcheck erwartete fälschlich zusätzlich UDP 443 und setzte den Writer
+automatisch wieder auf locked; ein erster Credential-Web-Postcheck erwartete
+den ausschließlich zum Edge gehörenden Writerwert auch im internen Webcontainer
+und nahm die gesamte Credentialänderung automatisch zurück. Beide
+Prüfannahmen wurden gegen die gemergten Verträge korrigiert; vor dem jeweiligen
+Folgeschritt war der vollständige sichere Rücknahmezustand belegt. Es gab dabei
+keinen Backup-/Restorestart, keine Daten-, DNS-, Schema-, Image- oder
+Fremdanwendungsänderung.
+
+Geschützte Zielnachweise:
+/root/catering-target-evidence/observer-activation-20260920T181647Z,
+/root/catering-target-evidence/credential-bind-20260920-final-v2 und
+/root/catering-target-evidence/writer-enable-final-20260920T191334Z.
+Der alte Datenstand und alle Backups bleiben erhalten. Nach neuen Zielwrites
+darf kein Rückfall auf die alte Datenbank erfolgen; ein Rückweg erfordert
+Writer-Lock, vollständige Rückübertragung und erneuten Vier-Tabellen-/Schema-/
+ACL-Vergleich. Der bekannte Produkt-Reloadbefund bleibt getrennt offen und ist
+durch diesen technischen Übergang nicht als behoben erklärt.

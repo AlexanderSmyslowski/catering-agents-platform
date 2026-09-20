@@ -2083,3 +2083,30 @@ Weitere Ausbauschritte sollten erst wieder erfolgen, wenn ein neuer realer Produ
   Merge, frischer Betriebs-Preflight und erst danach gesondert freigegebener
   technischer Übergang. PR693 bleibt Draft; keine Installation, DNS-, Daten-,
   Zugangs-, Timer-, Cron- oder Monitormutation.
+
+
+### 5.393 - 2026-09-20 — Catering technisch auf Zielserver umgestellt
+
+- Ausführungsquelle bleibt Mergecommit 3c5f6076bf04a88c13f8c10fa6779c4f57c3b65c,
+  Tree 53ef0acf1dd9d3c949d35069055f5e6c3ce9a76d. Ziel ist
+  catering-prod-1/Server166533273; alter Catering-Writer bleibt gestoppt.
+- Finaler Vier-Tabellen-Datenstand ist gebunden. Der natürliche Zyklus vom
+  20.09.2026 18:00:23UTC bestand Backup, externen Readback, OnSuccess-Restore
+  und Cleanup; Snapshot
+  b8fb0248db45e8c5b897c21a2fb6408c99461a2cb10227c7e3226f8ab6b8ec2f.
+  Timer bleibt enabled/active.
+- Better-Stack-Heartbeat493066/Team569103 läuft mit Cron300 und Provider300/300.
+  Kontrollierter Missed-heartbeat-Incident1018404670, tatsächlicher
+  Alarmempfang, natürlicher gesunder Recoverylauf und Recoverymail sind belegt.
+- Finale öffentliche Basic-Auth-Zugangsdaten wurden neu gebunden; Klartext
+  ausschließlich in geschützter lokaler Betreiberablage außerhalb Git
+  (Verzeichnis 0700, Datei 0600). Real geprüft: TLS, Quellfence, 401 ohne Auth, 200 mit Auth, im gesperrten
+  Zustand 404/423. Keine Secrets in Git oder Betriebsberichten.
+- Zielwriter seit 20.09.2026 19:13:35UTC enabled; nur der Edge wurde dafür neu
+  erstellt. Ziel ist alleiniger Writer, alter Datenstand/Backups bleiben
+  erhalten. Nach neuen Zielwrites kein Rückfall auf Altdaten ohne vollständigen
+  Rücktransfer und Vier-Tabellen-/Schema-/ACL-Vergleich.
+- Der bekannte Produkt-Reloadbefund bleibt getrennt offen und ist durch den
+  technischen Übergang nicht behoben. Vollständige Nachweise und Rücknahmen in
+  docs/agent-memory/2026-09-19-catering-target-build.md sowie lokal im
+  bestehenden Catering-Evidenzordner.
