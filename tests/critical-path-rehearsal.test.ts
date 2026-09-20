@@ -304,7 +304,10 @@ describe("critical path rehearsal", () => {
         .sort((left, right) => right.revision - left.revision)[0];
       expect(negativeCurrentDraft?.supersedesDraftId).toBe(negativeDraft?.draftId);
       expect(negativeCurrentDraft?.draftArtifacts.productionPlan).toBeDefined();
-      expect(negativeCurrentDraft?.draftArtifacts.productionPlan?.blockingIssues).toContain("production readiness is insufficient");
+      expect(negativeCurrentDraft?.draftArtifacts.productionPlan?.blockingIssues?.length).toBeGreaterThan(0);
+      expect(negativeCurrentDraft?.draftArtifacts.productionPlan?.componentReadiness).toEqual(
+        expect.arrayContaining([expect.objectContaining({ status: "blocked" })])
+      );
       expect(negativeDraft?.draftArtifacts.productionPlan).toBeUndefined();
       expect(negativeDraft?.draftArtifacts.purchaseList).toBeUndefined();
       expect(negativeDraft?.draftArtifacts.recipes).toBeUndefined();
