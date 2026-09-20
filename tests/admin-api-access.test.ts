@@ -93,21 +93,6 @@ async function createCanonicalOfferHandoff(rootDir: string) {
     eventRequest: Record<string, unknown>;
     acceptedEventSpec: { specId: string; menuPlan: Array<{ componentId: string }> };
   }>();
-  const updatedIntake = await intakeApp.inject({
-    method: "PATCH",
-    url: `/v1/intake/specs/${intakePayload.acceptedEventSpec.specId}`,
-    headers: intakeHeaders,
-    payload: {
-      componentUpdates: intakePayload.acceptedEventSpec.menuPlan.map((component) => ({
-        componentId: component.componentId,
-        menuCategory: "classic",
-        productionMode: "scratch",
-        recipeOverrideId: "recipe-caesar-salad",
-        notes: "Explizite kanonische Rezeptentscheidung der Fixture."
-      }))
-    }
-  });
-  expectStatus(updatedIntake, 200);
   const createdCase = await offerApp.inject({
     method: "POST",
     url: "/v1/offers/cases",
