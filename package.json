@@ -56,7 +56,7 @@
     "@vitejs/plugin-react": "^5.1.4",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
-    "fastify": "^5.8.6",
+    "fastify": "^5.12.5",
     "jsdom": "^26.1.0",
     "pdf-parse": "^1.1.1",
     "pg": "^8.20.0",
@@ -80,8 +80,8 @@
     "@babel/core": "7.29.7",
     "esbuild": "0.28.1",
     "ws": "8.21.0",
-    "fast-uri": "3.1.6",
-    "browserslist": "4.28.7",
-    "baseline-browser-mapping": "2.10.39"
+    "fast-uri": "3.1.8",
+    "browserslist": "4.29.0",
+    "baseline-browser-mapping": "2.11.25"
   }
 }
