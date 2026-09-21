@@ -7,28 +7,45 @@ import { useOperatorNameState } from "../backoffice-ui/src/use-operator-name-sta
 type OperatorNameState = ReturnType<typeof useOperatorNameState>;
 
 const roots: Array<ReturnType<typeof createRoot>> = [];
+let localValues: Map<string, string>;
+let sessionValues: Map<string, string>;
+let localSetItem: ReturnType<typeof vi.fn>;
+let sessionSetItem: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
-  const storage = new Map<string, string>();
+  localValues = new Map<string, string>();
+  sessionValues = new Map<string, string>();
+  localSetItem = vi.fn((key: string, value: string) => localValues.set(key, String(value)));
+  sessionSetItem = vi.fn((key: string, value: string) => sessionValues.set(key, String(value)));
   const localStorageMock = {
-    getItem: (key: string) => storage.get(key) ?? null,
-    setItem: (key: string, value: string) => {
-      storage.set(key, String(value));
-    },
+    getItem: (key: string) => localValues.get(key) ?? null,
+    setItem: localSetItem,
     removeItem: (key: string) => {
-      storage.delete(key);
+      localValues.delete(key);
     },
     clear: () => {
-      storage.clear();
+      localValues.clear();
     }
+  };
+  const sessionStorageMock = {
+    getItem: (key: string) => sessionValues.get(key) ?? null,
+    setItem: sessionSetItem,
+    removeItem: (key: string) => sessionValues.delete(key),
+    clear: () => sessionValues.clear()
   };
 
   Object.defineProperty(window, "localStorage", {
     value: localStorageMock,
     configurable: true
   });
+  Object.defineProperty(window, "sessionStorage", {
+    value: sessionStorageMock,
+    configurable: true
+  });
   vi.stubGlobal("localStorage", localStorageMock);
+  vi.stubGlobal("sessionStorage", sessionStorageMock);
   window.localStorage.clear();
+  window.sessionStorage.clear();
 });
 
 afterEach(() => {
@@ -39,6 +56,7 @@ afterEach(() => {
   }
   document.body.innerHTML = "";
   window.localStorage.clear();
+  window.sessionStorage.clear();
   vi.unstubAllGlobals();
 });
 
@@ -69,31 +87,32 @@ function renderOperatorNameState() {
 }
 
 describe("useOperatorNameState", () => {
-  it("starts with the generic operator name when no value is stored", () => {
+  it("exposes no identity outside an authenticated session", () => {
     const probe = renderOperatorNameState();
 
-    expect(probe.state.operatorName).toBe("Mitarbeiter");
+    expect(probe.state.operatorName).toBe("");
+    expect(localSetItem).not.toHaveBeenCalled();
+    expect(sessionSetItem).not.toHaveBeenCalled();
   });
 
-  it("trims and persists operator name changes", () => {
+  it("ignores browser attempts to change or persist identity", () => {
     const probe = renderOperatorNameState();
 
     act(() => {
       probe.state.handleOperatorNameChange("  Kueche Nord  ");
     });
 
-    expect(probe.state.operatorName).toBe("Kueche Nord");
-    expect(window.localStorage.getItem("catering.operatorName")).toBe("Kueche Nord");
+    expect(probe.state.operatorName).toBe("");
+    expect(localSetItem).not.toHaveBeenCalled();
+    expect(sessionSetItem).not.toHaveBeenCalled();
   });
 
-  it("falls back to the generic name for blank input", () => {
+  it("ignores a legacy local operator value", () => {
+    localValues.set("catering.operatorName", "Kueche Nord");
     const probe = renderOperatorNameState();
 
-    act(() => {
-      probe.state.handleOperatorNameChange("   ");
-    });
-
-    expect(probe.state.operatorName).toBe("Mitarbeiter");
-    expect(window.localStorage.getItem("catering.operatorName")).toBe("Mitarbeiter");
+    expect(probe.state.operatorName).toBe("");
+    expect(localSetItem).not.toHaveBeenCalled();
+    expect(sessionSetItem).not.toHaveBeenCalled();
   });
 });

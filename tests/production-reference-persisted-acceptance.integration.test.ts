@@ -43,8 +43,11 @@ async function persistApprovedHandoff(
   const reviewedDraft = options.reviewed === false
     ? persistedDraft
     : {
+      // Do not rewrite the case's original draft revision. A continuation is
+      // a new draft identity with its own canonical draft_created event.
       ...persistedDraft,
-      revision: persistedDraft.revision + 1,
+      draftId: `${persistedDraft.draftId}-reviewed`,
+      revision: 1,
       reviewStatus: {
         priceReviewStatus: "verified" as const,
         taxReviewStatus: "verified" as const,
@@ -54,13 +57,17 @@ async function persistApprovedHandoff(
         publishApproved: true
       }
     };
-  if (reviewedDraft !== persistedDraft) await store.saveDraft({ businessId: "local" }, reviewedDraft);
+  if (reviewedDraft !== persistedDraft) {
+    expect(await store.saveDraftForCase({ businessId: "local" }, caseId, reviewedDraft)).toBe("saved");
+    expect(await store.getDraft({ businessId: "local" }, reviewedDraft.draftId)).toEqual(reviewedDraft);
+  }
   const decisionResponse = await app.inject({
     method: "POST",
-    url: `/v1/offers/drafts/${draft.draftId}/decision`,
+    url: `/v1/offers/drafts/${reviewedDraft.draftId}/decision`,
     headers,
-    payload: { decision: "approved", revision: reviewedDraft.revision, variantId: draft.variantSet[0]!.variantId }
+    payload: { decision: "approved", revision: reviewedDraft.revision, variantId: reviewedDraft.variantSet[0]!.variantId }
   });
+  expect(decisionResponse.statusCode, decisionResponse.body).toBe(201);
   const approvedOfferId = decisionResponse.json<{ approvedOffer: { approvedOfferId: string } }>().approvedOffer.approvedOfferId;
   const handoffResponse = await app.inject({
     method: "POST",
@@ -68,6 +75,7 @@ async function persistApprovedHandoff(
     headers,
     payload: {}
   });
+  expect(handoffResponse.statusCode, handoffResponse.body).toBe(201);
   return {
     caseId,
     approvedOfferId,

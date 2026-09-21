@@ -5,6 +5,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../backoffice-ui/src/App.js";
 
 type RouteSmokeRecord = Record<string, unknown>;
+const routeSmokeSession = {
+  authenticated: true,
+  user: { userId: "route-smoke-user", displayName: "Route-Smoke" },
+  access: { capabilities: ["intake", "offer", "production", "production_read"] }
+};
 type RouteSmokeDashboardFixture = {
   intakeRequests?: Array<RouteSmokeRecord & { requestId?: string }>;
   acceptedSpecs?: Array<RouteSmokeRecord & { specId?: string }>;
@@ -46,6 +51,14 @@ function installBackofficeEnvironmentMocks(fixture: RouteSmokeDashboardFixture =
   const firstPurchaseList = fixture.purchaseLists?.[0];
   const firstSpec = fixture.acceptedSpecs?.[0];
   const firstRequest = fixture.intakeRequests?.[0];
+  const firstRequestDetail = firstRequest?.requestId
+    ? fixture.intakeRequestDetails?.[String(firstRequest.requestId)]
+    : undefined;
+  const firstRequestSource = (firstRequestDetail?.source ?? firstRequest?.source) as RouteSmokeRecord | undefined;
+  const firstRawInput = Array.isArray(firstRequestDetail?.rawInputs)
+    ? firstRequestDetail.rawInputs[0] as RouteSmokeRecord | undefined
+    : undefined;
+  const firstSourceMetadata = firstRawInput?.sourceMetadata as RouteSmokeRecord | undefined;
   const offerCaseId = firstOfferDraft?.draftId ? `offer-case-${String(firstOfferDraft.draftId)}` : undefined;
   const productionCaseId = firstSpec?.specId || firstProductionPlan?.planId || firstPurchaseList?.purchaseListId
     ? `production-case-${String(firstSpec?.specId ?? firstProductionPlan?.planId ?? firstPurchaseList?.purchaseListId)}`
@@ -54,8 +67,16 @@ function installBackofficeEnvironmentMocks(fixture: RouteSmokeDashboardFixture =
     ? {
         sourceId: `source-${String(firstRequest.requestId)}`,
         requestId: String(firstRequest.requestId),
+        ...(typeof firstRawInput?.documentId === "string" ? { documentId: firstRawInput.documentId } : {}),
+        ...(typeof firstSourceMetadata?.filename === "string" ? { filename: firstSourceMetadata.filename } : {}),
+        ...(typeof firstSourceMetadata?.mimeType === "string" ? { mimeType: firstSourceMetadata.mimeType } : {}),
+        ...(typeof firstSourceMetadata?.sha256 === "string" ? { sha256: firstSourceMetadata.sha256 } : {}),
         dataClass: "synthetic_demo",
-        addedAt: "2026-04-10T09:30:00.000Z"
+        addedAt: typeof firstSourceMetadata?.ingestedAt === "string"
+          ? firstSourceMetadata.ingestedAt
+          : typeof firstRequestSource?.receivedAt === "string"
+            ? firstRequestSource.receivedAt
+            : "2026-04-10T09:30:00.000Z"
       }
     : undefined;
   const offerDraft = firstOfferDraft
@@ -83,24 +104,72 @@ function installBackofficeEnvironmentMocks(fixture: RouteSmokeDashboardFixture =
         }
       }]
     : [];
-  const productionEvents = productionCaseId
-    ? [{
+  const productionDraft = productionCaseId && firstSpec?.specId
+    ? {
         businessId: "local",
-        eventId: `${productionCaseId}-created`,
-        caseId: productionCaseId,
-        sequence: 1,
-        at: "2026-04-10T09:30:00.000Z",
-        role: "system",
-        kind: "case_created",
-        text: "Produktionsauftrag angelegt.",
-        ...(sourceRef ? { sourceRef } : {})
-      }]
+        draftId: `production-draft-${String(firstSpec.specId)}`,
+        revision: 1,
+        status: "approved",
+        createdAt: "2026-04-10T09:31:00.000Z",
+        source: {
+          kind: "manual_import",
+          receivedAt: typeof firstRequestSource?.receivedAt === "string"
+            ? firstRequestSource.receivedAt
+            : sourceRef?.addedAt ?? "2026-04-10T09:31:00.000Z",
+          sourceRef: typeof sourceRef?.filename === "string"
+            ? `upload:${sourceRef.filename}`
+            : `accepted-event-spec:${String(firstSpec.specId)}`,
+          ...(typeof sourceRef?.sha256 === "string" ? { inputHash: `sha256:${sourceRef.sha256}` } : {})
+        },
+        reviewCards: [],
+        draftArtifacts: {
+          eventSpec: firstSpec
+        }
+      }
+    : undefined;
+  const productionEvents = productionCaseId
+    ? [
+        {
+          businessId: "local",
+          eventId: `${productionCaseId}-created`,
+          caseId: productionCaseId,
+          sequence: 1,
+          at: "2026-04-10T09:30:00.000Z",
+          role: "system",
+          kind: "case_created",
+          text: "Produktionsauftrag angelegt.",
+          ...(sourceRef ? { sourceRef } : {})
+        },
+        ...(productionDraft
+          ? [{
+              businessId: "local",
+              eventId: `${productionCaseId}-revision`,
+              caseId: productionCaseId,
+              sequence: 2,
+              at: "2026-04-10T09:31:00.000Z",
+              role: "assistant",
+              kind: "revision_created",
+              text: "Produktionsauftrag angelegt. Produktionsentwurf erstellt.",
+              artifactId: productionDraft.draftId,
+              revisionRef: {
+                artifactType: "ProductionDraft",
+                artifactId: productionDraft.draftId,
+                revision: productionDraft.revision,
+                createdAt: productionDraft.createdAt
+              }
+            }]
+          : [])
+      ]
     : [];
 
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
+
+      if (url.endsWith("/api/intake/v1/auth/session")) {
+        return Response.json(routeSmokeSession);
+      }
 
       if (url.endsWith("/api/offers/v1/offers/cases")) {
         return new Response(
@@ -145,8 +214,14 @@ function installBackofficeEnvironmentMocks(fixture: RouteSmokeDashboardFixture =
         );
       }
 
-      if (url.startsWith("/api/production/v1/production/drafts")) {
-        return new Response(JSON.stringify({ items: [], approvedProductionSpecs: [] }), {
+      if (
+        productionCaseId &&
+        url === `/api/production/v1/production/drafts?caseId=${encodeURIComponent(productionCaseId)}`
+      ) {
+        return new Response(JSON.stringify({
+          items: productionDraft ? [productionDraft] : [],
+          approvedProductionSpecs: []
+        }), {
           status: 200,
           headers: { "content-type": "application/json" }
         });
@@ -226,10 +301,16 @@ function installBackofficeEnvironmentMocks(fixture: RouteSmokeDashboardFixture =
       }
 
       if (url.endsWith("/api/production/v1/production/plans")) {
-        return new Response(JSON.stringify({ items: fixture.productionPlans ?? [] }), {
-          status: 200,
-          headers: { "content-type": "application/json" }
-        });
+        return new Response(
+          JSON.stringify({
+            access: { canOperateProduction: true },
+            items: fixture.productionPlans ?? []
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" }
+          }
+        );
       }
 
       if (url.endsWith("/api/production/v1/production/purchase-lists")) {
@@ -415,7 +496,12 @@ function installPendingBackofficeEnvironmentMocks() {
     configurable: true
   });
   vi.stubGlobal("localStorage", localStorageMock);
-  vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => undefined)));
+  vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+    if (String(input).endsWith("/api/intake/v1/auth/session")) {
+      return Promise.resolve(Response.json(routeSmokeSession));
+    }
+    return new Promise<Response>(() => undefined);
+  }));
 }
 
 afterEach(() => {
@@ -479,12 +565,9 @@ describe("backoffice route smoke", () => {
 
     const production = (await renderRoute("/produktion")).text;
 
-    expect(production).toContain("Produktionsdaten werden geladen; noch kein Vorgang bewertet.");
-    expect(production).toContain("Aufträge werden geladen");
-    expect(production).toContain("Aktuelle Plattformdaten werden geladen...");
+    expect(production).toContain("Produktionszugriff wird geprüft.");
     expect(production).not.toContain("Produktionspläne werden geladen; noch keine Planbewertung.");
     expect(production).not.toContain("Einkaufslisten werden geladen; noch keine Beschaffungsbewertung.");
-    expect(production).toContain("Aktuelle Plattformdaten werden geladen...");
     expect(production).not.toContain("Noch kein aktiver Vorgang");
     expect(production).not.toContain("0 Pläne · 0 Einkaufslisten · 0 Rezepte");
     expect(production).not.toContain("0 Küchenpläne mit Zeit- und Rezeptbezug sind vorhanden.");
@@ -527,7 +610,7 @@ describe("backoffice route smoke", () => {
           schemaVersion: 1,
           specId: "corridor-spec-1",
           requestId: "corridor-request-1",
-          sourceLineage: [{ sourceType: "offer_draft", reference: "corridor-draft-1" }],
+          sourceLineage: [{ sourceType: "pdf", reference: "corridor-request-1" }],
           readiness: { status: "partial", reasons: ["Lieferfenster fehlt."] },
           event: { type: "lunch", date: "2026-09-15" },
           servicePlan: { eventType: "lunch", serviceForm: "buffet" },
@@ -776,6 +859,10 @@ describe("backoffice route smoke", () => {
     fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
 
+      if (url.endsWith("/api/intake/v1/auth/session")) {
+        return Response.json(routeSmokeSession);
+      }
+
       if (
         url.endsWith("/api/offers/v1/offers/cases") &&
         (init?.method ?? "GET").toUpperCase() === "GET"
@@ -928,7 +1015,7 @@ describe("backoffice route smoke", () => {
       }
 
       if (url.endsWith("/api/production/v1/production/plans")) {
-        return new Response(JSON.stringify({ items: [] }), {
+        return new Response(JSON.stringify({ access: { canOperateProduction: true }, items: [] }), {
           status: 200,
           headers: { "content-type": "application/json" }
         });
@@ -1081,12 +1168,18 @@ describe("backoffice route smoke", () => {
 
   it("keeps offer and production handoff anchored on the same request, spec, and export markers", async () => {
     installBackofficeEnvironmentMocks({
+      intakeRequests: [
+        {
+          requestId: "c4-request-handoff",
+          source: { channel: "pdf_upload", receivedAt: "2026-05-22T11:30:00.000Z" }
+        }
+      ],
       acceptedSpecs: [
         {
           schemaVersion: 1,
           specId: "c4-spec-handoff",
           requestId: "c4-request-handoff",
-          sourceLineage: [{ sourceType: "offer_draft", reference: "c4-draft-handoff" }],
+          sourceLineage: [{ sourceType: "pdf", reference: "c4-request-handoff" }],
           readiness: { status: "complete", reasons: [] },
           event: { type: "lunch", date: "2026-08-21" },
           servicePlan: { eventType: "lunch", serviceForm: "buffet" },
@@ -1174,10 +1267,11 @@ describe("backoffice route smoke", () => {
     expect(production.text).toContain("Spezifikation im Fokus");
     expect(production.text).not.toContain("specId: c4-spec-handoff");
     expect(production.text).not.toContain("requestId: c4-request-handoff");
+    expect(production.text).toContain("Quellenanker");
     expect(production.text).toContain(
-      "Dokumentprüfung: Lesbarkeit: Textextraktion unsicher · Hinweise: PDF-Text nur unsicher extrahiert"
+      "Quellenmetadaten (gekürzt): c4-angebot.pdf · application/pdf · sha256:abcdef123456 · production · 2026-05-22T11:29:00.000Z"
     );
-    expect(production.text).toContain("Quellenmetadaten (gekürzt): c4-angebot.pdf · application/pdf · 2.0 KB · sha256:abcdef123456 · intake");
+    expect(production.text).not.toContain("Dokumentprüfung: Lesbarkeit: Textextraktion unsicher");
     expect(production.text).not.toContain("B5 Rohtext");
     expect(production.text).not.toContain("abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890");
     expect(production.text).toContain("Produktionsblatt exportieren für aktuellen Produktionsplan");

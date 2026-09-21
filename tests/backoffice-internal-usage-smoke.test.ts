@@ -19,6 +19,7 @@ import {
   type WebRecipeSearchProvider
 } from "@catering/production-service";
 import { App } from "../backoffice-ui/src/App.js";
+import { adminSessionResponse } from "./support/catering-session-ui-fixture.js";
 
 class EmptyWebProvider implements WebRecipeSearchProvider {
   async searchRecipes() {
@@ -261,6 +262,10 @@ describe("backoffice internal usage smoke", () => {
         }
         fetchCalls.push({ method, url, body });
 
+        if (method === "GET" && url.endsWith("/api/intake/v1/auth/session")) {
+          return adminSessionResponse();
+        }
+
         if (method === "GET" && url.endsWith("/api/production/v1/production/cases")) {
           return new Response(
             JSON.stringify({
@@ -318,7 +323,28 @@ describe("backoffice internal usage smoke", () => {
                     dataClass: "synthetic_demo",
                     addedAt: "2026-04-10T09:34:00.000Z"
                   }
-                }
+                },
+                ...(productionDrafts.at(-1)
+                  ? [
+                      {
+                        businessId: "local",
+                        eventId: `production-case-usage-revision-${productionDrafts.at(-1)!.revision}`,
+                        caseId: activeProductionCaseId,
+                        sequence: 2,
+                        at: productionDrafts.at(-1)!.createdAt,
+                        role: "assistant",
+                        kind: "revision_created",
+                        text: "Produktionsentwurf erstellt.",
+                        artifactId: productionDrafts.at(-1)!.draftId,
+                        revisionRef: {
+                          artifactType: "ProductionDraft",
+                          artifactId: productionDrafts.at(-1)!.draftId,
+                          revision: productionDrafts.at(-1)!.revision,
+                          createdAt: productionDrafts.at(-1)!.createdAt
+                        }
+                      }
+                    ]
+                  : [])
               ],
               ...(productionDrafts.at(-1) ? { currentDraft: productionDrafts.at(-1) } : {})
             }),
@@ -360,12 +386,15 @@ describe("backoffice internal usage smoke", () => {
 
         if (method === "GET" && url.endsWith("/api/production/v1/production/plans")) {
           if (currentPlan) {
-            return new Response(JSON.stringify({ items: [currentPlan] }), {
-              status: 200,
-              headers: { "content-type": "application/json" }
-            });
+            return new Response(
+              JSON.stringify({ access: { canOperateProduction: true }, items: [currentPlan] }),
+              {
+                status: 200,
+                headers: { "content-type": "application/json" }
+              }
+            );
           }
-          return new Response(JSON.stringify({ items: [] }), {
+          return new Response(JSON.stringify({ access: { canOperateProduction: true }, items: [] }), {
             status: 200,
             headers: { "content-type": "application/json" }
           });
@@ -698,24 +727,31 @@ describe("backoffice internal usage smoke", () => {
     const createPlanCallIndex = fetchCalls.findIndex(
       (call) => call.method === "POST" && call.url.endsWith("/api/production/v1/production/plans")
     );
-    const importDraftCallIndex = fetchCalls.findIndex(
-      (call) => call.method === "POST" && call.url.endsWith("/api/production/v1/production/drafts")
+    const importDraftCallIndices = fetchCalls.flatMap((call, index) =>
+      call.method === "POST" && call.url.endsWith("/api/production/v1/production/drafts") ? [index] : []
     );
-    const createCaseCallIndex = fetchCalls.findIndex(
-      (call) => call.method === "POST" && call.url.endsWith("/api/production/v1/production/cases")
+    const createCaseCallIndices = fetchCalls.flatMap((call, index) =>
+      call.method === "POST" && call.url.endsWith("/api/production/v1/production/cases") ? [index] : []
     );
     const prepareDraftCallIndex = fetchCalls.findIndex(
       (call) => call.method === "POST" && call.url.endsWith("/prepare")
     );
     expect(createdPlanViaPost).toBe(false);
     expect(saveAnswersCallIndex).toBeGreaterThanOrEqual(0);
-    expect(createCaseCallIndex).toBeGreaterThan(saveAnswersCallIndex);
-    expect(importDraftCallIndex).toBeGreaterThan(createCaseCallIndex);
-    expect(fetchCalls[importDraftCallIndex]?.body).toEqual({
+    expect(createCaseCallIndices).toHaveLength(1);
+    expect(importDraftCallIndices).toHaveLength(2);
+    expect(createCaseCallIndices[0]).toBeLessThan(importDraftCallIndices[0]!);
+    expect(importDraftCallIndices[0]).toBeLessThan(saveAnswersCallIndex);
+    expect(importDraftCallIndices[1]).toBeGreaterThan(saveAnswersCallIndex);
+    expect(fetchCalls[importDraftCallIndices[0]!]?.body).toEqual({
       caseId: "production-case-usage",
       specId: fixture.spec.specId
     });
-    expect(prepareDraftCallIndex).toBeGreaterThan(importDraftCallIndex);
+    expect(fetchCalls[importDraftCallIndices[1]!]?.body).toEqual({
+      caseId: "production-case-usage",
+      specId: fixture.spec.specId
+    });
+    expect(prepareDraftCallIndex).toBeGreaterThan(importDraftCallIndices[1]!);
     expect(createPlanCallIndex).toBe(-1);
     expect(document.body.textContent ?? "").toContain("Produktionsentwurf wurde vorbereitet und wartet auf Prüfung.");
     expect(document.body.textContent ?? "").toContain("Produktionsplan prüfen");

@@ -1,0 +1,275 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-09-19",
+  "scope": "Existing retained synthetic handoff: recipe candidate, quantity decision, event recipe review, planning evidence, prepare and reopen; no overall Gate-C approval",
+  "status": "verified technical operator path; human kitchen review and all final draft reviews remain open",
+  "comment": "https://github.com/AlexanderSmyslowski/catering-agents-platform/pull/694#issuecomment-5743033256",
+  "branch": "codex/gate-c-local-session-rehearsal-20260919",
+  "baseHead": "24519660988db8970a7c84db58a39c0e979ba557",
+  "baseTree": "79ef97b995e0aa8b0761ace4707903d63ae2fea0",
+  "reviewedSourceTestContentFingerprint": "1624621f9f442f4fcfc30e75e4127b511b0e09a230b19645a20b795a17c10f2e",
+  "canonicalPathHashManifestSha256": "7e1af9291452f129744a8ceabea78e2f4ee730fb459914b1cbc44f13b732bbf8",
+  "canonicalPathHashManifestAlgorithm": "sha256 over sorted records path + NUL + sha256(file bytes) + LF",
+  "sourceAndTestFilesSha256": {
+    "backoffice-ui/src/api.ts": "87a14714048b75eeb2f916d53a19385073d44e3c906e035d795e336d06fd58cd",
+    "backoffice-ui/src/production-route-main-layout.tsx": "a363b1c9e7773ae764ee9f8b7f7b17dd02877482b40c319de9c28e20f142071c",
+    "backoffice-ui/src/production-planning-evidence-panel.tsx": "4e6774ac8fb2dddda56e5aa204313adc5c00164ffded06c247312371d5b44acb",
+    "backoffice-ui/vite.config.ts": "3baee079d8610dbdf6ab2d79e708fbd993b3fb9dcc8a9a89cfcd3ce586c53a79",
+    "production-service/src/routes/artifact-routes.ts": "89dc9cd54a35f26e077e2f20820e802f6d2ae9cb82e3e7a684c08240d556f41b",
+    "production-service/src/routes/case-routes.ts": "47c5a47f4cd7466ac5245d463aa72cbc28e564c92612d8d61d24fc3fa0a0fd7c",
+    "tests/backoffice-production-planning-evidence-api.test.ts": "5f548a84b1719e3c0a0e170462971e4feb78f0f5bd2d5750cb255fabc50d6c96",
+    "tests/local-dev-session-proxy.test.ts": "58e3614fe0b964d1ef6bab11caaa608bb589644352bd9dcc9b27161d631c4e35",
+    "tests/production-planning-evidence-p1.test.ts": "5853cc204bec06db89a577bc9b3440a65a7048a6f5961f9a7fa5c52fedc70f0a",
+    "tests/production-planning-evidence-panel.test.tsx": "ece44aaa6b1e777aaef11e1df4c464395c9a860772d9db31421046b392c3a769"
+  },
+  "dependencyAnchor": {
+    "package-lock.json": "9e87460f1cdf88a68dbce46798655ffa6f5ebd9766bcc33ce17fc7ee79165a46",
+    "versionUpdatePerformed": false
+  },
+  "implementation": {
+    "operatorSurface": "Embedded recipe and quantity planning panel in the existing production workbench",
+    "existingRoutesUsed": [
+      "GET /v1/production/recipes",
+      "POST /v1/production/recipes/upload",
+      "POST /v1/production/drafts/:draftId/revise",
+      "POST /v1/production/cases/:caseId/planning-evidence",
+      "POST /v1/production/drafts/:draftId/prepare",
+      "GET /v1/production/drafts?caseId=:caseId"
+    ],
+    "newRouteAdded": false,
+    "newStorageAdded": false,
+    "purchaseComponentsRequirePlanningEvidence": false,
+    "guards": [
+      "current case, component, draft id and revision",
+      "exact assigned recipe id and current recipe snapshot hash",
+      "quantity bridge ready_for_scaling",
+      "all four event review confirmations",
+      "trusted current actor",
+      "stale, duplicate, foreign and malformed requests fail closed"
+    ],
+    "localDevIdentityScope": "Only the exact POST planning-evidence proxy path receives the Administrator session actor, and only with dev auth, a configured trusted secret and loopback intake/production targets; all other paths and methods retain their existing identity."
+  },
+  "verification": {
+    "reviewFixRed": {
+      "command": "npx vitest run tests/production-planning-evidence-p1.test.ts tests/backoffice-production-planning-evidence-api.test.ts tests/production-planning-evidence-panel.test.tsx -t 'non-string quantity enums|typed failure|definitive 422|canonical recipe after 409|HTTP 503' --maxWorkers=1",
+      "exitCode": 1,
+      "failed": 12,
+      "passed": 2
+    },
+    "reviewFixGreen": {
+      "command": "npx vitest run tests/production-planning-evidence-p1.test.ts tests/backoffice-production-planning-evidence-api.test.ts tests/production-planning-evidence-panel.test.tsx -t 'non-string quantity enums|typed failure|definitive 422|canonical recipe after 409|HTTP 503' --maxWorkers=1",
+      "exitCode": 0,
+      "passed": 14
+    },
+    "finalFocusedTests": {
+      "command": "npx vitest run tests/production-planning-evidence-p1.test.ts tests/production-planning-evidence-panel.test.tsx tests/backoffice-production-planning-evidence-api.test.ts tests/production-route-main-layout.test.tsx tests/production-draft-review-panel.test.tsx tests/production-ui-loader-confidentiality.test.ts tests/local-dev-session-proxy.test.ts tests/hosted-session-actor-boundary.test.ts tests/catering-hosted-session-e2e.test.ts tests/quantity-decision-contract.test.ts tests/quantity-recipe-production-bridge.test.ts tests/production-event-recipe-review-planning.test.ts tests/production-recipe-suggestions.test.ts tests/backoffice-api.test.ts tests/catering-login-ui.test.tsx --maxWorkers=1",
+      "exitCode": 0,
+      "testFiles": 15,
+      "passed": 286,
+      "failed": 0
+    },
+    "typecheck": {
+      "command": "npx tsc --noEmit",
+      "exitCode": 0
+    },
+    "build": {
+      "command": "npm run build",
+      "exitCode": 0,
+      "viteModules": 196,
+      "javascriptBundleKb": 491.63
+    },
+    "diffCheck": {
+      "command": "git diff --check",
+      "exitCode": 0
+    },
+    "runtimeAssertions": {
+      "command": "python3 .runtime/acceptance-20260919/recipe-evidence-assert.py",
+      "exitCode": 0
+    },
+    "browserConsoleErrors": 0,
+    "unchangedFullSuiteRerun": false
+  },
+  "runtime": {
+    "dataMode": "isolated copy of the retained synthetic case with fixture provider",
+    "originalDataRootMutated": false,
+    "originalRevision5Sha256": "e232b6edf1d2832a5388805618c0107eee3f4d3ecad4d7b8c4559d0400ec6e64",
+    "caseId": "production-case-handoff-6e0bf64a6bafbc9f5e43b5af9e935b5a5474ff2749c394bcc54005bd0a9b0291",
+    "handoffId": "handoff-c6118104258962aa50d11638df006a97e50207c2bf7d3a745df4931fda6a458e",
+    "eventSpecId": "spec-browser-rehearsal-offer-case",
+    "revisionChain": [
+      {
+        "revision": 5,
+        "draftId": "production-draft-revision-fe73b9d268bebeaa20b213567133c2b95aacacaed15b1ca20b92f5b28e7fea6c",
+        "statusAfterRun": "superseded"
+      },
+      {
+        "revision": 6,
+        "draftId": "production-draft-revision-8cb13f68d61e99bdb9c2a91595e3c5b849086e4a7e331e95cbfd65ddfa327aa9",
+        "statusAfterRun": "superseded",
+        "purpose": "canonical recipe assignment and exact planning-evidence binding"
+      },
+      {
+        "revision": 7,
+        "draftId": "production-draft-prepared-31f5a1cb7559da8fe3ac1bea4f7fe62e22e743a78be25e0f02b1f7c252f68a29",
+        "statusAfterRun": "pending_review",
+        "purpose": "prepared draft with derived recipe, production and purchase artifacts"
+      }
+    ],
+    "browserMutations": [
+      {
+        "request": 203,
+        "operation": "upload explicitly synthetic recipe fixture",
+        "httpStatus": 201
+      },
+      {
+        "request": 211,
+        "operation": "assign recipe and create revision 6 from revision 5",
+        "httpStatus": 201
+      },
+      {
+        "request": 221,
+        "operation": "persist quantity decision and event recipe review against revision 6",
+        "httpStatus": 201
+      },
+      {
+        "request": 230,
+        "operation": "prepare revision 6 and create revision 7",
+        "httpStatus": 201
+      }
+    ],
+    "reopenedRevision": 7,
+    "reopenedSameCaseHandoffSpec": true,
+    "reopenedAssignedRecipeUnchanged": true,
+    "predecessorEvidenceTransferredToRevision7": false,
+    "predecessorEvidenceDisplay": "Revision 7 shows revision 6 evidence only as predecessor provenance; it is not silently accepted as a review of revision 7.",
+    "planningEvidence": {
+      "evidenceId": "production-planning-evidence-084c2d0607368eeb093eadd84128a7c288a37b3720bf4aadc04034fdebbc705a",
+      "boundDraftRevision": 6,
+      "componentId": "kaffeepause-1",
+      "recipeId": "upload-kaffeepause-kompakt-synthetische-testfixture-3d824e6ef7",
+      "recipeSnapshotHash": "sha256:9d27f077525ef5e05a08fe4e0b485f3dfce99df07a1f9174eca7d7f2ab0a6c6e",
+      "bridgeStatus": "ready_for_scaling",
+      "basis": "servings_per_person",
+      "dishRole": "snack",
+      "guestCount": 35,
+      "perPerson": 1,
+      "target": {
+        "amount": 35,
+        "unit": "servings"
+      },
+      "source": "synthetic:browser-rehearsal-2026-09-19",
+      "actor": "Administrator",
+      "allFourEventConfirmations": true,
+      "classification": "synthetic operator decision; not a real kitchen review"
+    },
+    "negativeChecks": [
+      {
+        "name": "direct request without trusted operator",
+        "httpStatus": 403,
+        "message": "Produktions-Operator erforderlich."
+      },
+      {
+        "name": "replay evidence for superseded revision 6 through the UI proxy",
+        "httpStatus": 409,
+        "message": "Planungs-Evidenz kann nur für einen offenen ProductionDraft gespeichert werden."
+      }
+    ],
+    "cleanup": {
+      "ownBrowserClosed": true,
+      "ownServicesStopped": true,
+      "portsFree": [3311, 3312, 3313, 3314, 3320],
+      "foreignProcessesStopped": false,
+      "dataDeleted": false
+    }
+  },
+  "artifactsAfterPrepare": {
+    "recipeSnapshot": {
+      "count": 1,
+      "recipeId": "upload-kaffeepause-kompakt-synthetische-testfixture-3d824e6ef7",
+      "name": "Kaffeepause kompakt – synthetische Testfixture",
+      "baseYield": {
+        "amount": 10,
+        "unit": "servings"
+      },
+      "approvalState": "review_required",
+      "fixtureSha256": "1724211e7bc330be4d2972343bbd7e45078f240c52999259fa24d4d9ccd44e95"
+    },
+    "productionPlan": {
+      "readiness": "complete within the pending draft",
+      "productionBatches": 1,
+      "scaledYield": {
+        "amount": 35,
+        "unit": "servings"
+      },
+      "batchCount": 4,
+      "scaledIngredients": [
+        "350 g Kaffeebohnen",
+        "70 g Tee",
+        "3.5 l Haferdrink"
+      ],
+      "kitchenSheets": 2,
+      "unresolvedItems": 0
+    },
+    "purchaseList": {
+      "items": 5,
+      "recipeLineage": [
+        "350 g Kaffeebohnen",
+        "70 g Tee",
+        "3.5 l Haferdrink"
+      ],
+      "procurementLineage": [
+        "35 portion Croissants",
+        "35 portion Wasser"
+      ]
+    },
+    "pendingReviewCards": [
+      "card-prepared-event-spec",
+      "card-prepared-production-plan",
+      "card-prepared-purchase-list",
+      "card-prepared-recipe-1"
+    ],
+    "approvedProductionSpecs": 0,
+    "appliedPlans": 0
+  },
+  "independentReview": {
+    "scopeReview": "GO",
+    "initialCodeReview": "HOLD with two Important findings",
+    "resolvedFindings": [
+      "Non-string quantity enums could bypass provenance validation or cause an internal error.",
+      "Definitive 409/422 responses retained a stale retry payload indefinitely."
+    ],
+    "finalCodeReview": "GO with no Critical, Important or Minor findings",
+    "buildImportDeltaReview": "GO; direct runtime import is semantically identical and avoids the server-only barrel in the browser bundle",
+    "finalWholeChangeReview": "GO for this bounded technical block with no open Critical, Important or Minor findings; no merge, deployment or overall Gate-C approval"
+  },
+  "localEvidenceSha256": {
+    "recipe-evidence-assert.py": "365fd9358e4ad915b920d5e34544200999a09aedd2a6f0e17485dab00e537262",
+    "recipe-evidence-assert.json": "ce29e791f62a1d3c1748bd2bc487555eca940b0d87f9921fb0e3e74ce0e6582d",
+    "runtime-drafts.json": "88028d488172733e23f5294aa424ab9d2a76af7fca163ebe1d126a9d1f8dd611",
+    "runtime-case.json": "34ba23648d1678643459533cb7697811699c3b1334ea76ae16bdec88b8628b97",
+    "runtime-recipes.json": "9bbb28dbb41042eb6888128e9d501265d66032e1e01420baa84139f5d6435606",
+    "runtime-plans.json": "d6ee1be12638a54f4849a1a4a2ef4d6d13cfc05ee615cb58e32bc91f39439e27",
+    "recipe-evidence-browser-requests.log": "5b0e17af49bf09b5efa783549ce4938bb12c47d66b44b7f06cff7dd31a74590a",
+    "recipe-evidence-negative-checks.log": "9d04a26726e7d252e534b56e66f21b6aac72a9ff0b4b5b64509a7c7c67dbc192",
+    "recipe-evidence-final-tests.log": "4fbb28bd927c2f25826eb492b9c208bc6eecf9fd3bb7dc544bb657efb8ee8c26",
+    "recipe-evidence-final-tests.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "recipe-evidence-final-typecheck.log": "759c582d8258becaa967c5dc15f22c4618613f6a732963aa888752eb6d7ad774",
+    "recipe-evidence-final-typecheck.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "recipe-evidence-final-build.log": "789c100760a7f71801587487eda4025fada24e61e010bb6e7d47d58c6b7127c2",
+    "recipe-evidence-final-build.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "recipe-evidence-final-diffcheck.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "recipe-evidence-final-diffcheck.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "browser-console.log": "f000e74d550975a43edec6f00079c3af36bccb8cb746471c7330714dac45d6d5",
+    "page-recipe-assigned-revision6.yml": "cf46863dbb122431218f40b7180230d8dda63e1edd7900086f206633b5d07d77",
+    "page-planning-evidence-saved.yml": "29572b576413d00b4244955ecfe1b66655dbb0d9d6135d1f22c625f8c20abb13",
+    "page-prepared-revision7-reopened.yml": "8176c70620c74a273ca79a6d26ef4d62b4a1c433be974265fc33305a6978d620"
+  },
+  "limits": [
+    "The uploaded recipe remains review_required. Its automated ingredient, allergen and diet extraction is not a globally approved house recipe.",
+    "The four event confirmations were performed by a synthetic test actor for technical acceptance. No real human kitchen review occurred.",
+    "Revision 7 is still pending_review with four required cards. No draft was approved or applied; the production plans endpoint remains empty and no export completeness is claimed.",
+    "Croissants and water now have purchase rows derived from the synthetic decision, but product specification, pack size, supplier choice and real procurement coverage remain unverified.",
+    "Planning evidence is deliberately revision-bound to revision 6 and is not silently transferred to prepared revision 7.",
+    "No unchanged full suite, offer rerun, new reference case, paid provider, real data, server/AgenturOS change, merge or deployment was performed."
+  ]
+}

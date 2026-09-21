@@ -1,4 +1,4 @@
-import type { IntakeRequestDetail } from "./api.js";
+import type { ProductionSourceDetail } from "./api.js";
 import {
   formatDocumentIngestionStatusLabel,
   formatDocumentIngestionWarningLabel
@@ -59,11 +59,18 @@ function formatSourceMetadataSummary(input: Record<string, unknown>): string | u
   const uploadContext = readStringOrNumber(sourceMetadata, ["uploadContext"]);
   const ingestedAt = readStringOrNumber(sourceMetadata, ["ingestedAt"]);
 
-  if (!filename || !mimeType || typeof sizeBytes !== "number" || !Number.isFinite(sizeBytes) || !sha256 || !uploadContext) {
+  if (!filename || !mimeType || !sha256) {
     return undefined;
   }
 
-  return [filename, mimeType, formatBytes(sizeBytes), `sha256:${sha256.slice(0, 12)}`, uploadContext, ingestedAt]
+  return [
+    filename,
+    mimeType,
+    typeof sizeBytes === "number" && Number.isFinite(sizeBytes) ? formatBytes(sizeBytes) : undefined,
+    `sha256:${sha256.slice(0, 12)}`,
+    uploadContext,
+    ingestedAt
+  ]
     .filter(Boolean)
     .join(" · ");
 }
@@ -114,7 +121,7 @@ export function hasUnsafeIntakeSource(intakeRequestDetail?: Record<string, unkno
 }
 
 export function buildProductionIntakeOriginCardState(
-  intakeRequestDetail: IntakeRequestDetail
+  intakeRequestDetail: ProductionSourceDetail
 ): ProductionIntakeOriginCardState {
   const source = asRecord(intakeRequestDetail.source);
   const rawInputs = Array.isArray(intakeRequestDetail.rawInputs) ? intakeRequestDetail.rawInputs : [];

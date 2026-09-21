@@ -16,6 +16,8 @@ import {
   type Recipe,
   type RecipeStep
 } from "@catering/shared-core";
+import type { AppliedProductionSnapshot } from "./applied-production-snapshot.js";
+import { renderAppliedProductionContext, renderProductionKitchenSheets } from "./production-snapshot-html.js";
 
 export interface RenderProductionFolderInput {
   plan: ProductionPlan;
@@ -23,6 +25,7 @@ export interface RenderProductionFolderInput {
   purchaseLists?: PurchaseList[];
   recipes?: Recipe[];
   clarificationAnswers?: ProductionClarificationAnswer[];
+  appliedSnapshot?: AppliedProductionSnapshot;
 }
 
 function escapeHtml(value: string | number | undefined): string {
@@ -131,6 +134,32 @@ function stepsFor(
     return batch.steps;
   }
   return sheet?.steps ?? [];
+}
+
+const KITCHEN_ALLERGEN_LABELS: Record<string, string> = {
+  egg: "Ei",
+  mustard: "Senf",
+  milk: "Milch",
+  nuts: "Nüsse",
+  gluten: "Gluten"
+};
+
+function renderRecipeAllergens(
+  sheet: ProductionPlan["kitchenSheets"][number] | undefined
+): string {
+  // The kitchen sheet is the plan-frozen, reviewed projection. A missing or
+  // empty snapshot is surfaced explicitly; live recipe data is never a
+  // fallback and no recipe text is reparsed here.
+  const allergens = sheet?.allergens;
+  const rendered = allergens === undefined
+    ? "Allergene nicht hinterlegt – vor Produktion prüfen"
+    : allergens.length === 0
+      ? "Keine ausgewiesenen Allergene"
+      : [...new Set(allergens.map((allergen) =>
+        KITCHEN_ALLERGEN_LABELS[allergen.toLowerCase()] ?? allergen
+      ))].join(", ");
+
+  return `<p class="recipe-allergens"><strong>Allergene:</strong> ${escapeHtml(rendered)}</p>`;
 }
 
 function batchFor(
@@ -308,7 +337,7 @@ function renderSection7(input: RenderProductionFolderInput, recipeById: Map<stri
 
     const approvalStateLabel = formatRecipeApprovalStateLabel(recipe.source.approvalState) ?? "Status offen";
 
-    return [`<article class="recipe-card"><h3>${escapeHtml(recipe.name)}</h3><p>Quelle: ${escapeHtml(recipe.source.reference)} · Status: ${escapeHtml(approvalStateLabel)}</p><table><thead><tr><th>Zutat</th><th>Menge</th><th>Warengruppe</th></tr></thead><tbody>${renderIngredientRows(ingredients)}</tbody></table>${renderSteps(stepsFor(recipe, sheet, batch))}</article>`];
+    return [`<article class="recipe-card"><h3>${escapeHtml(recipe.name)}</h3><p>Quelle: ${escapeHtml(recipe.source.reference)} · Status: ${escapeHtml(approvalStateLabel)}</p>${renderRecipeAllergens(sheet)}<table><thead><tr><th>Zutat</th><th>Menge</th><th>Warengruppe</th></tr></thead><tbody>${renderIngredientRows(ingredients)}</tbody></table>${renderSteps(stepsFor(recipe, sheet, batch))}</article>`];
   });
   const missingRecipeIds = linkedRecipeIds.filter((recipeId) => !recipeById.has(recipeId));
 
@@ -457,9 +486,9 @@ function renderSection9(plan: ProductionPlan, purchaseList: PurchaseList | undef
 }
 
 function primaryPurchaseListFor(spec: AcceptedEventSpec, purchaseLists: PurchaseList[]): PurchaseList | undefined {
-  return [...purchaseLists]
-    .filter((listItem) => listItem.eventSpecId === spec.specId)
-    .sort((left, right) => left.purchaseListId.localeCompare(right.purchaseListId, "de"))[0];
+  const matching = purchaseLists.filter(listItem => listItem.eventSpecId === spec.specId);
+  if (matching.length > 1) throw Object.assign(new Error("Einkaufsliste ist ohne Apply-Anker nicht eindeutig."), { statusCode: 409 });
+  return matching[0];
 }
 
 function headerMeta(spec: AcceptedEventSpec): string {
@@ -506,6 +535,7 @@ footer { border-top: 1px solid #cbd5df; color: #52616f; margin-top: 24px; paddin
   .recipe-card, .purchase-group { break-after: page; page-break-after: always; }
 }
 </style></head><body><header class="document-header"><h1>Produktionsmappe – Rezeptkarten und aufsummierte Einkaufsliste</h1><p>${escapeHtml(headerMeta(input.spec))}</p></header>${[
+    renderAppliedProductionContext(input.appliedSnapshot),
     renderSection1(input.spec),
     renderSection2(input, recipeById),
     renderSection3(input),
@@ -513,6 +543,7 @@ footer { border-top: 1px solid #cbd5df; color: #52616f; margin-top: 24px; paddin
     renderSection5(input.spec),
     renderSection6(input, recipeById),
     renderSection7(input, recipeById),
+    renderProductionKitchenSheets(input.plan),
     renderSection8(purchaseList, recipeById, input.spec),
     renderSection9(input.plan, purchaseList, input.spec.event.date)
   ].join("")}<footer>Arbeitsdokument – Mengen, Allergene und Preise vor Produktion prüfen.</footer></body></html>`;

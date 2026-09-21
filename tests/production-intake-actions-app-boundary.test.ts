@@ -52,9 +52,11 @@ function input(
     })),
     uploadSourceDocument: vi.fn(async () => ({ documentId: "source-document-1" })),
     createProductionCase: vi.fn(async () => ({ case: { caseId: "production-case-1" } })),
+    createProductionDraftFromAcceptedEventSpec: vi.fn(async () => ({ draft: { draftId: "production-draft-spec-1" } })),
     createProductionDraftFromDocument: vi.fn(async () => ({ draft: draft() })),
     activeProductionCaseId: undefined,
     setActiveProductionCaseId: vi.fn(),
+    setActiveProductionCaseSpecId: vi.fn(),
     createOfferCase: vi.fn(async () => ({ case: { caseId: "offer-case-1" } })),
     createOfferDraftFromRequest: vi.fn(async () => ({ draftId: "offer-draft-upload-1" })),
     activeOfferCaseId: undefined,
@@ -143,6 +145,10 @@ describe("production intake actions app boundary", () => {
       "source-document-1"
     );
     expect(boundaryInput.createAcceptedSpecFromManualForm).toHaveBeenCalledWith(manualInput());
+    expect(boundaryInput.createProductionDraftFromAcceptedEventSpec).toHaveBeenCalledWith(
+      "production-case-1",
+      expect.objectContaining({ specId: "spec-manual-1" })
+    );
     expect(boundaryInput.resetManualSpecDraft).toHaveBeenCalledTimes(1);
     expect(boundaryInput.setError).not.toHaveBeenCalled();
   });

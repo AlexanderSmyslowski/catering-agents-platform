@@ -10,6 +10,7 @@ import {
   type ProductionDraftReviewCard,
   type ProductionDraftReviewDecision
 } from "./api.js";
+import { ProductionDraftFrozenContent } from "./production-draft-frozen-content.js";
 import { productionDraftEntryId } from "./production-entry-focus.js";
 
 const productionDraftReviewEvent = "catering:production-draft-review";
@@ -161,7 +162,7 @@ export function hasCompleteProductionSnapshot(draft: ProductionDraft): boolean {
   }
 
   const recipeIds = new Set(artifacts.recipes.flatMap((recipe) =>
-    typeof recipe.recipeId === "string" ? [recipe.recipeId] : []
+    typeof asRecord(recipe)?.recipeId === "string" ? [asRecord(recipe)!.recipeId] : []
   ));
   const selections = Array.isArray(artifacts.productionPlan.recipeSelections)
     ? artifacts.productionPlan.recipeSelections
@@ -441,9 +442,10 @@ export function ProductionDraftReviewPanel({
     setLoading(true);
     try {
       const response = await prepareProductionDraft(draftId);
-      setFocusedDraftId(response.draft.draftId);
+      await onDraftChanged?.();
+      if (!panelRef.current || previousCaseId.current !== caseId) return;
       setMessage("Produktionsentwurf wurde vorbereitet.");
-      await reloadDrafts({ clearMessage: false });
+      announceProductionDraftReview(response.draft.draftId);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Produktionsentwurf konnte nicht vorbereitet werden.");
     } finally {
@@ -574,6 +576,7 @@ export function ProductionDraftReviewPanel({
                     <strong>{card.title}</strong>
                     <p className="helper-text">{card.summary}</p>
                     <p className="helper-text">{formatReviewCardMeta(card)}</p>
+                    <ProductionDraftFrozenContent draft={draft} card={card} />
                     <ProductionDraftRevisionResult drafts={drafts} draft={draft} card={card} />
                     {card.decision === "change_requested" && card.operatorComment && !(
                       changeEditor?.draftId === draft.draftId && changeEditor.cardId === card.cardId

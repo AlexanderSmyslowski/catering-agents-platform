@@ -50,7 +50,8 @@ describe("P4 audit and review traceability", () => {
       expect(seedEntry?.actor && typeof seedEntry.actor === "object" ? (seedEntry.actor as Record<string, unknown>).name : undefined).toBe(
         auditOperatorName
       );
-      expect(String(seedEntry?.summary ?? "")).toContain("Produktions-Demoplaene angelegt");
+      expect(seedEntry).not.toHaveProperty("summary");
+      expect(seedEntry).not.toHaveProperty("details");
     } finally {
       await app.close();
       rmSync(dataRoot, { recursive: true, force: true });
@@ -112,7 +113,8 @@ describe("P4 audit and review traceability", () => {
       expect(reviewEntry?.actor && typeof reviewEntry.actor === "object" ? (reviewEntry.actor as Record<string, unknown>).name : undefined).toBe(
         "Produktions-Mitarbeiter"
       );
-      expect(String(reviewEntry?.summary ?? "")).toContain("über den Produktions-Workflow geprüft");
+      expect(reviewEntry).not.toHaveProperty("summary");
+      expect(reviewEntry).not.toHaveProperty("details");
     } finally {
       await app.close();
       rmSync(dataRoot, { recursive: true, force: true });

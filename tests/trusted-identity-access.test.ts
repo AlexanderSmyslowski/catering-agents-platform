@@ -10,6 +10,7 @@ function createDataRoot(): string {
 }
 
 const TRUSTED_SECRET = "test-shared-secret";
+const SESSION_ROOT_SECRET = "trusted-identity-session-secret-20260828";
 
 describe("trusted identity access guards", () => {
   it("rejects spoofed x-actor-name when a trusted identity secret is configured", async () => {
@@ -83,9 +84,9 @@ describe("trusted identity access guards", () => {
     rmSync(dataRoot, { recursive: true, force: true });
   });
 
-  it("fails closed for x-actor-name when no trusted secret and no dev auth are configured", async () => {
+  it("fails closed for x-actor-name when the session cookie is missing and dev auth is disabled", async () => {
     const dataRoot = createDataRoot();
-    const app = buildProductionApp({ dataRoot, env: {} });
+    const app = buildProductionApp({ dataRoot, trustedActorSecret: SESSION_ROOT_SECRET, env: {} });
 
     const response = await app.inject({
       method: "POST",
@@ -95,7 +96,7 @@ describe("trusted identity access guards", () => {
       }
     });
 
-    expect(response.statusCode).toBe(403);
+    expect(response.statusCode).toBe(401);
 
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });

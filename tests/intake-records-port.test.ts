@@ -11,7 +11,7 @@ import { buildIntakeApp } from "../intake-service/src/app.js";
 import { IntakeStore } from "../intake-service/src/store.js";
 import { HttpIntakeRecordsPort } from "../production-service/src/gateways/http-intake-records-port.js";
 
-const sharedSecret = "shared-secret";
+const sharedSecret = "intake-records-service-secret-20260828";
 const alpha = { businessId: "alpha" };
 
 function requestAndSpec(id: string) {
@@ -52,7 +52,7 @@ function injectedFetch(app: ReturnType<typeof buildIntakeApp>): typeof fetch {
 }
 
 describe("production intake records port", () => {
-  it("reads only the trusted business through a Production-Service identity", async () => {
+  it("binds Production-Service to the configured business and ignores its incoming business header", async () => {
     const rootDir = mkdtempSync(path.join(tmpdir(), "intake-record-port-read-"));
     const store = new IntakeStore({ rootDir });
     const { eventRequest, acceptedEventSpec } = requestAndSpec("request-alpha");
@@ -76,7 +76,7 @@ describe("production intake records port", () => {
     await expect(port.getRequest(alpha, eventRequest.requestId)).resolves.toEqual(eventRequest);
     await expect(port.getSpec(alpha, acceptedEventSpec.specId)).resolves.toEqual(acceptedEventSpec);
     await expect(port.getSpec({ businessId: "beta" }, acceptedEventSpec.specId))
-      .rejects.toThrow("Betriebskontext");
+      .resolves.toEqual(acceptedEventSpec);
 
     const wrongActor = await app.inject({
       method: "GET",
@@ -87,7 +87,7 @@ describe("production intake records port", () => {
         "x-catering-business-id": "alpha"
       }
     });
-    expect(wrongActor.statusCode).toBe(403);
+    expect(wrongActor.statusCode).toBe(401);
     await app.close();
   });
 

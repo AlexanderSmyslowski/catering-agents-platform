@@ -16,16 +16,24 @@ import {
   formatDocumentIngestionWarningLabel,
   assertBusinessId,
   assertTrustedActorConfiguration,
+  CateringUserStore,
+  classifyCateringRouteAuth,
   createTrustedActorResolver,
+  deriveCateringAuthKeys,
+  hasMinimalMvpCapability,
   formatMetroGroupLabel,
+  isCateringSessionMode,
   isDevAuthEnabled,
   hostedMultiBusinessReady,
+  projectAcceptedEventSpecForActor,
   RecipeLibrary,
+  registerCateringRequestAuth,
   recipeSourceOriginLabel,
   recipeSourceReferenceLabel,
-  resolveMinimalMvpRoleFromTrustedActor,
 } from "@catering/shared-core";
 import { renderProductionFolderHtml } from "./production-folder.js";
+import { resolveAppliedProductionSnapshot, type AppliedProductionSnapshot } from "./applied-production-snapshot.js";
+import { renderAppliedProductionContext, renderAppliedPurchaseQuantities, renderProductionKitchenSheets } from "./production-snapshot-html.js";
 
 export { renderProductionFolderHtml } from "./production-folder.js";
 
@@ -222,7 +230,7 @@ export function renderOfferHtml(draft: OfferDraft): string {
   ].join("");
 }
 
-export function renderProductionPlanHtml(plan: ProductionPlan, spec?: AcceptedEventSpec): string {
+export function renderProductionPlanHtml(plan: ProductionPlan, spec?: AcceptedEventSpec, appliedSnapshot?: AppliedProductionSnapshot): string {
   const unresolvedSection =
     plan.unresolvedItems.length > 0
       ? [`<section><h2>Offene Punkte</h2><ul>${plan.unresolvedItems.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></section>`]
@@ -230,6 +238,7 @@ export function renderProductionPlanHtml(plan: ProductionPlan, spec?: AcceptedEv
   return [
     "<html><body>",
     "<h1>Produktionsplan</h1>",
+    renderAppliedProductionContext(appliedSnapshot),
     `<p>Status: ${escapeHtml(formatProductionReadinessStatusLabel(plan.readiness.status))}</p>`,
     `<p>Rezeptauswahl: ${plan.recipeSelections.length}</p>`,
     ...renderSourceAnchorsSection(plan as unknown as Record<string, unknown>),
@@ -246,6 +255,8 @@ export function renderProductionPlanHtml(plan: ProductionPlan, spec?: AcceptedEv
           .join("")}</ol></section>`;
       }
     ),
+    renderProductionKitchenSheets(plan),
+    renderAppliedPurchaseQuantities(appliedSnapshot?.approvedSpec.artifacts.purchaseList),
     "<footer>Arbeitsdokument – Mengen, Allergene und Preise vor Produktion prüfen.</footer>",
     "</body></html>"
   ].join("");
@@ -295,6 +306,7 @@ export function renderPurchaseListCsv(list: PurchaseList): string {
 
 export interface PrintExportAppOptions extends CollectionStorageOptions {
   trustedActorSecret?: string;
+  userStore?: CateringUserStore;
   env?: Record<string, string | undefined>;
 }
 
@@ -305,6 +317,7 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
     throw new Error("Hosted Multi-Business-Betrieb ist noch nicht bereit.");
   }
   const trustedActorSecret = options.trustedActorSecret ?? env.CATERING_TRUSTED_ACTOR_SECRET;
+  const sessionMode = isCateringSessionMode(env);
   assertTrustedActorConfiguration({ requireTrustedBusinessId: hosted, trustedActorSecret });
   const allowDevActorHeader = isDevAuthEnabled(env);
   const defaultBusinessId = env.CATERING_DEFAULT_BUSINESS_ID ?? "local";
@@ -320,11 +333,11 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
     trustedActorSecret,
     allowDevActorHeader
   }));
-  const actorForRequest = (request: PrintExportRequest, ..._ignored: unknown[]) => resolveActor(request);
+  let actorForRequest = (request: PrintExportRequest, ..._ignored: unknown[]) => resolveActor(request);
   const isOfferOperator = (request: PrintExportRequest, ..._ignored: unknown[]) =>
-    resolveMinimalMvpRoleFromTrustedActor(actorForRequest(request)) === "offer_operator";
+    hasMinimalMvpCapability(actorForRequest(request), "offer");
   const isProductionOperator = (request: PrintExportRequest, ..._ignored: unknown[]) =>
-    resolveMinimalMvpRoleFromTrustedActor(actorForRequest(request)) === "production_operator";
+    hasMinimalMvpCapability(actorForRequest(request), "production");
   const requireOfferOperator = (
     request: PrintExportRequest,
     reply: { code: (statusCode: number) => { send: (payload: unknown) => unknown } },
@@ -342,6 +355,28 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
   const app = Fastify({
     logger: false
   });
+  const userStore = options.userStore ?? new CateringUserStore({
+    rootDir: options.rootDir,
+    databaseUrl: options.databaseUrl,
+    pgPool: options.pgPool
+  });
+  const authKeys = sessionMode ? deriveCateringAuthKeys(trustedActorSecret ?? "") : undefined;
+  const requestAuth = sessionMode
+    ? registerCateringRequestAuth({
+        app,
+        sessionMode,
+        userStore,
+        businessContext: defaultBusinessContext,
+        authKeys: authKeys!,
+        isPublicRequest: (request) => classifyCateringRouteAuth({
+          targetService: "print-export",
+          method: request.method,
+          pathname: request.url.split("?", 1)[0]
+        }) === "public-health"
+      })
+    : undefined;
+  actorForRequest = (request: PrintExportRequest, ..._ignored: unknown[]) =>
+    sessionMode ? requestAuth!.actorForRequest(request) : resolveActor(request);
   app.addHook("onRequest", async (request) => {
     if (request.url.split("?", 1)[0] !== "/health") actorForRequest(request);
   });
@@ -425,7 +460,8 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
         return reply.code(404).send({ message: "ProductionPlan nicht gefunden." });
       }
 
-      const spec = await intakeStore.getSpec(actor, plan.eventSpecId);
+      const appliedSnapshot = await resolveAppliedProductionSnapshot(productionStore, actor, { planId: plan.planId, eventSpecId: plan.eventSpecId });
+      const spec = appliedSnapshot?.approvedSpec.artifacts.eventSpec ?? await intakeStore.getSpec(actor, plan.eventSpecId);
 
       reply.header(
         "content-disposition",
@@ -433,7 +469,11 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
       );
       return reply
         .type("text/html; charset=utf-8")
-        .send(renderProductionPlanHtml(plan, spec));
+        .send(renderProductionPlanHtml(
+          appliedSnapshot?.approvedSpec.artifacts.productionPlan ?? plan,
+          spec ? projectAcceptedEventSpecForActor(actor, spec) : undefined,
+          appliedSnapshot
+        ));
     }
   );
 
@@ -451,7 +491,8 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
         return reply.code(404).send({ message: "ProductionPlan nicht gefunden." });
       }
 
-      const spec = await intakeStore.getSpec(actor, plan.eventSpecId);
+      const appliedSnapshot = await resolveAppliedProductionSnapshot(productionStore, actor, { planId: plan.planId, eventSpecId: plan.eventSpecId });
+      const spec = appliedSnapshot?.approvedSpec.artifacts.eventSpec ?? await intakeStore.getSpec(actor, plan.eventSpecId);
       if (!spec) {
         return reply.code(404).send({ message: "AcceptedEventSpec zum ProductionPlan nicht gefunden." });
       }
@@ -463,11 +504,11 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
         ])
       ];
       const [purchaseLists, recipes, clarificationAnswers] = await Promise.all([
-        productionStore.listPurchaseLists(actor),
-        Promise.all(recipeIds.map((recipeId) => recipeLibrary.get(actor, recipeId))),
-        productionStore.listClarificationAnswers(actor)
+        appliedSnapshot ? [appliedSnapshot.approvedSpec.artifacts.purchaseList] : productionStore.listPurchaseLists(actor),
+        appliedSnapshot ? appliedSnapshot.approvedSpec.artifacts.recipes : Promise.all(recipeIds.map((recipeId) => recipeLibrary.get(actor, recipeId))),
+        appliedSnapshot ? [] : productionStore.listClarificationAnswers(actor)
       ]);
-      const linkedRecipes = recipes.filter((recipe): recipe is Recipe => Boolean(recipe));
+      const linkedRecipes: Recipe[] = recipes.flatMap(recipe => recipe ? [recipe] : []);
 
       reply.header(
         "content-disposition",
@@ -476,10 +517,11 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
       return reply
         .type("text/html; charset=utf-8")
         .send(renderProductionFolderHtml({
-          plan,
-          spec,
+          plan: appliedSnapshot?.approvedSpec.artifacts.productionPlan ?? plan,
+          spec: projectAcceptedEventSpecForActor(actor, spec),
           purchaseLists: purchaseLists.filter((list) => list.eventSpecId === spec.specId),
           recipes: linkedRecipes,
+          appliedSnapshot,
           clarificationAnswers: clarificationAnswers.filter((answer) => answer.context.specId === spec.specId)
         }));
     }
@@ -493,10 +535,12 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
         return forbidden;
       }
 
-      const list = await productionStore.getPurchaseList(actorForRequest(request), request.params.purchaseListId);
+      const actor = actorForRequest(request);
+      const list = await productionStore.getPurchaseList(actor, request.params.purchaseListId);
       if (!list) {
         return reply.code(404).send({ message: "PurchaseList nicht gefunden." });
       }
+      const appliedSnapshot = await resolveAppliedProductionSnapshot(productionStore, actor, { purchaseListId: list.purchaseListId, eventSpecId: list.eventSpecId });
 
       reply.header(
         "content-disposition",
@@ -504,7 +548,7 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
       );
       return reply
         .type("text/csv; charset=utf-8")
-        .send(renderPurchaseListCsv(list));
+        .send(renderPurchaseListCsv(appliedSnapshot?.approvedSpec.artifacts.purchaseList ?? list));
     }
   );
 

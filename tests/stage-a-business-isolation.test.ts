@@ -1,4 +1,5 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -11,9 +12,12 @@ import { buildPrintExportApp } from "@catering/print-export";
 import { InMemoryIntakeRecordsPort } from "./support/in-memory-intake-records-port.js";
 import {
   AuditLogStore,
+  CateringUserStore,
+  createCateringUserRecord,
   createEventRequestFromText,
   createOfferDraft,
   hostedMultiBusinessReady,
+  hashCateringPin,
   internalRecipes,
   normalizeEventRequestToSpec,
   RecipeLibrary,
@@ -24,12 +28,6 @@ import {
 } from "@catering/shared-core";
 
 const secret = "stage-a-business-isolation-secret";
-const alpha = {
-  "x-catering-trusted-secret": secret,
-  "x-catering-actor-name": "Angebots-Mitarbeiter",
-  "x-catering-business-id": "alpha"
-};
-const beta = { ...alpha, "x-catering-business-id": "beta" };
 const roots: string[] = [];
 
 function root(): string {
@@ -38,9 +36,68 @@ function root(): string {
   return value;
 }
 
+function hostedEnv(businessId: string) {
+  return {
+    CATERING_DEPLOYMENT_PROFILE: "hosted",
+    CATERING_TRUSTED_ACTOR_SECRET: secret,
+    CATERING_DEFAULT_BUSINESS_ID: businessId
+  };
+}
+
+async function businessSession(
+  dataRoot: string,
+  businessId: "alpha" | "beta",
+  intakeStore?: IntakeStore
+) {
+  const userStore = new CateringUserStore({ rootDir: dataRoot });
+  const loginCode = `${businessId}-admin`;
+  const pin = businessId === "alpha" ? "482731" : "592731";
+  expect(await userStore.create({ businessId }, createCateringUserRecord({
+    businessId,
+    userId: `user-${businessId}-admin`,
+    loginCode,
+    displayName: `${businessId} Admin`,
+    pinHash: await hashCateringPin(pin),
+    role: "admin",
+    active: true,
+    now: new Date("2026-08-28T10:00:00.000Z")
+  }))).toBe("created");
+  const intake = buildIntakeApp({
+    rootDir: dataRoot,
+    ...(intakeStore ? { store: intakeStore } : {}),
+    userStore,
+    env: hostedEnv(businessId)
+  });
+  const login = await intake.inject({
+    method: "POST",
+    url: "/v1/auth/login",
+    headers: { host: "catering.test", origin: "https://catering.test" },
+    payload: { loginCode, pin }
+  });
+  expect(login.statusCode, login.body).toBe(200);
+  const setCookie = login.headers["set-cookie"];
+  const rawCookie = Array.isArray(setCookie) ? setCookie[0] : setCookie;
+  if (typeof rawCookie !== "string") throw new Error("Login hat kein Cookie geliefert.");
+  return {
+    intake,
+    userStore,
+    headers: {
+      cookie: rawCookie.split(";", 1)[0] ?? "",
+      host: "catering.test",
+      origin: "https://catering.test"
+    }
+  };
+}
+
 describe("Stage A profile-independent business isolation", () => {
   afterEach(() => {
-    for (const dataRoot of roots.splice(0)) rmSync(dataRoot, { recursive: true, force: true });
+    for (const dataRoot of roots.splice(0)) {
+      try {
+        execFileSync("/usr/bin/trash", [dataRoot], { stdio: "ignore" });
+      } catch {
+        // Testdaten bleiben außerhalb des Repositorys und werden niemals irreversibel gelöscht.
+      }
+    }
   });
 
   it("opens hosted mode only after the code-owned gate and never crosses identical case IDs", async () => {
@@ -48,65 +105,67 @@ describe("Stage A profile-independent business isolation", () => {
     // tied to the same trusted-business contract as the matrix below.
     expect(hostedMultiBusinessReady).toBe(true);
     const dataRoot = root();
+    const alphaSession = await businessSession(dataRoot, "alpha");
+    const betaSession = await businessSession(dataRoot, "beta");
     const offerStore = new OfferStore({ rootDir: dataRoot });
     const offerAlpha = buildOfferApp({
       rootDir: dataRoot,
       store: offerStore,
-      trustedActorSecret: secret,
-      env: { CATERING_DEPLOYMENT_PROFILE: "hosted", CATERING_TRUSTED_ACTOR_SECRET: secret }
+      userStore: alphaSession.userStore,
+      env: hostedEnv("alpha")
     });
     const offerBeta = buildOfferApp({
       rootDir: dataRoot,
       store: offerStore,
-      trustedActorSecret: secret,
-      env: { CATERING_DEPLOYMENT_PROFILE: "hosted", CATERING_TRUSTED_ACTOR_SECRET: secret }
+      userStore: betaSession.userStore,
+      env: hostedEnv("beta")
     });
     const productionStore = new ProductionStore({ rootDir: dataRoot });
     const productionAlpha = buildProductionApp({
       dataRoot,
       store: productionStore,
       intakeRecords: new InMemoryIntakeRecordsPort(),
-      trustedActorSecret: secret,
-      env: { CATERING_DEPLOYMENT_PROFILE: "hosted", CATERING_TRUSTED_ACTOR_SECRET: secret }
+      userStore: alphaSession.userStore,
+      env: hostedEnv("alpha")
     });
     const productionBeta = buildProductionApp({
       dataRoot,
       store: productionStore,
       intakeRecords: new InMemoryIntakeRecordsPort(),
-      trustedActorSecret: secret,
-      env: { CATERING_DEPLOYMENT_PROFILE: "hosted", CATERING_TRUSTED_ACTOR_SECRET: secret }
+      userStore: betaSession.userStore,
+      env: hostedEnv("beta")
     });
 
     try {
       const alphaCase = await offerAlpha.inject({
         method: "POST",
         url: "/v1/offers/cases",
-        headers: alpha,
+        headers: alphaSession.headers,
         payload: { customerName: "Alpha", eventTypeLabel: "Empfang", eventDate: "2026-06-14", attendeeCount: 10 }
       });
       const betaCase = await offerBeta.inject({
         method: "POST",
         url: "/v1/offers/cases",
-        headers: beta,
+        headers: betaSession.headers,
         payload: { customerName: "Beta", eventTypeLabel: "Empfang", eventDate: "2026-06-14", attendeeCount: 10 }
       });
       expect(alphaCase.statusCode).toBe(201);
       expect(betaCase.statusCode).toBe(201);
       const alphaCaseId = alphaCase.json<{ case: { caseId: string } }>().case.caseId;
       const betaCaseId = betaCase.json<{ case: { caseId: string } }>().case.caseId;
-      expect([403, 404]).toContain((await offerBeta.inject({ method: "GET", url: `/v1/offers/cases/${alphaCaseId}`, headers: beta })).statusCode);
-      expect([403, 404]).toContain((await offerAlpha.inject({ method: "GET", url: `/v1/offers/cases/${betaCaseId}`, headers: alpha })).statusCode);
+      expect([403, 404]).toContain((await offerBeta.inject({ method: "GET", url: `/v1/offers/cases/${alphaCaseId}`, headers: betaSession.headers })).statusCode);
+      expect([403, 404]).toContain((await offerAlpha.inject({ method: "GET", url: `/v1/offers/cases/${betaCaseId}`, headers: alphaSession.headers })).statusCode);
 
       const alphaProduction = await productionAlpha.inject({
         method: "POST",
         url: "/v1/production/cases",
-        headers: { ...alpha, "x-catering-actor-name": "Produktions-Mitarbeiter" },
+        headers: alphaSession.headers,
         payload: { customerName: "Alpha", eventTypeLabel: "Empfang", eventDate: "2026-06-14", attendeeCount: 10 }
       });
       const betaProduction = await productionBeta.inject({
         method: "POST",
         url: "/v1/production/cases",
-        headers: { ...beta, "x-catering-actor-name": "Produktions-Mitarbeiter" },
+        headers: betaSession.headers,
         payload: { customerName: "Beta", eventTypeLabel: "Empfang", eventDate: "2026-06-14", attendeeCount: 10 }
       });
       expect(alphaProduction.statusCode).toBe(201);
@@ -115,15 +174,18 @@ describe("Stage A profile-independent business isolation", () => {
       expect([403, 404]).toContain((await productionBeta.inject({
         method: "GET",
         url: `/v1/production/cases/${alphaProductionCaseId}`,
-        headers: { ...beta, "x-catering-actor-name": "Produktions-Mitarbeiter" }
+        headers: betaSession.headers
       })).statusCode);
       expect((await productionAlpha.inject({
         method: "GET",
         url: "/v1/production/cases",
-        headers: { ...alpha, "x-catering-actor-name": "Produktions-Mitarbeiter" }
+        headers: alphaSession.headers
       })).json().items).toHaveLength(1);
     } finally {
-      await Promise.all([offerAlpha.close(), offerBeta.close(), productionAlpha.close(), productionBeta.close()]);
+      await Promise.all([
+        offerAlpha.close(), offerBeta.close(), productionAlpha.close(), productionBeta.close(),
+        alphaSession.intake.close(), betaSession.intake.close()
+      ]);
     }
   });
 
@@ -132,60 +194,57 @@ describe("Stage A profile-independent business isolation", () => {
     const offerStore = new OfferStore({ rootDir: dataRoot });
     const productionStore = new ProductionStore({ rootDir: dataRoot });
     const intakeStore = new IntakeStore({ rootDir: dataRoot });
+    const alphaSession = await businessSession(dataRoot, "alpha", intakeStore);
+    const betaSession = await businessSession(dataRoot, "beta", intakeStore);
     const offerAlpha = buildOfferApp({
       rootDir: dataRoot,
       store: offerStore,
-      trustedActorSecret: secret,
-      env: { CATERING_DEPLOYMENT_PROFILE: "hosted", CATERING_TRUSTED_ACTOR_SECRET: secret }
+      userStore: alphaSession.userStore,
+      env: hostedEnv("alpha")
     });
     const offerBeta = buildOfferApp({
       rootDir: dataRoot,
       store: offerStore,
-      trustedActorSecret: secret,
-      env: { CATERING_DEPLOYMENT_PROFILE: "hosted", CATERING_TRUSTED_ACTOR_SECRET: secret }
+      userStore: betaSession.userStore,
+      env: hostedEnv("beta")
     });
     const productionAlpha = buildProductionApp({
       dataRoot,
       store: productionStore,
       intakeRecords: new InMemoryIntakeRecordsPort(),
-      trustedActorSecret: secret,
-      env: { CATERING_DEPLOYMENT_PROFILE: "hosted", CATERING_TRUSTED_ACTOR_SECRET: secret }
+      userStore: alphaSession.userStore,
+      env: hostedEnv("alpha")
     });
     const productionBeta = buildProductionApp({
       dataRoot,
       store: productionStore,
       intakeRecords: new InMemoryIntakeRecordsPort(),
-      trustedActorSecret: secret,
-      env: { CATERING_DEPLOYMENT_PROFILE: "hosted", CATERING_TRUSTED_ACTOR_SECRET: secret }
+      userStore: betaSession.userStore,
+      env: hostedEnv("beta")
     });
-    const intakeAlpha = buildIntakeApp({
+    const intakeAlpha = alphaSession.intake;
+    const intakeBeta = betaSession.intake;
+    const exportsAlpha = buildPrintExportApp({
       rootDir: dataRoot,
-      store: intakeStore,
-      trustedActorSecret: secret,
-      env: { CATERING_DEPLOYMENT_PROFILE: "hosted", CATERING_TRUSTED_ACTOR_SECRET: secret }
+      userStore: alphaSession.userStore,
+      env: hostedEnv("alpha")
     });
-    const intakeBeta = buildIntakeApp({
+    const exportsBeta = buildPrintExportApp({
       rootDir: dataRoot,
-      store: intakeStore,
-      trustedActorSecret: secret,
-      env: { CATERING_DEPLOYMENT_PROFILE: "hosted", CATERING_TRUSTED_ACTOR_SECRET: secret }
-    });
-    const exports = buildPrintExportApp({
-      rootDir: dataRoot,
-      trustedActorSecret: secret,
-      env: { CATERING_DEPLOYMENT_PROFILE: "hosted", CATERING_TRUSTED_ACTOR_SECRET: secret }
+      userStore: betaSession.userStore,
+      env: hostedEnv("beta")
     });
     const alphaContext = { businessId: "alpha" } as const;
     const betaContext = { businessId: "beta" } as const;
-    const intakeHeaders = { ...alpha, "x-catering-actor-name": "Intake-Mitarbeiter" };
-    const betaIntakeHeaders = { ...beta, "x-catering-actor-name": "Intake-Mitarbeiter" };
-    const productionAlphaHeaders = { ...alpha, "x-catering-actor-name": "Produktions-Mitarbeiter" };
-    const productionBetaHeaders = { ...beta, "x-catering-actor-name": "Produktions-Mitarbeiter" };
+    const intakeHeaders = alphaSession.headers;
+    const betaIntakeHeaders = betaSession.headers;
+    const productionAlphaHeaders = alphaSession.headers;
+    const productionBetaHeaders = betaSession.headers;
 
     try {
       const offerCases = await Promise.all([
-        offerAlpha.inject({ method: "POST", url: "/v1/offers/cases", headers: alpha, payload: { customerName: "Alpha", eventTypeLabel: "Matrix", eventDate: "2026-06-14", attendeeCount: 10 } }),
-        offerBeta.inject({ method: "POST", url: "/v1/offers/cases", headers: beta, payload: { customerName: "Beta", eventTypeLabel: "Matrix", eventDate: "2026-06-14", attendeeCount: 20 } })
+        offerAlpha.inject({ method: "POST", url: "/v1/offers/cases", headers: alphaSession.headers, payload: { customerName: "Alpha", eventTypeLabel: "Matrix", eventDate: "2026-06-14", attendeeCount: 10 } }),
+        offerBeta.inject({ method: "POST", url: "/v1/offers/cases", headers: betaSession.headers, payload: { customerName: "Beta", eventTypeLabel: "Matrix", eventDate: "2026-06-14", attendeeCount: 20 } })
       ]);
       const alphaOfferCaseId = offerCases[0]!.json<{ case: { caseId: string } }>().case.caseId;
       const betaOfferCaseId = offerCases[1]!.json<{ case: { caseId: string } }>().case.caseId;
@@ -214,8 +273,8 @@ describe("Stage A profile-independent business isolation", () => {
       const alphaOfferDraftId = alphaDraft.draftId;
       const betaOfferDraftId = betaDraft.draftId;
       expect(alphaOfferDraftId).toBe(betaOfferDraftId);
-      const alphaOfferExport = await exports.inject({ method: "GET", url: `/v1/exports/offers/${alphaOfferDraftId}/html`, headers: alpha });
-      const betaOfferExport = await exports.inject({ method: "GET", url: `/v1/exports/offers/${alphaOfferDraftId}/html`, headers: beta });
+      const alphaOfferExport = await exportsAlpha.inject({ method: "GET", url: `/v1/exports/offers/${alphaOfferDraftId}/html`, headers: alphaSession.headers });
+      const betaOfferExport = await exportsBeta.inject({ method: "GET", url: `/v1/exports/offers/${alphaOfferDraftId}/html`, headers: betaSession.headers });
       expect(alphaOfferExport.statusCode).toBe(200);
       expect(betaOfferExport.statusCode).toBe(200);
       expect(alphaOfferExport.body).toContain("ALPHA-EXPORT-MARKER");
@@ -274,8 +333,8 @@ describe("Stage A profile-independent business isolation", () => {
       await productionStore.savePurchaseList(betaContext, purchaseList("beta"));
       expect((await productionAlpha.inject({ method: "GET", url: "/v1/production/plans", headers: productionAlphaHeaders })).json<{ items: ProductionPlan[] }>().items[0]?.warnings).toContain("alpha");
       expect((await productionBeta.inject({ method: "GET", url: "/v1/production/plans", headers: productionBetaHeaders })).json<{ items: ProductionPlan[] }>().items[0]?.warnings).toContain("beta");
-      const alphaPlanExport = await exports.inject({ method: "GET", url: "/v1/exports/production-plans/matrix-plan/html", headers: productionAlphaHeaders });
-      const betaPlanExport = await exports.inject({ method: "GET", url: "/v1/exports/production-plans/matrix-plan/html", headers: productionBetaHeaders });
+      const alphaPlanExport = await exportsAlpha.inject({ method: "GET", url: "/v1/exports/production-plans/matrix-plan/html", headers: productionAlphaHeaders });
+      const betaPlanExport = await exportsBeta.inject({ method: "GET", url: "/v1/exports/production-plans/matrix-plan/html", headers: productionBetaHeaders });
       expect(alphaPlanExport.statusCode).toBe(200);
       expect(betaPlanExport.statusCode).toBe(200);
       expect(alphaPlanExport.body).toContain("ALPHA-PLAN-MARKER");
@@ -283,8 +342,8 @@ describe("Stage A profile-independent business isolation", () => {
       expect(betaPlanExport.body).toContain("BETA-PLAN-MARKER");
       expect(betaPlanExport.body).not.toContain("ALPHA-PLAN-MARKER");
 
-      const alphaPurchaseExport = await exports.inject({ method: "GET", url: "/v1/exports/purchase-lists/matrix-purchase/csv", headers: productionAlphaHeaders });
-      const betaPurchaseExport = await exports.inject({ method: "GET", url: "/v1/exports/purchase-lists/matrix-purchase/csv", headers: productionBetaHeaders });
+      const alphaPurchaseExport = await exportsAlpha.inject({ method: "GET", url: "/v1/exports/purchase-lists/matrix-purchase/csv", headers: productionAlphaHeaders });
+      const betaPurchaseExport = await exportsBeta.inject({ method: "GET", url: "/v1/exports/purchase-lists/matrix-purchase/csv", headers: productionBetaHeaders });
       expect(alphaPurchaseExport.statusCode).toBe(200);
       expect(betaPurchaseExport.statusCode).toBe(200);
       expect(alphaPurchaseExport.body).toContain("ALPHA-PURCHASE-MARKER");
@@ -292,8 +351,8 @@ describe("Stage A profile-independent business isolation", () => {
       expect(betaPurchaseExport.body).toContain("BETA-PURCHASE-MARKER");
       expect(betaPurchaseExport.body).not.toContain("ALPHA-PURCHASE-MARKER");
 
-      const alphaFolderExport = await exports.inject({ method: "GET", url: "/v1/exports/production-folders/matrix-plan/html", headers: productionAlphaHeaders });
-      const betaFolderExport = await exports.inject({ method: "GET", url: "/v1/exports/production-folders/matrix-plan/html", headers: productionBetaHeaders });
+      const alphaFolderExport = await exportsAlpha.inject({ method: "GET", url: "/v1/exports/production-folders/matrix-plan/html", headers: productionAlphaHeaders });
+      const betaFolderExport = await exportsBeta.inject({ method: "GET", url: "/v1/exports/production-folders/matrix-plan/html", headers: productionBetaHeaders });
       expect(alphaFolderExport.statusCode).toBe(200);
       expect(betaFolderExport.statusCode).toBe(200);
       expect(alphaFolderExport.body).toContain("ALPHA-FOLDER-MARKER");
@@ -318,7 +377,7 @@ describe("Stage A profile-independent business isolation", () => {
     } finally {
       await Promise.all([
         offerAlpha.close(), offerBeta.close(), productionAlpha.close(), productionBeta.close(),
-        intakeAlpha.close(), intakeBeta.close(), exports.close()
+        intakeAlpha.close(), intakeBeta.close(), exportsAlpha.close(), exportsBeta.close()
       ]);
     }
   });

@@ -4,6 +4,9 @@ import {
 } from "./production-plan-submission-action.js";
 import {
   buildProductionSpecEditPersistAction,
+  isHandoffDraftContext,
+  assertCurrentProductionDraftContext,
+  type ProductionDraftEditContext,
   type ProductionSpecEditPersistActionInput
 } from "./production-spec-edit-persist-action.js";
 import {
@@ -51,7 +54,26 @@ export type ProductionPlanningControls = ProductionSpecFocusActions & {
 export function buildProductionPlanningControls(
   input: ProductionPlanningControlsInput
 ): ProductionPlanningControls {
+  let contextForPreparation = input.productionDraftContext;
+  let savedPredecessor: ProductionDraftEditContext | undefined;
+  const canonicalDraftForPreparation = isHandoffDraftContext(contextForPreparation)
+    ? () => {
+      assertCurrentProductionDraftContext(contextForPreparation!, input.getCurrentProductionDraftContext, savedPredecessor);
+      return contextForPreparation!.draft;
+    }
+    : undefined;
   const persistCurrentSpecEdit = buildProductionSpecEditPersistAction({
+    productionDraftContext: input.productionDraftContext,
+    getCurrentProductionDraftContext: input.getCurrentProductionDraftContext,
+    reviseProductionDraft: input.reviseProductionDraft,
+    onDraftRevised: (draft) => {
+      // React may still display this exact source until the saved revision renders.
+      // Only our own save can authorize that temporary predecessor, never a different case or revision.
+      savedPredecessor = input.productionDraftContext;
+      contextForPreparation = { caseId: input.productionDraftContext!.caseId, draft };
+      input.onDraftRevised?.(draft);
+      input.showProductionDraftReview(draft.draftId);
+    },
     editingSpecId: input.editingSpecId,
     updateAcceptedSpec: input.updateAcceptedSpec,
     buildCurrentSpecUpdateInput: input.buildCurrentSpecUpdateInput,
@@ -72,6 +94,7 @@ export function buildProductionPlanningControls(
     ...focusActions,
     persistCurrentSpecEdit,
     handleCreatePlan: buildProductionPlanSubmissionAction({
+      canonicalDraftForPreparation,
       createProductionCase: input.createProductionCase,
       createProductionDraftFromAcceptedEventSpec: input.createProductionDraftFromAcceptedEventSpec,
       activeProductionCaseId: input.activeProductionCaseId,

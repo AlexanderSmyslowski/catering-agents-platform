@@ -1,6 +1,8 @@
 import {
   byoLlmDataClasses,
+  validateAcceptedEventSpec,
   validateEventRequest,
+  type AcceptedEventSpec,
   type BusinessContext,
   type ByoLlmDataClass,
   type EventRequest
@@ -114,6 +116,35 @@ export class HttpSourceDocumentMetadataReader implements SourceDocumentMetadataR
       );
     } catch {
       throw new Error("Intake-Request ist nicht schema-valide.");
+    }
+  }
+
+  async getSpec(
+    context: BusinessContext,
+    specId: string
+  ): Promise<AcceptedEventSpec | undefined> {
+    const response = await this.request(
+      context,
+      `/v1/intake/internal/specs/${encodeURIComponent(specId)}`
+    );
+    if (response.status === 404) return undefined;
+    if (!response.ok) throw new Error("AcceptedEventSpec konnte nicht geladen werden.");
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch {
+      throw new Error("AcceptedEventSpec ist kein gültiges JSON.");
+    }
+    try {
+      const spec = validateAcceptedEventSpec(
+        (payload as { acceptedEventSpec?: unknown } | undefined)?.acceptedEventSpec as AcceptedEventSpec
+      );
+      if (spec.specId !== specId) {
+        throw new Error("AcceptedEventSpec passt nicht zur angeforderten Identität.");
+      }
+      return spec;
+    } catch {
+      throw new Error("AcceptedEventSpec ist nicht schema-valide.");
     }
   }
 

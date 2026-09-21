@@ -13,8 +13,10 @@ import { AppFeedbackShell } from "./app-feedback-shell.js";
 import { buildAppRouteShellState } from "./app-route-shell-state.js";
 import { buildAppDashboardRouteState } from "./app-dashboard-route-state.js";
 import { HomePortalApp } from "./home-portal-app.js";
-import { OfferProductApp } from "./offer-product-app.js";
-import { ProductionProductApp } from "./production-product-app.js";
+import { OfferRouteAccessBoundary } from "./offer-route-access-boundary.js";
+import type { OfferProductApp } from "./offer-product-app.js";
+import { ProductionRouteAccessBoundary } from "./production-route-access-boundary.js";
+import { SessionBoundary, useCateringSession } from "./session-boundary.js";
 import {
   buildRecordView,
   buildRecordViewMap,
@@ -58,11 +60,12 @@ import type {
   PurchaseList,
   Recipe
 } from "@catering/shared-core";
-import type { IntakeRequestDetail } from "./api.js";
+import type { ProductionSourceDetail } from "./api.js";
 import { buildProductionConversationState } from "./production-conversation-state.js";
 import { buildProductionArtifactSelectionAppBoundary } from "./production-artifact-selection-app-boundary.js";
 import { buildProductionFocusState } from "./production-focus-state.js";
 import { buildProductionIntakeActionsAppBoundary } from "./production-intake-actions-app-boundary.js";
+import { canEditProductionDraftQuantities, type ProductionDraftEditContext } from "./production-spec-edit-persist-action.js";
 import type { StagedProductionDocument } from "./production-document-submit-action.js";
 import { buildMiniPilotCheckReportState } from "./mini-pilot-check-report-state.js";
 import { extractAcceptedSpecId } from "./production-api-response-ids.js";
@@ -79,6 +82,7 @@ import { useProductionQuestionAutoOpen } from "./use-production-question-auto-op
 import { useProductionDocumentProgress } from "./use-production-document-progress.js";
 import { useProductionIntakeDraft } from "./use-production-intake-draft.js";
 import { useProductionIntakeRequestDetail } from "./use-production-intake-request-detail.js";
+import { buildProductionSnapshotSourceDetail } from "./production-snapshot-source-detail.js";
 import { useProductionManualSpecForm } from "./use-production-manual-spec-form.js";
 import { useProductionPlanProgress } from "./use-production-plan-progress.js";
 import { useProductionWindowFileDrop } from "./use-production-window-file-drop.js";
@@ -171,6 +175,7 @@ type ProductWorkspaceProps = {
   resolveProductionCaseFromHandoff?: (handoffId: string) => Promise<{ caseId: string }>;
   currentProductionDraftId?: string;
   currentProductionDraft?: ProductionDraft;
+  productionSourceDetail?: ProductionSourceDetail;
   currentApprovedProductionSpecId?: string;
   currentProductionResultArtifactId?: string;
 };
@@ -416,6 +421,7 @@ function ProductWorkspaceView({
   resolveProductionCaseFromHandoff,
   currentProductionDraftId,
   currentProductionDraft,
+  productionSourceDetail,
   currentApprovedProductionSpecId,
   currentProductionResultArtifactId
 }: ProductWorkspaceProps) {
@@ -708,11 +714,26 @@ function ProductWorkspaceView({
   );
 
   const {
-    intakeRequestDetail,
-    intakeRequestDetailError,
+    intakeRequestDetail: loadedIntakeRequestDetail,
+    intakeRequestDetailError: loadedIntakeRequestDetailError,
     resetIntakeRequestDetail
-  } = useProductionIntakeRequestDetail({ currentIntakeRequestId });
+  } = useProductionIntakeRequestDetail({
+    // Production renders the persisted, server-projected draft snapshot. A
+    // request-detail lookup here would cross the commercial Intake boundary.
+    currentIntakeRequestId: route === "production" ? undefined : currentIntakeRequestId
+  });
+  const intakeRequestDetail = route === "production"
+    ? productionSourceDetail ?? null
+    : loadedIntakeRequestDetail;
+  const intakeRequestDetailError = route === "production"
+    ? undefined
+    : loadedIntakeRequestDetailError;
 
+  const editingProductionDraftContext = useRef<ProductionDraftEditContext | undefined>(undefined);
+  const liveProductionDraftContext = useRef<ProductionDraftEditContext | undefined>(undefined);
+  liveProductionDraftContext.current = activeProductionCaseId && currentProductionDraft
+    ? { caseId: activeProductionCaseId, draft: currentProductionDraft }
+    : undefined;
   const {
     editingSpecId,
     dismissedProductionAnswerSpecId,
@@ -730,7 +751,7 @@ function ProductWorkspaceView({
     setEditingAttendeeCount,
     setEditingServiceForm,
     setEditingMenuItems,
-    loadSpecIntoEditor: loadSpecIntoEditorState,
+    loadSpecIntoEditor: loadSpecIntoEditorSnapshot,
     resetSpecEdit,
     updateEditingComponentState,
     buildCurrentSpecUpdateInput
@@ -739,6 +760,14 @@ function ProductWorkspaceView({
       ? buildRecordView(focusedProductionSpecRecord)
       : undefined
   });
+
+  function loadSpecIntoEditorState(spec: Parameters<typeof loadSpecIntoEditorSnapshot>[0]): string {
+    editingProductionDraftContext.current = activeProductionCaseId && currentProductionDraft &&
+      currentProductionDraft.draftArtifacts?.eventSpec?.specId === spec.specId
+      ? { caseId: activeProductionCaseId, draft: structuredClone(currentProductionDraft) }
+      : undefined;
+    return loadSpecIntoEditorSnapshot(spec);
+  }
 
   const {
     currentProductionSpecId,
@@ -890,9 +919,11 @@ function ProductWorkspaceView({
     createAcceptedSpecFromDocument,
     uploadSourceDocument,
     createProductionCase,
+    createProductionDraftFromAcceptedEventSpec,
     createProductionDraftFromDocument,
     activeProductionCaseId,
     setActiveProductionCaseId,
+    setActiveProductionCaseSpecId,
     getStagedProductionDocument: () => stagedProductionDocumentRef.current,
     setStagedProductionDocument: (stage) => {
       stagedProductionDocumentRef.current = stage;
@@ -940,6 +971,13 @@ function ProductWorkspaceView({
     handleSaveSpecEdit
   } = buildProductionPlanningControls({
     editingSpecId,
+    productionDraftContext: editingSpecId && editingProductionDraftContext.current
+      ? editingProductionDraftContext.current
+      : activeProductionCaseId && currentProductionDraft
+        ? { caseId: activeProductionCaseId, draft: currentProductionDraft }
+        : undefined,
+    getCurrentProductionDraftContext: () => liveProductionDraftContext.current,
+    reviseProductionDraft,
     updateAcceptedSpec,
     buildCurrentSpecUpdateInput,
     loadSpecIntoEditorState,
@@ -1021,6 +1059,7 @@ function ProductWorkspaceView({
   const {
     productionRouteMainLayoutState
   } = buildAppProductionRouteAppBoundary({
+    canEditPurchasedQuantities: canEditProductionDraftQuantities(editingSpecId, editingProductionDraftContext.current),
     activeProductionCaseId,
     viewState: productionRouteViewState,
     submitting,
@@ -1316,7 +1355,7 @@ function ProductRouteController({ route, shell, masthead }: ProductRouteControll
 
   if (route === "offer") {
     return (
-      <OfferProductApp
+      <OfferRouteAccessBoundary
         shell={shell}
         masthead={masthead}
         activeCaseId={activeOfferCaseId}
@@ -1344,12 +1383,12 @@ function ProductRouteController({ route, shell, masthead }: ProductRouteControll
               (await createProductionCaseFromHandoff(handoffId)).case}
           />
         )}
-      </OfferProductApp>
+      </OfferRouteAccessBoundary>
     );
   }
 
   return (
-    <ProductionProductApp
+    <ProductionRouteAccessBoundary
       shell={shell}
       masthead={masthead}
       activeCaseId={activeProductionCaseId}
@@ -1373,16 +1412,18 @@ function ProductRouteController({ route, shell, masthead }: ProductRouteControll
           availableCases={product.data.cases}
           currentProductionDraftId={product.data.currentDraft?.draftId}
           currentProductionDraft={product.data.currentDraft}
+          productionSourceDetail={buildProductionSnapshotSourceDetail(product.data)}
           currentApprovedProductionSpecId={product.data.approvedProductionSpec?.approvedProductionSpecId}
           currentProductionResultArtifactId={product.data.currentPlan?.planId ?? product.data.currentPurchaseList?.purchaseListId}
         />
       )}
-    </ProductionProductApp>
+    </ProductionRouteAccessBoundary>
   );
 }
 
-/** Resolve the three product routes before handing control to the workbench. */
-export function App() {
+/** Resolve the three product routes only after the server has authenticated the browser session. */
+function AuthenticatedApp() {
+  const cateringSession = useCateringSession();
   const route = detectRoute(getPathname());
   const routeShellState = buildAppRouteShellState({
     route,
@@ -1396,7 +1437,18 @@ export function App() {
   });
 
   if (route === "home") {
-    return <HomePortalApp shell={routeShellState.shell} />;
+    return (
+      <HomePortalApp shell={routeShellState.shell}>
+        {cateringSession ? (
+          <div className="masthead-actions">
+            <span aria-label="Angemeldeter Benutzer">{cateringSession.session.user.displayName}</span>
+            <button className="secondary-button" type="button" onClick={cateringSession.logout}>
+              Abmelden
+            </button>
+          </div>
+        ) : null}
+      </HomePortalApp>
+    );
   }
   return (
     <ProductRouteController
@@ -1404,5 +1456,13 @@ export function App() {
       shell={routeShellState.shell}
       masthead={routeShellState.masthead}
     />
+  );
+}
+
+export function App() {
+  return (
+    <SessionBoundary>
+      <AuthenticatedApp />
+    </SessionBoundary>
   );
 }

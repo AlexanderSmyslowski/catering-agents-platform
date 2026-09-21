@@ -1,16 +1,11 @@
-import { useState } from "react";
-import { persistOperatorName, readOperatorName } from "./api.js";
+import { useCateringSession } from "./session-boundary.js";
 
+/** Compatibility shape for legacy callers; identity is read-only and comes only from the authenticated session. */
 export function useOperatorNameState() {
-  const [operatorName, setOperatorName] = useState(() => readOperatorName());
-
-  function handleOperatorNameChange(value: string) {
-    const persisted = persistOperatorName(value);
-    setOperatorName(persisted);
-  }
+  const cateringSession = useCateringSession();
 
   return {
-    operatorName,
-    handleOperatorNameChange
+    operatorName: cateringSession?.session.user.displayName ?? "",
+    handleOperatorNameChange: (_value: string) => undefined
   };
 }

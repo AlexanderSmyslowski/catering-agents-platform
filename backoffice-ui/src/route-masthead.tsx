@@ -1,4 +1,5 @@
 import type { AppRoute } from "./app-shell-state.js";
+import { useCateringSession } from "./session-boundary.js";
 
 export type RouteMastheadProps = {
   route: AppRoute;
@@ -14,13 +15,12 @@ export type RouteMastheadProps = {
 export function RouteMasthead({
   route,
   baseUrl,
-  operatorName,
   loading,
   submitting,
-  onOperatorNameChange,
   onSeedDemoData,
   onRefreshDashboard
 }: RouteMastheadProps) {
+  const cateringSession = useCateringSession();
   const routeCards = [
     {
       href: "/angebot",
@@ -67,20 +67,26 @@ export function RouteMasthead({
             Produktionsagent
           </a>
         </nav>
-        {route === "home" ? (
+        {cateringSession || route === "home" ? (
           <div className="masthead-actions">
-            <input
-              className="operator-input"
-              placeholder="Bearbeitername"
-              value={operatorName}
-              onChange={(event) => onOperatorNameChange(event.target.value)}
-            />
-            <button disabled={loading || submitting} onClick={() => void onSeedDemoData()}>
-              Demo-Daten laden
-            </button>
-            <button className="secondary-button" disabled={loading || submitting} onClick={() => void onRefreshDashboard()}>
-              Aktualisieren
-            </button>
+            {cateringSession ? (
+              <>
+                <span aria-label="Angemeldeter Benutzer">{cateringSession.session.user.displayName}</span>
+                <button className="secondary-button" type="button" onClick={cateringSession.logout}>
+                  Abmelden
+                </button>
+              </>
+            ) : null}
+            {route === "home" ? (
+              <>
+                <button disabled={loading || submitting} onClick={() => void onSeedDemoData()}>
+                  Demo-Daten laden
+                </button>
+                <button className="secondary-button" disabled={loading || submitting} onClick={() => void onRefreshDashboard()}>
+                  Aktualisieren
+                </button>
+              </>
+            ) : null}
           </div>
         ) : null}
       </div>

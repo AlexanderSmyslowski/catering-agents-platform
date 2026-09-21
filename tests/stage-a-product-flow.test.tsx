@@ -17,6 +17,7 @@ import { CaseNextActionBar } from "../backoffice-ui/src/case-next-action-bar.js"
 import { buildCaseHistoryState } from "../backoffice-ui/src/case-history-state.js";
 import { buildCaseNextAction } from "../backoffice-ui/src/case-next-action.js";
 import { App } from "../backoffice-ui/src/App.js";
+import { adminSessionResponse } from "./support/catering-session-ui-fixture.js";
 
 const secret = "stage-a-product-flow-secret";
 const offerHeaders = {
@@ -52,14 +53,14 @@ describe("Stage A product route flow", () => {
       rootDir: dataRoot,
       store: new OfferStore({ rootDir: dataRoot }),
       trustedActorSecret: secret,
-      env: { CATERING_DEFAULT_BUSINESS_ID: "alpha", CATERING_TRUSTED_ACTOR_SECRET: secret }
+      env: { CATERING_DEFAULT_BUSINESS_ID: "alpha", CATERING_TRUSTED_ACTOR_SECRET: secret, CATERING_DEV_AUTH: "1" }
     });
     const productionApp = buildProductionApp({
       dataRoot,
       store: new ProductionStore({ rootDir: dataRoot }),
       intakeRecords: new InMemoryIntakeRecordsPort(),
       trustedActorSecret: secret,
-      env: { CATERING_DEFAULT_BUSINESS_ID: "alpha", CATERING_TRUSTED_ACTOR_SECRET: secret }
+      env: { CATERING_DEFAULT_BUSINESS_ID: "alpha", CATERING_TRUSTED_ACTOR_SECRET: secret, CATERING_DEV_AUTH: "1" }
     });
     try {
       const offerCreated = await offerApp.inject({
@@ -202,6 +203,9 @@ describe("Stage A product route flow", () => {
       const url = String(input);
       const method = (init?.method ?? "GET").toUpperCase();
       calls.push({ method, url });
+      if (url.endsWith("/api/intake/v1/auth/session")) {
+        return adminSessionResponse();
+      }
       if (url.endsWith("/api/offers/health")) {
         return Response.json({ service: "offer-service", status: "ok", timestamp: "", counts: {} });
       }

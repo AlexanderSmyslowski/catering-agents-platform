@@ -3,6 +3,7 @@ import type { MinimalMvpRole, TrustedActor } from "./access-control.js";
 import type { BusinessId } from "./business-context.js";
 import type { ByoLlmDataClass } from "./data-classification.js";
 import type { ByoLlmProcessingPolicyMetadata } from "./byo-llm-provider-data-policy.js";
+import type { CaseEventVisibility } from "./case-contracts.js";
 
 export const SCHEMA_VERSION = "1.0.0";
 
@@ -234,6 +235,7 @@ export interface MenuComponent {
   productionDecision?: {
     mode?: "scratch" | "hybrid" | "convenience_purchase" | "external_finished";
     purchasedElements?: string[];
+    purchasedQuantities?: Array<{ element: string; amountPerPerson: number; unit: string }>;
     notes?: string;
   };
 }
@@ -324,6 +326,7 @@ export interface OfferDraft {
   customerFacingText: string;
   internalWorkingText: string;
   proposedEventSpec: AcceptedEventSpec;
+  sourceAcceptedEventSpecSnapshot?: AcceptedEventSpec;
   portfolioMapping?: OfferPortfolioMapping;
   reviewStatus?: OfferReviewStatus;
 }
@@ -341,6 +344,7 @@ export interface ApprovedOffer {
   serviceModules: ServiceModule[];
   pricingSummary: PricingSummary;
   selectedVariant: OfferVariant;
+  sourceAcceptedEventSpecSnapshot?: AcceptedEventSpec;
 }
 
 export interface ProductionHandoff {
@@ -351,6 +355,7 @@ export interface ProductionHandoff {
   approvalRequestId: string;
   createdAt: string;
   eventSpecSnapshot: AcceptedEventSpec;
+  sourceAcceptedEventSpecSnapshot?: AcceptedEventSpec;
   pricingSnapshot: PricingSummary;
   source: { draftId: string; revision: number; selectedVariantId: string };
 }
@@ -407,6 +412,7 @@ export interface ProductionDraftReviewCard {
   riskLevel?: "low" | "medium" | "high" | "blocking";
   requiredApproval?: boolean;
   operatorComment?: string;
+  operatorCommentVisibility?: CaseEventVisibility;
   decidedBy?: string;
   decidedAt?: string;
 }

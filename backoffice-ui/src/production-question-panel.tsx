@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ProductionConversationProjection } from "../../shared-core/src/conversation-projection.js";
-import type { IntakeRequestDetail } from "./api.js";
+import type { ProductionSourceDetail } from "./api.js";
 import { ProductionIntakeOriginCard } from "./production-intake-origin-card.js";
 import { hasUnsafeIntakeSource } from "./production-intake-origin-card-state.js";
 import { getSpecLabel } from "./production-language.js";
@@ -18,6 +18,7 @@ import type { ComponentEditState } from "./production-answer-types.js";
 export { formatDocumentIngestionSummary } from "./production-intake-origin-card-state.js";
 
 export type ProductionQuestionEditorState = {
+  canEditPurchasedQuantities?: boolean;
   editingSpecId?: string;
   editingEventType: string;
   editingEventDate: string;
@@ -55,7 +56,7 @@ export type ProductionQuestionPanelState = {
   productionConversationProjection: ProductionConversationProjection;
   workbenchSpecFacts: WorkbenchSpecFact[];
   intakeRequestDetailError?: string;
-  intakeRequestDetail: IntakeRequestDetail | null;
+  intakeRequestDetail: ProductionSourceDetail | null;
   filteredSpecs: Array<Record<string, unknown>>;
   documentPhase: "idle" | "analysing" | "done";
   productionWorkspaceCleared: boolean;
@@ -101,6 +102,7 @@ export function ProductionQuestionPanel({
   } = questionState;
   const { openSpecForQuestions, refreshAfterDraftDecision } = questionActions;
   const {
+    canEditPurchasedQuantities = false,
     editingSpecId,
     editingEventType,
     editingEventDate,
@@ -216,6 +218,7 @@ export function ProductionQuestionPanel({
               answerEditor={
                 actionState.isFocusedSpecEditing ? (
                   <ProductionStructuredAnswerEditor
+                    canEditPurchasedQuantities={canEditPurchasedQuantities}
                     focusedProductionSpec={focusedProductionSpec}
                     editingEventType={editingEventType}
                     editingEventDate={editingEventDate}

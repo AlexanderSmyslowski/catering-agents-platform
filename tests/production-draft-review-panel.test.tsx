@@ -8,6 +8,7 @@ import {
   formatProductionDraftSourceLabel,
   formatProductionDraftStatusLabel,
   announceProductionDraftRefresh,
+  announceProductionDraftReview,
   ProductionDraftReviewPanel
 } from "../backoffice-ui/src/production-draft-review-panel.js";
 import type {
@@ -15,6 +16,7 @@ import type {
   ProductionDraftReviewDecision
 } from "../backoffice-ui/src/api.js";
 import * as api from "../backoffice-ui/src/api.js";
+import { buildProductionPlanningControls } from "../backoffice-ui/src/production-planning-controls.js";
 
 const originalFetch = globalThis.fetch;
 const activeCaseId = "case-production-draft-review-ui";
@@ -960,4 +962,93 @@ describe("ProductionDraftReviewPanel", () => {
 
     await act(async () => root.unmount());
   });
+
+  it("updates both review panels after classification save and a separate prepare", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    Object.defineProperty(window, "localStorage", { configurable: true, value: {
+      getItem: () => null, setItem: () => undefined, removeItem: () => undefined
+    } });
+    const original: ProductionDraft = { ...draftFixture(), revision: 2,
+      source: { sourceRef: "offer-handoff:handoff-classification" },
+      reviewCards: [{ ...draftFixture().reviewCards[0]!, title: "Klassifikation fehlt" }],
+      draftArtifacts: { ...draftFixture().draftArtifacts,
+        eventSpec: { specId: "spec-coffee", event: { title: "Kaffeepause" }, menuPlan: [{ componentId: "coffee", label: "Kaffee" }] }
+      }
+    };
+    const saved: ProductionDraft = { ...original, draftId: "classification-saved-r3", revision: 3, supersedesDraftId: original.draftId,
+      reviewCards: [{ ...original.reviewCards[0]!, title: "Klassifikation gespeichert" }],
+      draftArtifacts: { eventSpec: { ...original.draftArtifacts!.eventSpec, menuPlan: [{ componentId: "coffee", label: "Kaffee", menuCategory: "classic" }] } }
+    };
+    const prepared: ProductionDraft = { ...original, draftId: "classification-prepared-r4", revision: 4, supersedesDraftId: saved.draftId,
+      reviewCards: [{ ...original.reviewCards[0]!, title: "Herstellungsweg weiterhin offen", riskLevel: "blocking" }],
+      draftArtifacts: { ...original.draftArtifacts, eventSpec: saved.draftArtifacts!.eventSpec }
+    };
+    let drafts = [original];
+    let currentContext = { caseId: activeCaseId, draft: original };
+    let dashboardDraftId = original.draftId;
+    const refreshDashboard = async () => {
+      currentContext = { caseId: activeCaseId, draft: drafts.find(draft => draft.status === "pending_review")! };
+      dashboardDraftId = currentContext.draft.draftId;
+    };
+    globalThis.fetch = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      if (String(url) === productionDraftsUrl) return jsonResponse({ items: drafts, approvedProductionSpecs: [] });
+      if (String(url).endsWith(`/${original.draftId}/revise`) && init?.method === "POST") {
+        drafts = [{ ...original, status: "superseded" }, saved];
+        return jsonResponse({ draft: saved }, 201);
+      }
+      if (String(url).endsWith(`/${saved.draftId}/prepare`) && init?.method === "POST") {
+        drafts = [{ ...original, status: "superseded" }, { ...saved, status: "superseded" }, prepared];
+        return jsonResponse({ draft: prepared }, 201);
+      }
+      return jsonResponse({ message: "Unexpected request" }, 404);
+    }) as typeof fetch;
+    const controls = buildProductionPlanningControls({
+      editingSpecId: "spec-coffee", productionDraftContext: currentContext,
+      getCurrentProductionDraftContext: () => currentContext, reviseProductionDraft: api.reviseProductionDraft,
+      buildCurrentSpecUpdateInput: () => ({ menuItems: ["Kaffee"], componentUpdates: [{ componentId: "coffee", menuCategory: "classic", purchasedElements: [], recipeOverrideId: "" }] }),
+      updateAcceptedSpec: vi.fn(), loadSpecIntoEditorState: () => "spec-coffee",
+      createProductionCase: vi.fn(), createProductionDraftFromAcceptedEventSpec: vi.fn(), prepareProductionDraft: api.prepareProductionDraft,
+      setActiveProductionCaseId: vi.fn(), setActiveProductionCaseSpecId: vi.fn(), setSubmitting: vi.fn(),
+      setProductionWorkspaceCleared: vi.fn(), setFocusedProductionSpecId: vi.fn(), resetSpecEdit: vi.fn(),
+      refreshDashboard, setNotice: vi.fn(), clearMessages: vi.fn(), setError: vi.fn(), startPlanProgress: vi.fn(),
+      clearSelectedPlanId: vi.fn(), completePlanProgress: vi.fn(), failPlanProgress: vi.fn(),
+      showProductionDraftReview: announceProductionDraftReview
+    });
+    window.history.pushState({}, "", `/produktion?productionDraftId=${original.draftId}`);
+    try {
+      await act(async () => {
+        root.render(createElement("div", null, ...["input", "questions"].map(key => createElement(ProductionDraftReviewPanel, {
+          key, submitting: false, caseId: activeCaseId, latestOnly: true, onDraftChanged: refreshDashboard
+        }))));
+        await flushPromises();
+      });
+      const panels = Array.from(container.querySelectorAll('section[aria-label="Produktionsentwurf-Prüfung"]'));
+      expect(panels).toHaveLength(2);
+      expect(panels.every(panel => panel.textContent?.includes("Klassifikation fehlt"))).toBe(true);
+      await act(async () => { await controls.handleSaveSpecEdit(); await flushPromises(); });
+      expect(dashboardDraftId).toBe(saved.draftId);
+      for (const panel of panels) {
+        expect(panel.textContent).not.toContain("Klassifikation fehlt");
+        expect(panel.textContent).toContain("Klassifikation gespeichert");
+        expect(Array.from(panel.querySelectorAll("button")).some(button => button.textContent === "Entwurf vorbereiten")).toBe(true);
+      }
+      await act(async () => {
+        Array.from(panels[0]!.querySelectorAll("button")).find(button => button.textContent === "Entwurf vorbereiten")!.click();
+        await flushPromises(); await flushPromises();
+      });
+      expect(dashboardDraftId).toBe(prepared.draftId);
+      for (const panel of panels) {
+        expect(panel.textContent).toContain("Herstellungsweg weiterhin offen");
+        expect(panel.textContent).not.toContain("Klassifikation gespeichert");
+        expect(Array.from(panel.querySelectorAll("button")).some(button => button.textContent === "Entwurf vorbereiten")).toBe(false);
+        expect((Array.from(panel.querySelectorAll("button")).find(button => button.textContent === "Entwurf freigeben") as HTMLButtonElement).disabled).toBe(true);
+      }
+    } finally {
+      await act(async () => root.unmount());
+      window.history.pushState({}, "", "/produktion");
+    }
+  });
+
 });

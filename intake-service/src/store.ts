@@ -8,6 +8,7 @@ import {
   type BusinessContext,
   type BusinessScopedPersistentCollection,
   type CollectionStorageOptions,
+  type CriticalSectionTarget,
   type AcceptedEventSpec,
   type EventRequest,
   type OperationalArchiveReasonCode,
@@ -320,6 +321,23 @@ function activeOnly<T extends { operationalArchive?: OperationalArchiveState }>(
   return includeArchived ? items : items.filter((item) => !isOperationallyArchived(item));
 }
 
+function acceptedEventSpecLockTarget(specId: string): CriticalSectionTarget {
+  return { kind: "accepted_event_spec", artifactId: specId, revision: 0 };
+}
+
+function sameStringSet(left: readonly string[], right: readonly string[]): boolean {
+  if (left.length !== right.length) return false;
+  const rightSet = new Set(right);
+  return left.every((value) => rightSet.has(value));
+}
+
+class IntakeArchiveRetryError extends Error {
+  constructor() {
+    super("Zugehörige AcceptedEventSpecs haben sich während des Archivvorlaufs geändert.");
+    this.name = "IntakeArchiveRetryError";
+  }
+}
+
 export class IntakeStore {
   private readonly requests: BusinessScopedPersistentCollection<EventRequest>;
 
@@ -346,11 +364,13 @@ export class IntakeStore {
   }
 
   async saveSpec(context: BusinessContext, spec: AcceptedEventSpec): Promise<void> {
-    await this.saveRecord(context, this.specs, spec.specId, spec, "spec");
+    await this.withSpecCriticalSection(context, spec.specId, (specs) =>
+      this.saveRecord(context, specs, spec.specId, spec, "spec")
+    );
   }
 
   async insertSpec(context: BusinessContext, spec: AcceptedEventSpec): Promise<"created" | "exists"> {
-    return this.specs.insert(context, spec);
+    return this.withSpecCriticalSection(context, spec.specId, (specs) => specs.insert(context, spec));
   }
 
   async replaceSpec(
@@ -363,17 +383,19 @@ export class IntakeStore {
     if (expected.specId !== replacement.specId) {
       throw new Error("AcceptedEventSpec-Ersetzung muss dieselbe specId behalten.");
     }
-    const existing = await this.specs.get(context, expected.specId);
-    if (!existing) return "missing";
-    // A repeated service call after a successful write is safe even when its old expected snapshot is now stale.
-    if (areJsonValuesEqual(existing, replacement)) return "same_content";
-    if (isOperationallyArchived(existing)) return "conflict";
-    return this.specs.compareAndSetExact(
-      context,
-      expected.specId,
-      expected,
-      replacement
-    );
+    return this.withSpecCriticalSection(context, expected.specId, async (specs) => {
+      const existing = await specs.get(context, expected.specId);
+      if (!existing) return "missing";
+      // A repeated service call after a successful write is safe even when its old expected snapshot is now stale.
+      if (areJsonValuesEqual(existing, replacement)) return "same_content";
+      if (isOperationallyArchived(existing)) return "conflict";
+      return specs.compareAndSetExact(
+        context,
+        expected.specId,
+        expected,
+        replacement
+      );
+    });
   }
 
   async getSpec(context: BusinessContext, specId: string): Promise<AcceptedEventSpec | undefined> {
@@ -407,21 +429,81 @@ export class IntakeStore {
     input: ArchiveRequestContextInput
   ): Promise<{ request?: EventRequest; specs: AcceptedEventSpec[]; alreadyArchived: boolean }> {
     const storage = this.storageOptions ?? {};
+    let specIds = await this.relatedSpecIds(context, input.requestId, this.requests, this.specs);
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        return await withBusinessTargetCriticalSection({
+          storage,
+          context,
+          target: { kind: "intake_request", artifactId: input.requestId, revision: 0 },
+          collectionNamespace: "intake/archive",
+          compatibilityNamespaceTargets: specIds.map((specId) => ({
+            collectionNamespace: "intake/specs",
+            target: acceptedEventSpecLockTarget(specId)
+          })),
+          queueFullMessage: "Die Warteschlange für Intake-Archive benötigt eine betriebliche Bereinigung.",
+          queueExhaustedMessage: "Die Warteschlange für Intake-Archive ist ausgeschöpft.",
+          timeoutMessage: "Der Intake-Kontext konnte nicht rechtzeitig gesperrt werden.",
+          legacyTimeoutMessage: "Der alte Intake-Kontext konnte nicht rechtzeitig entsperrt werden.",
+          postgresPoolMessage: "PostgreSQL-Intake-Archive benötigen einen Pool mit exklusivem Client-Checkout.",
+          operation: async (transactionalQueryable) => {
+            const collections = transactionalQueryable
+              ? createIntakeCollections({ rootDir: storage.rootDir, pgPool: transactionalQueryable })
+              : { requests: this.requests, specs: this.specs, shadowRuns: this.shadowRuns };
+            const lockedSpecIds = await this.relatedSpecIds(
+              context,
+              input.requestId,
+              collections.requests,
+              collections.specs
+            );
+            if (!sameStringSet(specIds, lockedSpecIds)) throw new IntakeArchiveRetryError();
+            return this.archiveWithinCollections(context, input, collections, Boolean(transactionalQueryable));
+          }
+        });
+      } catch (error) {
+        if (!(error instanceof IntakeArchiveRetryError) || attempt === 2) {
+          throw error;
+        }
+        specIds = await this.relatedSpecIds(context, input.requestId, this.requests, this.specs);
+      }
+    }
+    throw new IntakeArchiveRetryError();
+  }
+
+  private async relatedSpecIds(
+    context: BusinessContext,
+    requestId: string,
+    requests: BusinessScopedPersistentCollection<EventRequest>,
+    specs: BusinessScopedPersistentCollection<AcceptedEventSpec>
+  ): Promise<string[]> {
+    if (!await requests.get(context, requestId)) return [];
+    return (await specs.list(context))
+      .filter((spec) => spec.sourceLineage.some((source) => source.reference === requestId))
+      .map((spec) => spec.specId)
+      .sort();
+  }
+
+  private async withSpecCriticalSection<T>(
+    context: BusinessContext,
+    specId: string,
+    operation: (specs: BusinessScopedPersistentCollection<AcceptedEventSpec>) => Promise<T>
+  ): Promise<T> {
+    const storage = this.storageOptions ?? {};
     return withBusinessTargetCriticalSection({
       storage,
       context,
-      target: { kind: "intake_request", artifactId: input.requestId, revision: 0 },
-      collectionNamespace: "intake/archive",
-      queueFullMessage: "Die Warteschlange für Intake-Archive benötigt eine betriebliche Bereinigung.",
-      queueExhaustedMessage: "Die Warteschlange für Intake-Archive ist ausgeschöpft.",
-      timeoutMessage: "Der Intake-Kontext konnte nicht rechtzeitig gesperrt werden.",
-      legacyTimeoutMessage: "Der alte Intake-Kontext konnte nicht rechtzeitig entsperrt werden.",
-      postgresPoolMessage: "PostgreSQL-Intake-Archive benötigen einen Pool mit exklusivem Client-Checkout.",
+      target: acceptedEventSpecLockTarget(specId),
+      collectionNamespace: "intake/specs",
+      queueFullMessage: "Die Warteschlange für AcceptedEventSpecs benötigt eine betriebliche Bereinigung.",
+      queueExhaustedMessage: "Die Warteschlange für AcceptedEventSpecs ist ausgeschöpft.",
+      timeoutMessage: "AcceptedEventSpec konnte nicht rechtzeitig gesperrt werden.",
+      legacyTimeoutMessage: "AcceptedEventSpec konnte nicht rechtzeitig entsperrt werden.",
+      postgresPoolMessage: "PostgreSQL-Intake-Specs benötigen einen Pool mit exklusivem Client-Checkout.",
       operation: async (transactionalQueryable) => {
-        const collections = transactionalQueryable
-          ? createIntakeCollections({ rootDir: storage.rootDir, pgPool: transactionalQueryable })
-          : { requests: this.requests, specs: this.specs, shadowRuns: this.shadowRuns };
-        return this.archiveWithinCollections(context, input, collections, Boolean(transactionalQueryable));
+        const specs = transactionalQueryable
+          ? createIntakeCollections({ rootDir: storage.rootDir, pgPool: transactionalQueryable }).specs
+          : this.specs;
+        return operation(specs);
       }
     });
   }

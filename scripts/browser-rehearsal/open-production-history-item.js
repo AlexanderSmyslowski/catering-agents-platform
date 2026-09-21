@@ -8,9 +8,7 @@ async () => {
   if (!expectedSpecId || !expectedCaseId || !expectedHandoffId) {
     throw new Error("Produktionsfall ist nicht über den Rehearsal-Handoff gebunden.");
   }
-  const response = await fetch(`/api/production/v1/production/cases/${encodeURIComponent(expectedCaseId)}`, {
-    headers: { "x-actor-name": "Produktions-Mitarbeiter" },
-  });
+  const response = await fetch(`/api/production/v1/production/cases/${encodeURIComponent(expectedCaseId)}`);
   const payload = await response.json();
   if (!response.ok || payload?.case?.caseId !== expectedCaseId || payload.case.product !== "production" ||
     payload.case.productionHandoffId !== expectedHandoffId || payload.case.sourceSpecId !== expectedSpecId) {
@@ -22,9 +20,7 @@ async () => {
   );
   if (!historyDetails) throw new Error("Produktions-Historie fehlt");
   historyDetails.open = true;
-  const listResponse = await fetch("/api/production/v1/production/cases", {
-    headers: { "x-actor-name": "Produktions-Mitarbeiter" },
-  });
+  const listResponse = await fetch("/api/production/v1/production/cases");
   const listPayload = await listResponse.json();
   const cases = Array.isArray(listPayload?.items) ? listPayload.items : [];
   const matchingCases = cases.filter((item) =>

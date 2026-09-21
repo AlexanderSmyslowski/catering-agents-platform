@@ -11,8 +11,8 @@ async () => {
     throw new Error("Produktions-Handoff ist nicht über den bestätigten Angebotskontext gebunden.");
   }
 
-  const fetchJson = async (path, headers = {}) => {
-    const response = await fetch(path, { headers });
+  const fetchJson = async (path) => {
+    const response = await fetch(path);
     const raw = typeof response.text === "function"
       ? await response.text()
       : JSON.stringify(await response.json());
@@ -23,8 +23,6 @@ async () => {
     if (!response.ok) throw new Error(`${path} schlug mit HTTP ${response.status} fehl: ${payload?.message ?? raw}`);
     return payload;
   };
-  const offerHeaders = { "x-actor-name": "Angebots-Mitarbeiter" };
-  const productionHeaders = { "x-actor-name": "Produktions-Mitarbeiter" };
   const waitFor = async (label, predicate, attempts = 60) => {
     let lastError;
     for (let attempt = 0; attempt < attempts; attempt += 1) {
@@ -41,7 +39,6 @@ async () => {
   const offerCase = await waitFor("Produktions-Handoff", async () => {
     const payload = await fetchJson(
       `/api/offers/v1/offers/cases/${encodeURIComponent(expectedCaseId)}`,
-      offerHeaders,
     );
     if (payload?.case?.caseId !== expectedCaseId || payload.case.product !== "offer") {
       throw new Error("Angebotsfall passt nach der Navigation nicht zur gespeicherten Fallidentität.");
@@ -53,7 +50,6 @@ async () => {
   const handoffId = offerCase.case.productionHandoffId;
   const handoffPayload = await fetchJson(
     `/api/offers/v1/offers/handoffs/${encodeURIComponent(handoffId)}`,
-    productionHeaders,
   );
   const handoff = handoffPayload?.handoff;
   if (handoff?.handoffId !== handoffId || handoff.approvedOfferId !== expectedApprovedOfferId ||
@@ -64,7 +60,6 @@ async () => {
   const productionCase = await waitFor("Produktionsfall", async () => {
     const productionList = await fetchJson(
       "/api/production/v1/production/cases",
-      productionHeaders,
     );
     const candidates = (productionList?.items ?? []).filter((item) =>
       item?.product === "production" &&
@@ -75,7 +70,6 @@ async () => {
       try {
         detail = await fetchJson(
           `/api/production/v1/production/cases/${encodeURIComponent(candidate.caseId)}`,
-          productionHeaders,
         );
       } catch {
         continue;

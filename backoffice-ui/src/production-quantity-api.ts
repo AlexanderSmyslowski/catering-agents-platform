@@ -1,3 +1,8 @@
+import {
+  assertCateringSessionBoundResponse,
+  buildCateringBrowserRequestInit
+} from "./session-api.js";
+
 export type ProductionQuantityWorkflowEdit =
   | { origin: "target_output"; perUnitAmount: number; unit: string }
   | { origin: "purchase_ingredient"; ingredientId: string; amount: number; unit: string };
@@ -55,14 +60,13 @@ export interface ProductionQuantityWorkflowConfirmResponse {
   status: "review_required" | "regenerated";
 }
 
-function actorHeaders(): Headers {
-  const headers = new Headers({ "content-type": "application/json" });
-  headers.set("x-actor-name", "Produktions-Mitarbeiter");
-  return headers;
-}
-
 async function fetchQuantityJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, { ...init, headers: actorHeaders() });
+  const requestInit = buildCateringBrowserRequestInit(init, {
+    includeJsonContentType: true,
+    sessionBound: true
+  });
+  const response = await fetch(url, requestInit);
+  assertCateringSessionBoundResponse(response, requestInit.signal);
   if (!response.ok) throw new Error(`${response.status} ${response.statusText}`.trim());
   return response.json() as Promise<T>;
 }

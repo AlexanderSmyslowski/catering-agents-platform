@@ -5,6 +5,7 @@ import {
   createEventRequestFromText,
   createCuratedOfferDraft,
   createOfferDraft,
+  createOfferDraftFromAcceptedEventSpec,
   normalizeEventRequestToSpec,
   validateEventRequest,
   validateOfferDraft,
@@ -164,7 +165,7 @@ export function registerOfferDraftRoutes(
     return packagePreset ? createCuratedOfferDraft(eventRequest, packagePreset) : createOfferDraft(eventRequest);
   }
 
-  app.post<{ Body: EventRequest & { caseId?: string } }>("/v1/offers/drafts", async (request, reply) => {
+  app.post<{ Body: EventRequest & { caseId?: string; acceptedEventSpecId?: unknown } }>("/v1/offers/drafts", async (request, reply) => {
     if (!isOfferOperator(request, trustedActorSecret, allowDevActorHeader)) {
       return reply.code(403).send({
         message: "Angebots-Operator erforderlich."
@@ -177,9 +178,18 @@ export function registerOfferDraftRoutes(
     if (!await store.getCase(actor, caseId)) {
       return reply.code(404).send({ message: "Angebotsauftrag nicht gefunden." });
     }
+    const rawAcceptedEventSpecId = request.body?.acceptedEventSpecId;
+    const acceptedEventSpecId = rawAcceptedEventSpecId === undefined
+      ? undefined
+      : typeof rawAcceptedEventSpecId === "string" && rawAcceptedEventSpecId.trim()
+        ? rawAcceptedEventSpecId.trim()
+        : null;
+    if (acceptedEventSpecId === null) {
+      return reply.code(422).send({ message: "acceptedEventSpecId muss eine nichtleere Zeichenfolge sein." });
+    }
     let eventRequest: EventRequest;
     try {
-      const { caseId: _caseId, ...body } = request.body;
+      const { caseId: _caseId, acceptedEventSpecId: _acceptedEventSpecId, ...body } = request.body;
       eventRequest = validateEventRequest(body as EventRequest);
     } catch (error) {
       return reply.code(422).send({
@@ -202,7 +212,46 @@ export function registerOfferDraftRoutes(
           : "Quelldokument konnte nicht verifiziert werden."
       });
     }
-    const draft = validateOfferDraft({ ...createPortfolioAwareOfferDraft(verifiedEventRequest), businessId: actor.businessId, revision: 1 });
+    let draft;
+    if (acceptedEventSpecId) {
+      if (!sourceDocumentReader?.getSpec) {
+        return reply.code(503).send({
+          message: "Serverseitige AcceptedEventSpec kann im Angebotsdienst derzeit nicht verifiziert werden."
+        });
+      }
+      let acceptedEventSpec;
+      try {
+        acceptedEventSpec = await sourceDocumentReader.getSpec(
+          { businessId: actor.businessId },
+          acceptedEventSpecId
+        );
+      } catch {
+        return reply.code(503).send({
+          message: "Serverseitige AcceptedEventSpec kann im Angebotsdienst derzeit nicht verifiziert werden."
+        });
+      }
+      if (!acceptedEventSpec || acceptedEventSpec.specId !== acceptedEventSpecId) {
+        return reply.code(422).send({
+          message: "AcceptedEventSpec konnte für diesen Auftrag nicht verifiziert werden."
+        });
+      }
+      if (!acceptedEventSpec.sourceLineage.some((source) => source.reference === verifiedEventRequest.requestId)) {
+        return reply.code(422).send({
+          message: "AcceptedEventSpec gehört nicht zur angeforderten Intake-Anfrage."
+        });
+      }
+      try {
+        draft = validateOfferDraft({
+          ...createOfferDraftFromAcceptedEventSpec(acceptedEventSpec),
+          businessId: actor.businessId,
+          revision: 1
+        });
+      } catch {
+        return reply.code(422).send({ message: "AcceptedEventSpec ist nicht schema-valide." });
+      }
+    } else {
+      draft = validateOfferDraft({ ...createPortfolioAwareOfferDraft(verifiedEventRequest), businessId: actor.businessId, revision: 1 });
+    }
     if (await store.saveDraftForCase(actor, caseId, draft, sourceRefs) === "case_conflict") {
       return reply.code(409).send({ message: "Dieser Angebotsentwurf gehört bereits zu einem anderen Auftrag." });
     }
@@ -215,6 +264,7 @@ export function registerOfferDraftRoutes(
       summary: "Angebotsentwurf aus strukturierter Event-Anfrage erstellt.",
       details: {
         requestId: verifiedEventRequest.requestId,
+        acceptedEventSpecId: acceptedEventSpecId ?? null,
         readiness: draft.proposedEventSpec.readiness.status,
         variants: draft.variantSet.length
       }

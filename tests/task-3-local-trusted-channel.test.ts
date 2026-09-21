@@ -45,7 +45,7 @@ describe("Task 3 local trusted channel", () => {
 
   it("rejects a trusted browser identity that selects a different local business", async () => {
     const rootDir = mkdtempSync(path.join(tmpdir(), "catering-local-business-boundary-"));
-    const env = { CATERING_DEFAULT_BUSINESS_ID: "local" };
+    const env = { CATERING_DEFAULT_BUSINESS_ID: "local", CATERING_DEV_AUTH: "1" };
     const intake = buildIntakeApp({ rootDir, trustedActorSecret: secret, env });
     const offer = buildOfferApp({ rootDir, trustedActorSecret: secret, env });
     const browserChosen = {

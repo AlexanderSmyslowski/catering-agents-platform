@@ -4,10 +4,16 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   AuditLogStore,
   BoundaryGuardedLlmAdapter,
+  CateringLoginService,
+  CateringUserStore,
   buildBoundaryGuardedLlmAdapterFromEnv,
+  classifyCateringRouteAuth,
   loadByoLlmExternalProcessingApprovalFromEnv,
+  createCateringInternalServiceActorResolver,
   createTrustedActorResolver,
+  deriveCateringAuthKeys,
   assertBusinessId,
+  hasMinimalMvpCapability,
   type CollectionStorageOptions,
   createLlmReadinessAgentAuditRecord,
   createEventRequestFromManualForm,
@@ -15,10 +21,11 @@ import {
   getDemoIntakeRequests,
   getDemoProductionAnsweredClarificationAnchor,
   hostedMultiBusinessReady,
+  isCateringSessionMode,
   isDevAuthEnabled,
   llmReadinessContractVersion,
   normalizeEventRequestToSpec,
-  resolveMinimalMvpRoleFromTrustedActor,
+  registerCateringRequestAuth,
   DOCUMENT_UPLOAD_LIMITS,
   withEvaluatedReadiness,
   validateAcceptedEventSpec,
@@ -32,6 +39,10 @@ import {
   type EventScheduleItem,
   type OperationalArchiveReasonCode
 } from "@catering/shared-core";
+import {
+  registerCateringAuthRoutes,
+  registerCateringDevSessionRoute
+} from "./routes/auth-routes.js";
 import { buildEventRequestFromText } from "./extraction.js";
 import {
   IntakeStore,
@@ -438,6 +449,7 @@ function applySpecUpdates(
 
 export interface IntakeAppOptions extends CollectionStorageOptions {
   store?: IntakeStore;
+  userStore?: CateringUserStore;
   sourceDocumentStore?: SourceDocumentStore;
   auditLog?: AuditLogStore;
   llmAdapter?: LlmReadinessProviderAdapter;
@@ -460,6 +472,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
     throw new Error("Hosted Multi-Business-Betrieb ist noch nicht bereit.");
   }
   const trustedActorSecret = options.trustedActorSecret ?? env.CATERING_TRUSTED_ACTOR_SECRET;
+  const sessionMode = isCateringSessionMode(env);
   const allowDevActorHeader = isDevAuthEnabled(env);
   const resolveActor = createTrustedActorResolver({
       fallbackActorName: "Intake-Mitarbeiter",
@@ -468,9 +481,9 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
       trustedActorSecret,
       allowDevActorHeader
     });
-  const actorForRequest = (request: { headers: Record<string, string | string[] | undefined> }, ..._ignored: unknown[]) => resolveActor(request);
+  let actorForRequest = (request: { headers: Record<string, string | string[] | undefined> }, ..._ignored: unknown[]) => resolveActor(request);
   const isIntakeOperator = (request: { headers: Record<string, string | string[] | undefined> }, ..._ignored: unknown[]) =>
-    resolveMinimalMvpRoleFromTrustedActor(actorForRequest(request)) === "intake_operator";
+    hasMinimalMvpCapability(actorForRequest(request), "intake");
   const requireIntakeOperator = (
     request: { headers: Record<string, string | string[] | undefined> },
     reply: { code: (statusCode: number) => { send: (payload: unknown) => unknown } },
@@ -479,7 +492,7 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
     ? undefined
     : reply.code(403).send({ message: "Intake-Operator erforderlich." });
   const isOperationsAuditOperator = (request: { headers: Record<string, string | string[] | undefined> }, ..._ignored: unknown[]) =>
-    resolveMinimalMvpRoleFromTrustedActor(actorForRequest(request)) === "operations_audit_operator";
+    hasMinimalMvpCapability(actorForRequest(request), "operations_audit");
   const storageOptions = isIntakeStore(input) ? input.storageOptions : options;
   const store =
     options.store ??
@@ -502,6 +515,11 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
       databaseUrl: storageOptions?.databaseUrl,
       pgPool: storageOptions?.pgPool
     });
+  const userStore = options.userStore ?? new CateringUserStore({
+    rootDir: storageOptions?.rootDir,
+    databaseUrl: storageOptions?.databaseUrl,
+    pgPool: storageOptions?.pgPool
+  });
   if (options.llmAdapter && !options.llmProviderDescriptor) {
     throw new Error("Injected BYO LLM adapters require an explicit server-owned llmProviderDescriptor.");
   }
@@ -510,8 +528,47 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
     bodyLimit: DOCUMENT_UPLOAD_LIMITS.intake.maxFileSizeBytes
   });
 
+  const authKeys = sessionMode ? deriveCateringAuthKeys(trustedActorSecret ?? "") : undefined;
+  const internalServiceActorForRequest = sessionMode
+    ? createCateringInternalServiceActorResolver({
+        targetService: "intake-service",
+        trustedActorSecret: trustedActorSecret!,
+        businessContext: defaultBusinessContext
+      })
+    : undefined;
+  const requestAuth = sessionMode
+    ? registerCateringRequestAuth({
+        app,
+        sessionMode,
+        userStore,
+        businessContext: defaultBusinessContext,
+        authKeys: authKeys!,
+        internalServiceActorForRequest,
+        isInternalServiceRequest: (request) => classifyCateringRouteAuth({
+          targetService: "intake-service",
+          method: request.method,
+          pathname: request.url.split("?", 1)[0]
+        }) === "internal-service",
+        isPublicRequest: (request) => {
+          const pathname = request.url.split("?", 1)[0];
+          const classification = classifyCateringRouteAuth({
+            targetService: "intake-service",
+            method: request.method,
+            pathname
+          });
+          return classification === "public-health" || classification === "public-auth";
+        }
+      })
+    : undefined;
+  const loginService = sessionMode
+    ? new CateringLoginService({ userStore, rateLimitSecret: authKeys!.rateLimitKey })
+    : undefined;
+  actorForRequest = (request: { headers: Record<string, string | string[] | undefined> }, ..._ignored: unknown[]) =>
+    sessionMode ? requestAuth!.actorForRequest(request) : resolveActor(request);
+
   app.addHook("onRequest", async (request, reply) => {
-    if (request.url.split("?", 1)[0] === "/health") return;
+    const pathname = request.url.split("?", 1)[0];
+    if (pathname === "/health" || pathname === "/v1/auth/login") return;
     const actor = actorForRequest(request);
     if (!hosted && actor.businessId !== defaultBusinessContext.businessId) {
       return reply.code(403).send({
@@ -521,6 +578,19 @@ export function buildIntakeApp(input: IntakeStore | IntakeAppOptions = {}) {
   });
 
   app.register(multipart);
+
+  if (sessionMode) {
+    registerCateringAuthRoutes({
+      app,
+      userStore,
+      loginService: loginService!,
+      requestAuth: requestAuth!,
+      authKeys: authKeys!,
+      businessContext: defaultBusinessContext
+    });
+  } else {
+    registerCateringDevSessionRoute({ app, actorForRequest });
+  }
 
   app.get("/health", async (_request, reply) => {
     if (hosted) {

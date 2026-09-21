@@ -124,7 +124,7 @@ describe("Task 4 explicit business scope and recipe seeding", () => {
     const app = buildProductionApp({
       dataRoot: dataRoot(),
       trustedActorSecret: "task-4-local-business-secret",
-      env: { CATERING_DEFAULT_BUSINESS_ID: "local" }
+      env: { CATERING_DEFAULT_BUSINESS_ID: "local", CATERING_DEV_AUTH: "1" }
     });
 
     try {

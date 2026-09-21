@@ -3,11 +3,18 @@ import { formatSubmitErrorMessage } from "./submit-error-message.js";
 
 export type ProductionTextIntakeSubmitInput = {
   createAcceptedSpecFromText: (text: string) => Promise<Record<string, unknown>>;
+  createProductionCase: (input?: Record<string, never>) => Promise<{ case: { caseId: string } }>;
+  createProductionDraftFromAcceptedEventSpec: (
+    caseId: string,
+    spec: Record<string, unknown>
+  ) => Promise<{ draft: { draftId: string } }>;
   intakeText: string;
   setSubmitting: (submitting: boolean) => void;
   setProductionWorkspaceCleared: (cleared: boolean) => void;
   clearMessages: () => void;
   setFocusedProductionSpecId: (specId: string) => void;
+  setActiveProductionCaseId: (caseId: string) => void;
+  setActiveProductionCaseSpecId: (specId: string) => void;
   refreshDashboard: () => Promise<void>;
   setNotice: (message: string) => void;
   setError: (message: string) => void;
@@ -15,12 +22,15 @@ export type ProductionTextIntakeSubmitInput = {
 
 export function buildProductionTextIntakeSubmitAction({
   createAcceptedSpecFromText,
+  createProductionCase,
+  createProductionDraftFromAcceptedEventSpec,
   intakeText,
   setSubmitting,
   setProductionWorkspaceCleared,
   clearMessages,
   setFocusedProductionSpecId,
-  refreshDashboard,
+  setActiveProductionCaseId,
+  setActiveProductionCaseSpecId,
   setNotice,
   setError
 }: ProductionTextIntakeSubmitInput) {
@@ -36,10 +46,12 @@ export function buildProductionTextIntakeSubmitAction({
     try {
       const response = await createAcceptedSpecFromText(intakeText);
       const specId = extractAcceptedSpecId(response);
-      if (specId) {
-        setFocusedProductionSpecId(specId);
-      }
-      await refreshDashboard();
+      if (!specId) throw new Error("Freitext-Spezifikation enthält keine gültige ID.");
+      const productionCase = await createProductionCase({});
+      await createProductionDraftFromAcceptedEventSpec(productionCase.case.caseId, { specId });
+      setActiveProductionCaseId(productionCase.case.caseId);
+      setActiveProductionCaseSpecId(specId);
+      setFocusedProductionSpecId(specId);
       setNotice("Freitext wurde in eine operative Spezifikation überführt.");
     } catch (submitError) {
       setError(

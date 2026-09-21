@@ -7,11 +7,15 @@ import {
 function input(overrides: Partial<ProductionTextIntakeSubmitInput> = {}): ProductionTextIntakeSubmitInput {
   return {
     createAcceptedSpecFromText: vi.fn(async () => ({ acceptedEventSpec: { specId: "spec-text-1" } })),
+    createProductionCase: vi.fn(async () => ({ case: { caseId: "case-text-1" } })),
+    createProductionDraftFromAcceptedEventSpec: vi.fn(async () => ({ draft: { draftId: "draft-text-1" } })),
     intakeText: "Lunch fuer 40 Personen mit Tomatensuppe.",
     setSubmitting: vi.fn(),
     setProductionWorkspaceCleared: vi.fn(),
     clearMessages: vi.fn(),
     setFocusedProductionSpecId: vi.fn(),
+    setActiveProductionCaseId: vi.fn(),
+    setActiveProductionCaseSpecId: vi.fn(),
     refreshDashboard: vi.fn(async () => undefined),
     setNotice: vi.fn(),
     setError: vi.fn(),
@@ -50,11 +54,22 @@ describe("production text intake submit action", () => {
         calls.push(`createAcceptedSpecFromText:${text}`);
         return { acceptedEventSpec: { specId: "spec-text-1" } };
       }),
+      createProductionCase: vi.fn(async () => {
+        calls.push("createProductionCase");
+        return { case: { caseId: "case-text-1" } };
+      }),
+      createProductionDraftFromAcceptedEventSpec: vi.fn(async (caseId, spec) => {
+        calls.push(`createProductionDraftFromAcceptedEventSpec:${caseId}:${String(spec.specId)}`);
+        return { draft: { draftId: "draft-text-1" } };
+      }),
+      setActiveProductionCaseId: vi.fn((caseId) => {
+        calls.push(`setActiveProductionCaseId:${caseId}`);
+      }),
+      setActiveProductionCaseSpecId: vi.fn((specId) => {
+        calls.push(`setActiveProductionCaseSpecId:${specId}`);
+      }),
       setFocusedProductionSpecId: vi.fn((specId) => {
         calls.push(`setFocusedProductionSpecId:${specId}`);
-      }),
-      refreshDashboard: vi.fn(async () => {
-        calls.push("refreshDashboard");
       }),
       setNotice: vi.fn((message) => {
         calls.push(`setNotice:${message}`);
@@ -70,14 +85,17 @@ describe("production text intake submit action", () => {
       "setProductionWorkspaceCleared:false",
       "clearMessages",
       "createAcceptedSpecFromText:Lunch fuer 40 Personen mit Tomatensuppe.",
+      "createProductionCase",
+      "createProductionDraftFromAcceptedEventSpec:case-text-1:spec-text-1",
+      "setActiveProductionCaseId:case-text-1",
+      "setActiveProductionCaseSpecId:spec-text-1",
       "setFocusedProductionSpecId:spec-text-1",
-      "refreshDashboard",
       "setNotice:Freitext wurde in eine operative Spezifikation überführt.",
       "setSubmitting:false"
     ]);
   });
 
-  it("keeps the successful path usable when the normalize response has no spec id", async () => {
+  it("fails closed when the normalize response has no spec id", async () => {
     const actionsInput = input({
       createAcceptedSpecFromText: vi.fn(async () => ({ acceptedEventSpec: {} }))
     });
@@ -85,9 +103,29 @@ describe("production text intake submit action", () => {
 
     await submitIntakeText();
 
+    expect(actionsInput.createProductionCase).not.toHaveBeenCalled();
+    expect(actionsInput.createProductionDraftFromAcceptedEventSpec).not.toHaveBeenCalled();
     expect(actionsInput.setFocusedProductionSpecId).not.toHaveBeenCalled();
-    expect(actionsInput.refreshDashboard).toHaveBeenCalledTimes(1);
-    expect(actionsInput.setNotice).toHaveBeenCalledWith("Freitext wurde in eine operative Spezifikation überführt.");
+    expect(actionsInput.setNotice).not.toHaveBeenCalled();
+    expect(actionsInput.setError).toHaveBeenCalledWith("Freitext-Spezifikation enthält keine gültige ID.");
+  });
+
+  it("does not expose an unpersisted spec when the Production draft import fails", async () => {
+    const actionsInput = input({
+      createProductionDraftFromAcceptedEventSpec: vi.fn(async () => {
+        throw new Error("Produktionsentwurf konnte nicht gespeichert werden");
+      })
+    });
+    const submitIntakeText = buildProductionTextIntakeSubmitAction(actionsInput);
+
+    await submitIntakeText();
+
+    expect(actionsInput.setActiveProductionCaseId).not.toHaveBeenCalled();
+    expect(actionsInput.setActiveProductionCaseSpecId).not.toHaveBeenCalled();
+    expect(actionsInput.setFocusedProductionSpecId).not.toHaveBeenCalled();
+    expect(actionsInput.setNotice).not.toHaveBeenCalled();
+    expect(actionsInput.setError).toHaveBeenCalledWith("Produktionsentwurf konnte nicht gespeichert werden");
+    expect(actionsInput.setSubmitting).toHaveBeenLastCalledWith(false);
   });
 
   it("surfaces normalization failures and always exits submitting state", async () => {

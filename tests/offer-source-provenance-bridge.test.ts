@@ -15,7 +15,7 @@ import type {
   StoredSourceDocument
 } from "../offer-service/src/ports/source-document-reader.js";
 
-const trustedSecret = "offer-provenance-secret";
+const trustedSecret = "offer-provenance-service-secret-20260828";
 const headers = {
   "x-catering-trusted-secret": trustedSecret,
   "x-catering-actor-name": "Angebots-Mitarbeiter",
@@ -45,6 +45,7 @@ function buildHarness(reader: SourceDocumentMetadataReader) {
     sourceDocumentReader: reader,
     trustedActorSecret: trustedSecret,
     env: {
+      CATERING_DEV_AUTH: "1",
       CATERING_DEFAULT_BUSINESS_ID: "alpha",
       CATERING_TRUSTED_ACTOR_SECRET: trustedSecret
     }

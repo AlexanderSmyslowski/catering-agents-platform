@@ -26,13 +26,17 @@ const context = { businessId: "local" };
 const target = { kind: "production_draft", artifactId: "draft-lock-test", revision: 1 };
 const namespace = "lock-tests";
 
-function targetLockPath(rootDir: string, lockTarget: CriticalSectionTarget = target): string {
+function targetLockPath(
+  rootDir: string,
+  lockTarget: CriticalSectionTarget = target,
+  lockNamespace = namespace
+): string {
   const identity = JSON.stringify({ businessId: context.businessId, ...lockTarget });
   return path.join(
     rootDir,
     "businesses",
     context.businessId,
-    namespace,
+    lockNamespace,
     ".decision-target-locks",
     `${createHash("sha256").update(identity).digest("hex")}.lock`
   );
@@ -44,6 +48,11 @@ function lockInput<T>(
   options: {
     target?: CriticalSectionTarget;
     compatibilityTargets?: CriticalSectionTarget[];
+    collectionNamespace?: string;
+    compatibilityNamespaceTargets?: Array<{
+      collectionNamespace: string;
+      target: CriticalSectionTarget;
+    }>;
   } = {}
 ) {
   return {
@@ -51,7 +60,10 @@ function lockInput<T>(
     context,
     target: options.target ?? target,
     ...(options.compatibilityTargets ? { compatibilityTargets: options.compatibilityTargets } : {}),
-    collectionNamespace: namespace,
+    ...(options.compatibilityNamespaceTargets
+      ? { compatibilityNamespaceTargets: options.compatibilityNamespaceTargets }
+      : {}),
+    collectionNamespace: options.collectionNamespace ?? namespace,
     queueFullMessage: "queue full",
     timeoutMessage: "target lock timed out",
     legacyTimeoutMessage: "legacy lock timed out",
@@ -78,16 +90,36 @@ function processFingerprintAvailable(): boolean {
 }
 
 class MockPostgresAdvisoryLocks {
-  private readonly holders = new Set<string>();
+  private readonly holders = new Map<string, { connectionId: number; depth: number }>();
   private readonly waiters = new Map<string, Array<() => void>>();
+  private readonly requests: string[] = [];
+  private readonly requestWaiters = new Map<number, Array<() => void>>();
+  private connections = 0;
+
+  lockRequests(): string[] { return [...this.requests]; }
+  connectionCount(): number { return this.connections; }
+  async waitForLockRequestCount(count: number): Promise<void> {
+    if (this.requests.length >= count) return;
+    await new Promise<void>((resolve) => {
+      const waiters = this.requestWaiters.get(count) ?? [];
+      waiters.push(resolve);
+      this.requestWaiters.set(count, waiters);
+    });
+  }
 
   pool() {
     return {
       query: async () => ({ rows: [] }),
       connect: async () => {
+        this.connections += 1;
+        const connectionId = this.connections;
         const held: string[] = [];
         const releaseHeld = () => {
           for (const key of held.splice(0).reverse()) {
+            const holder = this.holders.get(key);
+            if (!holder || holder.connectionId !== connectionId) continue;
+            holder.depth -= 1;
+            if (holder.depth > 0) continue;
             this.holders.delete(key);
             for (const wake of this.waiters.get(key) ?? []) wake();
             this.waiters.delete(key);
@@ -97,6 +129,19 @@ class MockPostgresAdvisoryLocks {
           query: async (sql: string, params: unknown[] = []) => {
             if (sql.includes("pg_advisory_xact_lock")) {
               const key = String(params[0]);
+              this.requests.push(key);
+              for (const [count, waiters] of this.requestWaiters) {
+                if (this.requests.length >= count) {
+                  for (const wake of waiters) wake();
+                  this.requestWaiters.delete(count);
+                }
+              }
+              const ownHolder = this.holders.get(key);
+              if (ownHolder?.connectionId === connectionId) {
+                ownHolder.depth += 1;
+                held.push(key);
+                return { rows: [] };
+              }
               while (this.holders.has(key)) {
                 await new Promise<void>((resolve) => {
                   const waiters = this.waiters.get(key) ?? [];
@@ -104,7 +149,7 @@ class MockPostgresAdvisoryLocks {
                   this.waiters.set(key, waiters);
                 });
               }
-              this.holders.add(key);
+              this.holders.set(key, { connectionId, depth: 1 });
               held.push(key);
             } else if (sql === "COMMIT" || sql === "ROLLBACK") {
               releaseHeld();
@@ -277,6 +322,181 @@ describe("business target critical section", () => {
       releaseLegacy();
       await Promise.allSettled([legacy, ...(canonical ? [canonical] : [])]);
     }
+  });
+
+  it("holds the AcceptedEventSpec fence across File namespaces until PostgreSQL commit", async () => {
+    const locks = new MockPostgresAdvisoryLocks();
+    const pgPool = locks.pool();
+    const specTarget = {
+      kind: "accepted_event_spec",
+      artifactId: "spec-shared-fence",
+      revision: 0
+    };
+    let releaseApply!: () => void;
+    const applyRelease = new Promise<void>((resolve) => { releaseApply = resolve; });
+    let signalApplyEntered!: () => void;
+    const applyEntered = new Promise<void>((resolve) => { signalApplyEntered = resolve; });
+    const apply = withBusinessTargetCriticalSection(lockInput(
+      { pgPool },
+      async (transactionalQueryable) => {
+        expect(transactionalQueryable).toBeDefined();
+        signalApplyEntered();
+        await applyRelease;
+        return "applied";
+      },
+      {
+        target: {
+          kind: "production_case",
+          artifactId: "case-shared-fence",
+          revision: 0
+        },
+        collectionNamespace: "production/case-events",
+        compatibilityNamespaceTargets: [{
+          collectionNamespace: "intake/specs",
+          target: specTarget
+        }]
+      }
+    ));
+    let mutationEntered = false;
+    let mutation: Promise<string> | undefined;
+
+    try {
+      await applyEntered;
+      mutation = withBusinessTargetCriticalSection(lockInput(
+        { pgPool },
+        async (transactionalQueryable) => {
+          expect(transactionalQueryable).toBeDefined();
+          mutationEntered = true;
+          return "mutated";
+        },
+        {
+          target: specTarget,
+          collectionNamespace: "intake/specs"
+        }
+      ));
+      await locks.waitForLockRequestCount(3);
+      expect(locks.connectionCount()).toBe(2);
+      expect(mutationEntered).toBe(false);
+      releaseApply();
+      await expect(apply).resolves.toBe("applied");
+      await expect(mutation).resolves.toBe("mutated");
+      expect(mutationEntered).toBe(true);
+      expect(locks.lockRequests()).toHaveLength(3);
+      expect(new Set(locks.lockRequests()).size).toBe(2);
+    } finally {
+      releaseApply();
+      await Promise.allSettled([apply, ...(mutation ? [mutation] : [])]);
+    }
+  });
+
+  it("serializes a historical namespace alias in the File backend", async () => {
+    const rootDir = mkdtempSync(path.join(tmpdir(), "catering-target-namespace-alias-file-"));
+    const legacyNamespace = "legacy-lock-tests";
+    let releaseLegacy!: () => void;
+    const legacyGate = new Promise<void>((resolve) => { releaseLegacy = resolve; });
+    let signalLegacyEntered!: () => void;
+    const legacyEntered = new Promise<void>((resolve) => { signalLegacyEntered = resolve; });
+    const legacy = withBusinessTargetCriticalSection(lockInput(
+      { rootDir },
+      async () => {
+        signalLegacyEntered();
+        await legacyGate;
+      },
+      { collectionNamespace: legacyNamespace }
+    ));
+    let canonicalEntered = false;
+    let canonical: Promise<void> | undefined;
+
+    try {
+      await legacyEntered;
+      canonical = withBusinessTargetCriticalSection(lockInput(
+        { rootDir },
+        async () => { canonicalEntered = true; },
+        {
+          compatibilityNamespaceTargets: [{ collectionNamespace: legacyNamespace, target }]
+        }
+      ));
+      const legacyQueuePath = `${targetLockPath(rootDir, target, legacyNamespace)}.queue`;
+      let aliasTicketObserved = false;
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        if (readdirSync(legacyQueuePath).some((entry) => entry.startsWith("ticket-"))) {
+          aliasTicketObserved = true;
+          break;
+        }
+        await delay(10);
+      }
+      expect(aliasTicketObserved).toBe(true);
+      expect(canonicalEntered).toBe(false);
+      releaseLegacy();
+      await Promise.all([legacy, canonical]);
+      expect(canonicalEntered).toBe(true);
+    } finally {
+      releaseLegacy();
+      await Promise.allSettled([legacy, ...(canonical ? [canonical] : [])]);
+      rmSync(rootDir, { recursive: true, force: true });
+    }
+  });
+
+  it("serializes a historical namespace alias in the pg-mem fallback", async () => {
+    const pgPool = pgMemPool();
+    const legacyNamespace = "legacy-lock-tests";
+    let releaseLegacy!: () => void;
+    const legacyGate = new Promise<void>((resolve) => { releaseLegacy = resolve; });
+    let signalLegacyEntered!: () => void;
+    const legacyEntered = new Promise<void>((resolve) => { signalLegacyEntered = resolve; });
+    const legacy = withBusinessTargetCriticalSection(lockInput(
+      { pgPool },
+      async () => {
+        signalLegacyEntered();
+        await legacyGate;
+      },
+      { collectionNamespace: legacyNamespace }
+    ));
+    let canonicalEntered = false;
+    let canonical: Promise<void> | undefined;
+
+    try {
+      await legacyEntered;
+      canonical = withBusinessTargetCriticalSection(lockInput(
+        { pgPool },
+        async () => { canonicalEntered = true; },
+        {
+          compatibilityNamespaceTargets: [{ collectionNamespace: legacyNamespace, target }]
+        }
+      ));
+      await delay(100);
+      expect(canonicalEntered).toBe(false);
+      releaseLegacy();
+      await Promise.all([legacy, canonical]);
+      expect(canonicalEntered).toBe(true);
+    } finally {
+      releaseLegacy();
+      await Promise.allSettled([legacy, ...(canonical ? [canonical] : [])]);
+    }
+  });
+
+  it("deduplicates the Case and Draft targets in one PostgreSQL transaction", async () => {
+    const locks = new MockPostgresAdvisoryLocks();
+    const pgPool = locks.pool();
+    const caseTarget = { kind: "offer_case", artifactId: "case-lock-test", revision: 0 };
+    const draftTarget = { kind: "offer_draft", artifactId: "draft-lock-test", revision: 1 };
+
+    await expect(withBusinessTargetCriticalSection(lockInput(
+      { pgPool },
+      async (transactionalQueryable) => {
+        expect(transactionalQueryable).toBeDefined();
+        return "done";
+      },
+      {
+        target: draftTarget,
+        compatibilityTargets: [caseTarget, draftTarget],
+        compatibilityNamespaceTargets: [{ collectionNamespace: "offers", target: draftTarget }]
+      }
+    ))).resolves.toBe("done");
+
+    expect(locks.connectionCount()).toBe(1);
+    expect(locks.lockRequests()).toHaveLength(2);
+    expect(new Set(locks.lockRequests()).size).toBe(2);
   });
 
   it("orders opposite pg-mem compatibility target inputs without deadlocking", async () => {

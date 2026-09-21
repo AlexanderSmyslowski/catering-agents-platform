@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { newDb } from "pg-mem";
@@ -14,9 +14,13 @@ import {
   createOfferDraft,
   validateApprovalRequestRecord,
   validateApprovedOffer,
+  validateCaseEvent,
+  validateProductionHandoff,
   type ApprovalRequestRecord,
   type ApprovedOffer,
+  type CaseEvent,
   type OfferDraft,
+  type ProductionHandoff,
   type Queryable
 } from "@catering/shared-core";
 import { buildOfferApp } from "../offer-service/src/app.js";
@@ -51,6 +55,83 @@ function buildTestHarness() {
   return { app, store, auditLog, rootDir };
 }
 
+async function buildRealPostgresOfferHarness() {
+  const schema = `offer_audit_atomicity_${process.pid}_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  const postgres = new PostgresPool({ connectionString: postgresConnectionString });
+  const quotedSchema = quotedIdentifier(schema);
+  await postgres.query(`CREATE SCHEMA ${quotedSchema}`);
+  let faultAction: string | undefined;
+  let faultCalls = 0;
+  const queryWithFault = async (
+    query: (sql: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>> }>,
+    sql: string,
+    params?: unknown[]
+  ) => {
+    const result = await query(sql, params);
+    if (
+      faultAction
+      && sql.trimStart().startsWith("INSERT INTO catering_business_records")
+      && params?.[1] === "audit/events"
+    ) {
+      const payload = typeof params[3] === "string" ? JSON.parse(params[3]) as { action?: string } : undefined;
+      if (payload?.action === faultAction) {
+        faultCalls += 1;
+        faultAction = undefined;
+        throw new Error(`synthetic post-insert audit failure: ${payload.action}`);
+      }
+    }
+    return result;
+  };
+  const connect = async () => {
+    const client = await postgres.connect();
+    await client.query(`SET search_path TO ${quotedSchema}`);
+    const query = client.query.bind(client) as (
+      sql: string,
+      params?: unknown[]
+    ) => Promise<{ rows: Array<Record<string, unknown>> }>;
+    return {
+      query: (sql: string, params?: unknown[]) => queryWithFault(query, sql, params),
+      release: () => client.release()
+    };
+  };
+  const pool = {
+    query: async (sql: string, params?: unknown[]) => {
+      const client = await connect();
+      try {
+        return await client.query(sql, params);
+      } finally {
+        client.release();
+      }
+    },
+    connect
+  };
+  const store = new OfferStore({ pgPool: pool });
+  const auditLog = new AuditLogStore({ pgPool: pool });
+  const app = buildOfferApp({ pgPool: pool, store, auditLog, trustedActorSecret: trustedSecret });
+  return {
+    app,
+    store,
+    auditLog,
+    pool,
+    setAuditFault: (action: string) => { faultAction = action; },
+    faultCalls: () => faultCalls,
+    close: async () => {
+      await app.close();
+      await postgres.query(`DROP SCHEMA IF EXISTS ${quotedSchema} CASCADE`);
+      await postgres.end();
+    }
+  };
+}
+
+async function postgresOfferSnapshot(
+  pool: { query: (sql: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>> }> }
+) {
+  const result = await pool.query(
+    "SELECT collection_name, record_id, payload::text AS payload FROM catering_business_records ORDER BY collection_name, record_id"
+  );
+  return result.rows;
+}
+
 function decisionsFor(store: OfferStore) {
   return offerDecisionRepositoryFor(store);
 }
@@ -74,6 +155,42 @@ async function createDraft(app: ReturnType<typeof buildTestApp>) {
   return response.json<{ draftId: string; variantSet: Array<{ variantId: string }> }>();
 }
 
+async function seedLegacyApprovalPair(store: OfferStore, draftId: string) {
+  const draft = await store.getDraft({ businessId: "local" }, draftId);
+  if (!draft) throw new Error("Expected draft for legacy approval fixture.");
+  const selectedVariant = draft.variantSet[0]!;
+  const approval = createApprovalRequestRecord({
+    actor: {
+      name: "Angebots-Mitarbeiter",
+      businessId: "local",
+      source: "trusted-proxy:x-catering-actor-name",
+      trusted: true
+    },
+    role: "offer_operator",
+    target: { kind: "offer_draft", artifactId: draftId, revision: draft.revision },
+    decision: "approved",
+    selectedVariantId: selectedVariant.variantId,
+    now: new Date("2026-01-02T03:04:05.000Z")
+  });
+  const approvedOffer = validateApprovedOffer({
+    schemaVersion: "1.0",
+    businessId: "local",
+    approvedOfferId: approvedOfferIdForApproval(approval),
+    sourceDraft: { draftId, revision: draft.revision },
+    selectedVariantId: selectedVariant.variantId,
+    approvalRequestId: approval.approvalRequestId,
+    approvedAt: approval.decidedAt,
+    eventSummary: draft.eventSummary,
+    customerFacingText: draft.customerFacingText,
+    serviceModules: structuredClone(draft.serviceModules),
+    pricingSummary: structuredClone(selectedVariant.proposedEventSpec.budgetContext!.pricingSummary!),
+    selectedVariant: structuredClone(selectedVariant)
+  });
+  expect(await store.insertApproval({ businessId: "local" }, approval)).toBe("created");
+  expect(await store.insertApprovedOffer({ businessId: "local" }, approvedOffer)).toBe("created");
+  return { draft, approval, approvedOffer };
+}
+
 describe("offer approval request", () => {
   it("creates an approved offer only after explicit variant approval", async () => {
     const app = buildTestApp();
@@ -90,6 +207,741 @@ describe("offer approval request", () => {
     expect(response.json<{ approval: { decidedBy: { name: string } } }>().approval.decidedBy.name).toBe("Angebots-Mitarbeiter");
     expect(response.json<{ approvedOffer: { selectedVariantId: string } }>().approvedOffer.selectedVariantId)
       .toBe(draft.variantSet[1]?.variantId);
+  });
+
+  it("rejects a foreign same-ID Decision audit in File mode before any projection", async () => {
+    const { app, store, auditLog } = buildTestHarness();
+    try {
+      const draft = await createDraft(app);
+      const approvalRequestId = approvalRequestIdForTarget({
+        businessId: "local",
+        target: { kind: "offer_draft", artifactId: draft.draftId, revision: 1 }
+      });
+      const approvedOfferId = approvedOfferIdForApproval({ businessId: "local", approvalRequestId });
+      const foreign = await auditLog.logFor({ businessId: "local" }, {
+        action: "offer.approved",
+        entityType: "ApprovedOffer",
+        entityId: approvedOfferId,
+        actor: { name: "foreign", source: "trusted-proxy:foreign" },
+        at: "2026-08-31T00:00:00.000Z",
+        idempotencyKey: `approved-offer:${approvedOfferId}`,
+        summary: "Foreign same-ID audit must not be adopted.",
+        details: { draftId: draft.draftId, variantId: "foreign-variant" }
+      });
+      const before = {
+        approvals: await store.listApprovalsForDraft({ businessId: "local" }, draft.draftId),
+        approvedOffers: await store.listApprovedOffers({ businessId: "local" }),
+        aggregate: await decisionsFor(store).getDecisionAggregate({ businessId: "local" }, approvalRequestId),
+        events: await store.listEvents({ businessId: "local" }, (await store.listCases({ businessId: "local" }))[0]!.caseId),
+        audits: await auditLog.listRecentFor({ businessId: "local" }, 100)
+      };
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/offers/drafts/${draft.draftId}/decision`,
+        headers: trustedHeaders,
+        payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
+      });
+
+      expect(response.statusCode, response.body).toBe(409);
+      expect(await store.listApprovalsForDraft({ businessId: "local" }, draft.draftId)).toEqual(before.approvals);
+      expect(await store.listApprovedOffers({ businessId: "local" })).toEqual(before.approvedOffers);
+      expect(await decisionsFor(store).getDecisionAggregate({ businessId: "local" }, approvalRequestId)).toEqual(before.aggregate);
+      expect(await store.listEvents({ businessId: "local" }, (await store.listCases({ businessId: "local" }))[0]!.caseId)).toEqual(before.events);
+      expect(await auditLog.listRecentFor({ businessId: "local" }, 100)).toEqual(before.audits);
+      await expect(auditLog.getFor({ businessId: "local" }, foreign.auditId)).resolves.toEqual(foreign);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("rejects a foreign same-ID Decision Case event in File mode before any projection", async () => {
+    const { app, store, auditLog, rootDir } = buildTestHarness();
+    try {
+      const draft = await createDraft(app);
+      const offerCase = (await store.listCases({ businessId: "local" }))[0]!;
+      const approvalRequestId = approvalRequestIdForTarget({
+        businessId: "local",
+        target: { kind: "offer_draft", artifactId: draft.draftId, revision: 1 }
+      });
+      const eventId = `offer-case-event-${createHash("sha256")
+        .update(`local\0${offerCase.caseId}\0review_decision\0${approvalRequestId}`)
+        .digest("hex")}`;
+      const events = createBusinessScopedPersistentCollection<CaseEvent>({
+        collectionName: "offers/case-events",
+        getId: (event) => event.eventId,
+        validate: validateCaseEvent,
+        rootDir
+      });
+      const currentEvents = await store.listEvents({ businessId: "local" }, offerCase.caseId);
+      await events.insert({ businessId: "local" }, {
+        businessId: "local",
+        eventId,
+        caseId: offerCase.caseId,
+        sequence: Math.max(...currentEvents.map((event) => event.sequence)) + 1,
+        at: "2026-08-31T00:00:00.000Z",
+        role: "system",
+        kind: "review_decision",
+        text: "foreign event",
+        artifactId: approvalRequestId
+      });
+      const before = {
+        case: await store.getCase({ businessId: "local" }, offerCase.caseId),
+        events: await store.listEvents({ businessId: "local" }, offerCase.caseId),
+        approval: await decisionsFor(store).getDecisionAggregate({ businessId: "local" }, approvalRequestId),
+        approvals: await store.listApprovalsForDraft({ businessId: "local" }, draft.draftId),
+        approvedOffers: await store.listApprovedOffers({ businessId: "local" }),
+        audits: await auditLog.listRecentFor({ businessId: "local" }, 100)
+      };
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/offers/drafts/${draft.draftId}/decision`,
+        headers: trustedHeaders,
+        payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
+      });
+
+      expect(response.statusCode, response.body).toBe(409);
+      expect(await store.getCase({ businessId: "local" }, offerCase.caseId)).toEqual(before.case);
+      expect(await store.listEvents({ businessId: "local" }, offerCase.caseId)).toEqual(before.events);
+      expect(await decisionsFor(store).getDecisionAggregate({ businessId: "local" }, approvalRequestId)).toEqual(before.approval);
+      expect(await store.listApprovalsForDraft({ businessId: "local" }, draft.draftId)).toEqual(before.approvals);
+      expect(await store.listApprovedOffers({ businessId: "local" })).toEqual(before.approvedOffers);
+      expect(await auditLog.listRecentFor({ businessId: "local" }, 100)).toEqual(before.audits);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("rejects a foreign OfferCase approval identity before File Decision projection", async () => {
+    const { app, store, auditLog } = buildTestHarness();
+    try {
+      const draft = await createDraft(app);
+      const offerCase = (await store.listCases({ businessId: "local" }))[0]!;
+      const approvalRequestId = approvalRequestIdForTarget({
+        businessId: "local",
+        target: { kind: "offer_draft", artifactId: draft.draftId, revision: 1 }
+      });
+      const cases = (store as any).cases as {
+        set: (context: { businessId: string }, value: Record<string, unknown>) => Promise<void>
+      };
+      const existingCase = await store.getCase({ businessId: "local" }, offerCase.caseId);
+      if (!existingCase) throw new Error("Expected OfferCase.");
+      await cases.set({ businessId: "local" }, {
+        ...existingCase,
+        approvedOfferId: "foreign-approved-offer",
+        version: existingCase.version + 1
+      });
+      const before = {
+        case: await store.getCase({ businessId: "local" }, offerCase.caseId),
+        events: await store.listEvents({ businessId: "local" }, offerCase.caseId),
+        approval: await decisionsFor(store).getDecisionAggregate({ businessId: "local" }, approvalRequestId),
+        approvals: await store.listApprovalsForDraft({ businessId: "local" }, draft.draftId),
+        approvedOffers: await store.listApprovedOffers({ businessId: "local" }),
+        audits: await auditLog.listRecentFor({ businessId: "local" }, 100)
+      };
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/offers/drafts/${draft.draftId}/decision`,
+        headers: trustedHeaders,
+        payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
+      });
+      expect(response.statusCode, response.body).toBe(409);
+      expect(await store.getCase({ businessId: "local" }, offerCase.caseId)).toEqual(before.case);
+      expect(await store.listEvents({ businessId: "local" }, offerCase.caseId)).toEqual(before.events);
+      expect(await decisionsFor(store).getDecisionAggregate({ businessId: "local" }, approvalRequestId)).toEqual(before.approval);
+      expect(await store.listApprovalsForDraft({ businessId: "local" }, draft.draftId)).toEqual(before.approvals);
+      expect(await store.listApprovedOffers({ businessId: "local" })).toEqual(before.approvedOffers);
+      expect(await auditLog.listRecentFor({ businessId: "local" }, 100)).toEqual(before.audits);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("rejects a duplicate review_decision identity before an idempotent File retry", async () => {
+    const { app, store, auditLog, rootDir } = buildTestHarness();
+    try {
+      const draft = await createDraft(app);
+      const first = await app.inject({
+        method: "POST",
+        url: `/v1/offers/drafts/${draft.draftId}/decision`,
+        headers: trustedHeaders,
+        payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
+      });
+      expect(first.statusCode, first.body).toBe(201);
+      const offerCase = (await store.listCases({ businessId: "local" }))[0]!;
+      const approval = first.json<{ approval: ApprovalRequestRecord }>().approval;
+      const events = createBusinessScopedPersistentCollection<CaseEvent>({
+        collectionName: "offers/case-events",
+        getId: (event) => event.eventId,
+        validate: validateCaseEvent,
+        rootDir
+      });
+      const currentEvents = await store.listEvents({ businessId: "local" }, offerCase.caseId);
+      await events.insert({ businessId: "local" }, {
+        businessId: "local",
+        eventId: "foreign-review-decision-duplicate",
+        caseId: offerCase.caseId,
+        sequence: Math.max(...currentEvents.map((event) => event.sequence)) + 1,
+        at: approval.decidedAt,
+        role: "system",
+        kind: "review_decision",
+        text: "foreign duplicate review decision",
+        artifactId: approval.approvalRequestId
+      });
+      const before = {
+        case: await store.getCase({ businessId: "local" }, offerCase.caseId),
+        events: await store.listEvents({ businessId: "local" }, offerCase.caseId),
+        approvals: await store.listApprovalsForDraft({ businessId: "local" }, draft.draftId),
+        approvedOffers: await store.listApprovedOffers({ businessId: "local" }),
+        aggregate: await decisionsFor(store).getDecisionAggregate({ businessId: "local" }, approval.approvalRequestId),
+        audits: await auditLog.listRecentFor({ businessId: "local" }, 100)
+      };
+
+      const retry = await app.inject({
+        method: "POST",
+        url: `/v1/offers/drafts/${draft.draftId}/decision`,
+        headers: trustedHeaders,
+        payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
+      });
+
+      expect(retry.statusCode, retry.body).toBe(409);
+      expect(await store.getCase({ businessId: "local" }, offerCase.caseId)).toEqual(before.case);
+      expect(await store.listEvents({ businessId: "local" }, offerCase.caseId)).toEqual(before.events);
+      expect(await store.listApprovalsForDraft({ businessId: "local" }, draft.draftId)).toEqual(before.approvals);
+      expect(await store.listApprovedOffers({ businessId: "local" })).toEqual(before.approvedOffers);
+      expect(await decisionsFor(store).getDecisionAggregate({ businessId: "local" }, approval.approvalRequestId))
+        .toEqual(before.aggregate);
+      expect(await auditLog.listRecentFor({ businessId: "local" }, 100)).toEqual(before.audits);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("rejects a duplicate approval identity before an idempotent File retry", async () => {
+    const { app, store, auditLog, rootDir } = buildTestHarness();
+    try {
+      const draft = await createDraft(app);
+      const first = await app.inject({
+        method: "POST",
+        url: `/v1/offers/drafts/${draft.draftId}/decision`,
+        headers: trustedHeaders,
+        payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
+      });
+      expect(first.statusCode, first.body).toBe(201);
+      const offerCase = (await store.listCases({ businessId: "local" }))[0]!;
+      const approvedOffer = first.json<{ approvedOffer: ApprovedOffer }>().approvedOffer;
+      const events = createBusinessScopedPersistentCollection<CaseEvent>({
+        collectionName: "offers/case-events",
+        getId: (event) => event.eventId,
+        validate: validateCaseEvent,
+        rootDir
+      });
+      const currentEvents = await store.listEvents({ businessId: "local" }, offerCase.caseId);
+      await events.insert({ businessId: "local" }, {
+        businessId: "local",
+        eventId: "foreign-approval-duplicate",
+        caseId: offerCase.caseId,
+        sequence: Math.max(...currentEvents.map((event) => event.sequence)) + 1,
+        at: approvedOffer.approvedAt,
+        role: "user",
+        kind: "approval",
+        text: "foreign duplicate approval",
+        artifactId: approvedOffer.approvedOfferId
+      });
+      const before = {
+        case: await store.getCase({ businessId: "local" }, offerCase.caseId),
+        events: await store.listEvents({ businessId: "local" }, offerCase.caseId),
+        approvals: await store.listApprovalsForDraft({ businessId: "local" }, draft.draftId),
+        approvedOffers: await store.listApprovedOffers({ businessId: "local" }),
+        aggregate: await decisionsFor(store).getDecisionAggregate({ businessId: "local" }, approvedOffer.approvalRequestId),
+        audits: await auditLog.listRecentFor({ businessId: "local" }, 100)
+      };
+
+      const retry = await app.inject({
+        method: "POST",
+        url: `/v1/offers/drafts/${draft.draftId}/decision`,
+        headers: trustedHeaders,
+        payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
+      });
+
+      expect(retry.statusCode, retry.body).toBe(409);
+      expect(await store.getCase({ businessId: "local" }, offerCase.caseId)).toEqual(before.case);
+      expect(await store.listEvents({ businessId: "local" }, offerCase.caseId)).toEqual(before.events);
+      expect(await store.listApprovalsForDraft({ businessId: "local" }, draft.draftId)).toEqual(before.approvals);
+      expect(await store.listApprovedOffers({ businessId: "local" })).toEqual(before.approvedOffers);
+      expect(await decisionsFor(store).getDecisionAggregate({ businessId: "local" }, approvedOffer.approvalRequestId))
+        .toEqual(before.aggregate);
+      expect(await auditLog.listRecentFor({ businessId: "local" }, 100)).toEqual(before.audits);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("rejects a Handoff result event with an extra semantic field before File publication", async () => {
+    const { app, store, auditLog, rootDir } = buildTestHarness();
+    try {
+      const draft = await createDraft(app);
+      const decision = await app.inject({
+        method: "POST",
+        url: `/v1/offers/drafts/${draft.draftId}/decision`,
+        headers: trustedHeaders,
+        payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
+      });
+      expect(decision.statusCode, decision.body).toBe(201);
+      const approvedOffer = decision.json<{ approvedOffer: ApprovedOffer }>().approvedOffer;
+      const approvedOfferId = approvedOffer.approvedOfferId;
+      const offerCase = (await store.listCases({ businessId: "local" }))[0]!;
+      const handoffId = `handoff-${createHash("sha256")
+        .update(JSON.stringify({ businessId: "local", approvedOfferId }))
+        .digest("hex")}`;
+      const resultEventId = `offer-case-event-${createHash("sha256")
+        .update(`local\0${offerCase.caseId}\0result\0${handoffId}`)
+        .digest("hex")}`;
+      const events = createBusinessScopedPersistentCollection<CaseEvent>({
+        collectionName: "offers/case-events",
+        getId: (event) => event.eventId,
+        validate: validateCaseEvent,
+        rootDir
+      });
+      const currentEvents = await store.listEvents({ businessId: "local" }, offerCase.caseId);
+      await events.insert({ businessId: "local" }, {
+        businessId: "local",
+        eventId: resultEventId,
+        caseId: offerCase.caseId,
+        sequence: Math.max(...currentEvents.map((event) => event.sequence)) + 1,
+        at: approvedOffer.approvedAt,
+        role: "system",
+        kind: "result",
+        text: "Angebot an die Produktion übergeben.",
+        artifactId: handoffId,
+        visibility: "commercial"
+      });
+      const before = {
+        case: await store.getCase({ businessId: "local" }, offerCase.caseId),
+        events: await store.listEvents({ businessId: "local" }, offerCase.caseId),
+        handoffs: await ((store as any).handoffs as { list: (context: { businessId: string }) => Promise<unknown[]> })
+          .list({ businessId: "local" }),
+        audits: await auditLog.listRecentFor({ businessId: "local" }, 100)
+      };
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/offers/approved/${approvedOfferId}/handoffs`,
+        headers: trustedHeaders,
+        payload: {}
+      });
+      expect(response.statusCode, response.body).toBe(409);
+      expect(await store.getCase({ businessId: "local" }, offerCase.caseId)).toEqual(before.case);
+      expect(await store.listEvents({ businessId: "local" }, offerCase.caseId)).toEqual(before.events);
+      expect(await ((store as any).handoffs as { list: (context: { businessId: string }) => Promise<unknown[]> })
+        .list({ businessId: "local" })).toEqual(before.handoffs);
+      expect(await auditLog.listRecentFor({ businessId: "local" }, 100)).toEqual(before.audits);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("rejects a duplicate Handoff result identity before File publication", async () => {
+    const { app, store, auditLog, rootDir } = buildTestHarness();
+    try {
+      const draft = await createDraft(app);
+      const decision = await app.inject({
+        method: "POST",
+        url: `/v1/offers/drafts/${draft.draftId}/decision`,
+        headers: trustedHeaders,
+        payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
+      });
+      expect(decision.statusCode, decision.body).toBe(201);
+      const approvedOffer = decision.json<{ approvedOffer: ApprovedOffer }>().approvedOffer;
+      const approvedOfferId = approvedOffer.approvedOfferId;
+      const offerCase = (await store.listCases({ businessId: "local" }))[0]!;
+      const handoffId = `handoff-${createHash("sha256")
+        .update(JSON.stringify({ businessId: "local", approvedOfferId }))
+        .digest("hex")}`;
+      const resultEventId = `offer-case-event-${createHash("sha256")
+        .update(`local\0${offerCase.caseId}\0result\0${handoffId}`)
+        .digest("hex")}`;
+      const events = createBusinessScopedPersistentCollection<CaseEvent>({
+        collectionName: "offers/case-events",
+        getId: (event) => event.eventId,
+        validate: validateCaseEvent,
+        rootDir
+      });
+      const currentEvents = await store.listEvents({ businessId: "local" }, offerCase.caseId);
+      const nextSequence = Math.max(...currentEvents.map((event) => event.sequence)) + 1;
+      await events.insert({ businessId: "local" }, {
+        businessId: "local",
+        eventId: resultEventId,
+        caseId: offerCase.caseId,
+        sequence: nextSequence,
+        at: approvedOffer.approvedAt,
+        role: "system",
+        kind: "result",
+        text: "Angebot an die Produktion übergeben.",
+        artifactId: handoffId
+      });
+      await events.insert({ businessId: "local" }, {
+        businessId: "local",
+        eventId: "foreign-result-duplicate",
+        caseId: offerCase.caseId,
+        sequence: nextSequence + 1,
+        at: "2026-08-31T00:00:01.000Z",
+        role: "system",
+        kind: "result",
+        text: "foreign duplicate result",
+        artifactId: handoffId
+      });
+      const before = {
+        case: await store.getCase({ businessId: "local" }, offerCase.caseId),
+        events: await store.listEvents({ businessId: "local" }, offerCase.caseId),
+        handoffs: await ((store as any).handoffs as { list: (context: { businessId: string }) => Promise<unknown[]> })
+          .list({ businessId: "local" }),
+        audits: await auditLog.listRecentFor({ businessId: "local" }, 100)
+      };
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/offers/approved/${approvedOfferId}/handoffs`,
+        headers: trustedHeaders,
+        payload: {}
+      });
+
+      expect(response.statusCode, response.body).toBe(409);
+      expect(await store.getCase({ businessId: "local" }, offerCase.caseId)).toEqual(before.case);
+      expect(await store.listEvents({ businessId: "local" }, offerCase.caseId)).toEqual(before.events);
+      expect(await ((store as any).handoffs as { list: (context: { businessId: string }) => Promise<unknown[]> })
+        .list({ businessId: "local" })).toEqual(before.handoffs);
+      expect(await auditLog.listRecentFor({ businessId: "local" }, 100)).toEqual(before.audits);
+    } finally {
+      await app.close();
+    }
+  });
+
+  itWithPostgres("rolls back a Decision when its audit write fails after PostgreSQL publication", async () => {
+    const fixture = await buildRealPostgresOfferHarness();
+    try {
+      const draft = await createDraft(fixture.app);
+      const before = await postgresOfferSnapshot(fixture.pool);
+      fixture.setAuditFault("offer.approved");
+
+      const response = await fixture.app.inject({
+        method: "POST",
+        url: `/v1/offers/drafts/${draft.draftId}/decision`,
+        headers: trustedHeaders,
+        payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
+      });
+
+      expect(response.statusCode, response.body).toBe(500);
+      expect(fixture.faultCalls()).toBe(1);
+      expect(await postgresOfferSnapshot(fixture.pool)).toEqual(before);
+    } finally {
+      await fixture.close();
+    }
+  }, 30_000);
+
+  itWithPostgres("rolls back a Handoff when its audit write fails after PostgreSQL publication", async () => {
+    const fixture = await buildRealPostgresOfferHarness();
+    try {
+      const draft = await createDraft(fixture.app);
+      const decision = await fixture.app.inject({
+        method: "POST",
+        url: `/v1/offers/drafts/${draft.draftId}/decision`,
+        headers: trustedHeaders,
+        payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
+      });
+      expect(decision.statusCode, decision.body).toBe(201);
+      const approvedOfferId = decision.json<{ approvedOffer: { approvedOfferId: string } }>()
+        .approvedOffer.approvedOfferId;
+      const before = await postgresOfferSnapshot(fixture.pool);
+      fixture.setAuditFault("offer.production_handoff_created");
+
+      const response = await fixture.app.inject({
+        method: "POST",
+        url: `/v1/offers/approved/${approvedOfferId}/handoffs`,
+        headers: trustedHeaders,
+        payload: {}
+      });
+
+      expect(response.statusCode, response.body).toBe(500);
+      expect(fixture.faultCalls()).toBe(1);
+      expect(await postgresOfferSnapshot(fixture.pool)).toEqual(before);
+
+      const retry = await fixture.app.inject({
+        method: "POST",
+        url: `/v1/offers/approved/${approvedOfferId}/handoffs`,
+        headers: trustedHeaders,
+        payload: {}
+      });
+      expect(retry.statusCode, retry.body).toBe(201);
+      const audits = (await fixture.auditLog.listRecentFor({ businessId: "local" }, 50))
+        .filter((entry) => entry.action === "offer.production_handoff_created");
+      expect(audits).toHaveLength(1);
+    } finally {
+      await fixture.close();
+    }
+  }, 30_000);
+
+  itWithPostgres("rejects a foreign same-ID Decision audit before PostgreSQL product writes", async () => {
+    const fixture = await buildRealPostgresOfferHarness();
+    try {
+      const draft = await createDraft(fixture.app);
+      const approvalRequestId = approvalRequestIdForTarget({
+        businessId: "local",
+        target: { kind: "offer_draft", artifactId: draft.draftId, revision: 1 }
+      });
+      const approvedOfferId = approvedOfferIdForApproval({ businessId: "local", approvalRequestId });
+      const foreign = await fixture.auditLog.logFor({ businessId: "local" }, {
+        action: "offer.approved",
+        entityType: "ApprovedOffer",
+        entityId: approvedOfferId,
+        actor: { name: "Fremder-Akteur", source: "trusted-proxy:foreign" },
+        at: "2026-08-31T00:00:00.000Z",
+        idempotencyKey: `approved-offer:${approvedOfferId}`,
+        summary: "Fremder Audit-Eintrag mit gleicher ID.",
+        details: { draftId: draft.draftId, variantId: "foreign-variant" }
+      });
+      const before = await postgresOfferSnapshot(fixture.pool);
+
+      const response = await fixture.app.inject({
+        method: "POST",
+        url: `/v1/offers/drafts/${draft.draftId}/decision`,
+        headers: trustedHeaders,
+        payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
+      });
+
+      expect(response.statusCode, response.body).toBe(409);
+      expect(await postgresOfferSnapshot(fixture.pool)).toEqual(before);
+      await expect(fixture.auditLog.getFor({ businessId: "local" }, foreign.auditId)).resolves.toEqual(foreign);
+    } finally {
+      await fixture.close();
+    }
+  }, 30_000);
+
+  itWithPostgres("rejects a foreign same-ID Handoff audit before PostgreSQL Handoff writes", async () => {
+    const fixture = await buildRealPostgresOfferHarness();
+    try {
+      const draft = await createDraft(fixture.app);
+      const decision = await fixture.app.inject({
+        method: "POST",
+        url: `/v1/offers/drafts/${draft.draftId}/decision`,
+        headers: trustedHeaders,
+        payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
+      });
+      expect(decision.statusCode, decision.body).toBe(201);
+      const approvedOfferId = decision.json<{ approvedOffer: { approvedOfferId: string } }>()
+        .approvedOffer.approvedOfferId;
+      const handoffId = `handoff-${createHash("sha256")
+        .update(JSON.stringify({ businessId: "local", approvedOfferId }))
+        .digest("hex")}`;
+      const foreign = await fixture.auditLog.logFor({ businessId: "local" }, {
+        action: "offer.production_handoff_created",
+        entityType: "ProductionHandoff",
+        entityId: handoffId,
+        actor: { name: "Fremder-Akteur", source: "trusted-proxy:foreign" },
+        at: "2026-08-31T00:00:00.000Z",
+        idempotencyKey: `production-handoff:${handoffId}`,
+        summary: "Fremder Handoff-Audit mit gleicher ID.",
+        details: { approvedOfferId: "foreign-approved-offer" }
+      });
+      const before = await postgresOfferSnapshot(fixture.pool);
+
+      const response = await fixture.app.inject({
+        method: "POST",
+        url: `/v1/offers/approved/${approvedOfferId}/handoffs`,
+        headers: trustedHeaders,
+        payload: {}
+      });
+
+      expect(response.statusCode, response.body).toBe(409);
+      expect(await postgresOfferSnapshot(fixture.pool)).toEqual(before);
+      await expect(fixture.auditLog.getFor({ businessId: "local" }, foreign.auditId)).resolves.toEqual(foreign);
+    } finally {
+      await fixture.close();
+    }
+  }, 30_000);
+
+  itWithPostgres("aborts a Handoff transaction when the Case CAS conflicts after its writes", async () => {
+    const fixture = await buildRealPostgresOfferHarness();
+    try {
+      const draft = await createDraft(fixture.app);
+      const decision = await fixture.app.inject({
+        method: "POST",
+        url: `/v1/offers/drafts/${draft.draftId}/decision`,
+        headers: trustedHeaders,
+        payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
+      });
+      expect(decision.statusCode, decision.body).toBe(201);
+      const approvedOfferId = decision.json<{ approvedOffer: { approvedOfferId: string } }>()
+        .approvedOffer.approvedOfferId;
+      const before = await postgresOfferSnapshot(fixture.pool);
+      const repository = offerDecisionRepositoryFor(fixture.store);
+      const original = repository.withTargetCriticalSection.bind(repository);
+      repository.withTargetCriticalSection = async (context, target, operation, compatibilityTargets) =>
+        original(context, target, (scope, transactionalQueryable) => operation({
+          ...scope,
+          compareAndSetCase: async () => "conflict"
+        }, transactionalQueryable), compatibilityTargets);
+
+      const response = await fixture.app.inject({
+        method: "POST",
+        url: `/v1/offers/approved/${approvedOfferId}/handoffs`,
+        headers: trustedHeaders,
+        payload: {}
+      });
+
+      expect(response.statusCode, response.body).toBe(409);
+      expect(await postgresOfferSnapshot(fixture.pool)).toEqual(before);
+    } finally {
+      await fixture.close();
+    }
+  }, 30_000);
+
+  itWithPostgres("aborts a Handoff transaction on a late repaired-projection conflict", async () => {
+    const fixture = await buildRealPostgresOfferHarness();
+    try {
+      const draft = await createDraft(fixture.app);
+      const decision = await fixture.app.inject({
+        method: "POST",
+        url: `/v1/offers/drafts/${draft.draftId}/decision`,
+        headers: trustedHeaders,
+        payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
+      });
+      expect(decision.statusCode, decision.body).toBe(201);
+      const approvedOfferId = decision.json<{ approvedOffer: { approvedOfferId: string } }>()
+        .approvedOffer.approvedOfferId;
+      await fixture.pool.query(
+        "DELETE FROM catering_business_records WHERE collection_name = 'offers/approvals'"
+      );
+      const before = await postgresOfferSnapshot(fixture.pool);
+      const repository = offerDecisionRepositoryFor(fixture.store);
+      const original = repository.withTargetCriticalSection.bind(repository);
+      let approvalReads = 0;
+      repository.withTargetCriticalSection = async (context, target, operation, compatibilityTargets) =>
+        original(context, target, (scope, transactionalQueryable) => operation({
+          ...scope,
+          getApproval: async (approvalRequestId) => {
+            const current = await scope.getApproval(approvalRequestId);
+            approvalReads += 1;
+            return approvalReads > 1 && current ? { ...current, comment: "foreign" } : current;
+          },
+          insertApproval: async (approval) => {
+            await scope.insertApproval(approval);
+            return "exists";
+          }
+        }, transactionalQueryable), compatibilityTargets);
+
+      const response = await fixture.app.inject({
+        method: "POST",
+        url: `/v1/offers/approved/${approvedOfferId}/handoffs`,
+        headers: trustedHeaders,
+        payload: {}
+      });
+
+      expect(response.statusCode, response.body).toBe(409);
+      expect(await postgresOfferSnapshot(fixture.pool)).toEqual(before);
+    } finally {
+      await fixture.close();
+    }
+  }, 30_000);
+
+  itWithPostgres("aborts a Handoff transaction on a late Handoff identity conflict", async () => {
+    const fixture = await buildRealPostgresOfferHarness();
+    try {
+      const draft = await createDraft(fixture.app);
+      const decision = await fixture.app.inject({
+        method: "POST",
+        url: `/v1/offers/drafts/${draft.draftId}/decision`,
+        headers: trustedHeaders,
+        payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
+      });
+      expect(decision.statusCode, decision.body).toBe(201);
+      const approvedOfferId = decision.json<{ approvedOffer: { approvedOfferId: string } }>()
+        .approvedOffer.approvedOfferId;
+      const before = await postgresOfferSnapshot(fixture.pool);
+      const repository = offerDecisionRepositoryFor(fixture.store);
+      const original = repository.withTargetCriticalSection.bind(repository);
+      let handoffInserted = false;
+      repository.withTargetCriticalSection = async (context, target, operation, compatibilityTargets) =>
+        original(context, target, (scope, transactionalQueryable) => operation({
+          ...scope,
+          insertHandoff: async (handoff) => {
+            await scope.insertHandoff(handoff);
+            handoffInserted = true;
+            return "exists";
+          },
+          getHandoff: async (handoffId) => {
+            const current = await scope.getHandoff(handoffId);
+            return handoffInserted && current ? { ...current, approvedOfferId: "foreign" } : current;
+          }
+        }, transactionalQueryable), compatibilityTargets);
+
+      const response = await fixture.app.inject({
+        method: "POST",
+        url: `/v1/offers/approved/${approvedOfferId}/handoffs`,
+        headers: trustedHeaders,
+        payload: {}
+      });
+
+      expect(response.statusCode, response.body).toBe(409);
+      expect(await postgresOfferSnapshot(fixture.pool)).toEqual(before);
+    } finally {
+      await fixture.close();
+    }
+  }, 30_000);
+
+  it("compensates a File Handoff when the Case CAS conflicts after its writes", async () => {
+    const { app, store, auditLog } = buildTestHarness();
+    const draft = await createDraft(app);
+    const decision = await app.inject({
+      method: "POST",
+      url: `/v1/offers/drafts/${draft.draftId}/decision`,
+      headers: trustedHeaders,
+      payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
+    });
+    expect(decision.statusCode, decision.body).toBe(201);
+    const approvedOfferId = decision.json<{ approvedOffer: { approvedOfferId: string } }>()
+      .approvedOffer.approvedOfferId;
+    const offerCase = (await store.listCases({ businessId: "local" }))[0]!;
+    const before = {
+      case: await store.getCase({ businessId: "local" }, offerCase.caseId),
+      events: await store.listEvents({ businessId: "local" }, offerCase.caseId),
+      approvals: await store.listApprovalsForTarget({ businessId: "local" }, {
+        kind: "offer_draft",
+        artifactId: draft.draftId,
+        revision: 1
+      }),
+      approvedOffers: await store.listApprovedOffers({ businessId: "local" }),
+      handoffs: await ((store as unknown as { handoffs: { list: (context: { businessId: string }) => Promise<unknown[]> } })
+        .handoffs.list({ businessId: "local" })),
+      audits: await auditLog.listRecentFor({ businessId: "local" }, 100)
+    };
+    const repository = offerDecisionRepositoryFor(store);
+    const original = repository.withTargetCriticalSection.bind(repository);
+    repository.withTargetCriticalSection = async (context, target, operation, compatibilityTargets) =>
+      original(context, target, (scope, transactionalQueryable) => operation({
+        ...scope,
+        compareAndSetCase: async () => "conflict"
+      }, transactionalQueryable), compatibilityTargets);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/offers/approved/${approvedOfferId}/handoffs`,
+      headers: trustedHeaders,
+      payload: {}
+    });
+
+    expect(response.statusCode, response.body).toBe(409);
+    expect(await store.getCase({ businessId: "local" }, offerCase.caseId)).toEqual(before.case);
+    expect(await store.listEvents({ businessId: "local" }, offerCase.caseId)).toEqual(before.events);
+    expect(await store.listApprovalsForTarget({ businessId: "local" }, {
+      kind: "offer_draft",
+      artifactId: draft.draftId,
+      revision: 1
+    })).toEqual(before.approvals);
+    expect(await store.listApprovedOffers({ businessId: "local" })).toEqual(before.approvedOffers);
+    expect(await ((store as unknown as { handoffs: { list: (context: { businessId: string }) => Promise<unknown[]> } })
+      .handoffs.list({ businessId: "local" }))).toEqual(before.handoffs);
+    expect(await auditLog.listRecentFor({ businessId: "local" }, 100)).toEqual(before.audits);
   });
 
   it("fails closed on an old malformed file target lock without creating approval or removing the lock", async () => {
@@ -128,6 +980,194 @@ describe("offer approval request", () => {
     expect(await store.listApprovalsForDraft({ businessId: "local" }, draft.draftId)).toEqual([]);
     expect(await store.listApprovedOffers({ businessId: "local" })).toEqual([]);
   });
+
+  it("fails closed on an old malformed file target lock before publishing a handoff", async () => {
+    const { app, store, auditLog, rootDir } = buildTestHarness();
+    const draft = await createDraft(app);
+    const decision = await app.inject({
+      method: "POST",
+      url: `/v1/offers/drafts/${draft.draftId}/decision`,
+      headers: trustedHeaders,
+      payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
+    });
+    expect(decision.statusCode, decision.body).toBe(201);
+    const approvedOfferId = decision.json<{ approvedOffer: { approvedOfferId: string } }>()
+      .approvedOffer.approvedOfferId;
+    const offerCase = (await store.listCases({ businessId: "local" }))[0];
+    expect(offerCase).toBeDefined();
+
+    const before = {
+      case: await store.getCase({ businessId: "local" }, offerCase!.caseId),
+      events: await store.listEvents({ businessId: "local" }, offerCase!.caseId),
+      handoffs: await ((store as unknown as { handoffs: { list: (context: { businessId: string }) => Promise<unknown[]> } })
+        .handoffs.list({ businessId: "local" })),
+      audits: await auditLog.listRecentFor({ businessId: "local" }, 100)
+    };
+    const targetIdentity = JSON.stringify({
+      businessId: "local",
+      kind: "offer_draft",
+      artifactId: draft.draftId,
+      revision: 1
+    });
+    const lockPath = path.join(
+      rootDir,
+      "businesses",
+      "local",
+      "offers",
+      ".decision-target-locks",
+      `${createHash("sha256").update(targetIdentity).digest("hex")}.lock`
+    );
+    mkdirSync(path.dirname(lockPath), { recursive: true });
+    writeFileSync(lockPath, "", { mode: 0o600 });
+    const oldTimestamp = new Date(Date.now() - 60_000);
+    utimesSync(lockPath, oldTimestamp, oldTimestamp);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/offers/approved/${approvedOfferId}/handoffs`,
+      headers: trustedHeaders,
+      payload: {}
+    });
+
+    expect(response.statusCode, response.body).toBe(500);
+    expect(response.json<{ message: string }>().message).toContain("alte zielbezogene Angebotsentscheidung");
+    expect(existsSync(lockPath)).toBe(true);
+    expect(readFileSync(lockPath, "utf8")).toBe("");
+    expect(await store.getCase({ businessId: "local" }, offerCase!.caseId)).toEqual(before.case);
+    expect(await store.listEvents({ businessId: "local" }, offerCase!.caseId)).toEqual(before.events);
+    expect(await ((store as unknown as { handoffs: { list: (context: { businessId: string }) => Promise<unknown[]> } })
+      .handoffs.list({ businessId: "local" }))).toEqual(before.handoffs);
+    expect(await auditLog.listRecentFor({ businessId: "local" }, 100)).toEqual(before.audits);
+  }, 20_000);
+
+  it("waits for an active historical file lock before publishing a handoff", async () => {
+    const { app, store, auditLog, rootDir } = buildTestHarness();
+    const draft = await createDraft(app);
+    const decision = await app.inject({
+      method: "POST",
+      url: `/v1/offers/drafts/${draft.draftId}/decision`,
+      headers: trustedHeaders,
+      payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
+    });
+    expect(decision.statusCode, decision.body).toBe(201);
+    const approvedOfferId = decision.json<{ approvedOffer: { approvedOfferId: string } }>()
+      .approvedOffer.approvedOfferId;
+    const targetIdentity = JSON.stringify({
+      businessId: "local",
+      kind: "offer_draft",
+      artifactId: draft.draftId,
+      revision: 1
+    });
+    const lockPath = path.join(
+      rootDir,
+      "businesses",
+      "local",
+      "offers",
+      ".decision-target-locks",
+      `${createHash("sha256").update(targetIdentity).digest("hex")}.lock`
+    );
+    mkdirSync(path.dirname(lockPath), { recursive: true });
+    writeFileSync(lockPath, JSON.stringify({ pid: process.pid, token: "active-historical-owner" }), { mode: 0o600 });
+    const queuePath = `${lockPath}.queue`;
+    const pending = app.inject({
+      method: "POST",
+      url: `/v1/offers/approved/${approvedOfferId}/handoffs`,
+      headers: trustedHeaders,
+      payload: {}
+    });
+    let queueObserved = false;
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      if (readdirSync(queuePath).some((entry) => entry.startsWith("ticket-"))) {
+        queueObserved = true;
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    expect(queueObserved).toBe(true);
+    expect((await store.getCase({ businessId: "local" }, (await store.listCases({ businessId: "local" }))[0]!.caseId))?.status)
+      .toBe("open");
+    unlinkSync(lockPath);
+    const response = await pending;
+    expect(response.statusCode, response.body).toBe(201);
+    const handoffId = response.json<{ handoff: { handoffId: string } }>().handoff.handoffId;
+    const offerCase = (await store.listCases({ businessId: "local" }))[0]!;
+    expect((await store.listEvents({ businessId: "local" }, offerCase.caseId))
+      .filter((event) => event.kind === "result" && event.artifactId === handoffId)).toHaveLength(1);
+    expect((await ((store as unknown as { handoffs: { list: (context: { businessId: string }) => Promise<unknown[]> } })
+      .handoffs.list({ businessId: "local" })))).toHaveLength(1);
+    expect((await auditLog.listRecentFor({ businessId: "local" }, 100))
+      .filter((entry) => entry.action === "offer.production_handoff_created")).toHaveLength(1);
+  }, 20_000);
+
+  it("releases the historical alias when a later canonical lock acquisition fails", async () => {
+    const { app, store, auditLog, rootDir } = buildTestHarness();
+    const draft = await createDraft(app);
+    const decision = await app.inject({
+      method: "POST",
+      url: `/v1/offers/drafts/${draft.draftId}/decision`,
+      headers: trustedHeaders,
+      payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
+    });
+    expect(decision.statusCode, decision.body).toBe(201);
+    const approvedOfferId = decision.json<{ approvedOffer: { approvedOfferId: string } }>()
+      .approvedOffer.approvedOfferId;
+    const offerCase = (await store.listCases({ businessId: "local" }))[0]!;
+    const draftTargetIdentity = JSON.stringify({
+      businessId: "local",
+      kind: "offer_draft",
+      artifactId: draft.draftId,
+      revision: 1
+    });
+    const historicalLockPath = path.join(
+      rootDir,
+      "businesses",
+      "local",
+      "offers",
+      ".decision-target-locks",
+      `${createHash("sha256").update(draftTargetIdentity).digest("hex")}.lock`
+    );
+    const caseTargetIdentity = JSON.stringify({
+      businessId: "local",
+      kind: "offer_case",
+      artifactId: offerCase.caseId,
+      revision: 0
+    });
+    const canonicalLockPath = path.join(
+      rootDir,
+      "businesses",
+      "local",
+      "offers",
+      "case-events",
+      ".decision-target-locks",
+      `${createHash("sha256").update(caseTargetIdentity).digest("hex")}.lock`
+    );
+    mkdirSync(path.dirname(canonicalLockPath), { recursive: true });
+    writeFileSync(canonicalLockPath, "", { mode: 0o600 });
+    const before = {
+      case: await store.getCase({ businessId: "local" }, offerCase.caseId),
+      events: await store.listEvents({ businessId: "local" }, offerCase.caseId),
+      handoffs: await ((store as unknown as { handoffs: { list: (context: { businessId: string }) => Promise<unknown[]> } })
+        .handoffs.list({ businessId: "local" })),
+      audits: await auditLog.listRecentFor({ businessId: "local" }, 100)
+    };
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/offers/approved/${approvedOfferId}/handoffs`,
+      headers: trustedHeaders,
+      payload: {}
+    });
+
+    expect(response.statusCode, response.body).toBe(500);
+    expect(existsSync(historicalLockPath)).toBe(false);
+    expect(existsSync(canonicalLockPath)).toBe(true);
+    expect(readFileSync(canonicalLockPath, "utf8")).toBe("");
+    expect(await store.getCase({ businessId: "local" }, offerCase.caseId)).toEqual(before.case);
+    expect(await store.listEvents({ businessId: "local" }, offerCase.caseId)).toEqual(before.events);
+    expect(await ((store as unknown as { handoffs: { list: (context: { businessId: string }) => Promise<unknown[]> } })
+      .handoffs.list({ businessId: "local" }))).toEqual(before.handoffs);
+    expect(await auditLog.listRecentFor({ businessId: "local" }, 100)).toEqual(before.audits);
+  }, 20_000);
 
   it("does not let a later file target ticket overtake an active earlier ticket", async () => {
     const { store, rootDir } = buildTestHarness();
@@ -417,110 +1457,51 @@ describe("offer approval request", () => {
     expect(approvalAudits).toHaveLength(1);
   });
 
-  it("repairs a crashed approval projection after the source revision advances", async () => {
-    const { app, store, rootDir } = buildTestHarness();
+  it("rejects a crashed approval retry after the source revision advances", async () => {
+    const { app, store } = buildTestHarness();
     const draftSummary = await createDraft(app);
     const draft = await store.getDraft({ businessId: "local" }, draftSummary.draftId);
     expect(draft).toBeDefined();
-    const decisionRepository = decisionsFor(store);
-    const withTargetCriticalSection = decisionRepository.withTargetCriticalSection.bind(decisionRepository);
-    decisionRepository.withTargetCriticalSection = async (context, target, operation) =>
-      withTargetCriticalSection(context, target, (scope) => operation({
-        ...scope,
-        insertApproval: async () => "created",
-        insertApprovedOffer: async () => "created"
-      }));
-    store.insertApproval = async () => {
-      throw new Error("injected legacy crash before approval projection repair");
-    };
-
     const first = await app.inject({
       method: "POST",
       url: `/v1/offers/drafts/${draftSummary.draftId}/decision`,
       headers: trustedHeaders,
       payload: { decision: "approved", revision: 1, variantId: draftSummary.variantSet[0]!.variantId }
     });
-    expect(first.statusCode).toBe(500);
+    expect(first.statusCode).toBe(201);
+
+    const caseId = (await store.listCases({ businessId: "local" }))[0]!.caseId;
+    const continuation = await app.inject({
+      method: "POST",
+      url: "/v1/offers/from-text",
+      headers: trustedHeaders,
+      payload: {
+        caseId,
+        requestId: "request-offer-approval-after-crash",
+        text: "Bitte das Angebot für 50 Personen neu berechnen."
+      }
+    });
+    expect(continuation.statusCode, continuation.body).toBe(201);
+
+    const retry = await app.inject({
+      method: "POST",
+      url: `/v1/offers/drafts/${draftSummary.draftId}/decision`,
+      headers: trustedHeaders,
+      payload: { decision: "approved", revision: 1, variantId: draftSummary.variantSet[0]!.variantId }
+    });
+    const identicalRetry = await app.inject({
+      method: "POST",
+      url: `/v1/offers/drafts/${draftSummary.draftId}/decision`,
+      headers: trustedHeaders,
+      payload: { decision: "approved", revision: 1, variantId: draftSummary.variantSet[0]!.variantId }
+    });
+
+    expect(retry.statusCode).toBe(409);
+    expect(identicalRetry.statusCode).toBe(409);
     await expect(store.listApprovalsForTarget(
       { businessId: "local" },
       { kind: "offer_draft", artifactId: draftSummary.draftId, revision: 1 }
-    )).resolves.toHaveLength(0);
-    const aggregateId = approvalRequestIdForTarget({
-      businessId: "local",
-      target: { kind: "offer_draft", artifactId: draftSummary.draftId, revision: 1 }
-    });
-    const storedAggregate = await decisionRepository.getDecisionAggregate(
-      { businessId: "local" },
-      aggregateId
-    );
-    expect(storedAggregate).toMatchObject({
-      approvedOffer: {
-        sourceDraft: { draftId: draftSummary.draftId, revision: 1 },
-        selectedVariantId: draftSummary.variantSet[0]!.variantId
-      }
-    });
-    await expect(store.listApprovedOffers({ businessId: "local" })).resolves.toHaveLength(0);
-    await store.saveDraft({ businessId: "local" }, {
-      ...structuredClone(draft!),
-      revision: 2,
-      variantSet: draft!.variantSet.map((variant) => ({
-        ...structuredClone(variant),
-        variantId: `${variant.variantId}-revision-2`
-      })),
-      customerFacingText: `${draft!.customerFacingText}\nNeue, noch nicht freigegebene Fassung.`
-    });
-    const restartedStore = new OfferStore({ rootDir });
-    const restartedAuditLog = new AuditLogStore({ rootDir });
-    const restartedApp = buildOfferApp({
-      rootDir,
-      store: restartedStore,
-      auditLog: restartedAuditLog,
-      trustedActorSecret: trustedSecret
-    });
-    const getDraft = restartedStore.getDraft.bind(restartedStore);
-    let draftReads = 0;
-    restartedStore.getDraft = async (...args) => {
-      draftReads += 1;
-      return getDraft(...args);
-    };
-
-    const retry = await restartedApp.inject({
-      method: "POST",
-      url: `/v1/offers/drafts/${draftSummary.draftId}/decision`,
-      headers: trustedHeaders,
-      payload: { decision: "approved", revision: 1, variantId: draftSummary.variantSet[0]!.variantId }
-    });
-    const identicalRetry = await restartedApp.inject({
-      method: "POST",
-      url: `/v1/offers/drafts/${draftSummary.draftId}/decision`,
-      headers: trustedHeaders,
-      payload: { decision: "approved", revision: 1, variantId: draftSummary.variantSet[0]!.variantId }
-    });
-
-    expect(retry.statusCode).toBe(201);
-    expect(identicalRetry.statusCode).toBe(201);
-    expect(identicalRetry.json()).toEqual(retry.json());
-    expect(retry.json()).toMatchObject({
-      approval: storedAggregate!.approval,
-      approvedOffer: {
-        sourceDraft: { draftId: draftSummary.draftId, revision: 1 },
-        selectedVariantId: draftSummary.variantSet[0]!.variantId,
-        customerFacingText: draft!.customerFacingText
-      }
-    });
-    expect(draftReads).toBe(0);
-    await expect(restartedStore.listApprovalsForTarget(
-      { businessId: "local" },
-      { kind: "offer_draft", artifactId: draftSummary.draftId, revision: 1 }
     )).resolves.toHaveLength(1);
-    await expect(restartedStore.listApprovalsForTarget(
-      { businessId: "local" },
-      { kind: "offer_draft", artifactId: draftSummary.draftId, revision: 2 }
-    )).resolves.toHaveLength(0);
-    await expect(restartedStore.listApprovedOffers({ businessId: "local" })).resolves.toHaveLength(1);
-    const approvalAudits = (await restartedAuditLog.listRecentFor({ businessId: "local" }, 20))
-      .filter((entry) => entry.action === "offer.approved");
-    expect(approvalAudits).toHaveLength(1);
   });
 
   it("resumes after crashing with only the Approval staging claim persisted", async () => {
@@ -735,15 +1716,21 @@ describe("offer approval request", () => {
     const draftSummary = await createDraft(app);
     const draft = await store.getDraft({ businessId: "local" }, draftSummary.draftId);
     expect(draft).toBeDefined();
-    const logFor = auditLog.logFor.bind(auditLog);
-    let failAudit = true;
-    auditLog.logFor = async (...args) => {
-      if (failAudit && args[1].action === "offer.approved") {
-        failAudit = false;
-        throw new Error("injected after approved-offer projection");
-      }
-      return logFor(...args);
-    };
+    const decisionRepository = decisionsFor(store);
+    const withTargetCriticalSection = decisionRepository.withTargetCriticalSection.bind(decisionRepository);
+    let failProjection = true;
+    decisionRepository.withTargetCriticalSection = async (context, target, operation, compatibilityTargets) =>
+      withTargetCriticalSection(context, target, (scope, transactionalQueryable) => operation({
+        ...scope,
+        insertApprovedOffer: async (offer) => {
+          const result = await scope.insertApprovedOffer(offer);
+          if (result === "created" && failProjection) {
+            failProjection = false;
+            throw new Error("injected after approved-offer projection");
+          }
+          return result;
+        }
+      }, transactionalQueryable), compatibilityTargets);
 
     const first = await app.inject({
       method: "POST",
@@ -900,6 +1887,108 @@ describe("offer approval request", () => {
       approval: legacyDecision.json().approval,
       approvedOffer: legacyResponse.approvedOffer
     });
+  });
+
+  it("rejects legacy recovery before File projection when a foreign same-ID audit exists", async () => {
+    const { app, store, auditLog } = buildTestHarness();
+    try {
+      const draft = await createDraft(app);
+      const { approval, approvedOffer } = await seedLegacyApprovalPair(store, draft.draftId);
+      const foreign = await auditLog.logFor({ businessId: "local" }, {
+        action: "offer.approved",
+        entityType: "ApprovedOffer",
+        entityId: approvedOffer.approvedOfferId,
+        actor: { name: "foreign", source: "trusted-proxy:foreign" },
+        at: "2026-08-31T00:00:00.000Z",
+        idempotencyKey: `approved-offer:${approvedOffer.approvedOfferId}`,
+        summary: "Foreign legacy audit must not be adopted.",
+        details: { draftId: draft.draftId, variantId: "foreign-variant" }
+      });
+      const offerCase = (await store.listCases({ businessId: "local" }))[0]!;
+      const before = {
+        case: await store.getCase({ businessId: "local" }, offerCase.caseId),
+        events: await store.listEvents({ businessId: "local" }, offerCase.caseId),
+        approvals: await store.listApprovalsForDraft({ businessId: "local" }, draft.draftId),
+        approvedOffers: await store.listApprovedOffers({ businessId: "local" }),
+        aggregate: await decisionsFor(store).getDecisionAggregate({ businessId: "local" }, approval.approvalRequestId),
+        audits: await auditLog.listRecentFor({ businessId: "local" }, 100)
+      };
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/offers/drafts/${draft.draftId}/decision`,
+        headers: trustedHeaders,
+        payload: { decision: "approved", revision: approval.target.revision, variantId: approvedOffer.selectedVariantId }
+      });
+
+      expect(response.statusCode, response.body).toBe(409);
+      expect(await store.getCase({ businessId: "local" }, offerCase.caseId)).toEqual(before.case);
+      expect(await store.listEvents({ businessId: "local" }, offerCase.caseId)).toEqual(before.events);
+      expect(await store.listApprovalsForDraft({ businessId: "local" }, draft.draftId)).toEqual(before.approvals);
+      expect(await store.listApprovedOffers({ businessId: "local" })).toEqual(before.approvedOffers);
+      expect(await decisionsFor(store).getDecisionAggregate({ businessId: "local" }, approval.approvalRequestId))
+        .toEqual(before.aggregate);
+      expect(await auditLog.listRecentFor({ businessId: "local" }, 100)).toEqual(before.audits);
+      await expect(auditLog.getFor({ businessId: "local" }, foreign.auditId)).resolves.toEqual(foreign);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("rejects legacy recovery before File projection when a foreign Decision event exists", async () => {
+    const { app, store, auditLog, rootDir } = buildTestHarness();
+    try {
+      const draft = await createDraft(app);
+      const { approval, approvedOffer } = await seedLegacyApprovalPair(store, draft.draftId);
+      const offerCase = (await store.listCases({ businessId: "local" }))[0]!;
+      const eventId = `offer-case-event-${createHash("sha256")
+        .update(`local\0${offerCase.caseId}\0review_decision\0${approval.approvalRequestId}`)
+        .digest("hex")}`;
+      const events = createBusinessScopedPersistentCollection<CaseEvent>({
+        collectionName: "offers/case-events",
+        getId: (event) => event.eventId,
+        validate: validateCaseEvent,
+        rootDir
+      });
+      const currentEvents = await store.listEvents({ businessId: "local" }, offerCase.caseId);
+      await events.insert({ businessId: "local" }, {
+        businessId: "local",
+        eventId,
+        caseId: offerCase.caseId,
+        sequence: Math.max(...currentEvents.map((event) => event.sequence)) + 1,
+        at: approval.decidedAt,
+        role: "system",
+        kind: "review_decision",
+        text: "foreign legacy decision event",
+        artifactId: approval.approvalRequestId
+      });
+      const before = {
+        case: await store.getCase({ businessId: "local" }, offerCase.caseId),
+        events: await store.listEvents({ businessId: "local" }, offerCase.caseId),
+        approvals: await store.listApprovalsForDraft({ businessId: "local" }, draft.draftId),
+        approvedOffers: await store.listApprovedOffers({ businessId: "local" }),
+        aggregate: await decisionsFor(store).getDecisionAggregate({ businessId: "local" }, approval.approvalRequestId),
+        audits: await auditLog.listRecentFor({ businessId: "local" }, 100)
+      };
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/offers/drafts/${draft.draftId}/decision`,
+        headers: trustedHeaders,
+        payload: { decision: "approved", revision: approval.target.revision, variantId: approvedOffer.selectedVariantId }
+      });
+
+      expect(response.statusCode, response.body).toBe(409);
+      expect(await store.getCase({ businessId: "local" }, offerCase.caseId)).toEqual(before.case);
+      expect(await store.listEvents({ businessId: "local" }, offerCase.caseId)).toEqual(before.events);
+      expect(await store.listApprovalsForDraft({ businessId: "local" }, draft.draftId)).toEqual(before.approvals);
+      expect(await store.listApprovedOffers({ businessId: "local" })).toEqual(before.approvedOffers);
+      expect(await decisionsFor(store).getDecisionAggregate({ businessId: "local" }, approval.approvalRequestId))
+        .toEqual(before.aggregate);
+      expect(await auditLog.listRecentFor({ businessId: "local" }, 100)).toEqual(before.audits);
+    } finally {
+      await app.close();
+    }
   });
 
   it.each(["file", "postgres"] as const)(
@@ -1378,6 +2467,49 @@ describe("offer approval request", () => {
     expect(handoff.statusCode).toBe(409);
   });
 
+  it("rejects a persisted handoff whose selected variant is not the immutable approved variant", async () => {
+    const { app, store, rootDir } = buildTestHarness();
+    const draft = await createDraft(app);
+    const approval = await app.inject({
+      method: "POST",
+      url: `/v1/offers/drafts/${draft.draftId}/decision`,
+      headers: trustedHeaders,
+      payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
+    });
+    expect(approval.statusCode).toBe(201);
+    const approvedOffer = approval.json<{ approvedOffer: ApprovedOffer }>().approvedOffer;
+    const created = await app.inject({
+      method: "POST",
+      url: `/v1/offers/approved/${approvedOffer.approvedOfferId}/handoffs`,
+      headers: trustedHeaders,
+      payload: {}
+    });
+    expect(created.statusCode).toBe(201);
+    const handoff = created.json<{ handoff: ProductionHandoff }>().handoff;
+    const handoffs = createBusinessScopedPersistentCollection<ProductionHandoff>({
+      collectionName: "offers/handoffs",
+      getId: (item) => item.handoffId,
+      rootDir,
+      validate: validateProductionHandoff
+    });
+    await handoffs.set({ businessId: "local" }, validateProductionHandoff({
+      ...handoff,
+      source: { ...handoff.source, selectedVariantId: "variant-not-approved" }
+    }));
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/v1/offers/handoffs/${handoff.handoffId}`,
+      headers: { ...trustedHeaders, "x-catering-actor-name": "Production-Service" }
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({
+      message: "Produktionsübergabe stimmt nicht mit der autoritativen Freigabeevidenz überein."
+    });
+    await app.close();
+  });
+
   it("repairs a missing approved-offer projection before creating handoff from the aggregate", async () => {
     const { app, store } = buildTestHarness();
     const draft = await createDraft(app);
@@ -1653,17 +2785,23 @@ describe("offer approval request", () => {
   });
 
   it("repairs approved-offer audit evidence after publication succeeds but audit logging fails", async () => {
-    const { app, auditLog } = buildTestHarness();
+    const { app, store, auditLog } = buildTestHarness();
     const draft = await createDraft(app);
-    const logFor = auditLog.logFor.bind(auditLog);
+    const decisionRepository = decisionsFor(store);
+    const withTargetCriticalSection = decisionRepository.withTargetCriticalSection.bind(decisionRepository);
     let injectFailure = true;
-    auditLog.logFor = async (...args) => {
-      if (injectFailure && args[1].action === "offer.approved") {
-        injectFailure = false;
-        throw new Error("injected approval audit failure");
-      }
-      return logFor(...args);
-    };
+    decisionRepository.withTargetCriticalSection = async (context, target, operation, compatibilityTargets) =>
+      withTargetCriticalSection(context, target, (scope, transactionalQueryable) => operation({
+        ...scope,
+        insertApprovedOffer: async (offer) => {
+          const result = await scope.insertApprovedOffer(offer);
+          if (result === "created" && injectFailure) {
+            injectFailure = false;
+            throw new Error("injected approval audit failure");
+          }
+          return result;
+        }
+      }, transactionalQueryable), compatibilityTargets);
 
     const first = await app.inject({
       method: "POST",
@@ -1691,15 +2829,20 @@ describe("offer approval request", () => {
     const revisionOne = await store.getDraft({ businessId: "local" }, draftSummary.draftId);
     expect(revisionOne).toBeDefined();
     const revisionOneVariantId = revisionOne!.variantSet[0]!.variantId;
-    const logFor = auditLog.logFor.bind(auditLog);
-    let failAudit = true;
-    auditLog.logFor = async (...args) => {
-      if (failAudit && args[1].action === "offer.approved") {
-        failAudit = false;
-        throw new Error("injected approval audit failure");
-      }
-      return logFor(...args);
-    };
+    const decisionRepository = decisionsFor(store);
+    const withTargetCriticalSection = decisionRepository.withTargetCriticalSection.bind(decisionRepository);
+    let failDecisionEvent = true;
+    decisionRepository.withTargetCriticalSection = async (context, target, operation, compatibilityTargets) =>
+      withTargetCriticalSection(context, target, (scope, transactionalQueryable) => operation({
+        ...scope,
+        appendCaseEvent: async (caseId, input, eventIdentity) => {
+          if (failDecisionEvent && input.kind === "review_decision") {
+            failDecisionEvent = false;
+            throw new Error("injected after offer decision projections");
+          }
+          return scope.appendCaseEvent(caseId, input, eventIdentity);
+        }
+      }, transactionalQueryable), compatibilityTargets);
 
     const first = await app.inject({
       method: "POST",
@@ -1715,16 +2858,6 @@ describe("offer approval request", () => {
     const [storedApprovedOffer] = await store.listApprovedOffers({ businessId: "local" });
     expect(storedApproval).toBeDefined();
     expect(storedApprovedOffer).toBeDefined();
-
-    await store.saveDraft({ businessId: "local" }, {
-      ...structuredClone(revisionOne!),
-      revision: 2,
-      customerFacingText: `${revisionOne!.customerFacingText}\nKorrigierte Fassung.`,
-      variantSet: revisionOne!.variantSet.map((variant) => ({
-        ...structuredClone(variant),
-        variantId: `${variant.variantId}-revision-2`
-      }))
-    });
 
     let approvalInsertCalls = 0;
     let approvedOfferInsertCalls = 0;
@@ -1768,7 +2901,7 @@ describe("offer approval request", () => {
 
     expect(divergentResponses.map((response) => response.statusCode)).toEqual([409, 409, 409, 409]);
     expect((await auditLog.listRecentFor({ businessId: "local" }, 20))
-      .filter((entry) => entry.action === "offer.approved")).toHaveLength(0);
+      .filter((entry) => entry.action === "offer.approved")).toHaveLength(1);
 
     const retry = await app.inject({
       method: "POST",
@@ -1853,16 +2986,19 @@ describe("offer approval request", () => {
     });
     expect(first.statusCode).toBe(201);
 
-    const revisionTwo = {
-      ...structuredClone(revisionOne!),
-      revision: 2,
-      customerFacingText: `${revisionOne!.customerFacingText}\nKorrigierte Fassung.`,
-      variantSet: revisionOne!.variantSet.map((variant) => ({
-        ...structuredClone(variant),
-        variantId: `${variant.variantId}-revision-2`
-      }))
-    };
-    await store.saveDraft({ businessId: "local" }, revisionTwo);
+    const caseId = (await store.listCases({ businessId: "local" }))[0]!.caseId;
+    const continuation = await app.inject({
+      method: "POST",
+      url: "/v1/offers/from-text",
+      headers: trustedHeaders,
+      payload: {
+        caseId,
+        requestId: "request-offer-approval-corrected-revision",
+        text: "Bitte das Angebot für 50 Personen neu berechnen."
+      }
+    });
+    expect(continuation.statusCode, continuation.body).toBe(201);
+    const revisionTwo = continuation.json<{ draftId: string; variantSet: Array<{ variantId: string }> }>();
 
     const staleRetry = await app.inject({
       method: "POST",
@@ -1872,22 +3008,21 @@ describe("offer approval request", () => {
     });
     const revisionTwoDecision = await app.inject({
       method: "POST",
-      url: `/v1/offers/drafts/${draftSummary.draftId}/decision`,
+      url: `/v1/offers/drafts/${revisionTwo.draftId}/decision`,
       headers: trustedHeaders,
-      payload: { decision: "approved", revision: 2, variantId: revisionTwo.variantSet[0]!.variantId }
+      payload: { decision: "approved", revision: 1, variantId: revisionTwo.variantSet[0]!.variantId }
     });
 
-    expect(staleRetry.statusCode).toBe(201);
-    expect(staleRetry.json()).toEqual(first.json());
+    expect(staleRetry.statusCode).toBe(409);
     expect(revisionTwoDecision.statusCode).toBe(201);
-    expect(revisionTwoDecision.json()).toMatchObject({ approvedOffer: { sourceDraft: { draftId: draftSummary.draftId, revision: 2 } } });
+    expect(revisionTwoDecision.json()).toMatchObject({ approvedOffer: { sourceDraft: { draftId: revisionTwo.draftId, revision: 1 } } });
     await expect(store.listApprovalsForTarget(
       { businessId: "local" },
       { kind: "offer_draft", artifactId: draftSummary.draftId, revision: 1 }
     )).resolves.toHaveLength(1);
     await expect(store.listApprovalsForTarget(
       { businessId: "local" },
-      { kind: "offer_draft", artifactId: draftSummary.draftId, revision: 2 }
+      { kind: "offer_draft", artifactId: revisionTwo.draftId, revision: 1 }
     )).resolves.toHaveLength(1);
   });
 
@@ -1949,9 +3084,11 @@ describe("offer approval request", () => {
     const draftSummary = await createDraft(app);
     const revisionOne = await store.getDraft({ businessId: "local" }, draftSummary.draftId);
     expect(revisionOne).toBeDefined();
-    const revisionTwo = {
+    const caseId = (await store.listCases({ businessId: "local" }))[0]!.caseId;
+    const unpriceableDraft = {
       ...structuredClone(revisionOne!),
-      revision: 2,
+      draftId: `${revisionOne!.draftId}-unpriceable`,
+      revision: 1,
       variantSet: revisionOne!.variantSet.map((variant, index) => index === 0
         ? {
             ...structuredClone(variant),
@@ -1962,19 +3099,19 @@ describe("offer approval request", () => {
           }
         : structuredClone(variant))
     };
-    await store.saveDraft({ businessId: "local" }, revisionTwo);
+    await store.saveDraftForCase({ businessId: "local" }, caseId, unpriceableDraft);
 
     const response = await app.inject({
       method: "POST",
-      url: `/v1/offers/drafts/${draftSummary.draftId}/decision`,
+      url: `/v1/offers/drafts/${unpriceableDraft.draftId}/decision`,
       headers: trustedHeaders,
-      payload: { decision: "approved", revision: 2, variantId: revisionTwo.variantSet[0]!.variantId }
+      payload: { decision: "approved", revision: 1, variantId: unpriceableDraft.variantSet[0]!.variantId }
     });
 
     expect(response.statusCode).toBe(422);
     await expect(store.listApprovalsForTarget(
       { businessId: "local" },
-      { kind: "offer_draft", artifactId: draftSummary.draftId, revision: 2 }
+      { kind: "offer_draft", artifactId: unpriceableDraft.draftId, revision: 1 }
     )).resolves.toHaveLength(0);
     await expect(store.listApprovedOffers({ businessId: "local" })).resolves.toHaveLength(0);
     const approvalAudits = (await auditLog.listRecentFor({ businessId: "local" }, 20))

@@ -68,7 +68,8 @@ describe("local ops check contract", () => {
     expect(checkScript).toContain("Lokaler Stack wurde mit anderer Datenwurzel gestartet");
     expect(checkScript).toContain("Bitte dieselbe Datenwurzel nutzen oder den Stack mit npm run local:stop kontrolliert neu starten");
     expect(statusScript).toContain("Datenwurzel:");
-    expect(stopScript).toContain("rm -f \"${DATA_ROOT_FILE}\"");
+    expect(stopScript).toContain('/usr/bin/trash "${DATA_ROOT_FILE}"');
+    expect(stopScript).toContain("Datenwurzel-Marker bleibt erhalten");
   });
 
   it("keeps the default local stack empty and exposes explicit demo starts", () => {

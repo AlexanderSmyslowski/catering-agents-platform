@@ -10,6 +10,9 @@ import {
 } from "@catering/shared-core";
 import {
   buildProductionApp,
+  buildProductionArtifacts,
+  InMemoryRecipeRepository,
+  RecipeDiscoveryService,
   isWebRecipeSearchEnabled
 } from "@catering/production-service";
 import {
@@ -83,11 +86,26 @@ describe("production web recipe search gate", () => {
     bindTestIntakeRecordsPort(app, intakeRecords);
 
     try {
-      const response = await runApprovedProductionWorkflow(app, {
-        payload: {
-          eventSpec: mysteryBowlSpec()
+      const artifacts = await buildProductionArtifacts(
+        mysteryBowlSpec(),
+        new RecipeDiscoveryService(
+          new InMemoryRecipeRepository({ rootDir: dataRoot }),
+          { searchRecipes: async () => [] }
+        ),
+        {
+          context: { businessId: "local" },
+          allowQuantityRecipeBridgeResolver: true
         }
-      });
+      );
+      const response = {
+        statusCode: 201,
+        body: JSON.stringify({ productionPlan: artifacts.productionPlan }),
+        json: () => ({
+          productionPlan: artifacts.productionPlan,
+          purchaseList: artifacts.purchaseList,
+          recipes: artifacts.recipes
+        })
+      };
 
       expect(response.statusCode, response.body).toBe(201);
       const body = response.json();

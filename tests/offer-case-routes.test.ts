@@ -1,16 +1,18 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   AuditLogStore,
+  approvalRequestIdForTarget,
   createEventRequestFromText,
   createOfferDraft as buildOfferDraft,
   validateOfferDraft,
   type OfferCase
 } from "@catering/shared-core";
 import { buildOfferApp } from "@catering/offer-service";
-import { OfferStore } from "../offer-service/src/store.js";
+import { OfferStore, offerDecisionRepositoryFor } from "../offer-service/src/store.js";
 
 const trustedSecret = "offer-case-route-secret";
 const alphaHeaders = {
@@ -34,11 +36,13 @@ function buildHarness(configuredBusinessId = "alpha") {
     auditLog: new AuditLogStore({ rootDir }),
     trustedActorSecret: trustedSecret,
     env: {
+      CATERING_DEV_AUTH: "1",
       CATERING_DEFAULT_BUSINESS_ID: configuredBusinessId,
       CATERING_TRUSTED_ACTOR_SECRET: trustedSecret
     }
   });
-  return { app, store };
+  const auditLog = new AuditLogStore({ rootDir });
+  return { app, store, auditLog, rootDir };
 }
 
 afterEach(() => {
@@ -82,6 +86,31 @@ async function createOfferDraft(
   });
   expect(response.statusCode, response.body).toBe(201);
   return response.json();
+}
+
+function targetLockPath(
+  rootDir: string,
+  businessId: string,
+  collectionNamespace: string,
+  target: { kind: string; artifactId: string; revision: number }
+): string {
+  const identity = JSON.stringify({ businessId, ...target });
+  return path.join(
+    rootDir,
+    "businesses",
+    businessId,
+    collectionNamespace,
+    ".decision-target-locks",
+    `${createHash("sha256").update(identity).digest("hex")}.lock`
+  );
+}
+
+async function waitUntil(predicate: () => boolean | Promise<boolean>): Promise<void> {
+  for (let attempt = 0; attempt < 1_000; attempt += 1) {
+    if (await predicate()) return;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+  throw new Error("Expected synchronization signal was not observed.");
 }
 
 async function completeOfferCase(
@@ -308,6 +337,105 @@ describe("offer case routes", () => {
         }
       }
     ]);
+  });
+
+  it("fails closed when a persisted draft has no matching case timeline event", async () => {
+    const { app, store } = buildHarness();
+    const offerCase = await createOfferCase(app);
+    const caseEvents = (store as any).caseEvents as { insert: (...args: any[]) => Promise<unknown> };
+    vi.spyOn(caseEvents, "insert").mockRejectedValueOnce(new Error("injected draft timeline failure"));
+
+    const draftResponse = await app.inject({
+      method: "POST",
+      url: "/v1/offers/drafts",
+      headers: alphaHeaders,
+      payload: {
+        caseId: offerCase.caseId,
+        ...createEventRequestFromText({
+          requestId: "request-orphaned-draft",
+          channel: "text",
+          rawText: "Empfang für 45 Personen mit Fingerfood."
+        })
+      }
+    });
+    expect(draftResponse.statusCode).toBe(500);
+    const orphan = (await store.listDrafts({ businessId: "alpha" }))[0];
+    expect(orphan).toBeDefined();
+    const decision = await app.inject({
+      method: "POST",
+      url: `/v1/offers/drafts/${orphan!.draftId}/decision`,
+      headers: alphaHeaders,
+      payload: {
+        decision: "approved",
+        revision: orphan!.revision,
+        variantId: orphan!.variantSet[0]!.variantId
+      }
+    });
+
+    expect(decision.statusCode, decision.body).toBe(409);
+    expect(await store.listApprovalsForDraft({ businessId: "alpha" }, orphan!.draftId)).toEqual([]);
+    expect(await store.listApprovedOffers({ businessId: "alpha" })).toEqual([]);
+    expect(await store.listEvents({ businessId: "alpha" }, offerCase.caseId)).toHaveLength(1);
+  });
+
+  it("requires the exact draft_created event instead of accepting revision_created alone", async () => {
+    const { app, store } = buildHarness();
+    const offerCase = await createOfferCase(app);
+    const context = { businessId: "alpha" };
+    const request = createEventRequestFromText({
+      requestId: "request-revision-only-draft",
+      channel: "text",
+      rawText: "Empfang für 45 Personen mit Fingerfood."
+    });
+    const draft = validateOfferDraft({
+      ...buildOfferDraft(request),
+      businessId: context.businessId,
+      revision: 1
+    });
+    await store.saveDraft(context, draft);
+    const draftCreatedAt = "2026-08-30T01:40:00.000Z";
+    await store.appendEvent(context, offerCase.caseId, {
+      at: draftCreatedAt,
+      role: "assistant",
+      kind: "revision_created",
+      text: "Angebotsentwurf erstellt.",
+      artifactId: draft.draftId,
+      revisionRef: {
+        artifactType: "OfferDraft",
+        artifactId: draft.draftId,
+        revision: draft.revision,
+        createdAt: draftCreatedAt,
+        supersedesArtifactId: "offer-draft-prior"
+      }
+    });
+    const eventsBefore = await store.listEvents(context, offerCase.caseId);
+
+    const decision = await app.inject({
+      method: "POST",
+      url: `/v1/offers/drafts/${draft.draftId}/decision`,
+      headers: alphaHeaders,
+      payload: {
+        decision: "approved",
+        revision: draft.revision,
+        variantId: draft.variantSet[0]!.variantId
+      }
+    });
+
+    expect(decision.statusCode, decision.body).toBe(409);
+    expect(await store.listApprovalsForTarget(context, {
+      kind: "offer_draft",
+      artifactId: draft.draftId,
+      revision: draft.revision
+    })).toEqual([]);
+    expect(await offerDecisionRepositoryFor(store).getDecisionAggregate(
+      context,
+      approvalRequestIdForTarget({
+        businessId: context.businessId,
+        target: { kind: "offer_draft", artifactId: draft.draftId, revision: draft.revision }
+      })
+    )).toBeUndefined();
+    expect(await store.listApprovedOffers(context)).toEqual([]);
+    expect(await store.listEvents(context, offerCase.caseId)).toEqual(eventsBefore);
   });
 
   it("keeps a free-text continuation inside its trusted case", async () => {
@@ -743,5 +871,597 @@ describe("offer case routes", () => {
       status: "completed",
       version: 3
     });
+  });
+
+  it("rejects an old handoff after a later continuation reopened the OfferCase", async () => {
+    const { app, store } = buildHarness("alpha");
+    const offerCase = await createOfferCase(app);
+    const completed = await completeOfferCase(app, offerCase.caseId);
+    const continuation = await app.inject({
+      method: "POST",
+      url: "/v1/offers/from-text",
+      headers: alphaHeaders,
+      payload: {
+        caseId: offerCase.caseId,
+        requestId: "request-offer-case-after-handoff",
+        text: "Bitte das Angebot für 50 Personen neu berechnen."
+      }
+    });
+    expect(continuation.statusCode, continuation.body).toBe(201);
+    const openCase = await store.getCase({ businessId: "alpha" }, offerCase.caseId);
+    expect(openCase?.status).toBe("open");
+    expect(openCase).not.toHaveProperty("approvedOfferId");
+    expect(openCase).not.toHaveProperty("productionHandoffId");
+    const retry = await app.inject({
+      method: "POST",
+      url: `/v1/offers/approved/${completed.approvedOfferId}/handoffs`,
+      headers: alphaHeaders,
+      payload: {}
+    });
+    const read = await app.inject({
+      method: "GET",
+      url: `/v1/offers/handoffs/${completed.productionHandoffId}`,
+      headers: alphaHeaders
+    });
+
+    expect(retry.statusCode, retry.body).toBe(409);
+    expect(read.statusCode, read.body).toBe(409);
+    expect(await store.getCase({ businessId: "alpha" }, offerCase.caseId)).toEqual(openCase);
+    expect((await store.listEvents({ businessId: "alpha" }, offerCase.caseId))
+      .filter((event) => event.kind === "result" && event.artifactId === completed.productionHandoffId)).toHaveLength(1);
+  });
+
+  it("checks the current continuation before recovering a stale Handoff projection", async () => {
+    const { app, store, auditLog } = buildHarness("alpha");
+    const offerCase = await createOfferCase(app);
+    const draft = await createOfferDraft(app, offerCase.caseId);
+    const decision = await app.inject({
+      method: "POST",
+      url: `/v1/offers/drafts/${draft.draftId}/decision`,
+      headers: alphaHeaders,
+      payload: {
+        decision: "approved",
+        revision: 1,
+        variantId: draft.variantSet[0]!.variantId
+      }
+    });
+    expect(decision.statusCode, decision.body).toBe(201);
+    const approvedOfferId = decision.json<{ approvedOffer: { approvedOfferId: string } }>()
+      .approvedOffer.approvedOfferId;
+    const approvalRequestId = decision.json<{ approval: { approvalRequestId: string } }>()
+      .approval.approvalRequestId;
+    const continuation = await app.inject({
+      method: "POST",
+      url: "/v1/offers/from-text",
+      headers: alphaHeaders,
+      payload: {
+        caseId: offerCase.caseId,
+        requestId: "request-stale-handoff-after-continuation",
+        text: "Bitte das Angebot für 50 Personen neu berechnen."
+      }
+    });
+    expect(continuation.statusCode, continuation.body).toBe(201);
+
+    // Simulate a recoverable, partially projected old aggregate. The current
+    // continuation is real; a stale Handoff must not repair A before rejecting.
+    const approval = await store.getApproval({ businessId: "alpha" }, approvalRequestId);
+    const approvedOffer = await store.getApprovedOffer({ businessId: "alpha" }, approvedOfferId);
+    if (!approval || !approvedOffer) throw new Error("Expected the initial decision projections.");
+    const approvalCollection = (store as any).approvals as { deleteIfExact: (...args: any[]) => Promise<unknown> };
+    const approvedOfferCollection = (store as any).approvedOffers as { deleteIfExact: (...args: any[]) => Promise<unknown> };
+    await approvalCollection.deleteIfExact({ businessId: "alpha" }, approvalRequestId, approval);
+    await approvedOfferCollection.deleteIfExact({ businessId: "alpha" }, approvedOfferId, approvedOffer);
+
+    const before = {
+      case: await store.getCase({ businessId: "alpha" }, offerCase.caseId),
+      events: await store.listEvents({ businessId: "alpha" }, offerCase.caseId),
+      approvals: await store.listApprovalsForDraft({ businessId: "alpha" }, draft.draftId),
+      approvedOffers: await store.listApprovedOffers({ businessId: "alpha" }),
+      handoffs: await ((store as any).handoffs as { list: (context: { businessId: string }) => Promise<unknown[]> })
+        .list({ businessId: "alpha" }),
+      audits: await auditLog.listRecentFor({ businessId: "alpha" }, 100)
+    };
+    const retry = await app.inject({
+      method: "POST",
+      url: `/v1/offers/approved/${approvedOfferId}/handoffs`,
+      headers: alphaHeaders,
+      payload: {}
+    });
+
+    expect(retry.statusCode, retry.body).toBe(409);
+    expect(await store.getCase({ businessId: "alpha" }, offerCase.caseId)).toEqual(before.case);
+    expect(await store.listEvents({ businessId: "alpha" }, offerCase.caseId)).toEqual(before.events);
+    expect(await store.listApprovalsForDraft({ businessId: "alpha" }, draft.draftId)).toEqual(before.approvals);
+    expect(await store.listApprovedOffers({ businessId: "alpha" })).toEqual(before.approvedOffers);
+    expect(await ((store as any).handoffs as { list: (context: { businessId: string }) => Promise<unknown[]> })
+      .list({ businessId: "alpha" })).toEqual(before.handoffs);
+    expect(await auditLog.listRecentFor({ businessId: "alpha" }, 100)).toEqual(before.audits);
+  });
+
+  it("rejects a Handoff GET that loses the OfferCase to a continuation after its initial check", async () => {
+    const { app, store, auditLog } = buildHarness("alpha");
+    const offerCase = await createOfferCase(app);
+    const draft = await createOfferDraft(app, offerCase.caseId);
+    const decision = await app.inject({
+      method: "POST",
+      url: `/v1/offers/drafts/${draft.draftId}/decision`,
+      headers: alphaHeaders,
+      payload: {
+        decision: "approved",
+        revision: 1,
+        variantId: draft.variantSet[0]!.variantId
+      }
+    });
+    expect(decision.statusCode, decision.body).toBe(201);
+    const approvedOfferId = decision.json<{ approvedOffer: { approvedOfferId: string } }>()
+      .approvedOffer.approvedOfferId;
+    const approvalRequestId = decision.json<{ approval: { approvalRequestId: string } }>()
+      .approval.approvalRequestId;
+    const handoff = await app.inject({
+      method: "POST",
+      url: `/v1/offers/approved/${approvedOfferId}/handoffs`,
+      headers: alphaHeaders,
+      payload: {}
+    });
+    expect(handoff.statusCode, handoff.body).toBe(201);
+    const handoffId = handoff.json<{ handoff: { handoffId: string } }>().handoff.handoffId;
+
+    // Leave a recoverable aggregate while removing the projections that GET would otherwise repair.
+    const approval = await store.getApproval({ businessId: "alpha" }, approvalRequestId);
+    const approvedOffer = await store.getApprovedOffer({ businessId: "alpha" }, approvedOfferId);
+    if (!approval || !approvedOffer) throw new Error("Expected the initial Decision projections.");
+    const approvalCollection = (store as any).approvals as { deleteIfExact: (...args: any[]) => Promise<unknown> };
+    const approvedOfferCollection = (store as any).approvedOffers as { deleteIfExact: (...args: any[]) => Promise<unknown> };
+    await approvalCollection.deleteIfExact({ businessId: "alpha" }, approvalRequestId, approval);
+    await approvedOfferCollection.deleteIfExact({ businessId: "alpha" }, approvedOfferId, approvedOffer);
+
+    const repository = offerDecisionRepositoryFor(store);
+    const originalWithTargetCriticalSection = repository.withTargetCriticalSection.bind(repository);
+    const originalSaveDraftForCase = store.saveDraftForCase.bind(store);
+    let releaseBeforeLock!: () => void;
+    const beforeLockReleased = new Promise<void>((resolve) => { releaseBeforeLock = resolve; });
+    let signalBeforeLock!: () => void;
+    const beforeLock = new Promise<void>((resolve) => { signalBeforeLock = resolve; });
+    let signalContinuationRequest!: () => void;
+    const continuationRequest = new Promise<void>((resolve) => { signalContinuationRequest = resolve; });
+    repository.withTargetCriticalSection = async (context, target, operation, compatibilityTargets) => {
+      signalBeforeLock();
+      await beforeLockReleased;
+      return originalWithTargetCriticalSection(context, target, operation, compatibilityTargets);
+    };
+    store.saveDraftForCase = async (context, caseId, nextDraft, sourceRefs) => {
+      signalContinuationRequest();
+      return originalSaveDraftForCase(context, caseId, nextDraft, sourceRefs);
+    };
+
+    try {
+      const before = {
+        approvals: await store.listApprovalsForDraft({ businessId: "alpha" }, draft.draftId),
+        approvedOffers: await store.listApprovedOffers({ businessId: "alpha" }),
+        handoffs: await ((store as any).handoffs as { list: (context: { businessId: string }) => Promise<unknown[]> })
+          .list({ businessId: "alpha" }),
+        audits: await auditLog.listRecentFor({ businessId: "alpha" }, 100)
+      };
+      const handoffPromise = app.inject({
+        method: "GET",
+        url: `/v1/offers/handoffs/${handoffId}`,
+        headers: alphaHeaders
+      });
+      await beforeLock;
+      const continuationPromise = app.inject({
+        method: "POST",
+        url: "/v1/offers/from-text",
+        headers: alphaHeaders,
+        payload: {
+          caseId: offerCase.caseId,
+          requestId: "request-handoff-get-race",
+          text: "Bitte das Angebot für 50 Personen neu berechnen."
+        }
+      });
+      await continuationRequest;
+      releaseBeforeLock();
+      const continuation = await continuationPromise;
+      expect(continuation.statusCode, continuation.body).toBe(201);
+      const afterContinuation = {
+        case: await store.getCase({ businessId: "alpha" }, offerCase.caseId),
+        events: await store.listEvents({ businessId: "alpha" }, offerCase.caseId),
+        approvals: await store.listApprovalsForDraft({ businessId: "alpha" }, draft.draftId),
+        approvedOffers: await store.listApprovedOffers({ businessId: "alpha" }),
+        handoffs: await ((store as any).handoffs as { list: (context: { businessId: string }) => Promise<unknown[]> })
+          .list({ businessId: "alpha" }),
+        audits: await auditLog.listRecentFor({ businessId: "alpha" }, 100)
+      };
+      const response = await handoffPromise;
+      expect(response.statusCode, response.body).toBe(409);
+      expect(await store.getCase({ businessId: "alpha" }, offerCase.caseId)).toEqual(afterContinuation.case);
+      expect(await store.listEvents({ businessId: "alpha" }, offerCase.caseId)).toEqual(afterContinuation.events);
+      expect(await store.listApprovalsForDraft({ businessId: "alpha" }, draft.draftId)).toEqual(afterContinuation.approvals);
+      expect(await store.listApprovedOffers({ businessId: "alpha" })).toEqual(afterContinuation.approvedOffers);
+      expect(await ((store as any).handoffs as { list: (context: { businessId: string }) => Promise<unknown[]> })
+        .list({ businessId: "alpha" })).toEqual(afterContinuation.handoffs);
+      expect(await auditLog.listRecentFor({ businessId: "alpha" }, 100)).toEqual(afterContinuation.audits);
+      expect(before.approvals).toEqual([]);
+    } finally {
+      releaseBeforeLock();
+      repository.withTargetCriticalSection = originalWithTargetCriticalSection;
+      store.saveDraftForCase = originalSaveDraftForCase;
+      await app.close();
+    }
+  });
+
+  it("rejects a corrupted Handoff before GET repairs missing Decision projections", async () => {
+    const { app, store, auditLog } = buildHarness("alpha");
+    const offerCase = await createOfferCase(app);
+    const draft = await createOfferDraft(app, offerCase.caseId);
+    const decision = await app.inject({
+      method: "POST",
+      url: `/v1/offers/drafts/${draft.draftId}/decision`,
+      headers: alphaHeaders,
+      payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
+    });
+    expect(decision.statusCode, decision.body).toBe(201);
+    const approvedOfferId = decision.json<{ approvedOffer: { approvedOfferId: string } }>()
+      .approvedOffer.approvedOfferId;
+    const approvalRequestId = decision.json<{ approval: { approvalRequestId: string } }>()
+      .approval.approvalRequestId;
+    const handoffResponse = await app.inject({
+      method: "POST",
+      url: `/v1/offers/approved/${approvedOfferId}/handoffs`,
+      headers: alphaHeaders,
+      payload: {}
+    });
+    expect(handoffResponse.statusCode, handoffResponse.body).toBe(201);
+    const handoff = handoffResponse.json<{ handoff: Record<string, unknown> }>().handoff;
+    const handoffCollection = (store as any).handoffs as {
+      set: (context: { businessId: string }, value: Record<string, unknown>) => Promise<void>
+    };
+    await handoffCollection.set({ businessId: "alpha" }, {
+      ...handoff,
+      pricingSnapshot: {
+        ...(handoff.pricingSnapshot as Record<string, unknown>),
+        subtotal: { amount: 9999.99, currency: "EUR" }
+      }
+    });
+    const approval = await store.getApproval({ businessId: "alpha" }, approvalRequestId);
+    const approvedOffer = await store.getApprovedOffer({ businessId: "alpha" }, approvedOfferId);
+    if (!approval || !approvedOffer) throw new Error("Expected Decision projections.");
+    const approvals = (store as any).approvals as { deleteIfExact: (...args: any[]) => Promise<unknown> };
+    const approvedOffers = (store as any).approvedOffers as { deleteIfExact: (...args: any[]) => Promise<unknown> };
+    await approvals.deleteIfExact({ businessId: "alpha" }, approvalRequestId, approval);
+    await approvedOffers.deleteIfExact({ businessId: "alpha" }, approvedOfferId, approvedOffer);
+    const before = {
+      approval: await store.getApproval({ businessId: "alpha" }, approvalRequestId),
+      approvedOffer: await store.getApprovedOffer({ businessId: "alpha" }, approvedOfferId),
+      handoff: await store.getHandoff({ businessId: "alpha" }, handoff.handoffId as string),
+      audits: await auditLog.listRecentFor({ businessId: "alpha" }, 100)
+    };
+    const response = await app.inject({
+      method: "GET",
+      url: `/v1/offers/handoffs/${handoff.handoffId as string}`,
+      headers: alphaHeaders
+    });
+    expect(response.statusCode, response.body).toBe(409);
+    expect(await store.getApproval({ businessId: "alpha" }, approvalRequestId)).toEqual(before.approval);
+    expect(await store.getApprovedOffer({ businessId: "alpha" }, approvedOfferId)).toEqual(before.approvedOffer);
+    expect(await store.getHandoff({ businessId: "alpha" }, handoff.handoffId as string)).toEqual(before.handoff);
+    expect(await auditLog.listRecentFor({ businessId: "alpha" }, 100)).toEqual(before.audits);
+  });
+
+  it("rejects a Handoff GET when the Case points at a different approved offer", async () => {
+    const { app, store, auditLog } = buildHarness("alpha");
+    const offerCase = await createOfferCase(app);
+    const completed = await completeOfferCase(app, offerCase.caseId);
+    const current = await store.getCase({ businessId: "alpha" }, offerCase.caseId);
+    if (!current) throw new Error("Expected the completed OfferCase.");
+    expect(await store.updateCase({ businessId: "alpha" }, offerCase.caseId, current.version, {
+      ...current,
+      approvedOfferId: "foreign-approved-offer",
+      version: current.version + 1
+    })).toBe("updated");
+    const before = {
+      case: await store.getCase({ businessId: "alpha" }, offerCase.caseId),
+      events: await store.listEvents({ businessId: "alpha" }, offerCase.caseId),
+      handoffs: await ((store as any).handoffs as { list: (context: { businessId: string }) => Promise<unknown[]> })
+        .list({ businessId: "alpha" }),
+      audits: await auditLog.listRecentFor({ businessId: "alpha" }, 100)
+    };
+    const response = await app.inject({
+      method: "GET",
+      url: `/v1/offers/handoffs/${completed.productionHandoffId}`,
+      headers: alphaHeaders
+    });
+    expect(response.statusCode, response.body).toBe(409);
+    expect(await store.getCase({ businessId: "alpha" }, offerCase.caseId)).toEqual(before.case);
+    expect(await store.listEvents({ businessId: "alpha" }, offerCase.caseId)).toEqual(before.events);
+    expect(await ((store as any).handoffs as { list: (context: { businessId: string }) => Promise<unknown[]> })
+      .list({ businessId: "alpha" })).toEqual(before.handoffs);
+    expect(await auditLog.listRecentFor({ businessId: "alpha" }, 100)).toEqual(before.audits);
+  });
+
+  it("rejects a Handoff GET when its Case is still open despite matching Handoff binding", async () => {
+    const { app, store, auditLog } = buildHarness("alpha");
+    const offerCase = await createOfferCase(app);
+    const completed = await completeOfferCase(app, offerCase.caseId);
+    const current = await store.getCase({ businessId: "alpha" }, offerCase.caseId);
+    if (!current) throw new Error("Expected the completed OfferCase.");
+    expect(await store.updateCase({ businessId: "alpha" }, offerCase.caseId, current.version, {
+      ...current,
+      status: "open",
+      version: current.version + 1
+    })).toBe("updated");
+    const before = {
+      case: await store.getCase({ businessId: "alpha" }, offerCase.caseId),
+      events: await store.listEvents({ businessId: "alpha" }, offerCase.caseId),
+      handoffs: await ((store as any).handoffs as { list: (context: { businessId: string }) => Promise<unknown[]> })
+        .list({ businessId: "alpha" }),
+      audits: await auditLog.listRecentFor({ businessId: "alpha" }, 100)
+    };
+    const response = await app.inject({
+      method: "GET",
+      url: `/v1/offers/handoffs/${completed.productionHandoffId}`,
+      headers: alphaHeaders
+    });
+    expect(response.statusCode, response.body).toBe(409);
+    expect(await store.getCase({ businessId: "alpha" }, offerCase.caseId)).toEqual(before.case);
+    expect(await store.listEvents({ businessId: "alpha" }, offerCase.caseId)).toEqual(before.events);
+    expect(await ((store as any).handoffs as { list: (context: { businessId: string }) => Promise<unknown[]> })
+      .list({ businessId: "alpha" })).toEqual(before.handoffs);
+    expect(await auditLog.listRecentFor({ businessId: "alpha" }, 100)).toEqual(before.audits);
+  });
+
+  it("keeps a Handoff GET and continuation serialized when GET acquires the Case lock first", async () => {
+    const { app, store } = buildHarness("alpha");
+    const offerCase = await createOfferCase(app);
+    const draft = await createOfferDraft(app, offerCase.caseId);
+    const decision = await app.inject({
+      method: "POST",
+      url: `/v1/offers/drafts/${draft.draftId}/decision`,
+      headers: alphaHeaders,
+      payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
+    });
+    expect(decision.statusCode, decision.body).toBe(201);
+    const approvedOfferId = decision.json<{ approvedOffer: { approvedOfferId: string } }>()
+      .approvedOffer.approvedOfferId;
+    const handoff = await app.inject({
+      method: "POST",
+      url: `/v1/offers/approved/${approvedOfferId}/handoffs`,
+      headers: alphaHeaders,
+      payload: {}
+    });
+    expect(handoff.statusCode, handoff.body).toBe(201);
+    const handoffId = handoff.json<{ handoff: { handoffId: string } }>().handoff.handoffId;
+
+    const repository = offerDecisionRepositoryFor(store);
+    const originalWithTargetCriticalSection = repository.withTargetCriticalSection.bind(repository);
+    const originalSaveDraftForCase = store.saveDraftForCase.bind(store);
+    let releaseGet!: () => void;
+    const getReleased = new Promise<void>((resolve) => { releaseGet = resolve; });
+    let signalGetLock!: () => void;
+    const getLock = new Promise<void>((resolve) => { signalGetLock = resolve; });
+    let signalContinuationRequest!: () => void;
+    const continuationRequest = new Promise<void>((resolve) => { signalContinuationRequest = resolve; });
+    let continuationFinished = false;
+    repository.withTargetCriticalSection = async (context, target, operation, compatibilityTargets) =>
+      originalWithTargetCriticalSection(
+        context,
+        target,
+        async (scope, transactionalQueryable) => {
+          signalGetLock();
+          const result = await operation(scope, transactionalQueryable);
+          await getReleased;
+          return result;
+        },
+        compatibilityTargets
+      );
+    store.saveDraftForCase = async (context, caseId, nextDraft, sourceRefs) => {
+      signalContinuationRequest();
+      const result = await originalSaveDraftForCase(context, caseId, nextDraft, sourceRefs);
+      continuationFinished = true;
+      return result;
+    };
+
+    try {
+      const getPromise = app.inject({
+        method: "GET",
+        url: `/v1/offers/handoffs/${handoffId}`,
+        headers: alphaHeaders
+      });
+      await getLock;
+      const continuationPromise = app.inject({
+        method: "POST",
+        url: "/v1/offers/from-text",
+        headers: alphaHeaders,
+        payload: {
+          caseId: offerCase.caseId,
+          requestId: "request-handoff-get-serial",
+          text: "Bitte das Angebot für 50 Personen neu berechnen."
+        }
+      });
+      await continuationRequest;
+      expect(continuationFinished).toBe(false);
+      await expect(store.getCase({ businessId: "alpha" }, offerCase.caseId)).resolves.toMatchObject({
+        status: "completed",
+        productionHandoffId: handoffId
+      });
+      releaseGet();
+      const response = await getPromise;
+      expect(response.statusCode, response.body).toBe(200);
+      const continuation = await continuationPromise;
+      expect(continuation.statusCode, continuation.body).toBe(201);
+      expect(continuationFinished).toBe(true);
+      await expect(store.getCase({ businessId: "alpha" }, offerCase.caseId)).resolves.toMatchObject({ status: "open" });
+    } finally {
+      releaseGet();
+      repository.withTargetCriticalSection = originalWithTargetCriticalSection;
+      store.saveDraftForCase = originalSaveDraftForCase;
+      await app.close();
+    }
+  });
+
+  it("does not let a continuation overwrite the current OfferCase after a Decision check", async () => {
+    const { app, store, rootDir } = buildHarness("alpha");
+    const offerCase = await createOfferCase(app);
+    const draft = await createOfferDraft(app, offerCase.caseId);
+    const originalAppendEventInCaseScope = store.appendEventInCaseScope.bind(store);
+    const originalSaveDraftForCase = store.saveDraftForCase.bind(store);
+    let releaseDecision!: () => void;
+    const decisionRelease = new Promise<void>((resolve) => { releaseDecision = resolve; });
+    let signalDecisionAppend!: () => void;
+    const decisionAppend = new Promise<void>((resolve) => { signalDecisionAppend = resolve; });
+    let signalContinuationRequest!: () => void;
+    const continuationRequest = new Promise<void>((resolve) => { signalContinuationRequest = resolve; });
+    let continuationSignalled = false;
+    store.appendEventInCaseScope = async (context, caseId, input, eventIdentity) => {
+      if (input.kind === "review_decision") {
+        signalDecisionAppend();
+        await decisionRelease;
+      }
+      return originalAppendEventInCaseScope(context, caseId, input, eventIdentity);
+    };
+    store.saveDraftForCase = async (context, caseId, nextDraft, sourceRefs) => {
+      if (!continuationSignalled) {
+        continuationSignalled = true;
+        signalContinuationRequest();
+      }
+      return originalSaveDraftForCase(context, caseId, nextDraft, sourceRefs);
+    };
+
+    try {
+      const decisionPromise = app.inject({
+        method: "POST",
+        url: `/v1/offers/drafts/${draft.draftId}/decision`,
+        headers: alphaHeaders,
+        payload: {
+          decision: "approved",
+          revision: 1,
+          variantId: draft.variantSet[0]!.variantId
+        }
+      });
+      await decisionAppend;
+      const continuationPromise = app.inject({
+        method: "POST",
+        url: "/v1/offers/from-text",
+        headers: alphaHeaders,
+        payload: {
+          caseId: offerCase.caseId,
+          requestId: "request-offer-case-decision-race",
+          text: "Bitte das Angebot für 50 Personen neu berechnen."
+        }
+      });
+      await continuationRequest;
+      const caseLock = targetLockPath(rootDir, "alpha", "offers/case-events", {
+        kind: "offer_case",
+        artifactId: offerCase.caseId,
+        revision: 0
+      });
+      await waitUntil(() => readdirSync(`${caseLock}.queue`).some((entry) => entry.startsWith("ticket-")));
+      expect(existsSync(targetLockPath(rootDir, "alpha", "offers", {
+        kind: "offer_draft",
+        artifactId: draft.draftId,
+        revision: 1
+      }))).toBe(true);
+      expect(existsSync(targetLockPath(rootDir, "alpha", "offers/case-events", {
+        kind: "offer_draft",
+        artifactId: draft.draftId,
+        revision: 1
+      }))).toBe(true);
+      expect(existsSync(caseLock)).toBe(true);
+      expect((await store.listEvents({ businessId: "alpha" }, offerCase.caseId))
+        .filter((event) => event.kind === "draft_created")).toHaveLength(1);
+
+      releaseDecision();
+      const [decision, continuation] = await Promise.all([decisionPromise, continuationPromise]);
+      expect(decision.statusCode, decision.body).toBe(201);
+      expect(continuation.statusCode, continuation.body).toBe(201);
+      const current = await store.getCase({ businessId: "alpha" }, offerCase.caseId);
+      expect(current).toMatchObject({ status: "open" });
+      expect(current).not.toHaveProperty("approvedOfferId");
+      expect(current).not.toHaveProperty("productionHandoffId");
+      const events = await store.listEvents({ businessId: "alpha" }, offerCase.caseId);
+      const continuationBody = continuation.json<{ draftId: string }>();
+      expect(events.at(-1)).toMatchObject({ kind: "draft_created", artifactId: continuationBody.draftId });
+    } finally {
+      releaseDecision();
+      await app.close();
+    }
+  });
+
+  it("holds the same Case lock while a continuation competes with Handoff", async () => {
+    const { app, store, rootDir } = buildHarness("alpha");
+    const offerCase = await createOfferCase(app);
+    const draft = await createOfferDraft(app, offerCase.caseId);
+    const decision = await app.inject({
+      method: "POST",
+      url: `/v1/offers/drafts/${draft.draftId}/decision`,
+      headers: alphaHeaders,
+      payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
+    });
+    expect(decision.statusCode, decision.body).toBe(201);
+    const approvedOfferId = decision.json<{ approvedOffer: { approvedOfferId: string } }>()
+      .approvedOffer.approvedOfferId;
+    const originalAppendEventInCaseScope = store.appendEventInCaseScope.bind(store);
+    const originalSaveDraftForCase = store.saveDraftForCase.bind(store);
+    let releaseHandoff!: () => void;
+    const handoffRelease = new Promise<void>((resolve) => { releaseHandoff = resolve; });
+    let signalHandoffAppend!: () => void;
+    const handoffAppend = new Promise<void>((resolve) => { signalHandoffAppend = resolve; });
+    let signalContinuationRequest!: () => void;
+    const continuationRequest = new Promise<void>((resolve) => { signalContinuationRequest = resolve; });
+    let continuationSignalled = false;
+    store.appendEventInCaseScope = async (context, caseId, input, eventIdentity) => {
+      if (input.kind === "result") {
+        signalHandoffAppend();
+        await handoffRelease;
+      }
+      return originalAppendEventInCaseScope(context, caseId, input, eventIdentity);
+    };
+    store.saveDraftForCase = async (context, caseId, nextDraft, sourceRefs) => {
+      if (!continuationSignalled) {
+        continuationSignalled = true;
+        signalContinuationRequest();
+      }
+      return originalSaveDraftForCase(context, caseId, nextDraft, sourceRefs);
+    };
+
+    try {
+      const handoffPromise = app.inject({
+        method: "POST",
+        url: `/v1/offers/approved/${approvedOfferId}/handoffs`,
+        headers: alphaHeaders,
+        payload: {}
+      });
+      await handoffAppend;
+      const continuationPromise = app.inject({
+        method: "POST",
+        url: "/v1/offers/from-text",
+        headers: alphaHeaders,
+        payload: {
+          caseId: offerCase.caseId,
+          requestId: "request-offer-case-handoff-race",
+          text: "Bitte das Angebot für 50 Personen neu berechnen."
+        }
+      });
+      await continuationRequest;
+      const caseLock = targetLockPath(rootDir, "alpha", "offers/case-events", {
+        kind: "offer_case",
+        artifactId: offerCase.caseId,
+        revision: 0
+      });
+      await waitUntil(() => readdirSync(`${caseLock}.queue`).some((entry) => entry.startsWith("ticket-")));
+      expect(existsSync(caseLock)).toBe(true);
+      expect((await store.listEvents({ businessId: "alpha" }, offerCase.caseId))
+        .some((event) => event.kind === "result")).toBe(false);
+
+      releaseHandoff();
+      const [handoff, continuation] = await Promise.all([handoffPromise, continuationPromise]);
+      expect(handoff.statusCode, handoff.body).toBe(201);
+      expect(continuation.statusCode, continuation.body).toBe(201);
+      const current = await store.getCase({ businessId: "alpha" }, offerCase.caseId);
+      expect(current).toMatchObject({ status: "open" });
+      expect(current).not.toHaveProperty("productionHandoffId");
+    } finally {
+      releaseHandoff();
+      await app.close();
+    }
   });
 });

@@ -7,6 +7,7 @@ import { IntakeStore, type IntakeShadowRun } from "@catering/intake-service";
 import {
   createEventRequestFromText,
   normalizeEventRequestToSpec,
+  withBusinessTargetCriticalSection,
   type AcceptedEventSpec,
   type BusinessContext,
   type CollectionStorageOptions,
@@ -363,5 +364,99 @@ describe("IntakeStore business scope", () => {
       releaseUpdate();
       await pool.end();
     }
+  });
+
+  it("serializes save, replace, and archive through the shared AcceptedEventSpec fence", async () => {
+    const rootDir = mkdtempSync(path.join(tmpdir(), "catering-intake-spec-fence-writers-"));
+    dataRoots.push(rootDir);
+    const storage = { rootDir };
+    const store = new IntakeStore(storage);
+    const request = requestFor("alpha");
+    const primarySpec = { ...specFor(request), specId: "fenced-spec-primary" };
+    const secondarySpec = {
+      ...specFor(request),
+      specId: "fenced-spec-secondary",
+      sourceLineage: specFor(request).sourceLineage.map((source) => ({ ...source }))
+    };
+    await store.saveRequest(alpha, request);
+    await store.saveSpec(alpha, primarySpec);
+    await store.saveSpec(alpha, secondarySpec);
+
+    const holdFence = async (specId: string) => {
+      let release!: () => void;
+      const released = new Promise<void>((resolve) => { release = resolve; });
+      let entered!: () => void;
+      const fenceEntered = new Promise<void>((resolve) => { entered = resolve; });
+      const holder = withBusinessTargetCriticalSection({
+        storage,
+        context: alpha,
+        target: { kind: "accepted_event_spec", artifactId: specId, revision: 0 },
+        collectionNamespace: "intake/specs",
+        queueFullMessage: "queue full",
+        timeoutMessage: "timeout",
+        legacyTimeoutMessage: "legacy timeout",
+        postgresPoolMessage: "pool required",
+        operation: async () => {
+          entered();
+          await released;
+        }
+      });
+      await fenceEntered;
+      return { holder, release };
+    };
+
+    const saveReplacement = {
+      ...primarySpec,
+      event: { ...primarySpec.event, title: "Gefenceter Ersatz" }
+    };
+    const saveFence = await holdFence(primarySpec.specId);
+    let saveSettled = false;
+    const savePromise = store.saveSpec(alpha, saveReplacement).then(() => {
+      saveSettled = true;
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(saveSettled).toBe(false);
+    saveFence.release();
+    await Promise.all([savePromise, saveFence.holder]);
+
+    const replaceTarget = {
+      ...saveReplacement,
+      event: { ...saveReplacement.event, title: "Gefencete Aktualisierung" }
+    };
+    const replaceFence = await holdFence(primarySpec.specId);
+    let replaceSettled = false;
+    const replacePromise = store.replaceSpec(alpha, saveReplacement, replaceTarget).then((result) => {
+      replaceSettled = true;
+      return result;
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(replaceSettled).toBe(false);
+    replaceFence.release();
+    await Promise.all([replacePromise, replaceFence.holder]);
+    await expect(replacePromise).resolves.toBe("updated");
+
+    const archiveFences = await Promise.all([
+      holdFence(primarySpec.specId),
+      holdFence(secondarySpec.specId)
+    ]);
+    let archiveSettled = false;
+    const archivePromise = store.archiveRequestContext(alpha, {
+      requestId: request.requestId,
+      reasonCode: "wrong_upload",
+      archivedAt: "2026-08-11T11:00:00.000Z",
+      archivedBy: "alpha-operator"
+    }).then((result) => {
+      archiveSettled = true;
+      return result;
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(archiveSettled).toBe(false);
+    for (const fence of archiveFences) fence.release();
+    await Promise.all([
+      archivePromise,
+      ...archiveFences.map((fence) => fence.holder)
+    ]);
+    expect((await store.getSpec(alpha, primarySpec.specId))?.operationalArchive?.status).toBe("archived");
+    expect((await store.getSpec(alpha, secondarySpec.specId))?.operationalArchive?.status).toBe("archived");
   });
 });

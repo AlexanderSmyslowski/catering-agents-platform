@@ -40,12 +40,12 @@ describe("browser offer-case creation integration", () => {
     const intakeApp = buildIntakeApp({
       rootDir,
       store: intakeStore,
-      env: { CATERING_DEV_AUTH: "true" }
+      env: { CATERING_DEV_AUTH: "1" }
     });
     const offerApp = buildOfferApp({
       rootDir,
       store: offerStore,
-      env: { CATERING_DEV_AUTH: "true" }
+      env: { CATERING_DEV_AUTH: "1" }
     });
     const previousFetch = globalThis.fetch;
     const previousSessionStorage = Object.getOwnPropertyDescriptor(globalThis, "sessionStorage");

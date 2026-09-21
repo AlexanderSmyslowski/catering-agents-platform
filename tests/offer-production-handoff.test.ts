@@ -123,7 +123,7 @@ describe("offer production handoff", () => {
     await app.close();
   });
 
-  it("repairs handoff audit evidence after publication and keeps concurrent retries idempotent", async () => {
+  it("fails once on the handoff audit writer and keeps concurrent retries idempotent", async () => {
     const rootDir = mkdtempSync(path.join(tmpdir(), "catering-offer-handoff-audit-"));
     const store = new OfferStore({ rootDir });
     const auditLog = new AuditLogStore({ rootDir });
@@ -139,14 +139,14 @@ describe("offer production handoff", () => {
       payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
     });
     const approvedOfferId = decision.json<{ approvedOffer: { approvedOfferId: string } }>().approvedOffer.approvedOfferId;
-    const logFor = auditLog.logFor.bind(auditLog);
+    const logForWithResult = auditLog.logForWithResult.bind(auditLog);
     let injectFailure = true;
-    auditLog.logFor = async (...args) => {
+    auditLog.logForWithResult = async (...args) => {
       if (injectFailure && args[1].action === "offer.production_handoff_created") {
         injectFailure = false;
         throw new Error("injected handoff audit failure");
       }
-      return logFor(...args);
+      return logForWithResult(...args);
     };
     const request = () => app.inject({
       method: "POST" as const, url: `/v1/offers/approved/${approvedOfferId}/handoffs`,

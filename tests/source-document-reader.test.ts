@@ -10,7 +10,7 @@ import {
 } from "../intake-service/src/source-document-store.js";
 import { HttpSourceDocumentReader } from "../production-service/src/gateways/http-source-document-reader.js";
 
-const sharedSecret = "shared-secret";
+const sharedSecret = "source-document-service-secret-20260828";
 const alpha = { businessId: "alpha" };
 
 function injectedFetch(app: ReturnType<typeof buildIntakeApp>): typeof fetch {

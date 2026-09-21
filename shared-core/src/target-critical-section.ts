@@ -39,11 +39,22 @@ export interface CriticalSectionTarget {
   revision: number;
 }
 
+/**
+ * An internal compatibility alias for a historical file-lock namespace. PostgreSQL advisory
+ * locks intentionally remain namespace-independent, while the file backend must fence both
+ * namespace paths during the same critical section.
+ */
+export interface CriticalSectionNamespaceTarget {
+  collectionNamespace: string;
+  target: CriticalSectionTarget;
+}
+
 export interface BusinessTargetCriticalSectionOptions<T> {
   storage: CollectionStorageOptions;
   context: BusinessContext;
   target: CriticalSectionTarget;
   compatibilityTargets?: readonly CriticalSectionTarget[];
+  compatibilityNamespaceTargets?: readonly CriticalSectionNamespaceTarget[];
   collectionNamespace: string;
   queueFullMessage: string;
   queueExhaustedMessage?: string;
@@ -113,8 +124,32 @@ function orderedCriticalSectionTargets<T>(
   input: BusinessTargetCriticalSectionOptions<T>
 ): CriticalSectionTarget[] {
   const targetsByIdentity = new Map<string, CriticalSectionTarget>();
-  for (const target of [input.target, ...(input.compatibilityTargets ?? [])]) {
+  for (const target of [
+    input.target,
+    ...(input.compatibilityTargets ?? []),
+    ...(input.compatibilityNamespaceTargets ?? []).map((entry) => entry.target)
+  ]) {
     targetsByIdentity.set(targetIdentity(input.context, target), target);
+  }
+  return [...targetsByIdentity.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([, target]) => target);
+}
+
+function orderedFileCriticalSectionTargets<T>(
+  input: BusinessTargetCriticalSectionOptions<T>
+): CriticalSectionNamespaceTarget[] {
+  const targetsByIdentity = new Map<string, CriticalSectionNamespaceTarget>();
+  const add = (collectionNamespace: string, target: CriticalSectionTarget) => {
+    const identity = `${collectionNamespace}\0${targetIdentity(input.context, target)}`;
+    targetsByIdentity.set(identity, { collectionNamespace, target });
+  };
+  add(input.collectionNamespace, input.target);
+  for (const target of input.compatibilityTargets ?? []) {
+    add(input.collectionNamespace, target);
+  }
+  for (const entry of input.compatibilityNamespaceTargets ?? []) {
+    add(entry.collectionNamespace, entry.target);
   }
   return [...targetsByIdentity.entries()]
     .sort(([left], [right]) => left.localeCompare(right))
@@ -634,13 +669,13 @@ export async function withBusinessTargetCriticalSection<T>(
   if (!queryable) {
     const releases: Array<() => void> = [];
     try {
-      for (const target of orderedCriticalSectionTargets(input)) {
+      for (const { collectionNamespace, target } of orderedFileCriticalSectionTargets(input)) {
         releases.push(await acquireFileTargetLock({
           lockPath: fileTargetLockPath(
             input.storage,
             input.context,
             target,
-            input.collectionNamespace
+            collectionNamespace
           ),
           queueFullMessage: input.queueFullMessage,
           queueExhaustedMessage: input.queueExhaustedMessage,
@@ -669,8 +704,8 @@ export async function withBusinessTargetCriticalSection<T>(
     if (!(error instanceof PgMemAdvisoryLockUnavailable)) throw error;
     // pg-mem has no advisory locks; only its in-process test adapter may use this fallback.
     return withTargetMutexes(
-      orderedCriticalSectionTargets(input).map(
-        (target) => `${input.collectionNamespace}:${targetIdentity(input.context, target)}`
+      orderedFileCriticalSectionTargets(input).map(
+        ({ collectionNamespace, target }) => `${collectionNamespace}:${targetIdentity(input.context, target)}`
       ),
       () => input.operation()
     );

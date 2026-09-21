@@ -16,6 +16,7 @@ import { buildProductionApp } from "../production-service/src/app.js";
 import { ProductionStore } from "../production-service/src/repositories/production-store.js";
 
 const productionStores = new WeakMap<object, ProductionStore>();
+const FAIL_CLOSED_SESSION_SECRET = "mutating-route-session-secret-20260828";
 
 type MutableRoute = {
   service: "intake" | "offer" | "production";
@@ -223,6 +224,48 @@ const mutatingMvpRoutes: MutableRoute[] = [
   {
     service: "production",
     method: "POST",
+    pathTemplate: "/v1/production/cases/:caseId/planning-evidence",
+    requiredRole: "production_operator",
+    url: "/v1/production/cases/matrix-production-case/planning-evidence",
+    payload: {
+      draftId: "matrix-production-draft",
+      draftRevision: 1,
+      componentId: "matrix-component",
+      recipeId: "matrix-recipe",
+      quantityDecision: {
+        decisionId: "matrix-quantity-decision",
+        eventSpecId: "matrix-event-spec",
+        componentId: "matrix-component",
+        guestCount: 25,
+        serviceFormat: "buffet",
+        dishRole: "other",
+        basis: "servings_per_person",
+        perUnitAmount: 1,
+        perUnitUnit: "servings",
+        targetAmount: 25,
+        targetUnit: "servings",
+        rationale: "Auth-Matrix-Payload.",
+        evidence: { kind: "operator_instruction", reference: "auth-matrix" },
+        reviewStatus: "approved"
+      },
+      recipeEventUseReview: {
+        eventSpecId: "matrix-event-spec",
+        recipeId: "matrix-recipe",
+        reviewedBy: "Produktions-Mitarbeiter",
+        reviewedAt: "2026-08-30T12:00:00.000Z",
+        decision: "accepted_for_event",
+        confirmations: {
+          quantitiesAndYield: true,
+          methodAndEquipment: true,
+          allergensAndDiet: true,
+          holdingAndRegeneration: true
+        }
+      }
+    }
+  },
+  {
+    service: "production",
+    method: "POST",
     pathTemplate: "/v1/production/drafts/:draftId/prepare",
     requiredRole: "production_operator",
     url: "/v1/production/drafts/matrix-production-draft/prepare",
@@ -243,7 +286,7 @@ const mutatingMvpRoutes: MutableRoute[] = [
     service: "production",
     method: "POST",
     pathTemplate: "/v1/production/drafts/from-document",
-    requiredRole: "production_operator",
+    requiredRole: "admin",
     payload: { caseId: "matrix-production-case", documentId: "matrix-source-document" },
     prepareCorrectRoleCase: async (app, headers) => {
       const created = await inject(app, {
@@ -550,13 +593,13 @@ async function seedChangeRequestedProductionDraftForMatrix(
 
 function buildAppForRoute(route: MutableRoute, dataRoot: string) {
   if (route.service === "intake") {
-    return buildIntakeApp({ rootDir: dataRoot, trustedActorSecret: TRUSTED_SECRET, env: {} });
+    return buildIntakeApp({ rootDir: dataRoot, trustedActorSecret: TRUSTED_SECRET, env: { CATERING_DEV_AUTH: "1" } });
   }
   if (route.service === "offer") {
-    return buildOfferApp({ rootDir: dataRoot, trustedActorSecret: TRUSTED_SECRET, env: {} });
+    return buildOfferApp({ rootDir: dataRoot, trustedActorSecret: TRUSTED_SECRET, env: { CATERING_DEV_AUTH: "1" } });
   }
   const store = new ProductionStore({ rootDir: dataRoot });
-  const app = buildProductionApp({ dataRoot, store, trustedActorSecret: TRUSTED_SECRET, env: {} });
+  const app = buildProductionApp({ dataRoot, store, trustedActorSecret: TRUSTED_SECRET, env: { CATERING_DEV_AUTH: "1" } });
   productionStores.set(app, store);
   return app;
 }
@@ -616,10 +659,10 @@ describe("mutating MVP route auth matrix", () => {
       dataRoots.push(dataRoot);
       const app =
         route.service === "intake"
-          ? buildIntakeApp({ rootDir: dataRoot, env: {} })
+          ? buildIntakeApp({ rootDir: dataRoot, trustedActorSecret: FAIL_CLOSED_SESSION_SECRET, env: {} })
           : route.service === "offer"
-            ? buildOfferApp({ rootDir: dataRoot, env: {} })
-            : buildProductionApp({ dataRoot, env: {} });
+            ? buildOfferApp({ rootDir: dataRoot, trustedActorSecret: FAIL_CLOSED_SESSION_SECRET, env: {} })
+            : buildProductionApp({ dataRoot, trustedActorSecret: FAIL_CLOSED_SESSION_SECRET, env: {} });
 
       try {
         const response = await inject(app, {
@@ -628,7 +671,7 @@ describe("mutating MVP route auth matrix", () => {
           payload: routePayload(route) as object | string | Buffer | undefined
         });
 
-        expect(response.statusCode).toBe(403);
+        expect(response.statusCode).toBe(401);
       } finally {
         await app.close();
       }

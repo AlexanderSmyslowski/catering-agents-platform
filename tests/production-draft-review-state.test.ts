@@ -177,7 +177,7 @@ describe("ProductionDraft review state", () => {
       store,
       auditLog,
       trustedActorSecret: TRUSTED_SECRET,
-      env: {}
+      env: { CATERING_DEV_AUTH: "1" }
     });
 
     try {
@@ -223,7 +223,7 @@ describe("ProductionDraft review state", () => {
       store,
       auditLog,
       trustedActorSecret: TRUSTED_SECRET,
-      env: {}
+      env: { CATERING_DEV_AUTH: "1" }
     });
 
     try {
@@ -262,7 +262,7 @@ describe("ProductionDraft review state", () => {
       store,
       auditLog,
       trustedActorSecret: TRUSTED_SECRET,
-      env: {}
+      env: { CATERING_DEV_AUTH: "1" }
     });
 
     try {
@@ -313,7 +313,7 @@ describe("ProductionDraft review state", () => {
       dataRoot,
       store,
       trustedActorSecret: TRUSTED_SECRET,
-      env: {}
+      env: { CATERING_DEV_AUTH: "1" }
     });
 
     try {
@@ -351,7 +351,7 @@ describe("ProductionDraft review state", () => {
       dataRoot,
       store,
       trustedActorSecret: TRUSTED_SECRET,
-      env: {}
+      env: { CATERING_DEV_AUTH: "1" }
     });
 
     try {
