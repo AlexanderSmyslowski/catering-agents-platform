@@ -1,0 +1,109 @@
+name: Update Catering target
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: Exact current main commit to install
+        required: true
+        type: string
+      confirmation:
+        description: Type UPDATE_CATERING_TARGET to permit the mutating phase
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: catering-target-update
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash --noprofile --norc -euo pipefail {0}
+
+jobs:
+  update:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.confirmation == 'UPDATE_CATERING_TARGET'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout exact requested commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.commit_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Guard exact current main
+        env:
+          REQUESTED_SHA: ${{ inputs.commit_sha }}
+        run: |
+          [[ "$REQUESTED_SHA" =~ ^[0-9a-fA-F]{40}$ ]]
+          checked_out_sha="$(git rev-parse HEAD)"
+          test "$checked_out_sha" = "$REQUESTED_SHA"
+          remote_main="$(git ls-remote origin refs/heads/main | awk 'NR == 1 {print $1}')"
+          test -n "$remote_main"
+          test "$remote_main" = "$REQUESTED_SHA"
+          printf 'TARGET_UPDATE_GUARD main=true checkout_sha=%s\n' "${REQUESTED_SHA:0:12}"
+
+      - name: Configure dedicated target SSH
+        env:
+          CATERING_TARGET_SSH_PRIVATE_KEY: ${{ secrets.CATERING_TARGET_SSH_PRIVATE_KEY }}
+          CATERING_TARGET_SSH_KNOWN_HOSTS: ${{ secrets.CATERING_TARGET_SSH_KNOWN_HOSTS }}
+        run: |
+          test -n "$CATERING_TARGET_SSH_PRIVATE_KEY"
+          test -n "$CATERING_TARGET_SSH_KNOWN_HOSTS"
+          install -d -m 700 "$RUNNER_TEMP/catering-target-ssh"
+          printf '%s\n' "$CATERING_TARGET_SSH_PRIVATE_KEY" > "$RUNNER_TEMP/catering-target-ssh/id_ed25519"
+          printf '%s\n' "$CATERING_TARGET_SSH_KNOWN_HOSTS" > "$RUNNER_TEMP/catering-target-ssh/known_hosts"
+          chmod 600 "$RUNNER_TEMP/catering-target-ssh/id_ed25519" "$RUNNER_TEMP/catering-target-ssh/known_hosts"
+
+      - name: Read-only target preflight
+        env:
+          DEPLOY_COMMIT_SHA: ${{ inputs.commit_sha }}
+          CATERING_TARGET_DEPLOY_HOST: ${{ secrets.CATERING_TARGET_DEPLOY_HOST }}
+          CATERING_TARGET_DEPLOY_USER: ${{ secrets.CATERING_TARGET_DEPLOY_USER }}
+          CATERING_TARGET_SSH_KEY_FILE: ${{ runner.temp }}/catering-target-ssh/id_ed25519
+          CATERING_TARGET_SSH_KNOWN_HOSTS_FILE: ${{ runner.temp }}/catering-target-ssh/known_hosts
+          CATERING_TARGET_SMOKE_BASIC_AUTH_USER: ${{ secrets.CATERING_TARGET_SMOKE_BASIC_AUTH_USER }}
+          CATERING_TARGET_SMOKE_BASIC_AUTH_PASSWORD: ${{ secrets.CATERING_TARGET_SMOKE_BASIC_AUTH_PASSWORD }}
+        run: |
+          test -n "$CATERING_TARGET_DEPLOY_HOST"
+          test -n "$CATERING_TARGET_DEPLOY_USER"
+          test -n "$CATERING_TARGET_SMOKE_BASIC_AUTH_USER"
+          test -n "$CATERING_TARGET_SMOKE_BASIC_AUTH_PASSWORD"
+          bash platform-infra/scripts/update-catering-target.sh --preflight |
+            tee "$RUNNER_TEMP/catering-target-preflight.txt"
+
+      - name: Update exact target commit
+        env:
+          DEPLOY_COMMIT_SHA: ${{ inputs.commit_sha }}
+          CATERING_TARGET_DEPLOY_HOST: ${{ secrets.CATERING_TARGET_DEPLOY_HOST }}
+          CATERING_TARGET_DEPLOY_USER: ${{ secrets.CATERING_TARGET_DEPLOY_USER }}
+          CATERING_TARGET_SSH_KEY_FILE: ${{ runner.temp }}/catering-target-ssh/id_ed25519
+          CATERING_TARGET_SSH_KNOWN_HOSTS_FILE: ${{ runner.temp }}/catering-target-ssh/known_hosts
+          CATERING_TARGET_SMOKE_BASIC_AUTH_USER: ${{ secrets.CATERING_TARGET_SMOKE_BASIC_AUTH_USER }}
+          CATERING_TARGET_SMOKE_BASIC_AUTH_PASSWORD: ${{ secrets.CATERING_TARGET_SMOKE_BASIC_AUTH_PASSWORD }}
+          CATERING_TARGET_CONFIRMATION: UPDATE_CATERING_TARGET
+        run: |
+          bash platform-infra/scripts/update-catering-target.sh --update |
+            tee "$RUNNER_TEMP/catering-target-update.txt"
+
+      - name: Upload redacted target-update evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: catering-target-update-evidence-${{ inputs.commit_sha }}
+          path: |
+            ${{ runner.temp }}/catering-target-preflight.txt
+            ${{ runner.temp }}/catering-target-update.txt
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Remove target SSH material
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/catering-target-ssh"
