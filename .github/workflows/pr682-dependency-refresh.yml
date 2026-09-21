@@ -1,0 +1,46 @@
+name: PR682 controlled dependency refresh
+
+on:
+  push:
+    branches:
+      - codex/pr682-dependency-fix-20260921
+
+permissions:
+  contents: write
+
+jobs:
+  refresh-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: true
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: Refresh lockfile only within declared patched constraints
+        run: npm install --package-lock-only --ignore-scripts
+      - name: Audit patched graph
+        run: |
+          npm audit --json > audit-full.json || true
+          npm audit --omit=dev --json > audit-prod.json || true
+          node -e 'const fs=require("fs"); for (const p of ["audit-full.json","audit-prod.json"]) { const a=JSON.parse(fs.readFileSync(p)); if ((a.metadata?.vulnerabilities?.total ?? 0) !== 0) { console.error(p, a.metadata?.vulnerabilities); process.exitCode=1; } }'
+      - name: Install exact graph
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Targeted runtime and API regression
+        run: npx vitest run tests/runtime-service-smoke.test.ts tests/admin-api-access.test.ts tests/critical-path-rehearsal.test.ts tests/production-planning-evidence-p1.test.ts tests/platform.test.ts --maxWorkers=1
+      - name: Commit lockfile only after green verification
+        run: |
+          git diff --exit-code -- package.json
+          if git diff --quiet -- package-lock.json; then
+            echo "Lockfile already current"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "security: refresh patched dependency lockfile"
+          git push
