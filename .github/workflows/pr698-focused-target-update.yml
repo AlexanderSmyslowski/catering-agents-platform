@@ -22,7 +22,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx vitest run tests/catering-target-update-contract.test.ts tests/catering-target-update-runner.test.ts tests/catering-target-update-workflow.test.ts tests/catering-target-update-production-boundary.test.ts --maxWorkers=1
-      - run: PYTHONPATH=tests python3 -m unittest tests/catering_target_isolation_test.py tests/catering_target_operations_test.py tests/catering_backup_tool_integration_test.py
+      - run: PYTHONPATH=tests python3 -m unittest tests/catering_target_isolation_test.py tests/catering_target_operations_test.py tests/catering_backup_observer_test.py
       - run: npx vitest run tests/catering-phase3-pilot-contract.test.ts tests/catering-backup-restore-contract.test.ts tests/catering-production-evidence-workflow-contract.test.ts tests/catering-production-operator-readout-contract.test.ts --maxWorkers=1
       - run: npm run build
       - run: bash -n platform-infra/scripts/update-catering-target.sh
