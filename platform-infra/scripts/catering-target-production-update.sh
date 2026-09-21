@@ -128,8 +128,9 @@ target_site="$deploy_path/platform-infra/sites/catering-target.caddy"
 
 check_regular_hash() {
   local path="$1" expected="$2"
-  [[ -f "$path" && ! -L "$path" ]] || return 1
-  [[ "$(sha256sum "$path" | awk '{print $1}')" == "$expected" ]]
+  sudo -n test -f "$path" || return 1
+  sudo -n test ! -L "$path" || return 1
+  [[ "$(sudo -n sha256sum "$path" | awk '{print $1}')" == "$expected" ]]
 }
 check_regular_hash "$platform_base" "$platform_base_hash"
 check_regular_hash "$platform_ops" "$platform_ops_hash"
@@ -141,9 +142,13 @@ check_regular_hash "$target_site" "$target_site_hash"
 if [[ -z "$expected_owner" ]]; then
   [[ ! -e "$update_lock && ! -L "$update_lock" ]] || exit 1
 else
-  [[ -d "$update_lock" && ! -L "$update_lock" && "$(stat -c '%a' "$update_lock")" == "700" ]] || exit 1
-  [[ -f "$update_lock/owner" && ! -L "$update_lock/owner" && "$(stat -c '%a' "$update_lock/owner")" == "600" ]] || exit 1
-  grep -Fxq "owner_token=$expected_owner" "$update_lock/owner"
+  sudo -n test -d "$update_lock" || exit 1
+  sudo -n test ! -L "$update_lock" || exit 1
+  [[ "$(sudo -n stat -c '%a' "$update_lock")" == "700" ]] || exit 1
+  sudo -n test -f "$update_lock/owner" || exit 1
+  sudo -n test ! -L "$update_lock/owner" || exit 1
+  [[ "$(sudo -n stat -c '%a' "$update_lock/owner")" == "600" ]] || exit 1
+  sudo -n grep -Fxq "owner_token=$expected_owner" "$update_lock/owner"
 fi
 
 command -v docker >/dev/null
@@ -290,7 +295,9 @@ owner_tmp="$lock/owner.pending.$$"
 printf '%s\n' "owner_token=$owner" | sudo -n tee "$owner_tmp" >/dev/null
 sudo -n chmod 0600 "$owner_tmp"
 sudo -n mv -f -- "$owner_tmp" "$lock/owner"
-[[ -f "$lock/owner" && ! -L "$lock/owner" && "$(sudo -n stat -c '%a' "$lock/owner")" == "600" ]]
+sudo -n test -f "$lock/owner"
+sudo -n test ! -L "$lock/owner"
+[[ "$(sudo -n stat -c '%a' "$lock/owner")" == "600" ]]
 sudo -n grep -Fxq "owner_token=$owner" "$lock/owner"
 REMOTE_LOCK
   LOCK_HELD=true
@@ -301,8 +308,12 @@ release_remote_lock() {
   ssh_target bash -s -- "${TARGET_UPDATE_LOCK}" "${LOCK_OWNER}" <<'REMOTE_UNLOCK'
 set -euo pipefail
 lock="$1"; owner="$2"
-[[ -d "$lock" && ! -L "$lock" && "$(sudo -n stat -c '%a' "$lock")" == "700" ]] || exit 1
-[[ -f "$lock/owner" && ! -L "$lock/owner" && "$(sudo -n stat -c '%a' "$lock/owner")" == "600" ]] || exit 1
+sudo -n test -d "$lock" || exit 1
+sudo -n test ! -L "$lock" || exit 1
+[[ "$(sudo -n stat -c '%a' "$lock")" == "700" ]] || exit 1
+sudo -n test -f "$lock/owner" || exit 1
+sudo -n test ! -L "$lock/owner" || exit 1
+[[ "$(sudo -n stat -c '%a' "$lock/owner")" == "600" ]] || exit 1
 sudo -n grep -Fxq "owner_token=$owner" "$lock/owner"
 sudo -n unlink "$lock/owner"
 sudo -n rmdir "$lock"
