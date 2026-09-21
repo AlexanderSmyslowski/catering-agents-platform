@@ -141,16 +141,16 @@ record_mutation() {
 prepare_candidate_release() {
   local root="${CATERING_TARGET_FAKE_ROOT:?CATERING_TARGET_FAKE_ROOT is required}"
   local release_dir="${root}/releases/${DEPLOY_COMMIT_SHA}"
-  mkdir -p "${release_dir}"
+  mkdir -p "${release_dir}" || return 1
   printf '%s\n' \
     "rsync" "-az" "--delete" \
     "--exclude=platform-infra/.env" \
     "--exclude=platform-infra/sites" \
     "--exclude=data" \
-    > "${root}/rsync-argv.txt"
-  record_mutation "sync release"
-  record_mutation "build runtime"
-  record_mutation "build web"
+    > "${root}/rsync-argv.txt" || return 1
+  record_mutation "sync release" || return 1
+  record_mutation "build runtime" || return 1
+  record_mutation "build web" || return 1
 
   local runtime_image="sha256:$(printf '1%.0s' {1..64})"
   local web_image="sha256:$(printf '2%.0s' {1..64})"
@@ -158,7 +158,7 @@ prepare_candidate_release() {
     web_image="missing"
   fi
 
-  python3 - "${release_dir}/candidate-images.json" "${runtime_image}" "${web_image}" <<'PY'
+  if ! python3 - "${release_dir}/candidate-images.json" "${runtime_image}" "${web_image}" <<'PY'
 import json, sys
 path, runtime_image, web_image = sys.argv[1:]
 value = {
@@ -174,8 +174,11 @@ with open(path, "w", encoding="utf-8") as handle:
     json.dump(value, handle, indent=2)
     handle.write("\n")
 PY
+  then
+    return 1
+  fi
 
-  python3 - "${release_dir}/candidate-images.json" "${CONTRACT_PATH}" <<'PY'
+  if ! python3 - "${release_dir}/candidate-images.json" "${CONTRACT_PATH}" <<'PY'
 import json, re, sys
 candidate = json.load(open(sys.argv[1], encoding="utf-8"))
 contract = json.load(open(sys.argv[2], encoding="utf-8"))
@@ -190,7 +193,10 @@ for service, config in candidate["services"].items():
     if not pattern.fullmatch(config["image"]):
         raise SystemExit(f"candidate image for {service} is not immutable")
 PY
-  record_mutation "candidate ready"
+  then
+    return 1
+  fi
+  record_mutation "candidate ready" || return 1
 }
 
 write_result() {
