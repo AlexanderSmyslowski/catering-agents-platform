@@ -59,6 +59,8 @@ def apply_scenario(state, scenario):
     if scenario == "topology-drift":
         state["serviceNetworks"]["production"] = ["catering_ingress"]
         return
+    if scenario == "candidate-image-missing":
+        return
     raise SystemExit(f"unknown harness scenario: {scenario}")
 
 def main():
