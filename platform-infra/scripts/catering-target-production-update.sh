@@ -388,3 +388,223 @@ platform_ops="$release_dir/source/platform-infra/docker-compose.catering-target.
 sudo -n docker compose --env-file "$runtime_env"   -f "$platform_base" -f "$platform_ops" -f "$release_dir/candidate-images.json"   config --format json >/dev/null
 REMOTE_LOAD
 }
+
+
+activate_remote_override() {
+  local override_path="$1"
+  local release_dir="${RELEASE_ROOT}/${DEPLOY_COMMIT_SHA}"
+  ssh_target bash -s -- "${release_dir}" "${TARGET_RUNTIME_ENV}" "${override_path}" <<'REMOTE_ACTIVATE'
+set -euo pipefail
+release_dir="$1"; runtime_env="$2"; override="$3"
+[[ "$release_dir" =~ ^/opt/catering-releases/[0-9a-fA-F]{40}$ ]] || exit 1
+[[ "$override" == "$release_dir/candidate-images.json" || "$override" == "$release_dir/previous-images.json" ]] || exit 1
+[[ -f "$override" && ! -L "$override" ]] || exit 1
+platform_base="$release_dir/source/platform-infra/docker-compose.catering-target.json"
+platform_ops="$release_dir/source/platform-infra/docker-compose.catering-target.operations.json"
+sudo -n docker compose --env-file "$runtime_env"   -f "$platform_base" -f "$platform_ops" -f "$override"   up -d --no-deps intake offer production exports web
+REMOTE_ACTIVATE
+}
+
+verify_remote_override_and_health() {
+  local override_path="$1"
+  local release_dir="${RELEASE_ROOT}/${DEPLOY_COMMIT_SHA}"
+  ssh_target bash -s -- "${release_dir}" "${override_path}" "${POSTGRES_VOLUME}" "${EDGE_IMAGE}" <<'REMOTE_VERIFY'
+set -euo pipefail
+release_dir="$1"; override="$2"; expected_postgres_volume="$3"; expected_edge_image="$4"
+[[ "$release_dir" =~ ^/opt/catering-releases/[0-9a-fA-F]{40}$ ]] || exit 1
+[[ "$override" == "$release_dir/candidate-images.json" || "$override" == "$release_dir/previous-images.json" ]] || exit 1
+[[ -f "$override" && ! -L "$override" ]] || exit 1
+
+expected_images="$(sudo -n cat "$override")"
+python3 - "$expected_images" <<'PY'
+import json, re, sys
+value = json.loads(sys.argv[1])
+if set(value) != {"services"}:
+    raise SystemExit(1)
+if set(value["services"]) != {"intake", "offer", "production", "exports", "web"}:
+    raise SystemExit(1)
+for item in value["services"].values():
+    if set(item) != {"image"} or not re.fullmatch(r"sha256:[0-9a-f]{64}", item["image"]):
+        raise SystemExit(1)
+PY
+
+for service in intake offer production exports web; do
+  expected="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["services"][sys.argv[2]]["image"])' "$expected_images" "$service")"
+  actual="$(sudo -n docker inspect --format '{{.Image}}' "platform-infra-${service}-1")"
+  [[ "$actual" == "$expected" ]] || exit 1
+  [[ "$(sudo -n docker inspect --format '{{.State.Running}}' "platform-infra-${service}-1")" == true ]] || exit 1
+done
+
+actual_postgres_volume="$(sudo -n docker inspect platform-infra-postgres-1 | python3 -c 'import json,sys; d=json.load(sys.stdin)[0]; hits=[m.get("Name","") for m in d.get("Mounts",[]) if m.get("Type")=="volume" and m.get("Destination")=="/var/lib/postgresql/data"]; print(hits[0] if len(hits)==1 else "")')"
+[[ "$actual_postgres_volume" == "$expected_postgres_volume" ]]
+[[ "$(sudo -n docker inspect --format '{{.Image}}' catering-edge-edge-1)" == "$expected_edge_image" ]]
+
+check_health() {
+  local container="$1" url="$2" attempt
+  for attempt in $(seq 1 20); do
+    if sudo -n docker exec "$container" node -e 'const u=process.argv[1]; fetch(u).then(async r=>{const t=await r.text(); if(!r.ok || !/"status"\s*:\s*"ok"/.test(t)) process.exit(1)}).catch(()=>process.exit(1))' "$url"; then
+      return 0
+    fi
+    sleep 2
+  done
+  return 1
+}
+check_health platform-infra-intake-1 http://127.0.0.1:3101/health
+check_health platform-infra-offer-1 http://127.0.0.1:3102/health
+check_health platform-infra-production-1 http://127.0.0.1:3103/health
+check_health platform-infra-exports-1 http://127.0.0.1:3104/health
+REMOTE_VERIFY
+}
+
+authenticated_read_smoke() {
+  : "${CATERING_TARGET_SMOKE_BASIC_AUTH_USER:?CATERING_TARGET_SMOKE_BASIC_AUTH_USER is required}"
+  : "${CATERING_TARGET_SMOKE_BASIC_AUTH_PASSWORD:?CATERING_TARGET_SMOKE_BASIC_AUTH_PASSWORD is required}"
+  : "${CATERING_TARGET_SMOKE_LOGIN_CODE:?CATERING_TARGET_SMOKE_LOGIN_CODE is required}"
+  : "${CATERING_TARGET_SMOKE_PIN:?CATERING_TARGET_SMOKE_PIN is required}"
+
+  local payload output
+  payload="$(python3 - <<'PY'
+import json, os
+print(json.dumps({
+    "basicUser": os.environ["CATERING_TARGET_SMOKE_BASIC_AUTH_USER"],
+    "basicPassword": os.environ["CATERING_TARGET_SMOKE_BASIC_AUTH_PASSWORD"],
+    "loginCode": os.environ["CATERING_TARGET_SMOKE_LOGIN_CODE"],
+    "pin": os.environ["CATERING_TARGET_SMOKE_PIN"],
+}, separators=(",", ":")))
+PY
+)"
+  output="$(printf '%s' "${payload}" | ssh_target sudo -n docker exec -i     platform-infra-intake-1 node /app/platform-infra/scripts/catering-target-authenticated-smoke.mjs)"
+  [[ "${output}" == "authenticated_read_smoke_ok" ]] || return 1
+}
+
+write_install_receipt() {
+  local release_dir="${RELEASE_ROOT}/${DEPLOY_COMMIT_SHA}"
+  ssh_target sudo -n python3 - "${release_dir}" "${RELEASE_ROOT}/installed" "${DEPLOY_COMMIT_SHA}" "${RUNTIME_IMAGE}" "${WEB_IMAGE}" <<'PY'
+import datetime, os, sys, tempfile
+release_dir, installed_path, commit, runtime_image, web_image = sys.argv[1:]
+if not release_dir.startswith("/opt/catering-releases/") or len(commit) != 40:
+    raise SystemExit(1)
+receipt_path = os.path.join(release_dir, "install-receipt")
+payload = (
+    "status=installed\n"
+    f"commit={commit}\n"
+    f"runtime_image={runtime_image}\n"
+    f"web_image={web_image}\n"
+    f"installed_at={datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}\n"
+)
+def atomic(path, data, mode):
+    directory = os.path.dirname(path)
+    fd, temp = tempfile.mkstemp(prefix=".target-update.", dir=directory)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(temp, mode)
+        os.replace(temp, path)
+    finally:
+        if os.path.exists(temp):
+            os.unlink(temp)
+atomic(receipt_path, payload, 0o600)
+atomic(installed_path, commit + "\n", 0o644)
+PY
+}
+
+rollback_remote_application() {
+  local release_dir="${RELEASE_ROOT}/${DEPLOY_COMMIT_SHA}"
+  if ! activate_remote_override "${release_dir}/previous-images.json"; then
+    return 1
+  fi
+  local rebound
+  if ! rebound="$(remote_preflight "${LOCK_OWNER}")"; then
+    return 1
+  fi
+  parse_preflight_binding "${rebound}"
+  verify_remote_override_and_health "${release_dir}/previous-images.json"
+}
+
+handle_production_failure() {
+  if rollback_remote_application; then
+    printf '%s\n' "TARGET_UPDATE_RESULT rolled_back"
+    release_remote_lock
+    return 1
+  fi
+  printf '%s\n' "TARGET_UPDATE_RESULT manual_recovery_required lock_retained=true" >&2
+  return 1
+}
+
+production_exit_trap() {
+  local status=$?
+  trap - EXIT
+  cleanup_local_candidate
+  if [[ "${LOCK_HELD}" == true ]]; then
+    printf '%s\n' "TARGET_UPDATE_RESULT manual_recovery_required lock_retained=true" >&2
+  fi
+  exit "${status}"
+}
+
+run_production_update() {
+  load_production_contract
+  validate_production_inputs
+  [[ "${CATERING_TARGET_CONFIRMATION:-}" == "UPDATE_CATERING_TARGET" ]] || fail "explicit target update confirmation required"
+  if migration_declaration_present; then
+    fail "manual_migration_approval_required"
+  fi
+
+  local initial
+  initial="$(remote_preflight "")"
+  parse_preflight_binding "${initial}"
+  printf '%s\n' "${initial}"
+
+  prepare_local_candidate
+  trap production_exit_trap EXIT
+
+  acquire_remote_lock
+  local locked
+  locked="$(remote_preflight "${LOCK_OWNER}")"
+  parse_preflight_binding "${locked}"
+
+  prepare_remote_release
+  if ! capture_previous_and_load_candidates; then
+    printf '%s\n' "TARGET_UPDATE_RESULT candidate_rejected" >&2
+    release_remote_lock
+    return 1
+  fi
+
+  local release_dir="${RELEASE_ROOT}/${DEPLOY_COMMIT_SHA}"
+  if ! activate_remote_override "${release_dir}/candidate-images.json"; then
+    handle_production_failure
+    return $?
+  fi
+
+  local postflight
+  if ! postflight="$(remote_preflight "${LOCK_OWNER}")"; then
+    handle_production_failure
+    return $?
+  fi
+  parse_preflight_binding "${postflight}"
+  if ! verify_remote_override_and_health "${release_dir}/candidate-images.json"; then
+    handle_production_failure
+    return $?
+  fi
+  if ! authenticated_read_smoke; then
+    handle_production_failure
+    return $?
+  fi
+
+  write_install_receipt
+  release_remote_lock
+  printf 'TARGET_UPDATE_RESULT updated commit=%s runtime_image=%s web_image=%s\n'     "${DEPLOY_COMMIT_SHA}" "${RUNTIME_IMAGE}" "${WEB_IMAGE}"
+}
+
+case "${MODE}" in
+  --preflight)
+    run_production_preflight
+    ;;
+  --update)
+    run_production_update
+    ;;
+  *)
+    fail "usage: catering-target-production-update.sh --preflight | --update"
+    ;;
+esac
