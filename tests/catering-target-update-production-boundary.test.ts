@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 const root = path.resolve(import.meta.dirname, "..");
 const runner = () => readFileSync(path.join(root, "platform-infra/scripts/update-catering-target.sh"), "utf8");
+const smoke = () => readFileSync(path.join(root, "platform-infra/scripts/catering-target-authenticated-smoke.mjs"), "utf8");
 
 describe("Catering target production command boundary", () => {
   it("implements strict read-only production preflight", () => {
@@ -35,6 +36,17 @@ describe("Catering target production command boundary", () => {
     expect(text).not.toContain("deploy-hetzner.sh");
     expect(text).not.toContain("docker-compose.production.yml");
     expect(text).not.toContain("docker-compose.edge-cutover.yml");
+  });
+
+  it("performs an authenticated application-session read smoke without embedding credentials", () => {
+    const runnerText = runner();
+    const smokeText = smoke();
+    expect(runnerText).toContain("catering-target-authenticated-smoke.mjs");
+    expect(smokeText).toContain("/api/intake/v1/auth/login");
+    expect(smokeText).toContain("/api/intake/v1/auth/session");
+    expect(smokeText).toContain("/api/production/v1/production/cases");
+    expect(smokeText).toContain("process.stdin");
+    expect(smokeText).not.toContain("synthetic-password");
   });
 
   it("protects the server-owned configuration in production sync", () => {
