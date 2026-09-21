@@ -172,7 +172,7 @@ value = {
 }
 with open(path, "w", encoding="utf-8") as handle:
     json.dump(value, handle, indent=2)
-    handle.write("\\n")
+    handle.write("\n")
 PY
 
   python3 - "${release_dir}/candidate-images.json" "${CONTRACT_PATH}" <<'PY'
