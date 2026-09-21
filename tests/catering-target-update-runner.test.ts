@@ -60,8 +60,10 @@ describe("Catering target updater candidate preparation", () => {
     const events = readFileSync(path.join(state, "mutations.log"), "utf8");
     expect(events).toContain("build runtime");
     expect(events).toContain("build web");
-    expect(events.indexOf("build runtime")).toBeLessThan(events.indexOf("activate"));
-    expect(events.indexOf("build web")).toBeLessThan(events.indexOf("activate"));
+    expect(events).toContain("candidate ready");
+    expect(events.indexOf("build runtime")).toBeLessThan(events.indexOf("candidate ready"));
+    expect(events.indexOf("build web")).toBeLessThan(events.indexOf("candidate ready"));
+    expect(events).not.toContain("activate");
     expect(events).not.toContain("build postgres");
     expect(events).not.toContain("build edge");
   });
@@ -79,6 +81,7 @@ describe("Catering target updater candidate preparation", () => {
     const { state, result } = runScenario("candidate-image-missing", "a".repeat(40), "update");
     expect(result.status).not.toBe(0);
     const events = readFileSync(path.join(state, "mutations.log"), "utf8");
+    expect(events).not.toContain("candidate ready");
     expect(events).not.toContain("activate");
   });
 });
