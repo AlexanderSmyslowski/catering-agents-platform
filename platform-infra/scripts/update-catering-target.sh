@@ -193,6 +193,98 @@ PY
   record_mutation "candidate ready"
 }
 
+write_result() {
+  local root="${CATERING_TARGET_FAKE_ROOT:?CATERING_TARGET_FAKE_ROOT is required}"
+  printf '%s\n' "$1" > "${root}/result.txt"
+}
+
+acquire_update_lock() {
+  local root="${CATERING_TARGET_FAKE_ROOT:?CATERING_TARGET_FAKE_ROOT is required}"
+  printf '%s\n' "held" > "${root}/lock-state.txt"
+  record_mutation "lock acquire"
+}
+
+release_update_lock() {
+  local root="${CATERING_TARGET_FAKE_ROOT:?CATERING_TARGET_FAKE_ROOT is required}"
+  printf '%s\n' "free" > "${root}/lock-state.txt"
+  record_mutation "unlock"
+}
+
+migration_required() {
+  [[ "${SCENARIO}" == "migration-required" || "${CATERING_TARGET_MIGRATION_REQUIRED:-0}" == "1" ]]
+}
+
+activate_candidate() {
+  record_mutation "activate"
+  [[ "${SCENARIO}" != "activate-fails" && "${SCENARIO}" != "rollback-fails" ]]
+}
+
+run_update_smoke() {
+  record_mutation "smoke"
+  [[ "${SCENARIO}" != "smoke-fails" ]]
+}
+
+run_update_postflight() {
+  record_mutation "postflight"
+  [[ "${SCENARIO}" != "postflight-port-drift" && "${SCENARIO}" != "postflight-network-drift" ]]
+}
+
+rollback_candidate() {
+  record_mutation "rollback"
+  [[ "${SCENARIO}" != "rollback-fails" ]]
+}
+
+handle_update_failure() {
+  local schema_mutation_started="$1"
+  if [[ "${schema_mutation_started}" == "true" ]]; then
+    write_result "manual_recovery_required"
+    return 1
+  fi
+  if rollback_candidate; then
+    write_result "rolled_back"
+    release_update_lock
+    return 1
+  fi
+  write_result "manual_recovery_required"
+  return 1
+}
+
+run_harness_update() {
+  prepare_harness_state
+  run_preflight
+
+  if migration_required; then
+    write_result "manual_migration_approval_required"
+    return 2
+  fi
+
+  acquire_update_lock
+  if ! prepare_candidate_release; then
+    write_result "candidate_rejected"
+    release_update_lock
+    return 1
+  fi
+
+  local schema_mutation_started=false
+  if ! activate_candidate; then
+    handle_update_failure "${schema_mutation_started}"
+    return $?
+  fi
+  if ! run_update_smoke; then
+    handle_update_failure "${schema_mutation_started}"
+    return $?
+  fi
+  if ! run_update_postflight; then
+    handle_update_failure "${schema_mutation_started}"
+    return $?
+  fi
+
+  record_mutation "install receipt"
+  write_result "updated"
+  release_update_lock
+  printf '%s\n' "updated"
+}
+
 run_preflight() {
   load_contract
   validate_exact_commit
@@ -211,10 +303,7 @@ case "${MODE}" in
     run_preflight
     ;;
   --harness-update)
-    prepare_harness_state
-    run_preflight
-    prepare_candidate_release
-    printf '%s\n' "candidate_ready"
+    run_harness_update
     ;;
   --preflight)
     fail "normal target preflight is not enabled until the dedicated workflow boundary is implemented"
