@@ -424,3 +424,90 @@ Do not dispatch the workflow.
 
 git add .github/workflows/update-catering-target.yml tests/catering-target-update-workflow.test.ts
 git commit -m "ci: add manual isolated Catering target update workflow"
+
+
+---
+
+### Task 6: Regression verification against existing target and backup contracts
+
+- [ ] **Step 1: Run all new tests**
+
+npx vitest run tests/catering-target-update-contract.test.ts tests/catering-target-update-runner.test.ts tests/catering-target-update-workflow.test.ts --maxWorkers=1
+
+- [ ] **Step 2: Run existing Python target/backup tests**
+
+python3 -m unittest tests/catering_target_isolation_test.py tests/catering_target_operations_test.py tests/catering_backup_tool_integration_test.py
+
+- [ ] **Step 3: Run existing Vitest target/backup contracts**
+
+npx vitest run tests/catering-phase3-pilot-contract.test.ts tests/catering-backup-restore-contract.test.ts tests/catering-production-evidence-workflow-contract.test.ts tests/catering-production-operator-readout-contract.test.ts --maxWorkers=1
+
+- [ ] **Step 4: Run build/typecheck**
+
+npm run build
+
+- [ ] **Step 5: Prove forbidden coupling absent**
+
+grep -R --line-number --fixed-strings 'zeiterfassung_default' platform-infra/catering-target-update-contract.json platform-infra/scripts/update-catering-target.sh .github/workflows/update-catering-target.yml && exit 1 || true
+
+Expected: no matches.
+
+Also run:
+
+git diff d6a9b8dbc0987c281c826a88697bddeeb51a9ff5 -- .github/workflows/deploy-production.yml platform-infra/scripts/deploy-hetzner.sh
+
+Expected: empty.
+
+- [ ] **Step 6: Run full suite**
+
+npm test
+npm run build
+
+Do not weaken tests. If local resources are insufficient, push the verified branch and require unchanged GitHub CI as full-suite evidence.
+
+- [ ] **Step 7: Commit only test-derived fixes**
+
+Every behavioral fix must have witnessed RED→GREEN evidence. No speculative cleanup.
+
+---
+
+### Task 7: Document verified implementation and stop before any real deployment
+
+**Files:** Create docs/operations/CATERING_TARGET_UPDATE.md; modify memory.md and docs/agent-memory/2026-09-21-gate-c-main-integration.md.
+
+- [ ] **Step 1: Write operator documentation from actual behavior**
+
+Document workflow/input, target identity, preflight, protected paths, candidate image override, migration policy, rollback versus recovery-required, success evidence, and explicit prohibition of the old Deploy production workflow.
+
+- [ ] **Step 2: Update memory after verification only**
+
+Record branch/head/tree, exact tests and counts, CI run IDs, and that the new workflow has never been dispatched against production. Bump memory once.
+
+- [ ] **Step 3: Consistency check**
+
+grep -R --line-number 'Deploy production' docs/operations/CATERING_TARGET_UPDATE.md docs/agent-memory/2026-09-21-gate-c-main-integration.md memory.md
+
+Every occurrence must be historical/prohibitive, never recommended for the target.
+
+- [ ] **Step 4: Commit docs**
+
+git add docs/operations/CATERING_TARGET_UPDATE.md memory.md docs/agent-memory/2026-09-21-gate-c-main-integration.md
+git commit -m "docs: record Catering target update preparation"
+
+- [ ] **Step 5: Push branch and run regular non-deploying CI**
+
+Verify triggers before push. update-catering-target.yml must remain manual-only and therefore must not execute.
+
+- [ ] **Step 6: Independent whole-branch review**
+
+Review against the approved spec, this plan, diff from d6a9b8d…, focused tests, and regular CI. Critical/Important findings get one bounded RED→GREEN fix pass. Minor findings are recorded unless they block a stated contract.
+
+- [ ] **Step 7: HALT**
+
+Required final state:
+- implementation branch reviewed;
+- tests/CI green;
+- no production workflow dispatch;
+- no server access;
+- no merge to main without separate request;
+- first live target update still requires explicit operational approval after a fresh read-only server preflight.
