@@ -63,7 +63,8 @@ describe("Catering target updater candidate preparation", () => {
     expect(events).toContain("candidate ready");
     expect(events.indexOf("build runtime")).toBeLessThan(events.indexOf("candidate ready"));
     expect(events.indexOf("build web")).toBeLessThan(events.indexOf("candidate ready"));
-    expect(events).not.toContain("activate");
+    expect(events).toContain("activate");
+    expect(events.indexOf("candidate ready")).toBeLessThan(events.indexOf("activate"));
     expect(events).not.toContain("build postgres");
     expect(events).not.toContain("build edge");
   });
