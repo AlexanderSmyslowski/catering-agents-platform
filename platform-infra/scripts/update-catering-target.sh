@@ -311,10 +311,11 @@ case "${MODE}" in
   --harness-update)
     run_harness_update
     ;;
-  --preflight)
-    fail "normal target preflight is not enabled until the dedicated workflow boundary is implemented"
+  --preflight|--update)
+    [[ "${CATERING_TARGET_TEST_MODE:-}" != "1" ]] || fail "production target modes are disabled in harness mode"
+    exec /bin/bash "${SCRIPT_DIR}/catering-target-production-update.sh" "${MODE}"
     ;;
   *)
-    fail "usage: update-catering-target.sh --harness SCENARIO | --harness-update SCENARIO | --preflight"
+    fail "usage: update-catering-target.sh --harness SCENARIO | --harness-update SCENARIO | --preflight | --update"
     ;;
 esac
