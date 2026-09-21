@@ -85,3 +85,49 @@ describe("Catering target updater candidate preparation", () => {
     expect(events).not.toContain("activate");
   });
 });
+
+
+describe("Catering target updater activation and recovery", () => {
+  it("marks a healthy synthetic update as installed only after postflight", () => {
+    const { state, result } = runScenario("healthy", "a".repeat(40), "update");
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("updated");
+    expect(readFileSync(path.join(state, "result.txt"), "utf8")).toBe("updated\n");
+    const events = readFileSync(path.join(state, "mutations.log"), "utf8");
+    expect(events).toContain("activate");
+    expect(events).toContain("smoke");
+    expect(events).toContain("postflight");
+    expect(events).toContain("install receipt");
+    expect(events.indexOf("postflight")).toBeLessThan(events.indexOf("install receipt"));
+    expect(readFileSync(path.join(state, "lock-state.txt"), "utf8")).toBe("free\n");
+  });
+
+  it.each(["activate-fails", "smoke-fails", "postflight-port-drift", "postflight-network-drift"])(
+    "rolls back a failed update for %s before schema mutation",
+    (scenario) => {
+      const { state, result } = runScenario(scenario, "a".repeat(40), "update");
+      expect(result.status).not.toBe(0);
+      expect(readFileSync(path.join(state, "result.txt"), "utf8")).toBe("rolled_back\n");
+      const events = readFileSync(path.join(state, "mutations.log"), "utf8");
+      expect(events).toContain("rollback");
+      expect(readFileSync(path.join(state, "lock-state.txt"), "utf8")).toBe("free\n");
+    }
+  );
+
+  it("retains the lock when rollback cannot be proven", () => {
+    const { state, result } = runScenario("rollback-fails", "a".repeat(40), "update");
+    expect(result.status).not.toBe(0);
+    expect(readFileSync(path.join(state, "result.txt"), "utf8")).toBe("manual_recovery_required\n");
+    expect(readFileSync(path.join(state, "lock-state.txt"), "utf8")).toBe("held\n");
+  });
+
+  it("blocks an undeclared migration before sync, build, or activation", () => {
+    const { state, result } = runScenario("migration-required", "a".repeat(40), "update");
+    expect(result.status).not.toBe(0);
+    expect(readFileSync(path.join(state, "result.txt"), "utf8")).toBe("manual_migration_approval_required\n");
+    const events = readFileSync(path.join(state, "mutations.log"), "utf8");
+    expect(events).not.toContain("sync release");
+    expect(events).not.toContain("build runtime");
+    expect(events).not.toContain("activate");
+  });
+});
