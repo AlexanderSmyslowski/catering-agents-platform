@@ -71,11 +71,15 @@ jobs:
           CATERING_TARGET_SSH_KNOWN_HOSTS_FILE: ${{ runner.temp }}/catering-target-ssh/known_hosts
           CATERING_TARGET_SMOKE_BASIC_AUTH_USER: ${{ secrets.CATERING_TARGET_SMOKE_BASIC_AUTH_USER }}
           CATERING_TARGET_SMOKE_BASIC_AUTH_PASSWORD: ${{ secrets.CATERING_TARGET_SMOKE_BASIC_AUTH_PASSWORD }}
+          CATERING_TARGET_SMOKE_LOGIN_CODE: ${{ secrets.CATERING_TARGET_SMOKE_LOGIN_CODE }}
+          CATERING_TARGET_SMOKE_PIN: ${{ secrets.CATERING_TARGET_SMOKE_PIN }}
         run: |
           test -n "$CATERING_TARGET_DEPLOY_HOST"
           test -n "$CATERING_TARGET_DEPLOY_USER"
           test -n "$CATERING_TARGET_SMOKE_BASIC_AUTH_USER"
           test -n "$CATERING_TARGET_SMOKE_BASIC_AUTH_PASSWORD"
+          test -n "$CATERING_TARGET_SMOKE_LOGIN_CODE"
+          test -n "$CATERING_TARGET_SMOKE_PIN"
           bash platform-infra/scripts/update-catering-target.sh --preflight |
             tee "$RUNNER_TEMP/catering-target-preflight.txt"
 
@@ -88,6 +92,8 @@ jobs:
           CATERING_TARGET_SSH_KNOWN_HOSTS_FILE: ${{ runner.temp }}/catering-target-ssh/known_hosts
           CATERING_TARGET_SMOKE_BASIC_AUTH_USER: ${{ secrets.CATERING_TARGET_SMOKE_BASIC_AUTH_USER }}
           CATERING_TARGET_SMOKE_BASIC_AUTH_PASSWORD: ${{ secrets.CATERING_TARGET_SMOKE_BASIC_AUTH_PASSWORD }}
+          CATERING_TARGET_SMOKE_LOGIN_CODE: ${{ secrets.CATERING_TARGET_SMOKE_LOGIN_CODE }}
+          CATERING_TARGET_SMOKE_PIN: ${{ secrets.CATERING_TARGET_SMOKE_PIN }}
           CATERING_TARGET_CONFIRMATION: UPDATE_CATERING_TARGET
         run: |
           bash platform-infra/scripts/update-catering-target.sh --update |
