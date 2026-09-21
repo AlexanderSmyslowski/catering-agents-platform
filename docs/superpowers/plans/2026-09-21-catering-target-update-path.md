@@ -226,3 +226,201 @@ Expected: PASS.
 
 git add platform-infra/scripts/update-catering-target.sh platform-infra/scripts/catering-target-update-harness.py tests/catering-target-update-runner.test.ts
 git commit -m "feat: add fail-closed Catering target preflight"
+
+
+---
+
+### Task 3: Build immutable application candidates and protected sync
+
+**Files:** Modify platform-infra/scripts/update-catering-target.sh, platform-infra/scripts/catering-target-update-harness.py, tests/catering-target-update-runner.test.ts.
+
+**Interfaces:** Produces /opt/catering-releases/<commit>/ and an application-only Compose override with immutable images for intake, offer, production, exports, web; never replaces postgres or Edge.
+
+- [ ] **Step 1: Add RED candidate/sync tests**
+
+~~~ts
+it("builds candidate application images before activation", () => {
+  const { state, result } = runScenario("healthy");
+  expect(result.status).toBe(0);
+  const events = readFileSync(path.join(state, "mutations.log"), "utf8");
+  expect(events).toContain("build runtime");
+  expect(events).toContain("build web");
+  expect(events.indexOf("build runtime")).toBeLessThan(events.indexOf("activate"));
+  expect(events.indexOf("build web")).toBeLessThan(events.indexOf("activate"));
+  expect(events).not.toContain("build postgres");
+  expect(events).not.toContain("build edge");
+});
+
+it("excludes server-owned paths from rsync delete", () => {
+  const { state, result } = runScenario("healthy");
+  expect(result.status).toBe(0);
+  const argv = readFileSync(path.join(state, "rsync-argv.txt"), "utf8");
+  for (const value of ["platform-infra/.env", "platform-infra/sites", "data"]) {
+    expect(argv).toContain("--exclude=" + value);
+  }
+});
+~~~
+
+- [ ] **Step 2: Verify RED** for those tests.
+
+- [ ] **Step 3: Implement release preparation**
+
+After lock acquisition:
+1. create allowlisted release directory;
+2. bind previous installed commit and current application image IDs;
+3. require acceptable recovery point through the existing Catering backup status contract;
+4. rsync repository source with --delete and explicit protected excludes;
+5. build one runtime image from platform-infra/docker/Dockerfile.runtime;
+6. build one web image from platform-infra/docker/Dockerfile.web;
+7. resolve both to immutable sha256 IDs;
+8. generate an image-only override: runtime image for intake/offer/production/exports and web image for web;
+9. render target base + operations + candidate override before activation.
+
+- [ ] **Step 4: Add RED candidate-image-missing scenario** and require no activation.
+
+- [ ] **Step 5: Implement candidate validation**
+
+Require each image ID to match sha256:[0-9a-f]{64}. Reject override keys other than services.<application>.image; no postgres, Edge, networks, ports, volumes, or environment.
+
+- [ ] **Step 6: Run GREEN**
+
+npx vitest run tests/catering-target-update-runner.test.ts --maxWorkers=1
+
+- [ ] **Step 7: Commit**
+
+git add platform-infra/scripts/update-catering-target.sh platform-infra/scripts/catering-target-update-harness.py tests/catering-target-update-runner.test.ts
+git commit -m "feat: prepare immutable Catering target application candidates"
+
+---
+
+### Task 4: Activation, postflight, rollback, and migration boundary
+
+**Files:** Modify the runner, harness, runner tests, and contract only for the already-specified migration policy.
+
+**Interfaces:** Returns updated, rolled_back, manual_recovery_required, or manual_migration_approval_required.
+
+- [ ] **Step 1: Write RED failure-path tests**
+
+Scenarios: activate-fails, smoke-fails, postflight-port-drift, postflight-network-drift, rollback-fails, migration-required.
+
+~~~ts
+it("retains the lock when rollback cannot be proven", () => {
+  const { state, result } = runScenario("rollback-fails");
+  expect(result.status).not.toBe(0);
+  expect(readFileSync(path.join(state, "result.txt"), "utf8")).toContain("manual_recovery_required");
+  expect(readFileSync(path.join(state, "lock-state.txt"), "utf8")).toBe("held\n");
+});
+~~~
+
+- [ ] **Step 2: Verify RED** for all new scenarios.
+
+- [ ] **Step 3: Implement activation**
+
+Only update application services using target platform base JSON + target operations JSON + candidate image override. Do not modify Edge. Do not change PostgreSQL image or volume identity.
+
+- [ ] **Step 4: Implement postflight**
+
+Require:
+- five application services healthy/running;
+- PostgreSQL same volume identity;
+- exact expected network membership;
+- no application host ports;
+- Edge remains the only TCP 80/443 publisher;
+- authenticated existing read-smoke succeeds;
+- installed commit marker equals DEPLOY_COMMIT_SHA.
+
+Only then atomically write release receipt, release lock, and report updated.
+
+- [ ] **Step 5: Implement rollback**
+
+If schema_mutation_started=false, restore previous application image override/source release, reactivate, and rerun topology/health checks. If proof succeeds report rolled_back with nonzero update status. If proof fails, retain lock and report manual_recovery_required.
+
+- [ ] **Step 6: Implement migration fail-closed**
+
+With migrationPolicy.supportedCommand null, any declared migration need returns manual_migration_approval_required before sync/build/activation. Do not infer migration safety from source diffs.
+
+- [ ] **Step 7: Run GREEN**
+
+npx vitest run tests/catering-target-update-contract.test.ts tests/catering-target-update-runner.test.ts --maxWorkers=1
+
+Also run shell/Python syntax checks.
+
+- [ ] **Step 8: Commit**
+
+git add platform-infra/catering-target-update-contract.json platform-infra/scripts/update-catering-target.sh platform-infra/scripts/catering-target-update-harness.py tests/catering-target-update-runner.test.ts
+git commit -m "feat: add recoverable Catering target activation"
+
+---
+
+### Task 5: Add a manual main-only GitHub workflow
+
+**Files:** Create .github/workflows/update-catering-target.yml and tests/catering-target-update-workflow.test.ts.
+
+**Interfaces:** Required commit_sha; required confirmation UPDATE_CATERING_TARGET; dedicated target SSH/known-host/smoke secrets; no automatic trigger.
+
+- [ ] **Step 1: Write RED workflow tests**
+
+~~~ts
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { describe, expect, it } from "vitest";
+
+const root = path.resolve(import.meta.dirname, "..");
+const source = () => readFileSync(path.join(root, ".github/workflows/update-catering-target.yml"), "utf8");
+
+describe("Catering target update workflow", () => {
+  it("is manual and main-only", () => {
+    const text = source();
+    expect(text).toContain("workflow_dispatch:");
+    expect(text).not.toMatch(/^\s*push:/m);
+    expect(text).not.toMatch(/^\s*pull_request:/m);
+    expect(text).toContain("refs/heads/main");
+  });
+
+  it("never invokes the historical deploy chain", () => {
+    const text = source();
+    expect(text).toContain("platform-infra/scripts/update-catering-target.sh");
+    expect(text).not.toContain("deploy-hetzner.sh");
+    expect(text).not.toContain("zeiterfassung_default");
+  });
+
+  it("requires exact commit input and explicit confirmation", () => {
+    const text = source();
+    expect(text).toContain("commit_sha");
+    expect(text).toContain("UPDATE_CATERING_TARGET");
+  });
+});
+~~~
+
+- [ ] **Step 2: Verify RED**
+
+npx vitest run tests/catering-target-update-workflow.test.ts --maxWorkers=1
+
+- [ ] **Step 3: Implement workflow**
+
+Requirements:
+- workflow_dispatch only;
+- required commit_sha and confirmation inputs;
+- job guard for refs/heads/main;
+- fetch/check current remote main equals input commit;
+- checkout exact commit with persist-credentials: false;
+- strict known-host SSH;
+- dedicated target secrets;
+- read-only preflight first;
+- mutating runner only after exact confirmation;
+- redacted evidence artifact;
+- no automatic retry;
+- no old deploy script.
+
+- [ ] **Step 4: Add safety assertions** for forbidden triggers/references and missing persist-credentials: false.
+
+- [ ] **Step 5: Run GREEN**
+
+npx vitest run tests/catering-target-update-workflow.test.ts tests/catering-target-update-contract.test.ts tests/catering-target-update-runner.test.ts --maxWorkers=1
+
+Do not dispatch the workflow.
+
+- [ ] **Step 6: Commit**
+
+git add .github/workflows/update-catering-target.yml tests/catering-target-update-workflow.test.ts
+git commit -m "ci: add manual isolated Catering target update workflow"
