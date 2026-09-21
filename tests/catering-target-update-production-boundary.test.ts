@@ -3,7 +3,10 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 const root = path.resolve(import.meta.dirname, "..");
-const runner = () => readFileSync(path.join(root, "platform-infra/scripts/update-catering-target.sh"), "utf8");
+const runner = () => [
+  readFileSync(path.join(root, "platform-infra/scripts/update-catering-target.sh"), "utf8"),
+  readFileSync(path.join(root, "platform-infra/scripts/catering-target-production-update.sh"), "utf8")
+].join("\n");
 const smoke = () => readFileSync(path.join(root, "platform-infra/scripts/catering-target-authenticated-smoke.mjs"), "utf8");
 
 describe("Catering target production command boundary", () => {
