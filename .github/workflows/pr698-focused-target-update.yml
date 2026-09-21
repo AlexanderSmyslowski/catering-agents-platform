@@ -22,3 +22,4 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx vitest run tests/catering-target-update-contract.test.ts --maxWorkers=1
+      - run: python3 -m unittest tests/catering_target_isolation_test.py tests/catering_target_operations_test.py
