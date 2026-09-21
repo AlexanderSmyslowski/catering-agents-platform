@@ -222,3 +222,169 @@ run_production_preflight() {
   parse_preflight_binding "${output}"
   printf '%s\n' "${output}"
 }
+
+
+cleanup_local_candidate() {
+  if [[ -n "${LOCAL_RELEASE_DIR}" && -d "${LOCAL_RELEASE_DIR}" ]]; then
+    rm -rf -- "${LOCAL_RELEASE_DIR}"
+  fi
+}
+
+migration_declaration_present() {
+  [[ -e "${REPO_ROOT}/platform-infra/catering-target-migration.json" || "${CATERING_TARGET_MIGRATION_REQUIRED:-0}" == "1" ]]
+}
+
+prepare_local_candidate() {
+  command -v docker >/dev/null || fail "docker is required on the workflow runner"
+  command -v rsync >/dev/null || fail "rsync is required on the workflow runner"
+  command -v gzip >/dev/null || fail "gzip is required on the workflow runner"
+  if migration_declaration_present; then
+    fail "manual_migration_approval_required"
+  fi
+
+  LOCAL_RELEASE_DIR="$(mktemp -d "${RUNNER_TEMP:-/tmp}/catering-target-release.XXXXXX")"
+  local runtime_tag="catering-target-runtime:${DEPLOY_COMMIT_SHA}"
+  local web_tag="catering-target-web:${DEPLOY_COMMIT_SHA}"
+
+  docker build     --iidfile "${LOCAL_RELEASE_DIR}/runtime.iid"     --tag "${runtime_tag}"     --file "${REPO_ROOT}/platform-infra/docker/Dockerfile.runtime"     "${REPO_ROOT}"
+  docker build     --iidfile "${LOCAL_RELEASE_DIR}/web.iid"     --tag "${web_tag}"     --file "${REPO_ROOT}/platform-infra/docker/Dockerfile.web"     "${REPO_ROOT}"
+
+  RUNTIME_IMAGE="$(cat "${LOCAL_RELEASE_DIR}/runtime.iid")"
+  WEB_IMAGE="$(cat "${LOCAL_RELEASE_DIR}/web.iid")"
+  [[ "${RUNTIME_IMAGE}" =~ ^sha256:[0-9a-f]{64}$ ]] || fail "runtime candidate is not immutable"
+  [[ "${WEB_IMAGE}" =~ ^sha256:[0-9a-f]{64}$ ]] || fail "web candidate is not immutable"
+
+  python3 - "${LOCAL_RELEASE_DIR}/candidate-images.json" "${RUNTIME_IMAGE}" "${WEB_IMAGE}" <<'PY'
+import json, sys
+path, runtime_image, web_image = sys.argv[1:]
+value = {
+    "services": {
+        "intake": {"image": runtime_image},
+        "offer": {"image": runtime_image},
+        "production": {"image": runtime_image},
+        "exports": {"image": runtime_image},
+        "web": {"image": web_image},
+    }
+}
+with open(path, "w", encoding="utf-8") as handle:
+    json.dump(value, handle, indent=2, sort_keys=True)
+    handle.write("\n")
+PY
+
+  docker save "${RUNTIME_IMAGE}" | gzip -1 > "${LOCAL_RELEASE_DIR}/runtime-image.tar.gz"
+  docker save "${WEB_IMAGE}" | gzip -1 > "${LOCAL_RELEASE_DIR}/web-image.tar.gz"
+}
+
+acquire_remote_lock() {
+  LOCK_OWNER="target-update-${GITHUB_RUN_ID:-manual}-${DEPLOY_COMMIT_SHA}"
+  [[ "${LOCK_OWNER}" =~ ^[A-Za-z0-9._:-]+$ ]] || fail "invalid target lock owner"
+  ssh_target bash -s -- "${TARGET_UPDATE_LOCK}" "${LOCK_OWNER}" <<'REMOTE_LOCK'
+set -euo pipefail
+lock="$1"; owner="$2"
+[[ "$lock" == "/opt/catering-target-update.lock" ]] || exit 1
+if ! sudo -n mkdir -m 0700 -- "$lock"; then
+  echo "target update lock already exists" >&2
+  exit 75
+fi
+owner_tmp="$lock/owner.pending.$$"
+printf '%s\n' "owner_token=$owner" | sudo -n tee "$owner_tmp" >/dev/null
+sudo -n chmod 0600 "$owner_tmp"
+sudo -n mv -f -- "$owner_tmp" "$lock/owner"
+[[ -f "$lock/owner" && ! -L "$lock/owner" && "$(sudo -n stat -c '%a' "$lock/owner")" == "600" ]]
+sudo -n grep -Fxq "owner_token=$owner" "$lock/owner"
+REMOTE_LOCK
+  LOCK_HELD=true
+}
+
+release_remote_lock() {
+  [[ "${LOCK_HELD}" == true ]] || return 0
+  ssh_target bash -s -- "${TARGET_UPDATE_LOCK}" "${LOCK_OWNER}" <<'REMOTE_UNLOCK'
+set -euo pipefail
+lock="$1"; owner="$2"
+[[ -d "$lock" && ! -L "$lock" && "$(sudo -n stat -c '%a' "$lock")" == "700" ]] || exit 1
+[[ -f "$lock/owner" && ! -L "$lock/owner" && "$(sudo -n stat -c '%a' "$lock/owner")" == "600" ]] || exit 1
+sudo -n grep -Fxq "owner_token=$owner" "$lock/owner"
+sudo -n unlink "$lock/owner"
+sudo -n rmdir "$lock"
+REMOTE_UNLOCK
+  LOCK_HELD=false
+}
+
+prepare_remote_release() {
+  local release_dir="${RELEASE_ROOT}/${DEPLOY_COMMIT_SHA}"
+  ssh_target bash -s -- "${RELEASE_ROOT}" "${release_dir}" <<'REMOTE_RELEASE'
+set -euo pipefail
+release_root="$1"; release_dir="$2"
+[[ "$release_root" == "/opt/catering-releases" ]] || exit 1
+[[ "$release_dir" =~ ^/opt/catering-releases/[0-9a-fA-F]{40}$ ]] || exit 1
+if [[ ! -e "$release_root" ]]; then
+  sudo -n mkdir -m 0755 -- "$release_root"
+fi
+[[ -d "$release_root" && ! -L "$release_root" && "$(realpath -e "$release_root")" == "$release_root" ]] || exit 1
+[[ ! -e "$release_dir" && ! -L "$release_dir" ]] || { echo "release directory already exists" >&2; exit 1; }
+sudo -n mkdir -m 0755 -- "$release_dir" "$release_dir/source"
+REMOTE_RELEASE
+
+  local rsync_rsh
+  rsync_rsh="ssh -i ${CATERING_TARGET_SSH_KEY_FILE} -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=${CATERING_TARGET_SSH_KNOWN_HOSTS_FILE} -o ConnectTimeout=10 -p 22"
+
+  rsync -az --delete     --rsync-path="sudo -n rsync"     -e "${rsync_rsh}"     --exclude=.git     --exclude=node_modules     --exclude=backoffice-ui/dist     --exclude=platform-infra/.env     --exclude=platform-infra/sites     --exclude=data     "${REPO_ROOT}/" "${REMOTE}:${release_dir}/source/"
+
+  rsync -az     --rsync-path="sudo -n rsync"     -e "${rsync_rsh}"     "${LOCAL_RELEASE_DIR}/candidate-images.json"     "${LOCAL_RELEASE_DIR}/runtime-image.tar.gz"     "${LOCAL_RELEASE_DIR}/web-image.tar.gz"     "${REMOTE}:${release_dir}/"
+
+  ssh_target sudo -n chmod 0644     "${release_dir}/candidate-images.json"     "${release_dir}/runtime-image.tar.gz"     "${release_dir}/web-image.tar.gz"
+}
+
+capture_previous_and_load_candidates() {
+  local release_dir="${RELEASE_ROOT}/${DEPLOY_COMMIT_SHA}"
+  ssh_target bash -s -- "${release_dir}" "${TARGET_RUNTIME_ENV}" "${RUNTIME_IMAGE}" "${WEB_IMAGE}" <<'REMOTE_LOAD'
+set -euo pipefail
+release_dir="$1"; runtime_env="$2"; runtime_image="$3"; web_image="$4"
+[[ "$release_dir" =~ ^/opt/catering-releases/[0-9a-fA-F]{40}$ ]] || exit 1
+for value in "$runtime_image" "$web_image"; do [[ "$value" =~ ^sha256:[0-9a-f]{64}$ ]] || exit 1; done
+
+image_of() { sudo -n docker inspect --format '{{.Image}}' "$1"; }
+intake_image="$(image_of platform-infra-intake-1)"
+offer_image="$(image_of platform-infra-offer-1)"
+production_image="$(image_of platform-infra-production-1)"
+exports_image="$(image_of platform-infra-exports-1)"
+old_web_image="$(image_of platform-infra-web-1)"
+for value in "$intake_image" "$offer_image" "$production_image" "$exports_image" "$old_web_image"; do
+  [[ "$value" =~ ^sha256:[0-9a-f]{64}$ ]] || exit 1
+done
+
+sudo -n python3 - "$release_dir/previous-images.json" "$intake_image" "$offer_image" "$production_image" "$exports_image" "$old_web_image" <<'PY'
+import json, os, sys, tempfile
+path, intake, offer, production, exports, web = sys.argv[1:]
+value = {"services": {
+    "intake": {"image": intake},
+    "offer": {"image": offer},
+    "production": {"image": production},
+    "exports": {"image": exports},
+    "web": {"image": web},
+}}
+directory = os.path.dirname(path)
+fd, temporary = tempfile.mkstemp(prefix=".previous-images.", dir=directory)
+try:
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        json.dump(value, handle, indent=2, sort_keys=True)
+        handle.write("\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.chmod(temporary, 0o600)
+    os.replace(temporary, path)
+finally:
+    if os.path.exists(temporary):
+        os.unlink(temporary)
+PY
+
+sudo -n gzip -dc "$release_dir/runtime-image.tar.gz" | sudo -n docker load >/dev/null
+sudo -n gzip -dc "$release_dir/web-image.tar.gz" | sudo -n docker load >/dev/null
+sudo -n docker image inspect "$runtime_image" >/dev/null
+sudo -n docker image inspect "$web_image" >/dev/null
+
+platform_base="$release_dir/source/platform-infra/docker-compose.catering-target.json"
+platform_ops="$release_dir/source/platform-infra/docker-compose.catering-target.operations.json"
+sudo -n docker compose --env-file "$runtime_env"   -f "$platform_base" -f "$platform_ops" -f "$release_dir/candidate-images.json"   config --format json >/dev/null
+REMOTE_LOAD
+}
