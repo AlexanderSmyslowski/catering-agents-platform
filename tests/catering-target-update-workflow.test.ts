@@ -44,7 +44,9 @@ describe("Catering target update workflow", () => {
       "CATERING_TARGET_SSH_PRIVATE_KEY",
       "CATERING_TARGET_SSH_KNOWN_HOSTS",
       "CATERING_TARGET_SMOKE_BASIC_AUTH_USER",
-      "CATERING_TARGET_SMOKE_BASIC_AUTH_PASSWORD"
+      "CATERING_TARGET_SMOKE_BASIC_AUTH_PASSWORD",
+      "CATERING_TARGET_SMOKE_LOGIN_CODE",
+      "CATERING_TARGET_SMOKE_PIN"
     ]) {
       expect(text).toContain(name);
     }
