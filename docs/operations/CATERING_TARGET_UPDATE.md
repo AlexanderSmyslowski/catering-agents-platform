@@ -90,6 +90,13 @@ Vor jeder Mutation prüft der Produktionsrunner mindestens:
 
 Jeder unbekannte oder nicht lesbare kritische Zustand führt zum Abbruch.
 
+### Lock-Grenze des read-only Preflights
+
+Read-only bedeutet hier: Der Preflight legt **keinen** `/opt/catering-target-update.lock` an, verändert keine Container, Dateien, Firewall-, Netzwerk- oder Anwendungszustände und startet keinen Updatepfad.
+
+Der Backup-Observer darf bei `--check` zur konsistenten Beobachtung kurzzeitig einen exklusiven, nicht blockierenden `flock` auf seiner **bereits vorhandenen, read-only geöffneten** Observer-Lockdatei halten. Dieser Synchronisations-Lock ist kein Deployment-/Update-Lock. Laut Observer-Vertrag schreibt `--check` keinen Observerstatus und führt weder Docker, Restic, Dump, Restore noch Reparaturen aus.
+
+
 ## Migrationsgrenze
 
 Der Contract lautet:

@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.397
+version: 5.398
 date: 2026-09-22
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -8,7 +8,7 @@ repo: AlexanderSmyslowski/catering-agents-platform
 ## Aktueller Stand – eigenständiger Catering-Zielserver-Updateweg (2026-09-22)
 
 - PR #682 ist seit 21.09.2026 in `main` gemergt; Merge-Commit `d6a9b8dbc0987c281c826a88697bddeeb51a9ff5`.
-- Der eigenständige Updateweg für `catering-prod-1` wurde mit PR #698 in `main` aufgenommen; Merge-Commit `21b9a42e56d4a2c2691b71cd6093263368d4e572`. Der separate read-only Preflight wird in PR #699 ergänzt.
+- Der eigenständige Updateweg für `catering-prod-1` wurde mit PR #698 in `main` aufgenommen; Merge-Commit `21b9a42e56d4a2c2691b71cd6093263368d4e572`. Der separate read-only Preflight wurde mit PR #699 als Merge-Commit `3031adc20da3d01a14eb080411a11ca38e980974` in `main` aufgenommen.
 - Neuer manueller Update-Workflow: `.github/workflows/update-catering-target.yml`, ausschließlich `workflow_dispatch`, nur von aktuellem `main`, mit exaktem Commit und expliziter Bestätigung `UPDATE_CATERING_TARGET`.
 - Zusätzlich existiert ein separater read-only Preflight-Workflow `.github/workflows/catering-target-preflight.yml`: ebenfalls manuell und main-gebunden, aber ausschließlich `--preflight`; kein `--update`, keine Update-Bestätigung, keine Smoke-Credentials und keine mutierende Folgephase. Der erste echte Zielkontakt soll über diesen Pfad erfolgen.
 - Der historische Workflow `Deploy production` und `platform-infra/scripts/deploy-hetzner.sh` bleiben für den eigenständigen Zielserver **verboten**. Der neue Pfad darf `zeiterfassung_default` und die alte gemeinsame Edge-/Compose-Kette nicht verwenden.
@@ -19,7 +19,10 @@ repo: AlexanderSmyslowski/catering-agents-platform
 - Fokussierter Run `35689341911` (#54) auf `23573a204…`: 43/43 Vitest und 47/47 Python-Tests grün; Build und Syntaxprüfungen grün. Die produktiven Kontrollfluss-Tests führen den echten Produktionsrunner aus und ersetzen nur externe Kommando-Grenzen. Abschlussreview-Fix: Run `35700722316` belegte Runtime-DDL-Drift außerhalb des Business-Records-Blocks rot; nach erweitertem DDL-Manifest-Guard war Run `35700855657` mit 11/11 Kontrollfluss-Tests grün.
 - Reguläre CI `35689345135` (#3049) auf demselben Stand: Build/Test, Browser-Rehearsal und Compose-Parität grün; der branchspezifische Backup-Spezialjob war regulär skipped.
 - Betriebsdokument: `docs/operations/CATERING_TARGET_UPDATE.md`.
-- **Noch kein echter Zielserverlauf:** Workflow nicht dispatcht, kein Live-SSH, kein Deployment. Der erste echte Updateversuch bleibt separat freigabepflichtig und beginnt mit einer frischen read-only Zielprüfung.
+- Erste GitHub-Preflightversuche: zwei frühe Runs brachen vor Serverkontakt wegen fehlender Environment-Secrets ab; nach Einrichtung der vier dedizierten Secrets erreichte Run `35735810821` den SSH-Schritt, scheiterte aber mit Timeout auf Port 22. GitHub-hosted Runner erreichen den Zielserver daher aktuell nicht direkt.
+- Lokale read-only Vorbereitung über den bestehenden Mac-SSH-Zugang fand vor Serverkontakt einen echten Syntaxfehler im Remote-Preflight-Heredoc: beim freien Target-Update-Lock fehlte ein schließendes Anführungszeichen. Fix in PR #700, ergänzt um einen Test, der `REMOTE_PREFLIGHT` extrahiert und mit `bash -n` prüft.
+- Read-only-Lockgrenze: Der Preflight darf keinen Target-Update-Lock anlegen und nichts mutieren. Der Backup-Observer `--check` darf seinen vorhandenen Observer-Lock kurzzeitig read-only öffnen und per `flock` synchronisieren; dieser interne Lesekonsistenz-Lock ist kein Deployment-/Update-Lock und `--check` publiziert keinen Status.
+- **Noch kein erfolgreich abgeschlossener echter Zielserver-Preflight und kein Deployment.** Der erste echte Updateversuch bleibt separat freigabepflichtig und setzt einen vollständig grünen read-only Zielcheck voraus.
 - Reale Küchenprüfung, belastbare Zukaufspezifikationen und Rezept-/Allergenfreigaben bleiben fachlich getrennt und werden durch den technischen Updateweg nicht ersetzt.
 
 ## Zweck
