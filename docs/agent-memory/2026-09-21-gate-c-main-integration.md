@@ -95,3 +95,14 @@ PR #700 korrigiert ausschließlich diesen Shell-Syntaxfehler und ergänzt eine R
 Die read-only Lock-Grenze wurde präzisiert: Der Preflight legt keinen `/opt/catering-target-update.lock` an und verändert keinen Serverzustand. Der Backup-Observer darf bei `--check` zur konsistenten Beobachtung seine bereits vorhandene Lockdatei read-only öffnen und kurz per `flock` synchronisieren. Das ist kein Deployment-/Update-Lock; `--check` publiziert keinen Observerstatus und führt keine Reparatur-, Backup-, Restore- oder Dockeraktion aus.
 
 Bis zu einem vollständig grünen echten read-only Preflight bleibt jede mutierende Target-Aktualisierung gesperrt.
+
+
+## Fortsetzung 2026-09-22 – echter read-only Preflight und Diagnosehärtung
+
+Nach Merge von PR #701 wurde der echte lokale read-only Preflight genau einmal auf `5e9670a256b64cf24cbdb5329b876cd47568ec9a` ausgeführt. Der Lauf endete mit Exit-Code 1, leerem stdout/stderr und ohne `TARGET_PREFLIGHT_OK`. Wegen mehrerer stiller fail-closed Abbruchstellen konnte kein konkretes Ziel-Gate als Ursache behauptet werden. Es gab keine Wiederholung und keine Update-/Deploymentphase.
+
+PR #702 ergänzt deshalb ausschließlich nicht-sensitive Fehlerdiagnostik. Stille read-only Zielprüfungen melden künftig `TARGET_PREFLIGHT_FAIL gate=<statischer-name>`. Die Prüfbedingungen, Update-Lock-Grenze und Servermutation bleiben unverändert; es werden keine Secretwerte, tatsächlichen Hashes, Pfade oder Zielwerte ausgegeben.
+
+Die groben Phasen `runtime_schema_source`, `runtime_ddl_manifest` und `remote_target_invariants` sind gebunden. Im Remote-Preflight werden zusätzlich Zielidentität/Pfade, Target-Datei-Hashes, Lockzustand, Backup-Observer, Compose-Render, Docker-Netzsatz, Containerstatus, Writer-Modus, Schema-Version, Service-Netze/Ports, PostgreSQL-Volume und Edge-Image mit eindeutigen Gate-Namen versehen.
+
+Bis zu einem vollständig grünen echten read-only Preflight bleibt jede mutierende Target-Aktualisierung gesperrt.
