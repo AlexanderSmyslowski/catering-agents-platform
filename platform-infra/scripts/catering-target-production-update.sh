@@ -116,7 +116,7 @@ verify_runtime_schema_migration_unchanged() {
   candidate_hash="$(runtime_schema_migration_hash < "${local_path}")"
   [[ "${candidate_hash}" =~ ^[0-9a-f]{64}$ ]] || fail "candidate runtime schema migration hash invalid"
 
-  installed_source="$(ssh_target bash -s -- "${DEPLOY_PATH}/shared-core/src/persistence.ts" <<'REMOTE_SCHEMA_SOURCE'
+  if ! installed_source="$(ssh_target bash -s -- "${DEPLOY_PATH}/shared-core/src/persistence.ts" <<'REMOTE_SCHEMA_SOURCE'
 set -euo pipefail
 schema_fail() {
   printf 'TARGET_PREFLIGHT_FAIL gate=%s\n' "$1" >&2
@@ -128,7 +128,9 @@ sudo -n test -f "$source_path" || schema_fail runtime_schema_source_file
 sudo -n test ! -L "$source_path" || schema_fail runtime_schema_source_symlink
 sudo -n cat "$source_path" || schema_fail runtime_schema_source_read
 REMOTE_SCHEMA_SOURCE
-)"
+)"; then
+    fail "TARGET_PREFLIGHT_FAIL gate=runtime_schema_source"
+  fi
   installed_hash="$(printf '%s' "${installed_source}" | runtime_schema_migration_hash)"
   [[ "${installed_hash}" =~ ^[0-9a-f]{64}$ ]] || fail "installed runtime schema migration hash invalid"
   [[ "${installed_hash}" == "${candidate_hash}" ]] || fail "runtime schema migration drift: explicit migration approval required"

@@ -48,6 +48,15 @@ describe("Catering target production command boundary", () => {
     expect(remotePreflight).toMatch(/\bpsql\b[^\n]*--no-psqlrc\b/);
   });
 
+  it("wraps runtime schema source SSH failures in a coarse preflight gate", () => {
+    const production = readFileSync(
+      path.join(root, "platform-infra/scripts/catering-target-production-update.sh"),
+      "utf8"
+    );
+    expect(production).toMatch(/if ! installed_source="\\$\\(ssh_target bash -s --/);
+    expect(production).toContain('fail "TARGET_PREFLIGHT_FAIL gate=runtime_schema_source"');
+  });
+
   it("names critical read-only preflight failure gates without exposing values", () => {
     const production = readFileSync(
       path.join(root, "platform-infra/scripts/catering-target-production-update.sh"),
