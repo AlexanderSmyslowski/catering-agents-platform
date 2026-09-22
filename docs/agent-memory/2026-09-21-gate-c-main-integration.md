@@ -40,3 +40,36 @@ Nach Veröffentlichung des geprüften Zwei-Eltern-Baums ausschließlich die regu
 Vier bekannte npm-Advisories (zwei moderate, zwei high) sind noch paketbezogen einzuordnen; kein automatisches Audit-Fix. Reale menschliche Küchenprüfung, belastbare Zukaufspezifikationen und Rezept-/Allergenfreigaben sind durch synthetische Entscheidungen nicht ersetzt; kein Gate-C-Gesamt-GO.
 
 Der originale Mac-Worktree und lokale Agenten-Hub sind hier nicht gemountet, direkter Git-Netzzugriff fehlt. `HANDOFF_PROMPT.md` ist am Produktelternstand nicht vorhanden (404). Kein Hub-Writeback und keine Kenntnis fremder ungesicherter lokaler Änderungen behauptet. GitHub-Head und main werden vor Veröffentlichung erneut gelesen; kein Force-Push. Kein eigener Dokumentations-PR und keine zusätzliche Produkt-Testschleife nur für diesen Vermerk.
+
+
+## Fortsetzung 2026-09-22 – eigenständiger Target-Updateweg
+
+PR #682 wurde anschließend als Merge-Commit `d6a9b8dbc0987c281c826a88697bddeeb51a9ff5` in `main` aufgenommen. Die zuvor dokumentierte Grenze gegen den historischen `Deploy production`-Pfad bleibt bestehen und ist nun durch einen separaten, target-spezifischen Updateweg umgesetzt.
+
+Der neue Weg liegt in Draft-PR #698. Gebundener Implementierungsstand vor dieser Dokumentationsfortschreibung: `23573a204a51f79e1c62c299bf1778e26bc3ebee`.
+
+Maßgebliche Dateien:
+- `platform-infra/catering-target-update-contract.json`
+- `platform-infra/scripts/update-catering-target.sh`
+- `platform-infra/scripts/catering-target-production-update.sh`
+- `platform-infra/scripts/catering-target-authenticated-smoke.mjs`
+- `.github/workflows/update-catering-target.yml`
+- `docs/operations/CATERING_TARGET_UPDATE.md`
+
+Der neue Workflow ist ausschließlich manuell, main-only, commitgebunden und verlangt die explizite Bestätigung `UPDATE_CATERING_TARGET`. Er verwendet dedizierte `CATERING_TARGET_*`-Secrets und keine historische Shared-Deploy-Konfiguration.
+
+Der Produktionsrunner hält die eigenständige Zieltopologie fail-closed: kein `zeiterfassung_default`, keine alte Edge-Cutover-Kette, keine App-Hostports, PostgreSQL-Volume und Edge-Image werden vor und nach Aktivierung gebunden. Vor Mutation werden außerdem Backup-Observer, Writer-Modus, Business-Records-Schema-Version 3 sowie die unveränderte Runtime-Schema-Migrationsregion geprüft.
+
+Migrationen bleiben `explicit-only`; Version 1 besitzt keinen freigegebenen automatischen Migrationsbefehl. Migrationsbedarf oder Schema-Migrationsdrift stoppt vor Updatebeginn.
+
+Der App-Kandidat besteht nur aus immutable Runtime-/Web-Images. Aktiviert werden nur Intake, Offer, Production, Exports und Web. Vorherige App-Images werden als Rücknahmebasis gebunden. Scheitert Aktivierung, Postflight oder authentisierter Read-Smoke, wird nur bei beweisbarer Rücknahme auf den vorherigen Appstand zurückgeschaltet. Nicht beweisbare Rücknahme endet `manual_recovery_required lock_retained=true`.
+
+Der authentisierte Read-Smoke prüft Login, Session, Capability `production_read` und den Produktionsfall-Readpfad; er legt keinen Geschäftsvorgang an.
+
+Nachweise auf `23573a204…`:
+- fokussierter Run `35689341911` (#54): 43/43 Vitest und 47/47 Python-Tests, Build und Syntaxprüfungen grün;
+- reguläre CI `35689345135` (#3049): Build/Test, Browser-Rehearsal und Compose-Parität grün; Backup-Spezialjob branchbedingt skipped.
+
+Die produktiven Kontrollfluss-Tests führen den echten `catering-target-production-update.sh` aus und ersetzen nur die externen Kommando-Grenzen. Geprüft sind gesunder Preflight, vollständige Update-Reihenfolge, Aktivierungsfehler, Auth-Smoke-Fehler, erfolgreiche Rücknahme, Lock-Retention bei nicht beweisbarer Rücknahme und Migrationsabbruch vor Mutation.
+
+**Betriebsgrenze bleibt unverändert:** Bis zu einer neuen ausdrücklichen Freigabe kein Workflow-Dispatch, kein Live-SSH und kein Deployment. Der erste echte Zielserverlauf beginnt mit frischer read-only Prüfung und ist ein eigener Betriebsauftrag.
