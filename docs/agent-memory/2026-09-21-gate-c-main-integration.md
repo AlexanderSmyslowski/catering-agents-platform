@@ -75,3 +75,10 @@ Die produktiven Kontrollfluss-Tests führen den echten `catering-target-producti
 Abschlussreview-Fix: Die erste zusätzliche Gegenprobe für DDL-Drift außerhalb des Business-Records-Blocks scheiterte erwartungsgemäß in Run `35700722316` (10 grün, 1 rot). Der Produktionsrunner vergleicht seit `259b90528d2f19eeabeee9ddb2a9351f1c99f38f` zusätzlich ein kanonisches Runtime-DDL-Manifest mit dem installierten Quellstand; Run `35700855657` bestätigte anschließend 11/11 Kontrollfluss-Tests grün. Der dokumentierte installierte Altstand `3c5f6076…` und der Kandidat hatten bei der Review-Gegenprüfung identische DDL-Literale.
 
 **Betriebsgrenze bleibt unverändert:** Bis zu einer neuen ausdrücklichen Freigabe kein Workflow-Dispatch, kein Live-SSH und kein Deployment. Der erste echte Zielserverlauf beginnt mit frischer read-only Prüfung und ist ein eigener Betriebsauftrag.
+
+
+## Fortsetzung 2026-09-22 – separater read-only Target-Preflight
+
+Nach Merge des Target-Updatewegs in `main` wurde der erste Live-Kontakt weiter entkoppelt: `.github/workflows/catering-target-preflight.yml` führt ausschließlich den bereits geprüften Produktions-`--preflight` aus. Der Workflow ist manual-only, main-only und an den exakten aktuellen main-Commit gebunden. Er verwendet nur die dedizierten Target-SSH-Secrets, keinen `--update`-Pfad, keine Update-Bestätigung und keine Smoke-Credentials.
+
+Der Vertragstest `tests/catering-target-preflight-workflow.test.ts` wurde RED→GREEN entwickelt. Der erste fokussierte Lauf scheiterte erwartungsgemäß ausschließlich an der fehlenden Workflow-Datei; nach Implementierung bestand der fokussierte Lauf mit 5/5 Tests. Kein Live-SSH und kein Zielserverzugriff wurden durch diese Implementierung ausgelöst.
