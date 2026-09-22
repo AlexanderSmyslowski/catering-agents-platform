@@ -27,7 +27,7 @@ jobs:
   update:
     if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.confirmation == 'UPDATE_CATERING_TARGET'
     runs-on: ubuntu-latest
-    environment: production
+    environment: catering-target-production
     timeout-minutes: 45
 
     steps:
