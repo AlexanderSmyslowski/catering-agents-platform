@@ -106,6 +106,14 @@ if "docker exec -i" in joined_args and "catering-target-authenticated-smoke.mjs"
     raise SystemExit(0)
 
 
+if "shared-core/src/persistence.ts" in stdin_text and "sudo -n cat" in stdin_text:
+    log("ssh schema-source")
+    source = (Path.cwd() / "shared-core/src/persistence.ts").read_text(encoding="utf-8")
+    if scenario == "migration-source-drift":
+        source = source.replace("version_number >= 3", "version_number >= 4", 1)
+    sys.stdout.write(source)
+    raise SystemExit(0)
+
 if "TARGET_PREFLIGHT_OK target=" in stdin_text:
     log("ssh preflight")
     count_file = state_root / "preflight-count"
