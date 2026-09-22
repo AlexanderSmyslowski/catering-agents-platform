@@ -44,6 +44,22 @@ SSH erzwingt:
 
 Secretwerte werden weder in dieses Dokument noch in das Repository geschrieben.
 
+## Separater read-only Preflight
+
+Workflow: **Catering target preflight**
+
+Datei: `.github/workflows/catering-target-preflight.yml`
+
+Dieser Workflow ist bewusst vom mutierenden Updateworkflow getrennt. Er besitzt ausschließlich `workflow_dispatch`, akzeptiert nur einen exakten `commit_sha` und läuft nur von `refs/heads/main`.
+
+Vor dem SSH-Zugriff wird geprüft, dass der ausgecheckte Commit und der aktuelle Remote-Head von `main` exakt dem angegebenen Commit entsprechen. Der Workflow verwendet ausschließlich die dedizierten Target-SSH-Secrets und ruft nur:
+
+`bash platform-infra/scripts/update-catering-target.sh --preflight`
+
+auf. Es gibt keinen `--update`-Schritt, keine `UPDATE_CATERING_TARGET`-Bestätigung, keine Smoke-Credentials und keine mutierende Folgephase.
+
+Der Preflight verwendet dasselbe geschützte Environment `catering-target-production`, lädt den read-only Nachweis als Actions-Artefakt hoch und entfernt das temporäre SSH-Material anschließend wieder.
+
 ## Read-only Preflight
 
 Vor jeder Mutation prüft der Produktionsrunner mindestens:

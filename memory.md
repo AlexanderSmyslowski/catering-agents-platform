@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.396
+version: 5.397
 date: 2026-09-22
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -8,8 +8,9 @@ repo: AlexanderSmyslowski/catering-agents-platform
 ## Aktueller Stand – eigenständiger Catering-Zielserver-Updateweg (2026-09-22)
 
 - PR #682 ist seit 21.09.2026 in `main` gemergt; Merge-Commit `d6a9b8dbc0987c281c826a88697bddeeb51a9ff5`.
-- Der eigenständige Updateweg für `catering-prod-1` wird in Draft-PR #698 entwickelt. Gebundener Implementierungsstand vor dieser Memory-Fortschreibung: `23573a204a51f79e1c62c299bf1778e26bc3ebee`.
-- Neuer manueller Workflow: `.github/workflows/update-catering-target.yml`, ausschließlich `workflow_dispatch`, nur von aktuellem `main`, mit exaktem Commit und expliziter Bestätigung `UPDATE_CATERING_TARGET`.
+- Der eigenständige Updateweg für `catering-prod-1` wurde mit PR #698 in `main` aufgenommen; Merge-Commit `21b9a42e56d4a2c2691b71cd6093263368d4e572`. Der separate read-only Preflight wird in PR #699 ergänzt.
+- Neuer manueller Update-Workflow: `.github/workflows/update-catering-target.yml`, ausschließlich `workflow_dispatch`, nur von aktuellem `main`, mit exaktem Commit und expliziter Bestätigung `UPDATE_CATERING_TARGET`.
+- Zusätzlich existiert ein separater read-only Preflight-Workflow `.github/workflows/catering-target-preflight.yml`: ebenfalls manuell und main-gebunden, aber ausschließlich `--preflight`; kein `--update`, keine Update-Bestätigung, keine Smoke-Credentials und keine mutierende Folgephase. Der erste echte Zielkontakt soll über diesen Pfad erfolgen.
 - Der historische Workflow `Deploy production` und `platform-infra/scripts/deploy-hetzner.sh` bleiben für den eigenständigen Zielserver **verboten**. Der neue Pfad darf `zeiterfassung_default` und die alte gemeinsame Edge-/Compose-Kette nicht verwenden.
 - Target-Contract: `platform-infra/catering-target-update-contract.json`. Er bindet `catering-prod-1`, die vorhandenen Target-Compose-Dateien, die eigenständigen Netze, geschützte Zielpfade und `migrationPolicy: explicit-only` ohne freigegebenen automatischen Migrationsbefehl.
 - Produktionsrunner: `platform-infra/scripts/catering-target-production-update.sh`. Er prüft read-only Zielidentität, Target-Datei-Hashes, Backup-Observer, Writer-Modus, Schema-Version 3, Netz-/Porttopologie, PostgreSQL-Volume und Edge-Image; zusätzlich müssen Business-Records-Migrationsregion und das kanonische Runtime-DDL-Manifest aller überwachten Runtime-Quellen dem installierten Stand entsprechen. Anschließend baut er nur Runtime-/Web-Kandidaten, aktiviert nur die fünf Appdienste und bewahrt PostgreSQL/Edge.
