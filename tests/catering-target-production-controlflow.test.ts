@@ -155,6 +155,16 @@ describe("Catering target production control flow", () => {
     expect(commands).not.toContain("rsync");
   });
 
+  it("rejects runtime DDL drift outside the business-records migration before build or lock", () => {
+    const { result, commands } = runProduction("source-document-ddl-drift");
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("runtime DDL drift");
+    expect(commands).toContain("ssh ddl-manifest");
+    expect(commands).not.toContain("local_docker build");
+    expect(commands).not.toContain("ssh lock");
+    expect(commands).not.toContain("rsync");
+  });
+
   it("blocks a declared migration before remote preflight or build", () => {
     const { result, commands } = runProduction("healthy", "update", { CATERING_TARGET_MIGRATION_REQUIRED: "1" });
     expect(result.status).not.toBe(0);
