@@ -129,6 +129,139 @@ REMOTE_SCHEMA_SOURCE
   [[ "${installed_hash}" =~ ^[0-9a-f]{64}$ ]] || fail "installed runtime schema migration hash invalid"
   [[ "${installed_hash}" == "${candidate_hash}" ]] || fail "runtime schema migration drift: explicit migration approval required"
 }
+
+runtime_ddl_manifest_hash() {
+  local root="$1"
+  python3 - "$root" <<'PY'
+import hashlib
+import json
+import pathlib
+import re
+import sys
+
+root = pathlib.Path(sys.argv[1])
+runtime_roots = [
+    "shared-core/src",
+    "intake-service/src",
+    "offer-service/src",
+    "production-service/src",
+    "print-export/src",
+]
+ddl = re.compile(r"\b(?:CREATE|ALTER|DROP)\s+TABLE\b|\bCREATE\s+(?:UNIQUE\s+)?INDEX\b", re.I)
+
+def literals(source: str):
+    found = []
+    i = 0
+    while i < len(source):
+        quote = source[i]
+        if quote not in "'\"\`":
+            i += 1
+            continue
+        i += 1
+        body = []
+        while i < len(source):
+            char = source[i]
+            if char == "\\" and i + 1 < len(source):
+                body.extend([char, source[i + 1]])
+                i += 2
+                continue
+            if char == quote:
+                i += 1
+                break
+            body.append(char)
+            i += 1
+        value = "".join(body).strip()
+        if ddl.search(value):
+            found.append(hashlib.sha256(value.encode("utf-8")).hexdigest())
+    return sorted(found)
+
+manifest = {}
+for relative_root in runtime_roots:
+    directory = root / relative_root
+    if not directory.is_dir():
+        raise SystemExit(f"runtime DDL root missing: {relative_root}")
+    for path in sorted(directory.rglob("*")):
+        if path.is_file() and path.suffix in {".ts", ".tsx", ".js", ".mjs"}:
+            fragments = literals(path.read_text(encoding="utf-8"))
+            if fragments:
+                manifest[str(path.relative_to(root))] = fragments
+
+canonical = json.dumps(manifest, sort_keys=True, separators=(",", ":"))
+print(hashlib.sha256(canonical.encode("utf-8")).hexdigest())
+PY
+}
+
+remote_runtime_ddl_manifest_hash() {
+  ssh_target /usr/bin/python3 - "${DEPLOY_PATH}" <<'PY'
+# TARGET_RUNTIME_DDL_MANIFEST
+import hashlib
+import json
+import pathlib
+import re
+import sys
+
+root = pathlib.Path(sys.argv[1])
+if str(root) != "/opt/catering-agents-platform" or not root.is_dir() or root.is_symlink():
+    raise SystemExit("unexpected installed source root")
+runtime_roots = [
+    "shared-core/src",
+    "intake-service/src",
+    "offer-service/src",
+    "production-service/src",
+    "print-export/src",
+]
+ddl = re.compile(r"\b(?:CREATE|ALTER|DROP)\s+TABLE\b|\bCREATE\s+(?:UNIQUE\s+)?INDEX\b", re.I)
+
+def literals(source: str):
+    found = []
+    i = 0
+    while i < len(source):
+        quote = source[i]
+        if quote not in "'\"\`":
+            i += 1
+            continue
+        i += 1
+        body = []
+        while i < len(source):
+            char = source[i]
+            if char == "\\" and i + 1 < len(source):
+                body.extend([char, source[i + 1]])
+                i += 2
+                continue
+            if char == quote:
+                i += 1
+                break
+            body.append(char)
+            i += 1
+        value = "".join(body).strip()
+        if ddl.search(value):
+            found.append(hashlib.sha256(value.encode("utf-8")).hexdigest())
+    return sorted(found)
+
+manifest = {}
+for relative_root in runtime_roots:
+    directory = root / relative_root
+    if not directory.is_dir():
+        raise SystemExit(f"runtime DDL root missing: {relative_root}")
+    for path in sorted(directory.rglob("*")):
+        if path.is_file() and path.suffix in {".ts", ".tsx", ".js", ".mjs"}:
+            fragments = literals(path.read_text(encoding="utf-8"))
+            if fragments:
+                manifest[str(path.relative_to(root))] = fragments
+
+canonical = json.dumps(manifest, sort_keys=True, separators=(",", ":"))
+print(hashlib.sha256(canonical.encode("utf-8")).hexdigest())
+PY
+}
+
+verify_runtime_ddl_unchanged() {
+  local candidate_hash installed_hash
+  candidate_hash="$(runtime_ddl_manifest_hash "${REPO_ROOT}")"
+  installed_hash="$(remote_runtime_ddl_manifest_hash)"
+  [[ "${candidate_hash}" =~ ^[0-9a-f]{64}$ ]] || fail "candidate runtime DDL manifest hash invalid"
+  [[ "${installed_hash}" =~ ^[0-9a-f]{64}$ ]] || fail "installed runtime DDL manifest hash invalid"
+  [[ "${installed_hash}" == "${candidate_hash}" ]] || fail "runtime DDL drift: explicit migration approval required"
+}
 remote_preflight() {
   local expected_lock_owner="${1:-}"
   local platform_base_hash platform_ops_hash edge_base_hash edge_ops_hash edge_caddy_hash target_site_hash
@@ -259,6 +392,7 @@ run_production_preflight() {
   load_production_contract
   validate_production_inputs
   verify_runtime_schema_migration_unchanged
+  verify_runtime_ddl_unchanged
   local output
   output="$(remote_preflight "")"
   parse_preflight_binding "${output}"
@@ -599,6 +733,7 @@ run_production_update() {
     fail "manual_migration_approval_required"
   fi
   verify_runtime_schema_migration_unchanged
+  verify_runtime_ddl_unchanged
 
   local initial
   initial="$(remote_preflight "")"
