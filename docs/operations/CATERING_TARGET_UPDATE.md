@@ -90,6 +90,13 @@ Vor jeder Mutation prüft der Produktionsrunner mindestens:
 
 Jeder unbekannte oder nicht lesbare kritische Zustand führt zum Abbruch.
 
+Fehler im read-only Preflight müssen dabei einen nicht-sensitiven Gate-Namen auf stderr ausgeben:
+
+`TARGET_PREFLIGHT_FAIL gate=<gate>`
+
+Die Gate-Namen beschreiben nur die fehlgeschlagene Prüfkategorie, z. B. `platform_base_hash`, `backup_observer_health`, `docker_network_set`, `schema_version`, `web_network`, `edge_ports` oder `postgres_volume`. Tatsächliche Secretwerte, Hashes, Pfade, Hostdaten oder sonstige Zielwerte werden durch diese Diagnose nicht ausgegeben. Zusätzlich existieren grobe Marker für Fehler beim installierten Schemaquell-Read, beim Runtime-DDL-Manifest und im gesamten Remote-Invariantenblock.
+
+
 ### Lock-Grenze des read-only Preflights
 
 Read-only bedeutet hier: Der Preflight legt **keinen** `/opt/catering-target-update.lock` an, verändert keine Container, Dateien, Firewall-, Netzwerk- oder Anwendungszustände und startet keinen Updatepfad.
