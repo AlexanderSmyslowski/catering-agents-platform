@@ -106,6 +106,67 @@ if "docker exec -i" in joined_args and "catering-target-authenticated-smoke.mjs"
     raise SystemExit(0)
 
 
+def ddl_manifest_digest(repo_root: Path) -> str:
+    import hashlib
+    import json
+    import re
+
+    runtime_roots = [
+        "shared-core/src",
+        "intake-service/src",
+        "offer-service/src",
+        "production-service/src",
+        "print-export/src",
+    ]
+    ddl = re.compile(r"\b(?:CREATE|ALTER|DROP)\s+TABLE\b|\bCREATE\s+(?:UNIQUE\s+)?INDEX\b", re.I)
+
+    def literals(source: str):
+        found = []
+        i = 0
+        while i < len(source):
+            quote = source[i]
+            if quote not in "'\"\`":
+                i += 1
+                continue
+            i += 1
+            body = []
+            while i < len(source):
+                char = source[i]
+                if char == "\\" and i + 1 < len(source):
+                    body.extend([char, source[i + 1]])
+                    i += 2
+                    continue
+                if char == quote:
+                    i += 1
+                    break
+                body.append(char)
+                i += 1
+            value = "".join(body).strip()
+            if ddl.search(value):
+                found.append(hashlib.sha256(value.encode("utf-8")).hexdigest())
+        return sorted(found)
+
+    manifest = {}
+    for relative_root in runtime_roots:
+        directory = repo_root / relative_root
+        for path in sorted(directory.rglob("*")):
+            if path.is_file() and path.suffix in {".ts", ".tsx", ".js", ".mjs"}:
+                fragments = literals(path.read_text(encoding="utf-8"))
+                if fragments:
+                    manifest[str(path.relative_to(repo_root))] = fragments
+    canonical = json.dumps(manifest, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+if "TARGET_RUNTIME_DDL_MANIFEST" in stdin_text:
+    log("ssh ddl-manifest")
+    digest = ddl_manifest_digest(Path.cwd())
+    if scenario == "source-document-ddl-drift":
+        digest = "0" * 64
+    sys.stdout.write(digest + "\n")
+    raise SystemExit(0)
+
+
 if "shared-core/src/persistence.ts" in stdin_text and "sudo -n cat" in stdin_text:
     log("ssh schema-source")
     source = (Path.cwd() / "shared-core/src/persistence.ts").read_text(encoding="utf-8")
