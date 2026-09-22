@@ -102,7 +102,7 @@ runtime_schema_migration_hash() {
   python3 -c 'import hashlib,sys
 source=sys.stdin.read()
 start=source.find("const BUSINESS_RECORDS_SCHEMA_MIGRATION")
-end=source.find("\\nfunction getCachedPool", start)
+end=source.find("\nfunction getCachedPool", start)
 if start < 0 or end < 0:
     raise SystemExit("runtime schema migration region missing")
 print(hashlib.sha256(source[start:end].encode("utf-8")).hexdigest())'
