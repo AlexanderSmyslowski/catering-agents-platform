@@ -4,9 +4,14 @@ import { describe, expect, it } from "vitest";
 
 const root = path.resolve(import.meta.dirname, "..");
 const workflowPath = path.join(root, ".github/workflows/catering-target-preflight.yml");
+const productionRunnerPath = path.join(root, "platform-infra/scripts/catering-target-production-update.sh");
 
 function workflow() {
   return readFileSync(workflowPath, "utf8");
+}
+
+function productionRunner() {
+  return readFileSync(productionRunnerPath, "utf8");
 }
 
 describe("Catering target read-only preflight workflow", () => {
@@ -59,12 +64,15 @@ describe("Catering target read-only preflight workflow", () => {
     }
   });
 
-  it("uses the protected target environment and cleans temporary SSH material", () => {
+  it("uses the protected target environment and the runner's strict SSH transport", () => {
     const text = workflow();
+    const runner = productionRunner();
     expect(text).toContain("environment: catering-target-production");
-    expect(text).toContain("StrictHostKeyChecking=yes");
-    expect(text).toContain("UserKnownHostsFile=");
     expect(text).toContain("if: always()");
     expect(text).toContain("rm -rf --");
+    expect(runner).toContain("StrictHostKeyChecking=yes");
+    expect(runner).toContain("UserKnownHostsFile=");
+    expect(runner).toContain("BatchMode=yes");
+    expect(runner).toContain("IdentitiesOnly=yes");
   });
 });
