@@ -58,7 +58,7 @@ Maßgebliche Dateien:
 
 Der neue Workflow ist ausschließlich manuell, main-only, commitgebunden und verlangt die explizite Bestätigung `UPDATE_CATERING_TARGET`. Er verwendet dedizierte `CATERING_TARGET_*`-Secrets und keine historische Shared-Deploy-Konfiguration.
 
-Der Produktionsrunner hält die eigenständige Zieltopologie fail-closed: kein `zeiterfassung_default`, keine alte Edge-Cutover-Kette, keine App-Hostports, PostgreSQL-Volume und Edge-Image werden vor und nach Aktivierung gebunden. Vor Mutation werden außerdem Backup-Observer, Writer-Modus, Business-Records-Schema-Version 3 sowie die unveränderte Runtime-Schema-Migrationsregion geprüft.
+Der Produktionsrunner hält die eigenständige Zieltopologie fail-closed: kein `zeiterfassung_default`, keine alte Edge-Cutover-Kette, keine App-Hostports, PostgreSQL-Volume und Edge-Image werden vor und nach Aktivierung gebunden. Vor Mutation werden außerdem Backup-Observer, Writer-Modus, Business-Records-Schema-Version 3, die unveränderte Runtime-Schema-Migrationsregion und ein kanonisches Manifest aller DDL-Literale in Shared Core, Intake, Offer, Production und Export geprüft.
 
 Migrationen bleiben `explicit-only`; Version 1 besitzt keinen freigegebenen automatischen Migrationsbefehl. Migrationsbedarf oder Schema-Migrationsdrift stoppt vor Updatebeginn.
 
@@ -71,5 +71,7 @@ Nachweise auf `23573a204…`:
 - reguläre CI `35689345135` (#3049): Build/Test, Browser-Rehearsal und Compose-Parität grün; Backup-Spezialjob branchbedingt skipped.
 
 Die produktiven Kontrollfluss-Tests führen den echten `catering-target-production-update.sh` aus und ersetzen nur die externen Kommando-Grenzen. Geprüft sind gesunder Preflight, vollständige Update-Reihenfolge, Aktivierungsfehler, Auth-Smoke-Fehler, erfolgreiche Rücknahme, Lock-Retention bei nicht beweisbarer Rücknahme und Migrationsabbruch vor Mutation.
+
+Abschlussreview-Fix: Die erste zusätzliche Gegenprobe für DDL-Drift außerhalb des Business-Records-Blocks scheiterte erwartungsgemäß in Run `35700722316` (10 grün, 1 rot). Der Produktionsrunner vergleicht seit `259b90528d2f19eeabeee9ddb2a9351f1c99f38f` zusätzlich ein kanonisches Runtime-DDL-Manifest mit dem installierten Quellstand; Run `35700855657` bestätigte anschließend 11/11 Kontrollfluss-Tests grün. Der dokumentierte installierte Altstand `3c5f6076…` und der Kandidat hatten bei der Review-Gegenprüfung identische DDL-Literale.
 
 **Betriebsgrenze bleibt unverändert:** Bis zu einer neuen ausdrücklichen Freigabe kein Workflow-Dispatch, kein Live-SSH und kein Deployment. Der erste echte Zielserverlauf beginnt mit frischer read-only Prüfung und ist ein eigener Betriebsauftrag.
