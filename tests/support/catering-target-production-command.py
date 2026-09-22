@@ -116,6 +116,12 @@ if "shared-core/src/persistence.ts" in stdin_text and "sudo -n cat" in stdin_tex
 
 if "TARGET_PREFLIGHT_OK target=" in stdin_text:
     log("ssh preflight")
+    if "CATERING_WRITER_MODE" not in stdin_text or "catering_schema_migrations" not in stdin_text:
+        fail("synthetic ssh: production preflight lost writer/schema guards")
+    if scenario == "writer-disabled":
+        raise SystemExit(1)
+    if scenario == "schema-version-old":
+        raise SystemExit(1)
     count_file = state_root / "preflight-count"
     count = int(count_file.read_text(encoding="utf-8")) if count_file.exists() else 0
     count += 1
