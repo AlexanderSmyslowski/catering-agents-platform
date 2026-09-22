@@ -136,6 +136,15 @@ describe("Catering target production control flow", () => {
     expect(commands).not.toContain("rsync");
   });
 
+  it.each(["writer-disabled", "schema-version-old"])("rejects unsafe target state before build or lock: %s", (scenario) => {
+    const { result, commands } = runProduction(scenario);
+    expect(result.status).not.toBe(0);
+    expect(commands).toContain("ssh preflight");
+    expect(commands).not.toContain("local_docker build");
+    expect(commands).not.toContain("ssh lock");
+    expect(commands).not.toContain("rsync");
+  });
+
   it("rejects runtime schema-migration source drift before build or lock", () => {
     const { result, commands } = runProduction("migration-source-drift");
     expect(result.status).not.toBe(0);
