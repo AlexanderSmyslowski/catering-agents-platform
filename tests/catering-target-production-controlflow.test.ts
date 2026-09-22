@@ -136,6 +136,16 @@ describe("Catering target production control flow", () => {
     expect(commands).not.toContain("rsync");
   });
 
+  it("rejects runtime schema-migration source drift before build or lock", () => {
+    const { result, commands } = runProduction("migration-source-drift");
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("runtime schema migration drift");
+    expect(commands).toContain("ssh schema-source");
+    expect(commands).not.toContain("local_docker build");
+    expect(commands).not.toContain("ssh lock");
+    expect(commands).not.toContain("rsync");
+  });
+
   it("blocks a declared migration before remote preflight or build", () => {
     const { result, commands } = runProduction("healthy", "update", { CATERING_TARGET_MIGRATION_REQUIRED: "1" });
     expect(result.status).not.toBe(0);
