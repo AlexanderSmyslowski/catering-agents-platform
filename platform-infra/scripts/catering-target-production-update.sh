@@ -118,11 +118,15 @@ verify_runtime_schema_migration_unchanged() {
 
   installed_source="$(ssh_target bash -s -- "${DEPLOY_PATH}/shared-core/src/persistence.ts" <<'REMOTE_SCHEMA_SOURCE'
 set -euo pipefail
+schema_fail() {
+  printf 'TARGET_PREFLIGHT_FAIL gate=%s\n' "$1" >&2
+  exit 1
+}
 source_path="$1"
-[[ "$source_path" == "/opt/catering-agents-platform/shared-core/src/persistence.ts" ]] || exit 1
-sudo -n test -f "$source_path"
-sudo -n test ! -L "$source_path"
-sudo -n cat "$source_path"
+[[ "$source_path" == "/opt/catering-agents-platform/shared-core/src/persistence.ts" ]] || schema_fail runtime_schema_source_path
+sudo -n test -f "$source_path" || schema_fail runtime_schema_source_file
+sudo -n test ! -L "$source_path" || schema_fail runtime_schema_source_symlink
+sudo -n cat "$source_path" || schema_fail runtime_schema_source_read
 REMOTE_SCHEMA_SOURCE
 )"
   installed_hash="$(printf '%s' "${installed_source}" | runtime_schema_migration_hash)"
@@ -257,7 +261,9 @@ PY
 verify_runtime_ddl_unchanged() {
   local candidate_hash installed_hash
   candidate_hash="$(runtime_ddl_manifest_hash "${REPO_ROOT}")"
-  installed_hash="$(remote_runtime_ddl_manifest_hash)"
+  if ! installed_hash="$(remote_runtime_ddl_manifest_hash)"; then
+    fail "TARGET_PREFLIGHT_FAIL gate=runtime_ddl_manifest"
+  fi
   [[ "${candidate_hash}" =~ ^[0-9a-f]{64}$ ]] || fail "candidate runtime DDL manifest hash invalid"
   [[ "${installed_hash}" =~ ^[0-9a-f]{64}$ ]] || fail "installed runtime DDL manifest hash invalid"
   [[ "${installed_hash}" == "${candidate_hash}" ]] || fail "runtime DDL drift: explicit migration approval required"
@@ -394,7 +400,9 @@ run_production_preflight() {
   verify_runtime_schema_migration_unchanged
   verify_runtime_ddl_unchanged
   local output
-  output="$(remote_preflight "")"
+  if ! output="$(remote_preflight "")"; then
+    fail "TARGET_PREFLIGHT_FAIL gate=remote_target_invariants"
+  fi
   parse_preflight_binding "${output}"
   printf '%s\n' "${output}"
 }
