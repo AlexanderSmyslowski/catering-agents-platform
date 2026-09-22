@@ -82,3 +82,16 @@ Abschlussreview-Fix: Die erste zusätzliche Gegenprobe für DDL-Drift außerhalb
 Nach Merge des Target-Updatewegs in `main` wurde der erste Live-Kontakt weiter entkoppelt: `.github/workflows/catering-target-preflight.yml` führt ausschließlich den bereits geprüften Produktions-`--preflight` aus. Der Workflow ist manual-only, main-only und an den exakten aktuellen main-Commit gebunden. Er verwendet nur die dedizierten Target-SSH-Secrets, keinen `--update`-Pfad, keine Update-Bestätigung und keine Smoke-Credentials.
 
 Der Vertragstest `tests/catering-target-preflight-workflow.test.ts` wurde RED→GREEN entwickelt. Der erste fokussierte Lauf scheiterte erwartungsgemäß ausschließlich an der fehlenden Workflow-Datei; nach Implementierung bestand der fokussierte Lauf mit 5/5 Tests. Kein Live-SSH und kein Zielserverzugriff wurden durch diese Implementierung ausgelöst.
+
+
+## Fortsetzung 2026-09-22 – erster Live-Preflight-Versuch und Syntaxkorrektur
+
+PR #699 wurde als Merge-Commit `3031adc20da3d01a14eb080411a11ca38e980974` in `main` aufgenommen. Die ersten beiden manuellen GitHub-Preflightläufe brachen noch vor Serverkontakt wegen fehlender Environment-Secrets ab. Nach sicherer Einrichtung der vier dedizierten Target-Secrets erreichte Run `35735810821` den SSH-Schritt, scheiterte jedoch mit Timeout auf Port 22; der GitHub-hosted Runner kann den Zielserver aktuell nicht direkt erreichen.
+
+Der daraufhin lokal vorbereitete read-only Preflight über den vorhandenen Mac-SSH-Zugang wurde ebenfalls vor Serverkontakt gestoppt: Im `REMOTE_PREFLIGHT`-Heredoc von `catering-target-production-update.sh` fehlte beim Test auf Abwesenheit des Target-Update-Locks ein schließendes Anführungszeichen. Der isolierte Remote-Syntaxcheck lieferte Exit-Code 2.
+
+PR #700 korrigiert ausschließlich diesen Shell-Syntaxfehler und ergänzt eine Regression, die den kompletten `REMOTE_PREFLIGHT`-Block extrahiert und mit `bash -n` validiert. Kein Serverkontakt und keine Mutation erfolgen durch die Korrektur.
+
+Die read-only Lock-Grenze wurde präzisiert: Der Preflight legt keinen `/opt/catering-target-update.lock` an und verändert keinen Serverzustand. Der Backup-Observer darf bei `--check` zur konsistenten Beobachtung seine bereits vorhandene Lockdatei read-only öffnen und kurz per `flock` synchronisieren. Das ist kein Deployment-/Update-Lock; `--check` publiziert keinen Observerstatus und führt keine Reparatur-, Backup-, Restore- oder Dockeraktion aus.
+
+Bis zu einem vollständig grünen echten read-only Preflight bleibt jede mutierende Target-Aktualisierung gesperrt.
