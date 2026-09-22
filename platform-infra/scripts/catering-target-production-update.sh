@@ -304,7 +304,7 @@ check_regular_hash "$edge_caddy" "$edge_caddy_hash"
 check_regular_hash "$target_site" "$target_site_hash"
 
 if [[ -z "$expected_owner" ]]; then
-  [[ ! -e "$update_lock && ! -L "$update_lock" ]] || exit 1
+  [[ ! -e "$update_lock" && ! -L "$update_lock" ]] || exit 1
 else
   sudo -n test -d "$update_lock" || exit 1
   sudo -n test ! -L "$update_lock" || exit 1
