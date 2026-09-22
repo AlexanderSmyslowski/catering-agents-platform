@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -10,6 +11,21 @@ const runner = () => [
 const smoke = () => readFileSync(path.join(root, "platform-infra/scripts/catering-target-authenticated-smoke.mjs"), "utf8");
 
 describe("Catering target production command boundary", () => {
+
+  it("keeps the remote preflight shell block syntactically valid", () => {
+    const production = readFileSync(
+      path.join(root, "platform-infra/scripts/catering-target-production-update.sh"),
+      "utf8"
+    );
+    const match = production.match(/<<'REMOTE_PREFLIGHT'\n([\s\S]*?)\nREMOTE_PREFLIGHT/);
+    expect(match?.[1], "REMOTE_PREFLIGHT block missing").toBeTruthy();
+    const check = spawnSync("/bin/bash", ["-n"], {
+      input: match?.[1] ?? "",
+      encoding: "utf8"
+    });
+    expect(check.status, check.stderr).toBe(0);
+  });
+
   it("implements strict read-only production preflight", () => {
     const text = runner();
     expect(text).toContain("--preflight");
