@@ -90,7 +90,7 @@ describe("Catering target production control flow", () => {
     ];
     let cursor = -1;
     for (const marker of expected) {
-      const next = commands.indexOf(marker);
+      const next = commands.indexOf(marker, cursor + 1);
       expect(next, marker + "\n" + commands).toBeGreaterThan(cursor);
       cursor = next;
     }
