@@ -8,7 +8,7 @@ repo: AlexanderSmyslowski/catering-agents-platform
 ## Aktueller Stand – eigenständiger Catering-Zielserver-Updateweg (2026-09-22)
 
 - PR #682 ist seit 21.09.2026 in `main` gemergt; Merge-Commit `d6a9b8dbc0987c281c826a88697bddeeb51a9ff5`.
-- Der eigenständige Updateweg für `catering-prod-1` wird in Draft-PR #698 entwickelt. Gebundener Implementierungsstand vor dieser Memory-Fortschreibung: `23573a204a51f79e1c62c299bf1778e26bc3ebee`.
+- Der eigenständige Updateweg für `catering-prod-1` wurde mit PR #698 in `main` aufgenommen; Merge-Commit `21b9a42e56d4a2c2691b71cd6093263368d4e572`. Der separate read-only Preflight wird in PR #699 ergänzt.
 - Neuer manueller Update-Workflow: `.github/workflows/update-catering-target.yml`, ausschließlich `workflow_dispatch`, nur von aktuellem `main`, mit exaktem Commit und expliziter Bestätigung `UPDATE_CATERING_TARGET`.
 - Zusätzlich existiert ein separater read-only Preflight-Workflow `.github/workflows/catering-target-preflight.yml`: ebenfalls manuell und main-gebunden, aber ausschließlich `--preflight`; kein `--update`, keine Update-Bestätigung, keine Smoke-Credentials und keine mutierende Folgephase. Der erste echte Zielkontakt soll über diesen Pfad erfolgen.
 - Der historische Workflow `Deploy production` und `platform-infra/scripts/deploy-hetzner.sh` bleiben für den eigenständigen Zielserver **verboten**. Der neue Pfad darf `zeiterfassung_default` und die alte gemeinsame Edge-/Compose-Kette nicht verwenden.
