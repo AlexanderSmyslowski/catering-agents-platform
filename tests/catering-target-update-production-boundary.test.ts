@@ -53,7 +53,7 @@ describe("Catering target production command boundary", () => {
       path.join(root, "platform-infra/scripts/catering-target-production-update.sh"),
       "utf8"
     );
-    expect(production).toMatch(/if ! installed_source="\\$\\(ssh_target bash -s --/);
+    expect(production).toContain('if ! installed_source="$(ssh_target bash -s --');
     expect(production).toContain('fail "TARGET_PREFLIGHT_FAIL gate=runtime_schema_source"');
   });
 
