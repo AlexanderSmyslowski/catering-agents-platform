@@ -760,7 +760,9 @@ run_production_update() {
   verify_runtime_ddl_unchanged
 
   local initial
-  initial="$(remote_preflight "")"
+  if ! initial="$(remote_preflight "")"; then
+    fail "TARGET_PREFLIGHT_FAIL gate=remote_target_invariants"
+  fi
   parse_preflight_binding "${initial}"
   printf '%s\n' "${initial}"
 
