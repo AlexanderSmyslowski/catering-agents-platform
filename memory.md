@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.398
+version: 5.399
 date: 2026-09-22
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -22,6 +22,8 @@ repo: AlexanderSmyslowski/catering-agents-platform
 - Erste GitHub-Preflightversuche: zwei frühe Runs brachen vor Serverkontakt wegen fehlender Environment-Secrets ab; nach Einrichtung der vier dedizierten Secrets erreichte Run `35735810821` den SSH-Schritt, scheiterte aber mit Timeout auf Port 22. GitHub-hosted Runner erreichen den Zielserver daher aktuell nicht direkt.
 - Lokale read-only Vorbereitung über den bestehenden Mac-SSH-Zugang fand vor Serverkontakt einen echten Syntaxfehler im Remote-Preflight-Heredoc: beim freien Target-Update-Lock fehlte ein schließendes Anführungszeichen. Fix in PR #700, ergänzt um einen Test, der `REMOTE_PREFLIGHT` extrahiert und mit `bash -n` prüft.
 - Read-only-Lockgrenze: Der Preflight darf keinen Target-Update-Lock anlegen und nichts mutieren. Der Backup-Observer `--check` darf seinen vorhandenen Observer-Lock kurzzeitig read-only öffnen und per `flock` synchronisieren; dieser interne Lesekonsistenz-Lock ist kein Deployment-/Update-Lock und `--check` publiziert keinen Status.
+- Nach Merge von PR #700 auf `abe986452625499e1b07c3e64ca97ef60acfa06d` stoppte die nächste lokale Sicherheitsprüfung den echten Preflight erneut vor SSH: Der Schema-Read verwendete `psql` ohne `--no-psqlrc`, wodurch Startup-Dateien vor dem vorgesehenen SELECT zusätzliche Befehle hätten ausführen können.
+- PR #701 härtet ausschließlich diesen read-only Schema-Read mit `--no-psqlrc` und ergänzt einen Regressionstest, der diese Option im `REMOTE_PREFLIGHT` verbindlich fordert. Kein Serverkontakt durch den Fix.
 - **Noch kein erfolgreich abgeschlossener echter Zielserver-Preflight und kein Deployment.** Der erste echte Updateversuch bleibt separat freigabepflichtig und setzt einen vollständig grünen read-only Zielcheck voraus.
 - Reale Küchenprüfung, belastbare Zukaufspezifikationen und Rezept-/Allergenfreigaben bleiben fachlich getrennt und werden durch den technischen Updateweg nicht ersetzt.
 

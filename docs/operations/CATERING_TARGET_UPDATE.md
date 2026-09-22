@@ -81,7 +81,7 @@ Vor jeder Mutation prüft der Produktionsrunner mindestens:
 - exakt erwarteten Docker-Netzsatz einschließlich `catering_private`, `catering_ingress`, `catering_public`;
 - laufende Container für PostgreSQL, Intake, Offer, Production, Exports, Web und Edge;
 - `CATERING_WRITER_MODE=enabled`;
-- Business-Records-Schema-Version 3;
+- Business-Records-Schema-Version 3 über einen `psql --no-psqlrc`-Read, damit weder System- noch User-Startup-Dateien vor dem vorgesehenen SELECT ausgeführt werden;
 - exakte Service-Netzzuordnung;
 - keine Hostports an PostgreSQL oder den fünf Appdiensten;
 - ausschließlich 80/tcp und 443/tcp am Edge;

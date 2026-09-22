@@ -358,7 +358,7 @@ require_running "catering-edge-edge-1"
 writer_mode="$(sudo -n docker inspect catering-edge-edge-1 | python3 -c 'import json,sys; d=json.load(sys.stdin)[0]; hits=[v.split("=",1)[1] for v in d.get("Config",{}).get("Env",[]) if v.startswith("CATERING_WRITER_MODE=")]; print(hits[0] if len(hits)==1 else "")')"
 [[ "$writer_mode" == "enabled" ]] || { echo "target writer mode is not enabled" >&2; exit 1; }
 
-schema_version="$(sudo -n docker exec platform-infra-postgres-1 psql --no-password --username=catering --dbname=catering_agents --tuples-only --no-align --command="SELECT version_number FROM catering_schema_migrations WHERE unit_name = 'catering_business_records'" | tr -d '[:space:]')"
+schema_version="$(sudo -n docker exec platform-infra-postgres-1 psql --no-psqlrc --no-password --username=catering --dbname=catering_agents --tuples-only --no-align --command="SELECT version_number FROM catering_schema_migrations WHERE unit_name = 'catering_business_records'" | tr -d '[:space:]')"
 [[ "$schema_version" == "3" ]] || { echo "unexpected catering business-records schema version" >&2; exit 1; }
 [[ "$(networks_of platform-infra-postgres-1)" == "catering_private" ]]
 for service in intake offer production exports; do
