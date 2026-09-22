@@ -37,6 +37,17 @@ describe("Catering target production command boundary", () => {
     }
   });
 
+  it("disables psql startup files in the read-only remote preflight", () => {
+    const production = readFileSync(
+      path.join(root, "platform-infra/scripts/catering-target-production-update.sh"),
+      "utf8"
+    );
+    const match = production.match(/<<'REMOTE_PREFLIGHT'\n([\s\S]*?)\nREMOTE_PREFLIGHT/);
+    expect(match?.[1], "REMOTE_PREFLIGHT block missing").toBeTruthy();
+    const remotePreflight = match?.[1] ?? "";
+    expect(remotePreflight).toMatch(/\bpsql\b[^\n]*--no-psqlrc\b/);
+  });
+
   it("implements strict read-only production preflight", () => {
     const text = runner();
     expect(text).toContain("--preflight");
