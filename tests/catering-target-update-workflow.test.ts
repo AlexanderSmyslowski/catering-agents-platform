@@ -36,6 +36,12 @@ describe("Catering target update workflow", () => {
     expect(text).not.toContain("shared-edge");
   });
 
+  it("uses its own protected GitHub environment", () => {
+    const text = workflow();
+    expect(text).toContain("environment: catering-target-production");
+    expect(text).not.toMatch(/^\s*environment:\s*production\s*$/m);
+  });
+
   it("uses dedicated target secrets rather than historical deploy secret names", () => {
     const text = workflow();
     for (const name of [
