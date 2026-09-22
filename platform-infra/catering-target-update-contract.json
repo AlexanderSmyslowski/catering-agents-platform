@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "targetId": "catering-prod-1",
+  "deployPath": "/opt/catering-agents-platform",
+  "edgePath": "/opt/catering-edge",
+  "releaseRoot": "/opt/catering-releases",
+  "platformComposeFiles": [
+    "platform-infra/docker-compose.catering-target.json",
+    "platform-infra/docker-compose.catering-target.operations.json"
+  ],
+  "edgeComposeFiles": [
+    "edge-infra/docker-compose.catering-target.json",
+    "edge-infra/docker-compose.catering-target.operations.json"
+  ],
+  "applicationServices": [
+    "intake",
+    "offer",
+    "production",
+    "exports",
+    "web"
+  ],
+  "databaseService": "postgres",
+  "requiredNetworks": [
+    "catering_private",
+    "catering_ingress",
+    "catering_public"
+  ],
+  "forbiddenNetworks": [
+    "zeiterfassung_default"
+  ],
+  "protectedRemotePaths": [
+    "/etc/catering-target/runtime.env",
+    "/opt/catering-edge/Caddyfile",
+    "/opt/catering-agents-platform/platform-infra/.env",
+    "/opt/catering-agents-platform/platform-infra/sites",
+    "/opt/catering-agents-platform/data"
+  ],
+  "migrationPolicy": {
+    "mode": "explicit-only",
+    "supportedCommand": null
+  }
+}

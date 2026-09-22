@@ -1,9 +1,25 @@
 # memory.md
 
-version: 5.395
-date: 2026-09-21
+version: 5.396
+date: 2026-09-22
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
+
+## Aktueller Stand – eigenständiger Catering-Zielserver-Updateweg (2026-09-22)
+
+- PR #682 ist seit 21.09.2026 in `main` gemergt; Merge-Commit `d6a9b8dbc0987c281c826a88697bddeeb51a9ff5`.
+- Der eigenständige Updateweg für `catering-prod-1` wird in Draft-PR #698 entwickelt. Gebundener Implementierungsstand vor dieser Memory-Fortschreibung: `23573a204a51f79e1c62c299bf1778e26bc3ebee`.
+- Neuer manueller Workflow: `.github/workflows/update-catering-target.yml`, ausschließlich `workflow_dispatch`, nur von aktuellem `main`, mit exaktem Commit und expliziter Bestätigung `UPDATE_CATERING_TARGET`.
+- Der historische Workflow `Deploy production` und `platform-infra/scripts/deploy-hetzner.sh` bleiben für den eigenständigen Zielserver **verboten**. Der neue Pfad darf `zeiterfassung_default` und die alte gemeinsame Edge-/Compose-Kette nicht verwenden.
+- Target-Contract: `platform-infra/catering-target-update-contract.json`. Er bindet `catering-prod-1`, die vorhandenen Target-Compose-Dateien, die eigenständigen Netze, geschützte Zielpfade und `migrationPolicy: explicit-only` ohne freigegebenen automatischen Migrationsbefehl.
+- Produktionsrunner: `platform-infra/scripts/catering-target-production-update.sh`. Er prüft read-only Zielidentität, Target-Datei-Hashes, Backup-Observer, Writer-Modus, Schema-Version 3, Netz-/Porttopologie, PostgreSQL-Volume und Edge-Image; zusätzlich müssen Business-Records-Migrationsregion und das kanonische Runtime-DDL-Manifest aller überwachten Runtime-Quellen dem installierten Stand entsprechen. Anschließend baut er nur Runtime-/Web-Kandidaten, aktiviert nur die fünf Appdienste und bewahrt PostgreSQL/Edge.
+- Rücknahme ist fail-closed: vorherige App-Images werden vor Aktivierung gebunden. Eine Rücknahme gilt nur nach erneuter Preflight-/Image-/Volume-/Edge-Verifikation. Nicht beweisbare Rücknahme endet `manual_recovery_required lock_retained=true`.
+- Authentisierter Postflight-Smoke prüft Login, Session, Capability `production_read` und den read-only Produktionsfallpfad; kein Geschäftsvorgang wird angelegt.
+- Fokussierter Run `35689341911` (#54) auf `23573a204…`: 43/43 Vitest und 47/47 Python-Tests grün; Build und Syntaxprüfungen grün. Die produktiven Kontrollfluss-Tests führen den echten Produktionsrunner aus und ersetzen nur externe Kommando-Grenzen. Abschlussreview-Fix: Run `35700722316` belegte Runtime-DDL-Drift außerhalb des Business-Records-Blocks rot; nach erweitertem DDL-Manifest-Guard war Run `35700855657` mit 11/11 Kontrollfluss-Tests grün.
+- Reguläre CI `35689345135` (#3049) auf demselben Stand: Build/Test, Browser-Rehearsal und Compose-Parität grün; der branchspezifische Backup-Spezialjob war regulär skipped.
+- Betriebsdokument: `docs/operations/CATERING_TARGET_UPDATE.md`.
+- **Noch kein echter Zielserverlauf:** Workflow nicht dispatcht, kein Live-SSH, kein Deployment. Der erste echte Updateversuch bleibt separat freigabepflichtig und beginnt mit einer frischen read-only Zielprüfung.
+- Reale Küchenprüfung, belastbare Zukaufspezifikationen und Rezept-/Allergenfreigaben bleiben fachlich getrennt und werden durch den technischen Updateweg nicht ersetzt.
 
 ## Zweck
 Diese Datei ist die fuehrende Kurzreferenz fuer neue Chatfenster, Hermes Agent, Codex 5.4 mini und andere Arbeitskontexte.
