@@ -130,6 +130,7 @@ describe("Catering target production control flow", () => {
   it("fails before every mutation when initial remote preflight fails", () => {
     const { result, commands } = runProduction("preflight-fails");
     expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("TARGET_PREFLIGHT_FAIL gate=remote_target_invariants");
     expect(commands).toContain("ssh preflight");
     expect(commands).not.toContain("local_docker build");
     expect(commands).not.toContain("ssh lock");
