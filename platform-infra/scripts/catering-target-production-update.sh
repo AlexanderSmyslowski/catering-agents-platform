@@ -98,6 +98,37 @@ local_sha256() {
   sha256sum "$1" | awk '{print $1}'
 }
 
+runtime_schema_migration_hash() {
+  python3 -c 'import hashlib,sys
+source=sys.stdin.read()
+start=source.find("const BUSINESS_RECORDS_SCHEMA_MIGRATION")
+end=source.find("\\nfunction getCachedPool", start)
+if start < 0 or end < 0:
+    raise SystemExit("runtime schema migration region missing")
+print(hashlib.sha256(source[start:end].encode("utf-8")).hexdigest())'
+}
+
+verify_runtime_schema_migration_unchanged() {
+  local local_path="${REPO_ROOT}/shared-core/src/persistence.ts"
+  [[ -f "${local_path}" && ! -L "${local_path}" ]] || fail "candidate persistence source missing"
+
+  local candidate_hash installed_source installed_hash
+  candidate_hash="$(runtime_schema_migration_hash < "${local_path}")"
+  [[ "${candidate_hash}" =~ ^[0-9a-f]{64}$ ]] || fail "candidate runtime schema migration hash invalid"
+
+  installed_source="$(ssh_target bash -s -- "${DEPLOY_PATH}/shared-core/src/persistence.ts" <<'REMOTE_SCHEMA_SOURCE'
+set -euo pipefail
+source_path="$1"
+[[ "$source_path" == "/opt/catering-agents-platform/shared-core/src/persistence.ts" ]] || exit 1
+sudo -n test -f "$source_path"
+sudo -n test ! -L "$source_path"
+sudo -n cat "$source_path"
+REMOTE_SCHEMA_SOURCE
+)"
+  installed_hash="$(printf '%s' "${installed_source}" | runtime_schema_migration_hash)"
+  [[ "${installed_hash}" =~ ^[0-9a-f]{64}$ ]] || fail "installed runtime schema migration hash invalid"
+  [[ "${installed_hash}" == "${candidate_hash}" ]] || fail "runtime schema migration drift: explicit migration approval required"
+}
 remote_preflight() {
   local expected_lock_owner="${1:-}"
   local platform_base_hash platform_ops_hash edge_base_hash edge_ops_hash edge_caddy_hash target_site_hash
@@ -222,6 +253,7 @@ parse_preflight_binding() {
 run_production_preflight() {
   load_production_contract
   validate_production_inputs
+  verify_runtime_schema_migration_unchanged
   local output
   output="$(remote_preflight "")"
   parse_preflight_binding "${output}"
@@ -561,6 +593,7 @@ run_production_update() {
   if migration_declaration_present; then
     fail "manual_migration_approval_required"
   fi
+  verify_runtime_schema_migration_unchanged
 
   local initial
   initial="$(remote_preflight "")"
