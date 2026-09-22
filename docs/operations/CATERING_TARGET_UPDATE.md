@@ -54,6 +54,7 @@ Vor jeder Mutation prüft der Produktionsrunner mindestens:
 - Release-Root `/opt/catering-releases`;
 - exakten Checkout-Commit;
 - unveränderte Runtime-Schema-Migrationsregion gegenüber dem installierten Quellstand;
+- identisches Runtime-DDL-Manifest über Shared Core, Intake, Offer, Production und Export;
 - Hostname des Zielservers;
 - reale, nicht-symlinkende Zielpfade;
 - `/etc/catering-target/runtime.env` als root:root 0600;
@@ -86,7 +87,8 @@ Der Lauf stoppt vor Updatebeginn, wenn:
 
 - eine Migrationsdeklaration vorhanden ist;
 - `CATERING_TARGET_MIGRATION_REQUIRED=1` gesetzt ist;
-- die Runtime-Schema-Migrationsregion im Kandidaten vom installierten Stand abweicht.
+- die Runtime-Schema-Migrationsregion im Kandidaten vom installierten Stand abweicht;
+- sich irgendein produktives Runtime-DDL-Literal (CREATE/ALTER/DROP TABLE oder CREATE INDEX) in den überwachten Runtime-Quellen gegenüber dem installierten Stand ändert oder neu hinzukommt.
 
 Eine erforderliche Schemaänderung braucht zuerst einen eigenen geprüften Migrationsvertrag.
 
@@ -191,6 +193,8 @@ Reguläre CI **35689345135 / #3049** auf demselben Head:
 - branchspezifischer Backup-Spezialjob regulär skipped.
 
 Die produktiven Kontrollfluss-Tests führen den echten `catering-target-production-update.sh` aus und ersetzen nur die externen Kommando-Grenzen. Geprüft werden unter anderem gesunder Preflight, vollständige Update-Reihenfolge, Aktivierungsfehler, Auth-Smoke-Fehler, erfolgreiche Rücknahme, nicht beweisbare Rücknahme mit Lock-Retention und Migrationsabbruch vor Mutation.
+
+Abschlussreview-Korrektur: Ein zusätzlicher RED→GREEN-Test deckt Runtime-DDL außerhalb des Business-Records-Migrationsblocks ab. Run `35700722316` war mit genau dieser Gegenprobe rot (10 bestanden, 1 fehlgeschlagen); nach dem erweiterten DDL-Manifest-Guard war Run `35700855657` grün (11/11). Der installierte dokumentierte Altstand `3c5f6076…` und der aktuelle Kandidat hatten bei der Gegenprüfung identische DDL-Literale.
 
 ## Erster echter Zielserverlauf
 
