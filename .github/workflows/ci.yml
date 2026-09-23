@@ -279,6 +279,11 @@ jobs:
           mkdir -p "$bundle/bin"
           docker build --iidfile "$bundle/runtime.iid" --tag "catering-target-runtime:$SOURCE_COMMIT" --file source/platform-infra/docker/Dockerfile.runtime source
           docker build --iidfile "$bundle/web.iid" --tag "catering-target-web:$SOURCE_COMMIT" --file source/platform-infra/docker/Dockerfile.web source
+          if [[ -n "$(git -C source status --porcelain --untracked-files=all)" ]]; then
+            printf '%s\n' 'CATERING_TARGET_RELEASE_SOURCE_DIRTY_AFTER_BUILD' >&2
+            git -C source status --porcelain --untracked-files=all >&2
+            exit 1
+          fi
           runtime_image="$(cat "$bundle/runtime.iid")"
           web_image="$(cat "$bundle/web.iid")"
           [[ "$runtime_image" =~ ^sha256:[0-9a-f]{64}$ ]]
