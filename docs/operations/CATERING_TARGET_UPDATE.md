@@ -74,7 +74,9 @@ Vor jeder Mutation prüft der Produktionsrunner mindestens:
 - Hostname des Zielservers;
 - reale, nicht-symlinkende Zielpfade;
 - `/etc/catering-target/runtime.env` als root:root 0600; Existenz, Symlinkstatus und Metadaten werden wegen der root-only Ablage ausschließlich read-only über `sudo -n test/stat` geprüft, ohne den Secretinhalt auszugeben;
-- Hashbindung der vier Target-Compose-Dateien, der Edge-Caddy-Konfiguration und der privaten Target-Site;
+- getrennte Bindung von Repository-Quelldateien und den sechs bestätigten installierten Runtime-Dateien aus Contract v2 und Runtime-Inventar;
+- root:root-0644-Metadaten und SHA-256-Bindung der vier Target-Compose-Dateien, der Edge-Caddy-Konfiguration und der privaten Target-Site;
+- Docker-Compose-Projekt, Working Directory, Config-File-Labels und Service-Label der sechs Platformcontainer und des Edge-Containers;
 - freien Target-Update-Lock bzw. beim Recheck exakt eigenen Lock;
 - vorhandenen und gesunden Catering-Backup-Observer;
 - renderbare Platform- und Edge-Compose-Konfiguration;
@@ -92,7 +94,7 @@ Jeder unbekannte oder nicht lesbare kritische Zustand führt zum Abbruch.
 
 Der isolierte Zielaufbau enthält absichtlich keinen vollständigen Repository-Quellbaum unter `/opt/catering-agents-platform`; dort wurden nur die Ziel-Plattformdefinition und servereigene Zustände installiert. Die Migrations- und DDL-Driftprüfung liest den installierten Quellstand deshalb read-only aus `/app` der laufenden immutable Runtime-Appcontainer `intake`, `offer`, `production` und `exports`. Alle vier Fingerprints müssen dem Kandidaten entsprechen; es wird nichts in die Container oder auf den Host geschrieben.
 
-Der Remote-Preflight transportiert den absichtlich leeren Lock-Owner im unlocked/read-only Lauf als festen nichtleeren Sentinel, weil OpenSSH leere Remote-Argumente beim Aufbau der Remote-Kommandozeile nicht zuverlässig als Positionsparameter erhält. Vor dem Lesen der 13 Remote-Argumente wird deren Anzahl fail-closed geprüft; eine Abweichung meldet `TARGET_PREFLIGHT_FAIL gate=remote_argument_count`.
+Der Remote-Preflight transportiert den absichtlich leeren Lock-Owner im unlocked/read-only Lauf als festen nichtleeren Sentinel, weil OpenSSH leere Remote-Argumente beim Aufbau der Remote-Kommandozeile nicht zuverlässig als Positionsparameter erhält. Vor dem Lesen der 23 Remote-Argumente wird deren Anzahl fail-closed geprüft; eine Abweichung meldet `TARGET_PREFLIGHT_FAIL gate=remote_argument_count`.
 
 Fehler im read-only Preflight müssen dabei einen nicht-sensitiven Gate-Namen auf stderr ausgeben:
 
@@ -116,7 +118,7 @@ Der tatsächliche Zielzustand wird ab 23.09.2026 zusätzlich in `platform-infra/
 
 Zwei separat freigegebene, jeweils auf genau eine SSH-Sitzung begrenzte read-only Diagnosen auf dem an `25a62be3a18142977e552081b90b802933971ef0` gebundenen Stand haben das Runtime-Layout vollständig für die sechs relevanten Dateien bestätigt. Alle sechs Plattformcontainer melden Compose-Projekt `platform-infra`, Working Directory `/opt/catering-agents-platform/platform-infra` und `compose.json` plus `operations.json`. Der Edge-Container meldet Projekt `catering-edge`, Working Directory `/opt/catering-edge` und ebenfalls `compose.json` plus `operations.json`. Diese vier Compose-Dateien sowie `/opt/catering-edge/Caddyfile` und `/opt/catering-agents-platform/platform-infra/sites/catering-target.caddy` sind reguläre root:root-0644-Dateien und stimmen jeweils bytegenau per SHA-256 mit der zugeordneten Repository-Quelldatei am Vergleichscommit überein; Hashwerte und Dateiinhalte wurden nicht ausgegeben.
 
-Die vier zuvor vom Preflight erwarteten Remote-Pfade mit Repository-Dateinamen `docker-compose.catering-target*.json` sind auf dem Ziel nicht vorhanden. Das ist ein Vertragsmodellfehler: Die bestehenden Contract-Felder `platformComposeFiles` und `edgeComposeFiles` bezeichnen Repository-Quelldateien, wurden im Preflight aber zugleich als installierte Remote-Dateinamen verwendet. Der nächste Contract-Schritt muss deshalb Repository-Source-Pfade und installierte Runtime-Pfade getrennt modellieren. Das Inventar ist jetzt vollständig genug für diese Korrektur; bis sie umgesetzt und CI-geprüft ist, bleibt der echte Preflight fail-closed und es gibt kein Deployment-GO.
+Die vier zuvor vom Preflight erwarteten Remote-Pfade mit Repository-Dateinamen `docker-compose.catering-target*.json` sind auf dem Ziel nicht vorhanden. Das war ein Vertragsmodellfehler: Repository-Quelldateien wurden zugleich als installierte Remote-Dateinamen verwendet. Contract-Schema v2 trennt deshalb `repositorySourcePaths` strikt von `installedRuntime`. Der Produktionsrunner validiert diese Bindung lokal gegen das bestätigte `catering-target-runtime-inventory.json`, übergibt dem Remote-Preflight die installierten Pfade explizit und prüft zusätzlich root:root:0644, SHA-256 sowie die Docker-Compose-Labels der laufenden Platform- und Edge-Container. Runtimepfade werden nicht mehr aus Repository-Dateinamen konstruiert. Bis dieser v2-Stand CI-geprüft und gemergt ist, bleibt der echte Preflight fail-closed und es gibt kein Deployment-GO.
 
 ## Migrationsgrenze
 
