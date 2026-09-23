@@ -106,6 +106,19 @@ if "docker exec -i" in joined_args and "catering-target-authenticated-smoke.mjs"
     raise SystemExit(0)
 
 
+def schema_migration_digest(repo_root: Path, drift: bool = False) -> str:
+    import hashlib
+
+    source = (repo_root / "shared-core/src/persistence.ts").read_text(encoding="utf-8")
+    if drift:
+        source = source.replace("version_number >= 3", "version_number >= 4", 1)
+    start = source.find("const BUSINESS_RECORDS_SCHEMA_MIGRATION")
+    end = source.find("\nfunction getCachedPool", start)
+    if start < 0 or end < 0:
+        fail("synthetic ssh: runtime schema migration region missing")
+    return hashlib.sha256(source[start:end].encode("utf-8")).hexdigest()
+
+
 def ddl_manifest_digest(repo_root: Path) -> str:
     import hashlib
     import json
@@ -158,21 +171,21 @@ def ddl_manifest_digest(repo_root: Path) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
-if "TARGET_RUNTIME_DDL_MANIFEST" in stdin_text:
+if "TARGET_RUNTIME_SCHEMA_HASHES" in stdin_text:
+    log("ssh schema-source")
+    digest = schema_migration_digest(Path.cwd(), drift=scenario == "migration-source-drift")
+    for service in ["intake", "offer", "production", "exports"]:
+        sys.stdout.write(f"{service}={digest}\n")
+    raise SystemExit(0)
+
+
+if "TARGET_RUNTIME_DDL_HASHES" in stdin_text:
     log("ssh ddl-manifest")
     digest = ddl_manifest_digest(Path.cwd())
     if scenario == "source-document-ddl-drift":
         digest = "0" * 64
-    sys.stdout.write(digest + "\n")
-    raise SystemExit(0)
-
-
-if "shared-core/src/persistence.ts" in stdin_text and "sudo -n cat" in stdin_text:
-    log("ssh schema-source")
-    source = (Path.cwd() / "shared-core/src/persistence.ts").read_text(encoding="utf-8")
-    if scenario == "migration-source-drift":
-        source = source.replace("version_number >= 3", "version_number >= 4", 1)
-    sys.stdout.write(source)
+    for service in ["intake", "offer", "production", "exports"]:
+        sys.stdout.write(f"{service}={digest}\n")
     raise SystemExit(0)
 
 if "TARGET_PREFLIGHT_OK target=" in stdin_text:

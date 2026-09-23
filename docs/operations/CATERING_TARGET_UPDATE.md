@@ -69,8 +69,8 @@ Vor jeder Mutation prüft der Produktionsrunner mindestens:
 - Edgepfad `/opt/catering-edge`;
 - Release-Root `/opt/catering-releases`;
 - exakten Checkout-Commit;
-- unveränderte Runtime-Schema-Migrationsregion gegenüber dem installierten Quellstand;
-- identisches Runtime-DDL-Manifest über Shared Core, Intake, Offer, Production und Export;
+- unveränderte Runtime-Schema-Migrationsregion gegenüber dem tatsächlich laufenden Quellstand aller vier Runtime-Appcontainer;
+- identisches Runtime-DDL-Manifest über Shared Core, Intake, Offer, Production und Export in allen vier laufenden Runtime-Appcontainern;
 - Hostname des Zielservers;
 - reale, nicht-symlinkende Zielpfade;
 - `/etc/catering-target/runtime.env` als root:root 0600;
@@ -89,6 +89,8 @@ Vor jeder Mutation prüft der Produktionsrunner mindestens:
 - immutable Edge-Image-ID.
 
 Jeder unbekannte oder nicht lesbare kritische Zustand führt zum Abbruch.
+
+Der isolierte Zielaufbau enthält absichtlich keinen vollständigen Repository-Quellbaum unter `/opt/catering-agents-platform`; dort wurden nur die Ziel-Plattformdefinition und servereigene Zustände installiert. Die Migrations- und DDL-Driftprüfung liest den installierten Quellstand deshalb read-only aus `/app` der laufenden immutable Runtime-Appcontainer `intake`, `offer`, `production` und `exports`. Alle vier Fingerprints müssen dem Kandidaten entsprechen; es wird nichts in die Container oder auf den Host geschrieben.
 
 Fehler im read-only Preflight müssen dabei einen nicht-sensitiven Gate-Namen auf stderr ausgeben:
 

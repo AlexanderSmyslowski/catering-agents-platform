@@ -20,6 +20,7 @@ describe("Catering target production command boundary", () => {
     const blocks = [...production.matchAll(/<<'(REMOTE_[A-Z0-9_]+)'\n([\s\S]*?)\n\1/g)];
     expect(blocks.map((match) => match[1])).toEqual([
       "REMOTE_SCHEMA_SOURCE",
+      "REMOTE_DDL_MANIFEST",
       "REMOTE_PREFLIGHT",
       "REMOTE_LOCK",
       "REMOTE_UNLOCK",
@@ -48,13 +49,19 @@ describe("Catering target production command boundary", () => {
     expect(remotePreflight).toMatch(/\bpsql\b[^\n]*--no-psqlrc\b/);
   });
 
-  it("wraps runtime schema source SSH failures in a coarse preflight gate", () => {
+  it("reads installed migration and DDL source from all immutable runtime containers", () => {
     const production = readFileSync(
       path.join(root, "platform-infra/scripts/catering-target-production-update.sh"),
       "utf8"
     );
-    expect(production).toContain('if ! installed_source="$(ssh_target bash -s --');
+    expect(production).toContain("TARGET_RUNTIME_SCHEMA_HASHES");
+    expect(production).toContain("TARGET_RUNTIME_DDL_HASHES");
+    expect(production).toContain("/app/shared-core/src/persistence.ts");
+    expect(production).toContain("for service in intake offer production exports; do");
+    expect(production).toContain('sudo -n docker exec "$container"');
+    expect(production).not.toMatch(/DEPLOY_PATH\}\/shared-core\/src\/persistence\.ts/);
     expect(production).toContain('fail "TARGET_PREFLIGHT_FAIL gate=runtime_schema_source"');
+    expect(production).toContain('fail "TARGET_PREFLIGHT_FAIL gate=runtime_ddl_manifest"');
   });
 
   it("names critical read-only preflight failure gates without exposing values", () => {

@@ -108,32 +108,50 @@ if start < 0 or end < 0:
 print(hashlib.sha256(source[start:end].encode("utf-8")).hexdigest())'
 }
 
-verify_runtime_schema_migration_unchanged() {
-  local local_path="${REPO_ROOT}/shared-core/src/persistence.ts"
-  [[ -f "${local_path}" && ! -L "${local_path}" ]] || fail "candidate persistence source missing"
-
-  local candidate_hash installed_source installed_hash
-  candidate_hash="$(runtime_schema_migration_hash < "${local_path}")"
-  [[ "${candidate_hash}" =~ ^[0-9a-f]{64}$ ]] || fail "candidate runtime schema migration hash invalid"
-
-  if ! installed_source="$(ssh_target bash -s -- "${DEPLOY_PATH}/shared-core/src/persistence.ts" <<'REMOTE_SCHEMA_SOURCE'
+remote_runtime_schema_migration_hashes() {
+  ssh_target bash -s <<'REMOTE_SCHEMA_SOURCE'
 set -euo pipefail
+# TARGET_RUNTIME_SCHEMA_HASHES
 schema_fail() {
   printf 'TARGET_PREFLIGHT_FAIL gate=%s\n' "$1" >&2
   exit 1
 }
-source_path="$1"
-[[ "$source_path" == "/opt/catering-agents-platform/shared-core/src/persistence.ts" ]] || schema_fail runtime_schema_source_path
-sudo -n test -f "$source_path" || schema_fail runtime_schema_source_file
-sudo -n test ! -L "$source_path" || schema_fail runtime_schema_source_symlink
-sudo -n cat "$source_path" || schema_fail runtime_schema_source_read
+for service in intake offer production exports; do
+  container="platform-infra-${service}-1"
+  if ! hash="$(
+    sudo -n docker exec "$container" sh -eu -c '
+      source_path=/app/shared-core/src/persistence.ts
+      [ -f "$source_path" ] && [ ! -L "$source_path" ]
+      cat "$source_path"
+    ' | python3 -c 'import hashlib,sys
+source=sys.stdin.read()
+start=source.find("const BUSINESS_RECORDS_SCHEMA_MIGRATION")
+end=source.find("\nfunction getCachedPool", start)
+if start < 0 or end < 0:
+    raise SystemExit(1)
+print(hashlib.sha256(source[start:end].encode("utf-8")).hexdigest())'
+  )"; then
+    schema_fail "runtime_schema_source_${service}"
+  fi
+  [[ "$hash" =~ ^[0-9a-f]{64}$ ]] || schema_fail "runtime_schema_hash_${service}"
+  printf '%s=%s\n' "$service" "$hash"
+done
 REMOTE_SCHEMA_SOURCE
-)"; then
+}
+
+verify_runtime_schema_migration_unchanged() {
+  local local_path="${REPO_ROOT}/shared-core/src/persistence.ts"
+  [[ -f "${local_path}" && ! -L "${local_path}" ]] || fail "candidate persistence source missing"
+
+  local candidate_hash installed_hashes expected
+  candidate_hash="$(runtime_schema_migration_hash < "${local_path}")"
+  [[ "${candidate_hash}" =~ ^[0-9a-f]{64}$ ]] || fail "candidate runtime schema migration hash invalid"
+
+  if ! installed_hashes="$(remote_runtime_schema_migration_hashes)"; then
     fail "TARGET_PREFLIGHT_FAIL gate=runtime_schema_source"
   fi
-  installed_hash="$(printf '%s' "${installed_source}" | runtime_schema_migration_hash)"
-  [[ "${installed_hash}" =~ ^[0-9a-f]{64}$ ]] || fail "installed runtime schema migration hash invalid"
-  [[ "${installed_hash}" == "${candidate_hash}" ]] || fail "runtime schema migration drift: explicit migration approval required"
+  expected="$(printf 'intake=%s\noffer=%s\nproduction=%s\nexports=%s'     "${candidate_hash}" "${candidate_hash}" "${candidate_hash}" "${candidate_hash}")"
+  [[ "${installed_hashes}" == "${expected}" ]] || fail "runtime schema migration drift: explicit migration approval required"
 }
 
 runtime_ddl_manifest_hash() {
@@ -197,33 +215,38 @@ print(hashlib.sha256(canonical.encode("utf-8")).hexdigest())
 PY
 }
 
-remote_runtime_ddl_manifest_hash() {
-  ssh_target /usr/bin/python3 - "${DEPLOY_PATH}" <<'PY'
-# TARGET_RUNTIME_DDL_MANIFEST
-import hashlib
+remote_runtime_ddl_manifest_hashes() {
+  ssh_target bash -s <<'REMOTE_DDL_MANIFEST'
+set -euo pipefail
+# TARGET_RUNTIME_DDL_HASHES
+ddl_fail() {
+  printf 'TARGET_PREFLIGHT_FAIL gate=%s\n' "$1" >&2
+  exit 1
+}
+for service in intake offer production exports; do
+  container="platform-infra-${service}-1"
+  if ! digest="$(
+    sudo -n docker exec "$container" sh -eu -c '
+      cd /app
+      for root in shared-core/src intake-service/src offer-service/src production-service/src print-export/src; do
+        [ -d "$root" ] && [ ! -L "$root" ]
+      done
+      tar -cf - shared-core/src intake-service/src offer-service/src production-service/src print-export/src
+    ' | python3 -c 'import hashlib
 import json
 import pathlib
 import re
 import sys
+import tarfile
 
-root = pathlib.Path(sys.argv[1])
-if str(root) != "/opt/catering-agents-platform" or not root.is_dir() or root.is_symlink():
-    raise SystemExit("unexpected installed source root")
-runtime_roots = [
-    "shared-core/src",
-    "intake-service/src",
-    "offer-service/src",
-    "production-service/src",
-    "print-export/src",
-]
-ddl = re.compile(r"\b(?:CREATE|ALTER|DROP)\s+TABLE\b|\bCREATE\s+(?:UNIQUE\s+)?INDEX\b", re.I)
+ddl = re.compile(r"\\b(?:CREATE|ALTER|DROP)\\s+TABLE\\b|\\bCREATE\\s+(?:UNIQUE\\s+)?INDEX\\b", re.I)
 
-def literals(source: str):
+def literals(source):
     found = []
     i = 0
     while i < len(source):
         quote = source[i]
-        if quote not in "'\"\`":
+        if quote not in (chr(39), chr(34), chr(96)):
             i += 1
             continue
         i += 1
@@ -245,31 +268,42 @@ def literals(source: str):
     return sorted(found)
 
 manifest = {}
-for relative_root in runtime_roots:
-    directory = root / relative_root
-    if not directory.is_dir():
-        raise SystemExit(f"runtime DDL root missing: {relative_root}")
-    for path in sorted(directory.rglob("*")):
-        if path.is_file() and path.suffix in {".ts", ".tsx", ".js", ".mjs"}:
-            fragments = literals(path.read_text(encoding="utf-8"))
-            if fragments:
-                manifest[str(path.relative_to(root))] = fragments
+with tarfile.open(fileobj=sys.stdin.buffer, mode="r|*") as archive:
+    for member in archive:
+        if not member.isfile():
+            continue
+        name = member.name[2:] if member.name.startswith("./") else member.name
+        if pathlib.PurePosixPath(name).suffix not in {".ts", ".tsx", ".js", ".mjs"}:
+            continue
+        handle = archive.extractfile(member)
+        if handle is None:
+            raise SystemExit(1)
+        fragments = literals(handle.read().decode("utf-8"))
+        if fragments:
+            manifest[name] = fragments
 
 canonical = json.dumps(manifest, sort_keys=True, separators=(",", ":"))
-print(hashlib.sha256(canonical.encode("utf-8")).hexdigest())
-PY
+print(hashlib.sha256(canonical.encode("utf-8")).hexdigest())'
+  )"; then
+    ddl_fail "runtime_ddl_manifest_${service}"
+  fi
+  [[ "$digest" =~ ^[0-9a-f]{64}$ ]] || ddl_fail "runtime_ddl_hash_${service}"
+  printf '%s=%s\n' "$service" "$digest"
+done
+REMOTE_DDL_MANIFEST
 }
 
 verify_runtime_ddl_unchanged() {
-  local candidate_hash installed_hash
+  local candidate_hash installed_hashes expected
   candidate_hash="$(runtime_ddl_manifest_hash "${REPO_ROOT}")"
-  if ! installed_hash="$(remote_runtime_ddl_manifest_hash)"; then
+  if ! installed_hashes="$(remote_runtime_ddl_manifest_hashes)"; then
     fail "TARGET_PREFLIGHT_FAIL gate=runtime_ddl_manifest"
   fi
   [[ "${candidate_hash}" =~ ^[0-9a-f]{64}$ ]] || fail "candidate runtime DDL manifest hash invalid"
-  [[ "${installed_hash}" =~ ^[0-9a-f]{64}$ ]] || fail "installed runtime DDL manifest hash invalid"
-  [[ "${installed_hash}" == "${candidate_hash}" ]] || fail "runtime DDL drift: explicit migration approval required"
+  expected="$(printf 'intake=%s\noffer=%s\nproduction=%s\nexports=%s'     "${candidate_hash}" "${candidate_hash}" "${candidate_hash}" "${candidate_hash}")"
+  [[ "${installed_hashes}" == "${expected}" ]] || fail "runtime DDL drift: explicit migration approval required"
 }
+
 remote_preflight() {
   local expected_lock_owner="${1:-}"
   local platform_base_hash platform_ops_hash edge_base_hash edge_ops_hash edge_caddy_hash target_site_hash
