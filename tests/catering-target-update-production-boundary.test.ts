@@ -95,6 +95,15 @@ describe("Catering target production command boundary", () => {
     expect(remotePreflight).toContain("TARGET_PREFLIGHT_FAIL gate=%s");
   });
 
+  it("keeps local and remote runtime DDL detection semantics identical", () => {
+    const production = readFileSync(
+      path.join(root, "platform-infra/scripts/catering-target-production-update.sh"),
+      "utf8"
+    );
+    const ddlRegex = 'ddl = re.compile(r"\\b(?:CREATE|ALTER|DROP)\\s+TABLE\\b|\\bCREATE\\s+(?:UNIQUE\\s+)?INDEX\\b", re.I)';
+    expect(production.split(ddlRegex).length - 1).toBe(2);
+  });
+
   it("implements strict read-only production preflight", () => {
     const text = runner();
     expect(text).toContain("--preflight");
