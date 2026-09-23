@@ -73,7 +73,7 @@ Vor jeder Mutation prüft der Produktionsrunner mindestens:
 - identisches Runtime-DDL-Manifest über Shared Core, Intake, Offer, Production und Export in allen vier laufenden Runtime-Appcontainern;
 - Hostname des Zielservers;
 - reale, nicht-symlinkende Zielpfade;
-- `/etc/catering-target/runtime.env` als root:root 0600;
+- `/etc/catering-target/runtime.env` als root:root 0600; Existenz, Symlinkstatus und Metadaten werden wegen der root-only Ablage ausschließlich read-only über `sudo -n test/stat` geprüft, ohne den Secretinhalt auszugeben;
 - Hashbindung der vier Target-Compose-Dateien, der Edge-Caddy-Konfiguration und der privaten Target-Site;
 - freien Target-Update-Lock bzw. beim Recheck exakt eigenen Lock;
 - vorhandenen und gesunden Catering-Backup-Observer;

@@ -122,3 +122,12 @@ Die Korrektur liest migrationsrelevante Quelle und Runtime-DDL read-only aus `/a
 Der echte read-only Preflight auf `a24191a4484c204af17afcae417a167b7b5fc2dd` wurde genau einmal ausgeführt und stoppte ohne Mutation. stderr zeigte zuerst eine lokale Python-`SyntaxWarning` wegen der Backtick-Darstellung im DDL-Scanner, danach `bash: line 7: 13: unbound variable` und grob `TARGET_PREFLIGHT_FAIL gate=remote_target_invariants`.
 
 Ursache des Bash-Abbruchs: Im unlocked Preflight ist der erwartete Lock-Owner absichtlich leer. Ein leeres Argument in `ssh ... bash -s -- "" ...` wird beim Remote-Kommandoaufbau nicht zuverlässig als Positionsparameter transportiert; dadurch fehlte remote `${13}`. Die Korrektur verwendet für den leeren Owner einen festen nichtleeren Sentinel und prüft remote vor jeder Positionsauswertung exakt 13 Argumente. Der lokale DDL-Scanner verwendet zugleich eine warnungsfreie Quote-Tupeldarstellung.
+
+
+## Fortsetzung 2026-09-23 – root-only Runtime-Env-Prüfung
+
+Der echte read-only Preflight auf `5bb4fcd9c9d91450b049097fd3a242a565ca05b0` wurde genau einmal ausgeführt und stoppte ohne Mutation mit `TARGET_PREFLIGHT_FAIL gate=runtime_env_file`, danach grob `remote_target_invariants`.
+
+Der vorhandene Zielaufbau-Nachweis dokumentiert ausdrücklich, dass `/etc/catering-target/runtime.env` auf dem echten Ziel installiert war, von den Plattformdiensten genutzt wurde und root-only 0600 blieb. Der Preflight prüfte die Datei jedoch als unprivilegierter SSH-Benutzer mit `test/stat`. Bei einem nicht traversierbaren root-only Elternpfad kann dies fälschlich wie eine fehlende Datei erscheinen.
+
+Die Korrektur ändert keine erwartete Datei und liest keine Secrets: Existenz, Nicht-Symlink und root:root-0600-Metadaten werden ausschließlich read-only mit `sudo -n test` bzw. `sudo -n stat` geprüft. Fehlt die Datei tatsächlich, bleibt `runtime_env_file` fail-closed.

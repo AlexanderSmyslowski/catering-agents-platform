@@ -339,8 +339,9 @@ platform_base_hash="$8"; platform_ops_hash="$9"; edge_base_hash="${10}"; edge_op
 [[ "$(hostname -s)" == "$target_id" ]] || preflight_fail target_hostname
 [[ -d "$deploy_path" && ! -L "$deploy_path" && "$(realpath -e "$deploy_path")" == "$deploy_path" ]] || preflight_fail deploy_path
 [[ -d "$edge_path" && ! -L "$edge_path" && "$(realpath -e "$edge_path")" == "$edge_path" ]] || preflight_fail edge_path
-[[ -f "$runtime_env" && ! -L "$runtime_env" ]] || preflight_fail runtime_env_file
-[[ "$(stat -c '%u:%g:%a' "$runtime_env")" == "0:0:600" ]] || preflight_fail runtime_env_mode
+sudo -n test -f "$runtime_env" || preflight_fail runtime_env_file
+sudo -n test ! -L "$runtime_env" || preflight_fail runtime_env_symlink
+[[ "$(sudo -n stat -c '%u:%g:%a' "$runtime_env")" == "0:0:600" ]] || preflight_fail runtime_env_mode
 
 platform_base="$deploy_path/platform-infra/docker-compose.catering-target.json"
 platform_ops="$deploy_path/platform-infra/docker-compose.catering-target.operations.json"

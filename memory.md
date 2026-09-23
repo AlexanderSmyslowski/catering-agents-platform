@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.402
+version: 5.403
 date: 2026-09-22
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -31,6 +31,8 @@ repo: AlexanderSmyslowski/catering-agents-platform
 - Der Befund ist ein Preflight-Layoutfehler: Der isolierte Zielaufbau enthält absichtlich nur die Plattformdefinition unter `/opt/catering-agents-platform/platform-infra/`, nicht den vollständigen Repository-Quellbaum. Runtime-Schema- und DDL-Fingerprints müssen deshalb aus `/app` der laufenden immutable Runtime-Appcontainer gelesen und über intake/offer/production/exports gegen den Kandidaten gebunden werden.
 - Der echte read-only Preflight auf `a24191a4484c204af17afcae417a167b7b5fc2dd` lief genau einmal und stoppte ohne Mutation mit Python-`SyntaxWarning`, anschließend `bash: line 7: 13: unbound variable` und grob `remote_target_invariants`.
 - Ursache: Der unlocked Preflight übergab einen absichtlich leeren Lock-Owner als Remote-SSH-Argument; leere Remote-Argumente bleiben über OpenSSH nicht zuverlässig als Positionsparameter erhalten, wodurch `${13}` fehlte. Fix: nichtleerer Sentinel plus fail-closed `$# == 13`-Prüfung; DDL-Pythonquote warnungsfrei.
+- Der echte read-only Preflight auf `5bb4fcd9c9d91450b049097fd3a242a565ca05b0` lief genau einmal und stoppte ohne Mutation mit `runtime_env_file` / `remote_target_invariants`.
+- Historische Zielnachweise belegen `/etc/catering-target/runtime.env` als installierte, genutzte root-only-0600-Datei. Der unprivilegierte Preflight-`test/stat` kann bei fehlendem Traversalrecht fälschlich „fehlend“ melden; Korrektur: ausschließlich read-only `sudo -n test/stat`, ohne Secretinhalt zu lesen.
 - **Noch kein erfolgreich abgeschlossener echter Zielserver-Preflight und kein Deployment.** Der erste echte Updateversuch bleibt separat freigabepflichtig und setzt einen vollständig grünen read-only Zielcheck voraus.
 - Reale Küchenprüfung, belastbare Zukaufspezifikationen und Rezept-/Allergenfreigaben bleiben fachlich getrennt und werden durch den technischen Updateweg nicht ersetzt.
 

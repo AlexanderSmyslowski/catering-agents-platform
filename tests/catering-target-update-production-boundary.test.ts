@@ -94,6 +94,20 @@ describe("Catering target production command boundary", () => {
     expect(check.stdout.trim()).toMatch(/^[0-9a-f]{64}$/);
   });
 
+  it("checks the root-only runtime env through non-interactive sudo without reading its contents", () => {
+    const production = readFileSync(
+      path.join(root, "platform-infra/scripts/catering-target-production-update.sh"),
+      "utf8"
+    );
+    const match = production.match(/<<'REMOTE_PREFLIGHT'\n([\s\S]*?)\nREMOTE_PREFLIGHT/);
+    expect(match?.[1], "REMOTE_PREFLIGHT block missing").toBeTruthy();
+    const remotePreflight = match?.[1] ?? "";
+    expect(remotePreflight).toContain('sudo -n test -f "$runtime_env" || preflight_fail runtime_env_file');
+    expect(remotePreflight).toContain('sudo -n test ! -L "$runtime_env" || preflight_fail runtime_env_symlink');
+    expect(remotePreflight).toContain('sudo -n stat -c \'%u:%g:%a\' "$runtime_env"');
+    expect(remotePreflight).not.toContain('sudo -n cat "$runtime_env"');
+  });
+
   it("names critical read-only preflight failure gates without exposing values", () => {
     const production = readFileSync(
       path.join(root, "platform-infra/scripts/catering-target-production-update.sh"),
@@ -106,6 +120,7 @@ describe("Catering target production command boundary", () => {
       "remote_argument_count",
       "target_hostname",
       "deploy_path",
+      "runtime_env_symlink",
       "runtime_env_mode",
       "platform_base_hash",
       "target_site_hash",
