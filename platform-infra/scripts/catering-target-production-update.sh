@@ -239,7 +239,7 @@ import re
 import sys
 import tarfile
 
-ddl = re.compile(r"\\b(?:CREATE|ALTER|DROP)\\s+TABLE\\b|\\bCREATE\\s+(?:UNIQUE\\s+)?INDEX\\b", re.I)
+ddl = re.compile(r"\b(?:CREATE|ALTER|DROP)\s+TABLE\b|\bCREATE\s+(?:UNIQUE\s+)?INDEX\b", re.I)
 
 def literals(source):
     found = []
