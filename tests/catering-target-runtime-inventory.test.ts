@@ -13,55 +13,48 @@ describe("Catering target runtime inventory", () => {
       targetId: "catering-prod-1",
       observedAt: "2026-09-23",
       observation: {
-        source: "single-read-only-ssh-diagnosis",
+        source: "two-single-session-read-only-diagnostics",
         boundMainCommit: "25a62be3a18142977e552081b90b802933971ef0",
-        sshSessions: 1,
+        sshSessionsTotal: 2,
         mutation: false,
-        contentsRead: false
+        contentsRead: false,
+        hashValuesExposed: false
       },
       platform: {
         composeProject: "platform-infra",
         workingDirectory: "/opt/catering-agents-platform/platform-infra"
       },
       edge: {
-        containerComposeLabels: { status: "not_checked" },
-        operationsFile: { status: "unknown" }
+        composeProject: "catering-edge",
+        workingDirectory: "/opt/catering-edge",
+        container: { name: "catering-edge-edge-1", service: "edge" }
       },
       contractAlignment: {
         requiredModel: "separate repository source paths from installed remote runtime paths",
-        preflightAlignment: "pending_until_remaining_runtime_paths_are_confirmed"
+        preflightAlignment: "ready_for_contract_model_fix"
       }
     });
 
-    expect(inventory.platform.configFilesFromAllContainerLabels).toEqual([
-      expect.objectContaining({
-        path: "/opt/catering-agents-platform/platform-infra/compose.json",
-        labelEvidence: "confirmed_all_six_platform_containers",
-        currentFileState: expect.objectContaining({
-          status: "regular_file",
-          owner: "root",
-          group: "root",
-          mode: "0644"
-        })
-      }),
-      expect.objectContaining({
-        path: "/opt/catering-agents-platform/platform-infra/operations.json",
-        labelEvidence: "confirmed_all_six_platform_containers",
-        currentFileState: { status: "not_separately_checked" }
-      })
-    ]);
+    const allRuntimeFiles = [...inventory.platform.runtimeFiles, ...inventory.edge.runtimeFiles];
+    expect(allRuntimeFiles).toHaveLength(6);
+    for (const file of allRuntimeFiles) {
+      expect(file).toMatchObject({
+        status: "regular_file",
+        owner: "root",
+        group: "root",
+        mode: "0644",
+        sourceMatch: true
+      });
+      expect(file.path).toMatch(/^\/opt\/catering-/);
+      expect(file.sourcePath).toBeTypeOf("string");
+    }
 
-    expect(inventory.edge.observedComposeFiles).toEqual([
-      expect.objectContaining({
-        path: "/opt/catering-edge/compose.json",
-        currentFileState: expect.objectContaining({
-          status: "regular_file",
-          owner: "root",
-          group: "root",
-          mode: "0644"
-        })
-      })
-    ]);
+    expect(inventory.platform.runtimeFiles.map((file: any) => file.role).sort()).toEqual(
+      ["base_compose", "operations_compose", "target_site"]
+    );
+    expect(inventory.edge.runtimeFiles.map((file: any) => file.role).sort()).toEqual(
+      ["base_compose", "caddyfile", "operations_compose"]
+    );
 
     expect(inventory.legacyExpectedRemotePaths).toEqual([
       { path: "/opt/catering-agents-platform/platform-infra/docker-compose.catering-target.json", status: "missing" },
