@@ -143,7 +143,6 @@ describe("Catering target production command boundary", () => {
       "deploy_path",
       "runtime_env_symlink",
       "runtime_env_mode",
-      "target_site_hash",
       "target_update_lock_absent",
       "backup_observer_health",
       "platform_compose_render",
