@@ -74,7 +74,7 @@ describe("Catering target production command boundary", () => {
     const match = production.match(/<<'REMOTE_PREFLIGHT'\n([\s\S]*?)\nREMOTE_PREFLIGHT/);
     expect(match?.[1], "REMOTE_PREFLIGHT block missing").toBeTruthy();
     const remotePreflight = match?.[1] ?? "";
-    expect(remotePreflight).toContain('[[ "$#" -eq 13 ]] || preflight_fail remote_argument_count');
+    expect(remotePreflight).toContain('[[ "$#" -eq 23 ]] || preflight_fail remote_argument_count');
     expect(remotePreflight).toContain('expected_owner_arg="$7"');
     expect(remotePreflight).toContain('expected_owner=""');
   });
@@ -118,6 +118,7 @@ describe("Catering target production command boundary", () => {
     const remotePreflight = match?.[1] ?? "";
     expect(remotePreflight).toContain('preflight_fail "${gate}_file"');
     expect(remotePreflight).toContain('preflight_fail "${gate}_symlink"');
+    expect(remotePreflight).toContain('preflight_fail "${gate}_mode"');
     expect(remotePreflight).toContain('preflight_fail "${gate}_hash_read"');
     expect(remotePreflight).toContain('preflight_fail "${gate}_hash"');
     expect(remotePreflight).toContain('check_regular_hash "$platform_base" "$platform_base_hash" platform_base');
@@ -127,6 +128,28 @@ describe("Catering target production command boundary", () => {
     expect(remotePreflight).toContain('check_regular_hash "$edge_caddy" "$edge_caddy_hash" edge_caddy');
     expect(remotePreflight).toContain('check_regular_hash "$target_site" "$target_site_hash" target_site');
     expect(remotePreflight).not.toContain('check_regular_hash "$platform_base" "$platform_base_hash" ||');
+  });
+
+  it("binds preflight runtime files and Compose labels from contract v2 instead of reconstructing repo names", () => {
+    const production = readFileSync(
+      path.join(root, "platform-infra/scripts/catering-target-production-update.sh"),
+      "utf8"
+    );
+    const match = production.match(/<<'REMOTE_PREFLIGHT'\n([\s\S]*?)\nREMOTE_PREFLIGHT/);
+    expect(match?.[1], "REMOTE_PREFLIGHT block missing").toBeTruthy();
+    const remotePreflight = match?.[1] ?? "";
+    expect(production).toContain("repositorySourcePaths.platformBase");
+    expect(production).toContain("installedRuntime.platform.baseCompose");
+    expect(production).toContain("installedRuntime.edge.baseCompose");
+    expect(production).toContain("target runtime inventory binding mismatch");
+    expect(remotePreflight).toContain('platform_base="${10}"');
+    expect(remotePreflight).toContain('edge_base="${14}"');
+    expect(remotePreflight).toContain('target_site="${17}"');
+    expect(remotePreflight).toContain("com.docker.compose.project.config_files");
+    expect(remotePreflight).toContain('check_compose_labels "platform-infra-${service}-1"');
+    expect(remotePreflight).toContain('check_compose_labels "catering-edge-edge-1"');
+    expect(remotePreflight).not.toContain('$deploy_path/platform-infra/docker-compose.catering-target.json');
+    expect(remotePreflight).not.toContain('$deploy_path/edge-infra/docker-compose.catering-target.json');
   });
 
   it("names critical read-only preflight failure gates without exposing values", () => {
@@ -187,8 +210,9 @@ describe("Catering target production command boundary", () => {
     expect(text).toContain("UPDATE_CATERING_TARGET");
     expect(text).toContain("docker build");
     expect(text).toContain("docker load");
-    expect(text).toContain("docker-compose.catering-target.json");
-    expect(text).toContain("docker-compose.catering-target.operations.json");
+    const contract = JSON.parse(readFileSync(path.join(root, "platform-infra/catering-target-update-contract.json"), "utf8"));
+    expect(contract.repositorySourcePaths.platformBase).toBe("platform-infra/docker-compose.catering-target.json");
+    expect(contract.repositorySourcePaths.platformOperations).toBe("platform-infra/docker-compose.catering-target.operations.json");
   });
 
   it("never references the historical shared deployment chain", () => {
