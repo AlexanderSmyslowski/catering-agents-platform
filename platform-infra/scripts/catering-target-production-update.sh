@@ -412,6 +412,10 @@ fi
 [[ "$(hostname -s)" == "$target_id" ]] || preflight_fail target_hostname
 [[ -d "$deploy_path" && ! -L "$deploy_path" && "$(realpath -e "$deploy_path")" == "$deploy_path" ]] || preflight_fail deploy_path
 [[ -d "$edge_path" && ! -L "$edge_path" && "$(realpath -e "$edge_path")" == "$edge_path" ]] || preflight_fail edge_path
+sudo -n test -f "$runtime_env" || preflight_fail runtime_env_file
+sudo -n test ! -L "$runtime_env" || preflight_fail runtime_env_symlink
+[[ "$(sudo -n stat -c '%u:%g:%a' "$runtime_env")" == "0:0:600" ]] || preflight_fail runtime_env_mode
+
 [[ "$platform_working_dir" == "$deploy_path/platform-infra" ]] || preflight_fail platform_working_dir
 [[ "$edge_working_dir" == "$edge_path" ]] || preflight_fail edge_working_dir
 case "$platform_base" in "$platform_working_dir/"*) ;; *) preflight_fail platform_base_path ;; esac
@@ -420,10 +424,6 @@ case "$target_site" in "$platform_working_dir/sites/"*) ;; *) preflight_fail tar
 case "$edge_base" in "$edge_working_dir/"*) ;; *) preflight_fail edge_base_path ;; esac
 case "$edge_ops" in "$edge_working_dir/"*) ;; *) preflight_fail edge_ops_path ;; esac
 case "$edge_caddy" in "$edge_working_dir/"*) ;; *) preflight_fail edge_caddy_path ;; esac
-
-sudo -n test -f "$runtime_env" || preflight_fail runtime_env_file
-sudo -n test ! -L "$runtime_env" || preflight_fail runtime_env_symlink
-[[ "$(sudo -n stat -c '%u:%g:%a' "$runtime_env")" == "0:0:600" ]] || preflight_fail runtime_env_mode
 
 check_regular_hash() {
   local path="$1" expected="$2" gate="$3" actual
@@ -528,6 +528,7 @@ image_of() {
 require_running() {
   [[ "$(sudo -n docker inspect --format '{{.State.Running}}' "$1")" == true ]]
 }
+
 for service in postgres intake offer production exports web; do
   require_running "platform-infra-${service}-1" || preflight_fail "container_running_${service}"
 done
@@ -538,17 +539,17 @@ if ! writer_mode="$(sudo -n docker inspect catering-edge-edge-1 | python3 -c 'im
 fi
 [[ "$writer_mode" == "enabled" ]] || preflight_fail writer_mode
 
-if ! schema_version="$(sudo -n docker exec platform-infra-postgres-1 psql --no-psqlrc -U catering -d catering_agents -Atqc "SELECT version FROM catering_schema_migrations WHERE name = 'business_records_v3' LIMIT 1")"; then
+if ! schema_version="$(sudo -n docker exec platform-infra-postgres-1 psql --no-psqlrc --no-password --username=catering --dbname=catering_agents --tuples-only --no-align --command="SELECT version_number FROM catering_schema_migrations WHERE unit_name = 'catering_business_records'" | tr -d '[:space:]')"; then
   preflight_fail schema_version_read
 fi
 [[ "$schema_version" == "3" ]] || preflight_fail schema_version
-
 [[ "$(networks_of platform-infra-postgres-1)" == "catering_private" ]] || preflight_fail postgres_network
 for service in intake offer production exports; do
   [[ "$(networks_of "platform-infra-${service}-1")" == "catering_private" ]] || preflight_fail "app_network_${service}"
 done
 [[ "$(networks_of platform-infra-web-1)" == "catering_ingress,catering_private" ]] || preflight_fail web_network
 [[ "$(networks_of catering-edge-edge-1)" == "catering_ingress,catering_public" ]] || preflight_fail edge_network
+
 for service in postgres intake offer production exports web; do
   [[ -z "$(ports_of "platform-infra-${service}-1")" ]] || preflight_fail "app_ports_${service}"
 done
@@ -562,8 +563,81 @@ if ! edge_image="$(image_of catering-edge-edge-1)"; then
   preflight_fail edge_image_read
 fi
 [[ "$edge_image" =~ ^sha256:[0-9a-f]{64}$ ]] || preflight_fail edge_image
+
 printf 'TARGET_PREFLIGHT_OK target=%s backup=healthy writer=enabled schema_version=3 postgres_volume=%s edge_image=%s\n' "$target_id" "$postgres_volume" "$edge_image"
 REMOTE_PREFLIGHT
+}
+
+parse_preflight_binding() {
+  local output="$1"
+  POSTGRES_VOLUME="$(printf '%s\n' "$output" | sed -n 's/.* postgres_volume=\([^ ]*\).*/\1/p' | tail -n 1)"
+  EDGE_IMAGE="$(printf '%s\n' "$output" | sed -n 's/.* edge_image=\([^ ]*\).*/\1/p' | tail -n 1)"
+  [[ -n "${POSTGRES_VOLUME}" && "${EDGE_IMAGE}" =~ ^sha256:[0-9a-f]{64}$ ]] || fail "preflight binding output invalid"
+}
+
+run_production_preflight() {
+  load_production_contract
+  validate_production_inputs
+  verify_runtime_schema_migration_unchanged
+  verify_runtime_ddl_unchanged
+  local output
+  if ! output="$(remote_preflight "")"; then
+    fail "TARGET_PREFLIGHT_FAIL gate=remote_target_invariants"
+  fi
+  parse_preflight_binding "${output}"
+  printf '%s\n' "${output}"
+}
+
+
+cleanup_local_candidate() {
+  if [[ -n "${LOCAL_RELEASE_DIR}" && -d "${LOCAL_RELEASE_DIR}" ]]; then
+    rm -rf -- "${LOCAL_RELEASE_DIR}"
+  fi
+}
+
+migration_declaration_present() {
+  [[ -e "${REPO_ROOT}/platform-infra/catering-target-migration.json" || "${CATERING_TARGET_MIGRATION_REQUIRED:-0}" == "1" ]]
+}
+
+prepare_local_candidate() {
+  command -v docker >/dev/null || fail "docker is required on the workflow runner"
+  command -v rsync >/dev/null || fail "rsync is required on the workflow runner"
+  command -v gzip >/dev/null || fail "gzip is required on the workflow runner"
+  if migration_declaration_present; then
+    fail "manual_migration_approval_required"
+  fi
+
+  LOCAL_RELEASE_DIR="$(mktemp -d "${RUNNER_TEMP:-/tmp}/catering-target-release.XXXXXX")"
+  local runtime_tag="catering-target-runtime:${DEPLOY_COMMIT_SHA}"
+  local web_tag="catering-target-web:${DEPLOY_COMMIT_SHA}"
+
+  docker build     --iidfile "${LOCAL_RELEASE_DIR}/runtime.iid"     --tag "${runtime_tag}"     --file "${REPO_ROOT}/platform-infra/docker/Dockerfile.runtime"     "${REPO_ROOT}"
+  docker build     --iidfile "${LOCAL_RELEASE_DIR}/web.iid"     --tag "${web_tag}"     --file "${REPO_ROOT}/platform-infra/docker/Dockerfile.web"     "${REPO_ROOT}"
+
+  RUNTIME_IMAGE="$(cat "${LOCAL_RELEASE_DIR}/runtime.iid")"
+  WEB_IMAGE="$(cat "${LOCAL_RELEASE_DIR}/web.iid")"
+  [[ "${RUNTIME_IMAGE}" =~ ^sha256:[0-9a-f]{64}$ ]] || fail "runtime candidate is not immutable"
+  [[ "${WEB_IMAGE}" =~ ^sha256:[0-9a-f]{64}$ ]] || fail "web candidate is not immutable"
+
+  python3 - "${LOCAL_RELEASE_DIR}/candidate-images.json" "${RUNTIME_IMAGE}" "${WEB_IMAGE}" <<'PY'
+import json, sys
+path, runtime_image, web_image = sys.argv[1:]
+value = {
+    "services": {
+        "intake": {"image": runtime_image},
+        "offer": {"image": runtime_image},
+        "production": {"image": runtime_image},
+        "exports": {"image": runtime_image},
+        "web": {"image": web_image},
+    }
+}
+with open(path, "w", encoding="utf-8") as handle:
+    json.dump(value, handle, indent=2, sort_keys=True)
+    handle.write("\n")
+PY
+
+  docker save "${RUNTIME_IMAGE}" | gzip -1 > "${LOCAL_RELEASE_DIR}/runtime-image.tar.gz"
+  docker save "${WEB_IMAGE}" | gzip -1 > "${LOCAL_RELEASE_DIR}/web-image.tar.gz"
 }
 
 acquire_remote_lock() {
