@@ -110,6 +110,14 @@ Read-only bedeutet hier: Der Preflight legt **keinen** `/opt/catering-target-upd
 Der Backup-Observer darf bei `--check` zur konsistenten Beobachtung kurzzeitig einen exklusiven, nicht blockierenden `flock` auf seiner **bereits vorhandenen, read-only geöffneten** Observer-Lockdatei halten. Dieser Synchronisations-Lock ist kein Deployment-/Update-Lock. Laut Observer-Vertrag schreibt `--check` keinen Observerstatus und führt weder Docker, Restic, Dump, Restore noch Reparaturen aus.
 
 
+## Kanonisches Laufzeitinventar
+
+Der tatsächliche Zielzustand wird ab 23.09.2026 zusätzlich in `platform-infra/catering-target-runtime-inventory.json` maschinenlesbar geführt. Das Inventar unterscheidet ausdrücklich zwischen bestätigten Beobachtungen, aus laufenden Docker-Compose-Labels abgeleiteten Pfaden und noch nicht separat bestätigten Zuständen; unbekannte Werte dürfen nicht als Annahmen ergänzt werden.
+
+Zwei separat freigegebene, jeweils auf genau eine SSH-Sitzung begrenzte read-only Diagnosen auf dem an `25a62be3a18142977e552081b90b802933971ef0` gebundenen Stand haben das Runtime-Layout vollständig für die sechs relevanten Dateien bestätigt. Alle sechs Plattformcontainer melden Compose-Projekt `platform-infra`, Working Directory `/opt/catering-agents-platform/platform-infra` und `compose.json` plus `operations.json`. Der Edge-Container meldet Projekt `catering-edge`, Working Directory `/opt/catering-edge` und ebenfalls `compose.json` plus `operations.json`. Diese vier Compose-Dateien sowie `/opt/catering-edge/Caddyfile` und `/opt/catering-agents-platform/platform-infra/sites/catering-target.caddy` sind reguläre root:root-0644-Dateien und stimmen jeweils bytegenau per SHA-256 mit der zugeordneten Repository-Quelldatei am Vergleichscommit überein; Hashwerte und Dateiinhalte wurden nicht ausgegeben.
+
+Die vier zuvor vom Preflight erwarteten Remote-Pfade mit Repository-Dateinamen `docker-compose.catering-target*.json` sind auf dem Ziel nicht vorhanden. Das ist ein Vertragsmodellfehler: Die bestehenden Contract-Felder `platformComposeFiles` und `edgeComposeFiles` bezeichnen Repository-Quelldateien, wurden im Preflight aber zugleich als installierte Remote-Dateinamen verwendet. Der nächste Contract-Schritt muss deshalb Repository-Source-Pfade und installierte Runtime-Pfade getrennt modellieren. Das Inventar ist jetzt vollständig genug für diese Korrektur; bis sie umgesetzt und CI-geprüft ist, bleibt der echte Preflight fail-closed und es gibt kein Deployment-GO.
+
 ## Migrationsgrenze
 
 Der Contract lautet:

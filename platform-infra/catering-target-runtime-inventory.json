@@ -1,0 +1,144 @@
+{
+  "schemaVersion": 1,
+  "targetId": "catering-prod-1",
+  "observedAt": "2026-09-23",
+  "observation": {
+    "source": "two-single-session-read-only-diagnostics",
+    "boundMainCommit": "25a62be3a18142977e552081b90b802933971ef0",
+    "sshSessionsTotal": 2,
+    "mutation": false,
+    "contentsRead": false,
+    "hashValuesExposed": false
+  },
+  "platform": {
+    "composeProject": "platform-infra",
+    "workingDirectory": "/opt/catering-agents-platform/platform-infra",
+    "containers": [
+      {
+        "name": "platform-infra-postgres-1",
+        "service": "postgres"
+      },
+      {
+        "name": "platform-infra-intake-1",
+        "service": "intake"
+      },
+      {
+        "name": "platform-infra-offer-1",
+        "service": "offer"
+      },
+      {
+        "name": "platform-infra-production-1",
+        "service": "production"
+      },
+      {
+        "name": "platform-infra-exports-1",
+        "service": "exports"
+      },
+      {
+        "name": "platform-infra-web-1",
+        "service": "web"
+      }
+    ],
+    "runtimeFiles": [
+      {
+        "role": "base_compose",
+        "path": "/opt/catering-agents-platform/platform-infra/compose.json",
+        "sourcePath": "platform-infra/docker-compose.catering-target.json",
+        "status": "regular_file",
+        "owner": "root",
+        "group": "root",
+        "mode": "0644",
+        "sourceMatch": true,
+        "evidence": "container_labels_plus_read_only_metadata_and_sha256_comparison"
+      },
+      {
+        "role": "operations_compose",
+        "path": "/opt/catering-agents-platform/platform-infra/operations.json",
+        "sourcePath": "platform-infra/docker-compose.catering-target.operations.json",
+        "status": "regular_file",
+        "owner": "root",
+        "group": "root",
+        "mode": "0644",
+        "sourceMatch": true,
+        "evidence": "container_labels_plus_read_only_metadata_and_sha256_comparison"
+      },
+      {
+        "role": "target_site",
+        "path": "/opt/catering-agents-platform/platform-infra/sites/catering-target.caddy",
+        "sourcePath": "platform-infra/target-sites/catering-target.caddy",
+        "status": "regular_file",
+        "owner": "root",
+        "group": "root",
+        "mode": "0644",
+        "sourceMatch": true,
+        "evidence": "read_only_metadata_and_sha256_comparison"
+      }
+    ]
+  },
+  "edge": {
+    "composeProject": "catering-edge",
+    "workingDirectory": "/opt/catering-edge",
+    "container": {
+      "name": "catering-edge-edge-1",
+      "service": "edge"
+    },
+    "runtimeFiles": [
+      {
+        "role": "base_compose",
+        "path": "/opt/catering-edge/compose.json",
+        "sourcePath": "edge-infra/docker-compose.catering-target.json",
+        "status": "regular_file",
+        "owner": "root",
+        "group": "root",
+        "mode": "0644",
+        "sourceMatch": true,
+        "evidence": "container_labels_plus_read_only_metadata_and_sha256_comparison"
+      },
+      {
+        "role": "operations_compose",
+        "path": "/opt/catering-edge/operations.json",
+        "sourcePath": "edge-infra/docker-compose.catering-target.operations.json",
+        "status": "regular_file",
+        "owner": "root",
+        "group": "root",
+        "mode": "0644",
+        "sourceMatch": true,
+        "evidence": "container_labels_plus_read_only_metadata_and_sha256_comparison"
+      },
+      {
+        "role": "caddyfile",
+        "path": "/opt/catering-edge/Caddyfile",
+        "sourcePath": "edge-infra/Caddyfile.catering-target.operations",
+        "status": "regular_file",
+        "owner": "root",
+        "group": "root",
+        "mode": "0644",
+        "sourceMatch": true,
+        "evidence": "read_only_metadata_and_sha256_comparison"
+      }
+    ]
+  },
+  "legacyExpectedRemotePaths": [
+    {
+      "path": "/opt/catering-agents-platform/platform-infra/docker-compose.catering-target.json",
+      "status": "missing"
+    },
+    {
+      "path": "/opt/catering-agents-platform/platform-infra/docker-compose.catering-target.operations.json",
+      "status": "missing"
+    },
+    {
+      "path": "/opt/catering-edge/docker-compose.catering-target.json",
+      "status": "missing"
+    },
+    {
+      "path": "/opt/catering-edge/docker-compose.catering-target.operations.json",
+      "status": "missing"
+    }
+  ],
+  "contractAlignment": {
+    "currentProblem": "repository source compose names are reused as remote runtime compose names",
+    "requiredModel": "separate repository source paths from installed remote runtime paths",
+    "preflightAlignment": "ready_for_contract_model_fix"
+  }
+}

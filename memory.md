@@ -1,7 +1,7 @@
 # memory.md
 
-version: 5.404
-date: 2026-09-22
+version: 5.406
+date: 2026-09-23
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
 
@@ -35,6 +35,9 @@ repo: AlexanderSmyslowski/catering-agents-platform
 - Historische Zielnachweise belegen `/etc/catering-target/runtime.env` als installierte, genutzte root-only-0600-Datei. Der unprivilegierte Preflight-`test/stat` kann bei fehlendem Traversalrecht fälschlich „fehlend“ melden; Korrektur: ausschließlich read-only `sudo -n test/stat`, ohne Secretinhalt zu lesen.
 - Der echte read-only Preflight auf `2a7216d9e854d76a4faa7cdd71c4040c711d5829` lief genau einmal und stoppte ohne Mutation mit `platform_base_hash` / `remote_target_invariants`.
 - Die Platform-Base-Datei ist in Git am aktuellen Stand, am dokumentierten installierten Betriebsartefaktstand `3c5f6076…` und am späteren `f6c0aee4…` identisch; der Sollzustand wird nicht abgeschwächt. Der bisherige Hashhelper unterschied aber nicht zwischen Datei-/Symlinkfehler, `sha256sum`-Lesefehler und echtem Hashdrift. Diagnose wird deshalb in `*_file`, `*_symlink`, `*_hash_read`, `*_hash` getrennt.
+- Der echte read-only Preflight auf `25a62be3a18142977e552081b90b802933971ef0` lief genau einmal und stoppte ohne Mutation mit `platform_base_file` / `remote_target_invariants`.
+- Zwei separat freigegebene read-only Diagnosen mit je genau einer SSH-Sitzung bestätigten das Runtime-Layout vollständig: Platform-Projekt `platform-infra` unter `/opt/catering-agents-platform/platform-infra` mit `compose.json` + `operations.json`; Edge-Projekt `catering-edge` unter `/opt/catering-edge` mit `compose.json` + `operations.json`. Diese vier Dateien plus `/opt/catering-edge/Caddyfile` und `/opt/catering-agents-platform/platform-infra/sites/catering-target.caddy` sind root:root 0644 und stimmen jeweils per SHA-256 mit der zugeordneten Repository-Quelldatei am Vergleichscommit überein.
+- Die vier alten Remote-Erwartungen `docker-compose.catering-target*.json` fehlen tatsächlich. Ursache ist ein Contract-Modellfehler: Repository-Source-Namen wurden zugleich als Remote-Runtime-Namen verwendet. `platform-infra/catering-target-runtime-inventory.json` führt jetzt die vollständig bestätigten Runtime-Pfade und Source-Bindungen maschinenlesbar; Source- und Runtime-Pfade werden im nächsten Contract-Schritt getrennt.
 - **Noch kein erfolgreich abgeschlossener echter Zielserver-Preflight und kein Deployment.** Der erste echte Updateversuch bleibt separat freigabepflichtig und setzt einen vollständig grünen read-only Zielcheck voraus.
 - Reale Küchenprüfung, belastbare Zukaufspezifikationen und Rezept-/Allergenfreigaben bleiben fachlich getrennt und werden durch den technischen Updateweg nicht ersetzt.
 
