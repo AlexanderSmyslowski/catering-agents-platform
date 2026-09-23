@@ -116,15 +116,21 @@ verify_runtime_schema_migration_unchanged() {
   candidate_hash="$(runtime_schema_migration_hash < "${local_path}")"
   [[ "${candidate_hash}" =~ ^[0-9a-f]{64}$ ]] || fail "candidate runtime schema migration hash invalid"
 
-  installed_source="$(ssh_target bash -s -- "${DEPLOY_PATH}/shared-core/src/persistence.ts" <<'REMOTE_SCHEMA_SOURCE'
+  if ! installed_source="$(ssh_target bash -s -- "${DEPLOY_PATH}/shared-core/src/persistence.ts" <<'REMOTE_SCHEMA_SOURCE'
 set -euo pipefail
+schema_fail() {
+  printf 'TARGET_PREFLIGHT_FAIL gate=%s\n' "$1" >&2
+  exit 1
+}
 source_path="$1"
-[[ "$source_path" == "/opt/catering-agents-platform/shared-core/src/persistence.ts" ]] || exit 1
-sudo -n test -f "$source_path"
-sudo -n test ! -L "$source_path"
-sudo -n cat "$source_path"
+[[ "$source_path" == "/opt/catering-agents-platform/shared-core/src/persistence.ts" ]] || schema_fail runtime_schema_source_path
+sudo -n test -f "$source_path" || schema_fail runtime_schema_source_file
+sudo -n test ! -L "$source_path" || schema_fail runtime_schema_source_symlink
+sudo -n cat "$source_path" || schema_fail runtime_schema_source_read
 REMOTE_SCHEMA_SOURCE
-)"
+)"; then
+    fail "TARGET_PREFLIGHT_FAIL gate=runtime_schema_source"
+  fi
   installed_hash="$(printf '%s' "${installed_source}" | runtime_schema_migration_hash)"
   [[ "${installed_hash}" =~ ^[0-9a-f]{64}$ ]] || fail "installed runtime schema migration hash invalid"
   [[ "${installed_hash}" == "${candidate_hash}" ]] || fail "runtime schema migration drift: explicit migration approval required"
@@ -257,7 +263,9 @@ PY
 verify_runtime_ddl_unchanged() {
   local candidate_hash installed_hash
   candidate_hash="$(runtime_ddl_manifest_hash "${REPO_ROOT}")"
-  installed_hash="$(remote_runtime_ddl_manifest_hash)"
+  if ! installed_hash="$(remote_runtime_ddl_manifest_hash)"; then
+    fail "TARGET_PREFLIGHT_FAIL gate=runtime_ddl_manifest"
+  fi
   [[ "${candidate_hash}" =~ ^[0-9a-f]{64}$ ]] || fail "candidate runtime DDL manifest hash invalid"
   [[ "${installed_hash}" =~ ^[0-9a-f]{64}$ ]] || fail "installed runtime DDL manifest hash invalid"
   [[ "${installed_hash}" == "${candidate_hash}" ]] || fail "runtime DDL drift: explicit migration approval required"
@@ -274,14 +282,18 @@ remote_preflight() {
 
   ssh_target bash -s --     "${TARGET_ID}" "${DEPLOY_PATH}" "${EDGE_PATH}" "${TARGET_RUNTIME_ENV}"     "${TARGET_UPDATE_LOCK}" "${BACKUP_OBSERVER}" "${expected_lock_owner}"     "${platform_base_hash}" "${platform_ops_hash}" "${edge_base_hash}" "${edge_ops_hash}"     "${edge_caddy_hash}" "${target_site_hash}" <<'REMOTE_PREFLIGHT'
 set -euo pipefail
+preflight_fail() {
+  printf 'TARGET_PREFLIGHT_FAIL gate=%s\n' "$1" >&2
+  exit 1
+}
 target_id="$1"; deploy_path="$2"; edge_path="$3"; runtime_env="$4"; update_lock="$5"; observer="$6"; expected_owner="$7"
 platform_base_hash="$8"; platform_ops_hash="$9"; edge_base_hash="${10}"; edge_ops_hash="${11}"; edge_caddy_hash="${12}"; target_site_hash="${13}"
 
-[[ "$(hostname -s)" == "$target_id" ]] || { echo "target hostname mismatch" >&2; exit 1; }
-[[ -d "$deploy_path" && ! -L "$deploy_path" && "$(realpath -e "$deploy_path")" == "$deploy_path" ]] || exit 1
-[[ -d "$edge_path" && ! -L "$edge_path" && "$(realpath -e "$edge_path")" == "$edge_path" ]] || exit 1
-[[ -f "$runtime_env" && ! -L "$runtime_env" ]] || exit 1
-[[ "$(stat -c '%u:%g:%a' "$runtime_env")" == "0:0:600" ]] || exit 1
+[[ "$(hostname -s)" == "$target_id" ]] || preflight_fail target_hostname
+[[ -d "$deploy_path" && ! -L "$deploy_path" && "$(realpath -e "$deploy_path")" == "$deploy_path" ]] || preflight_fail deploy_path
+[[ -d "$edge_path" && ! -L "$edge_path" && "$(realpath -e "$edge_path")" == "$edge_path" ]] || preflight_fail edge_path
+[[ -f "$runtime_env" && ! -L "$runtime_env" ]] || preflight_fail runtime_env_file
+[[ "$(stat -c '%u:%g:%a' "$runtime_env")" == "0:0:600" ]] || preflight_fail runtime_env_mode
 
 platform_base="$deploy_path/platform-infra/docker-compose.catering-target.json"
 platform_ops="$deploy_path/platform-infra/docker-compose.catering-target.operations.json"
@@ -296,45 +308,49 @@ check_regular_hash() {
   sudo -n test ! -L "$path" || return 1
   [[ "$(sudo -n sha256sum "$path" | awk '{print $1}')" == "$expected" ]]
 }
-check_regular_hash "$platform_base" "$platform_base_hash"
-check_regular_hash "$platform_ops" "$platform_ops_hash"
-check_regular_hash "$edge_base" "$edge_base_hash"
-check_regular_hash "$edge_ops" "$edge_ops_hash"
-check_regular_hash "$edge_caddy" "$edge_caddy_hash"
-check_regular_hash "$target_site" "$target_site_hash"
+check_regular_hash "$platform_base" "$platform_base_hash" || preflight_fail platform_base_hash
+check_regular_hash "$platform_ops" "$platform_ops_hash" || preflight_fail platform_ops_hash
+check_regular_hash "$edge_base" "$edge_base_hash" || preflight_fail edge_base_hash
+check_regular_hash "$edge_ops" "$edge_ops_hash" || preflight_fail edge_ops_hash
+check_regular_hash "$edge_caddy" "$edge_caddy_hash" || preflight_fail edge_caddy_hash
+check_regular_hash "$target_site" "$target_site_hash" || preflight_fail target_site_hash
 
 if [[ -z "$expected_owner" ]]; then
-  [[ ! -e "$update_lock" && ! -L "$update_lock" ]] || exit 1
+  [[ ! -e "$update_lock" && ! -L "$update_lock" ]] || preflight_fail target_update_lock_absent
 else
-  sudo -n test -d "$update_lock" || exit 1
-  sudo -n test ! -L "$update_lock" || exit 1
-  [[ "$(sudo -n stat -c '%a' "$update_lock")" == "700" ]] || exit 1
-  sudo -n test -f "$update_lock/owner" || exit 1
-  sudo -n test ! -L "$update_lock/owner" || exit 1
-  [[ "$(sudo -n stat -c '%a' "$update_lock/owner")" == "600" ]] || exit 1
-  sudo -n grep -Fxq "owner_token=$expected_owner" "$update_lock/owner"
+  sudo -n test -d "$update_lock" || preflight_fail target_update_lock_dir
+  sudo -n test ! -L "$update_lock" || preflight_fail target_update_lock_symlink
+  [[ "$(sudo -n stat -c '%a' "$update_lock")" == "700" ]] || preflight_fail target_update_lock_mode
+  sudo -n test -f "$update_lock/owner" || preflight_fail target_update_lock_owner_file
+  sudo -n test ! -L "$update_lock/owner" || preflight_fail target_update_lock_owner_symlink
+  [[ "$(sudo -n stat -c '%a' "$update_lock/owner")" == "600" ]] || preflight_fail target_update_lock_owner_mode
+  sudo -n grep -Fxq "owner_token=$expected_owner" "$update_lock/owner" || preflight_fail target_update_lock_owner
 fi
 
-command -v docker >/dev/null
-[[ -f "$observer" && ! -L "$observer" ]] || exit 1
-observer_json="$(sudo -n /usr/bin/python3 -I "$observer" --check)"
-python3 - "$observer_json" <<'PY'
+command -v docker >/dev/null || preflight_fail docker_command
+[[ -f "$observer" && ! -L "$observer" ]] || preflight_fail backup_observer_file
+if ! observer_json="$(sudo -n /usr/bin/python3 -I "$observer" --check)"; then
+  preflight_fail backup_observer_command
+fi
+python3 - "$observer_json" <<'PY' || preflight_fail backup_observer_health
 import json, sys
 value = json.loads(sys.argv[1])
 if value.get("observer_run") != "completed" or value.get("backup_health") != "healthy":
-    raise SystemExit("backup observer is not healthy")
+    raise SystemExit(1)
 PY
 
-sudo -n docker compose --env-file "$runtime_env" -f "$platform_base" -f "$platform_ops" config --format json >/dev/null
-sudo -n docker compose --env-file "$runtime_env" -f "$edge_base" -f "$edge_ops" config --format json >/dev/null
+sudo -n docker compose --env-file "$runtime_env" -f "$platform_base" -f "$platform_ops" config --format json >/dev/null || preflight_fail platform_compose_render
+sudo -n docker compose --env-file "$runtime_env" -f "$edge_base" -f "$edge_ops" config --format json >/dev/null || preflight_fail edge_compose_render
 
-network_names="$(sudo -n docker network ls --format '{{.Name}}' | sort)"
-python3 - "$network_names" <<'PY'
+if ! network_names="$(sudo -n docker network ls --format '{{.Name}}' | sort)"; then
+  preflight_fail docker_network_list
+fi
+python3 - "$network_names" <<'PY' || preflight_fail docker_network_set
 import sys
 actual = set(filter(None, sys.argv[1].splitlines()))
 expected = {"bridge", "host", "none", "catering_private", "catering_ingress", "catering_public"}
 if actual != expected:
-    raise SystemExit("unexpected Docker network set")
+    raise SystemExit(1)
 PY
 
 networks_of() {
@@ -351,31 +367,39 @@ require_running() {
 }
 
 for service in postgres intake offer production exports web; do
-  require_running "platform-infra-${service}-1"
+  require_running "platform-infra-${service}-1" || preflight_fail "container_running_${service}"
 done
-require_running "catering-edge-edge-1"
+require_running "catering-edge-edge-1" || preflight_fail container_running_edge
 
-writer_mode="$(sudo -n docker inspect catering-edge-edge-1 | python3 -c 'import json,sys; d=json.load(sys.stdin)[0]; hits=[v.split("=",1)[1] for v in d.get("Config",{}).get("Env",[]) if v.startswith("CATERING_WRITER_MODE=")]; print(hits[0] if len(hits)==1 else "")')"
-[[ "$writer_mode" == "enabled" ]] || { echo "target writer mode is not enabled" >&2; exit 1; }
+if ! writer_mode="$(sudo -n docker inspect catering-edge-edge-1 | python3 -c 'import json,sys; d=json.load(sys.stdin)[0]; hits=[v.split("=",1)[1] for v in d.get("Config",{}).get("Env",[]) if v.startswith("CATERING_WRITER_MODE=")]; print(hits[0] if len(hits)==1 else "")')"; then
+  preflight_fail writer_mode_read
+fi
+[[ "$writer_mode" == "enabled" ]] || preflight_fail writer_mode
 
-schema_version="$(sudo -n docker exec platform-infra-postgres-1 psql --no-psqlrc --no-password --username=catering --dbname=catering_agents --tuples-only --no-align --command="SELECT version_number FROM catering_schema_migrations WHERE unit_name = 'catering_business_records'" | tr -d '[:space:]')"
-[[ "$schema_version" == "3" ]] || { echo "unexpected catering business-records schema version" >&2; exit 1; }
-[[ "$(networks_of platform-infra-postgres-1)" == "catering_private" ]]
+if ! schema_version="$(sudo -n docker exec platform-infra-postgres-1 psql --no-psqlrc --no-password --username=catering --dbname=catering_agents --tuples-only --no-align --command="SELECT version_number FROM catering_schema_migrations WHERE unit_name = 'catering_business_records'" | tr -d '[:space:]')"; then
+  preflight_fail schema_version_read
+fi
+[[ "$schema_version" == "3" ]] || preflight_fail schema_version
+[[ "$(networks_of platform-infra-postgres-1)" == "catering_private" ]] || preflight_fail postgres_network
 for service in intake offer production exports; do
-  [[ "$(networks_of "platform-infra-${service}-1")" == "catering_private" ]]
+  [[ "$(networks_of "platform-infra-${service}-1")" == "catering_private" ]] || preflight_fail "app_network_${service}"
 done
-[[ "$(networks_of platform-infra-web-1)" == "catering_ingress,catering_private" ]]
-[[ "$(networks_of catering-edge-edge-1)" == "catering_ingress,catering_public" ]]
+[[ "$(networks_of platform-infra-web-1)" == "catering_ingress,catering_private" ]] || preflight_fail web_network
+[[ "$(networks_of catering-edge-edge-1)" == "catering_ingress,catering_public" ]] || preflight_fail edge_network
 
 for service in postgres intake offer production exports web; do
-  [[ -z "$(ports_of "platform-infra-${service}-1")" ]]
+  [[ -z "$(ports_of "platform-infra-${service}-1")" ]] || preflight_fail "app_ports_${service}"
 done
-[[ "$(ports_of catering-edge-edge-1)" == "443/tcp=443,80/tcp=80" ]]
+[[ "$(ports_of catering-edge-edge-1)" == "443/tcp=443,80/tcp=80" ]] || preflight_fail edge_ports
 
-postgres_volume="$(sudo -n docker inspect platform-infra-postgres-1 | python3 -c 'import json,sys; d=json.load(sys.stdin)[0]; hits=[m.get("Name","") for m in d.get("Mounts",[]) if m.get("Type")=="volume" and m.get("Destination")=="/var/lib/postgresql/data"]; print(hits[0] if len(hits)==1 else "")')"
-[[ -n "$postgres_volume" ]]
-edge_image="$(image_of catering-edge-edge-1)"
-[[ "$edge_image" =~ ^sha256:[0-9a-f]{64}$ ]]
+if ! postgres_volume="$(sudo -n docker inspect platform-infra-postgres-1 | python3 -c 'import json,sys; d=json.load(sys.stdin)[0]; hits=[m.get("Name","") for m in d.get("Mounts",[]) if m.get("Type")=="volume" and m.get("Destination")=="/var/lib/postgresql/data"]; print(hits[0] if len(hits)==1 else "")')"; then
+  preflight_fail postgres_volume_read
+fi
+[[ -n "$postgres_volume" ]] || preflight_fail postgres_volume
+if ! edge_image="$(image_of catering-edge-edge-1)"; then
+  preflight_fail edge_image_read
+fi
+[[ "$edge_image" =~ ^sha256:[0-9a-f]{64}$ ]] || preflight_fail edge_image
 
 printf 'TARGET_PREFLIGHT_OK target=%s backup=healthy writer=enabled schema_version=3 postgres_volume=%s edge_image=%s\n' "$target_id" "$postgres_volume" "$edge_image"
 REMOTE_PREFLIGHT
@@ -394,7 +418,9 @@ run_production_preflight() {
   verify_runtime_schema_migration_unchanged
   verify_runtime_ddl_unchanged
   local output
-  output="$(remote_preflight "")"
+  if ! output="$(remote_preflight "")"; then
+    fail "TARGET_PREFLIGHT_FAIL gate=remote_target_invariants"
+  fi
   parse_preflight_binding "${output}"
   printf '%s\n' "${output}"
 }
@@ -736,7 +762,9 @@ run_production_update() {
   verify_runtime_ddl_unchanged
 
   local initial
-  initial="$(remote_preflight "")"
+  if ! initial="$(remote_preflight "")"; then
+    fail "TARGET_PREFLIGHT_FAIL gate=remote_target_invariants"
+  fi
   parse_preflight_binding "${initial}"
   printf '%s\n' "${initial}"
 

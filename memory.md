@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.399
+version: 5.400
 date: 2026-09-22
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -24,6 +24,9 @@ repo: AlexanderSmyslowski/catering-agents-platform
 - Read-only-Lockgrenze: Der Preflight darf keinen Target-Update-Lock anlegen und nichts mutieren. Der Backup-Observer `--check` darf seinen vorhandenen Observer-Lock kurzzeitig read-only öffnen und per `flock` synchronisieren; dieser interne Lesekonsistenz-Lock ist kein Deployment-/Update-Lock und `--check` publiziert keinen Status.
 - Nach Merge von PR #700 auf `abe986452625499e1b07c3e64ca97ef60acfa06d` stoppte die nächste lokale Sicherheitsprüfung den echten Preflight erneut vor SSH: Der Schema-Read verwendete `psql` ohne `--no-psqlrc`, wodurch Startup-Dateien vor dem vorgesehenen SELECT zusätzliche Befehle hätten ausführen können.
 - PR #701 härtet ausschließlich diesen read-only Schema-Read mit `--no-psqlrc` und ergänzt einen Regressionstest, der diese Option im `REMOTE_PREFLIGHT` verbindlich fordert. Kein Serverkontakt durch den Fix.
+- Der erste tatsächlich ausgeführte lokale read-only Preflight auf `5e9670a256b64cf24cbdb5329b876cd47568ec9a` endete mit Exit-Code 1 und leerem stdout/stderr; `TARGET_PREFLIGHT_OK` wurde nicht erreicht. Wegen stiller fail-closed Gates ließ sich das konkrete Ziel-Gate nicht belastbar bestimmen. Keine Wiederholung und keine Mutation.
+- PR #702 ergänzt ausschließlich nicht-sensitive Diagnosemarker für den read-only Preflight. Kritische Zielprüfungen melden bei Fehler `TARGET_PREFLIGHT_FAIL gate=<statischer-gate-name>`; Werte, Pfade und Secrets werden nicht ausgegeben. Der Kontrollfluss bleibt fail-closed und unverändert read-only.
+- Die Diagnose umfasst auch die groben Phasen `runtime_schema_source`, `runtime_ddl_manifest` und `remote_target_invariants` sowie feine Gates für Zielidentität, Target-Datei-Hashes, Update-Lock-Abwesenheit, Backup-Observer, Compose-Render, Docker-Netzsatz, Containerlaufzustand, Writer-Modus, Schema-Version, Service-Netze/Ports, PostgreSQL-Volume und Edge-Image.
 - **Noch kein erfolgreich abgeschlossener echter Zielserver-Preflight und kein Deployment.** Der erste echte Updateversuch bleibt separat freigabepflichtig und setzt einen vollständig grünen read-only Zielcheck voraus.
 - Reale Küchenprüfung, belastbare Zukaufspezifikationen und Rezept-/Allergenfreigaben bleiben fachlich getrennt und werden durch den technischen Updateweg nicht ersetzt.
 

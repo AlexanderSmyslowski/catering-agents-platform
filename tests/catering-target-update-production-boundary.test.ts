@@ -48,6 +48,46 @@ describe("Catering target production command boundary", () => {
     expect(remotePreflight).toMatch(/\bpsql\b[^\n]*--no-psqlrc\b/);
   });
 
+  it("wraps runtime schema source SSH failures in a coarse preflight gate", () => {
+    const production = readFileSync(
+      path.join(root, "platform-infra/scripts/catering-target-production-update.sh"),
+      "utf8"
+    );
+    expect(production).toContain('if ! installed_source="$(ssh_target bash -s --');
+    expect(production).toContain('fail "TARGET_PREFLIGHT_FAIL gate=runtime_schema_source"');
+  });
+
+  it("names critical read-only preflight failure gates without exposing values", () => {
+    const production = readFileSync(
+      path.join(root, "platform-infra/scripts/catering-target-production-update.sh"),
+      "utf8"
+    );
+    const match = production.match(/<<'REMOTE_PREFLIGHT'\n([\s\S]*?)\nREMOTE_PREFLIGHT/);
+    expect(match?.[1], "REMOTE_PREFLIGHT block missing").toBeTruthy();
+    const remotePreflight = match?.[1] ?? "";
+    for (const gate of [
+      "target_hostname",
+      "deploy_path",
+      "runtime_env_mode",
+      "platform_base_hash",
+      "target_site_hash",
+      "target_update_lock_absent",
+      "backup_observer_health",
+      "platform_compose_render",
+      "docker_network_set",
+      "writer_mode",
+      "schema_version",
+      "postgres_network",
+      "web_network",
+      "edge_ports",
+      "postgres_volume",
+      "edge_image"
+    ]) {
+      expect(remotePreflight).toContain("preflight_fail " + gate);
+    }
+    expect(remotePreflight).toContain("TARGET_PREFLIGHT_FAIL gate=%s");
+  });
+
   it("implements strict read-only production preflight", () => {
     const text = runner();
     expect(text).toContain("--preflight");

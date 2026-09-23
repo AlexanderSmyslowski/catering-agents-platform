@@ -125,7 +125,7 @@ def ddl_manifest_digest(repo_root: Path) -> str:
         i = 0
         while i < len(source):
             quote = source[i]
-            if quote not in "'\"\`":
+            if quote not in ("'", '"', "`"):
                 i += 1
                 continue
             i += 1
