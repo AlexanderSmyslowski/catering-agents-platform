@@ -106,3 +106,12 @@ PR #702 ergänzt deshalb ausschließlich nicht-sensitive Fehlerdiagnostik. Still
 Die groben Phasen `runtime_schema_source`, `runtime_ddl_manifest` und `remote_target_invariants` sind gebunden. Im Remote-Preflight werden zusätzlich Zielidentität/Pfade, Target-Datei-Hashes, Lockzustand, Backup-Observer, Compose-Render, Docker-Netzsatz, Containerstatus, Writer-Modus, Schema-Version, Service-Netze/Ports, PostgreSQL-Volume und Edge-Image mit eindeutigen Gate-Namen versehen.
 
 Bis zu einem vollständig grünen echten read-only Preflight bleibt jede mutierende Target-Aktualisierung gesperrt.
+
+
+## Fortsetzung 2026-09-23 – Preflight-Quellbindung an tatsächliches Target-Layout
+
+Der erste diagnostisch aussagekräftige echte read-only Preflight auf `cfda8ae04295f3adfe3133ce5587eedd099319a6` wurde genau einmal ausgeführt und stoppte ohne Mutation mit `TARGET_PREFLIGHT_FAIL gate=runtime_schema_source_file`, danach grob `runtime_schema_source`.
+
+Die Ursache liegt im Preflight-Vertrag: Der isolierte Zielaufbau installierte gemäß TARGET-REHEARSAL nur die Plattformdefinition unter `/opt/catering-agents-platform/platform-infra/`, nicht den vollständigen Repository-Quellbaum. Deshalb darf die Driftprüfung nicht `/opt/catering-agents-platform/shared-core/src/persistence.ts` oder die Runtime-Quellwurzeln auf dem Host voraussetzen.
+
+Die Korrektur liest migrationsrelevante Quelle und Runtime-DDL read-only aus `/app` aller vier laufenden immutable Runtime-Appcontainer (intake, offer, production, exports) und bindet jeden Fingerprint an den Kandidaten. Kein Serverzustand wird dafür ergänzt oder repariert.
