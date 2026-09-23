@@ -31,7 +31,7 @@ describe("Catering target runtime inventory", () => {
       },
       contractAlignment: {
         requiredModel: "separate repository source paths from installed remote runtime paths",
-        preflightAlignment: "ready_for_contract_model_fix"
+        preflightAlignment: "contract_v2_candidate_uses_confirmed_runtime_paths"
       }
     });
 

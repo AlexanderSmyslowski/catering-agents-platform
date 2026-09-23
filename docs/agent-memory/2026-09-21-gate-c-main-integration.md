@@ -156,3 +156,10 @@ Damit ist die Ursache des aktuellen Gates kein Hash- oder Berechtigungsproblem, 
 Eine zweite separat freigegebene read-only Diagnose mit genau einer SSH-Sitzung vervollständigte die noch offenen Fakten. Platform `compose.json`/`operations.json`, Edge `compose.json`/`operations.json`, `/opt/catering-edge/Caddyfile` und die Target-Site `/opt/catering-agents-platform/platform-infra/sites/catering-target.caddy` sind jeweils reguläre root:root-0644-Dateien und stimmen per read-only SHA-256-Vergleich exakt mit ihren Repository-Quelldateien am gebundenen Vergleichscommit überein. Hashwerte oder Datei-/Environmentinhalte wurden nicht ausgegeben.
 
 Der Edge-Container bestätigt per Compose-Labels Projekt `catering-edge`, Working Directory `/opt/catering-edge`, Config-Dateien `compose.json` und `operations.json`, Service `edge`. Damit sind die sechs für den Preflight relevanten Runtime-Dateipfade vollständig belegt. Das maschinenlesbare Inventar wurde entsprechend von „teilweise bestätigt“ auf „bereit für Contract-Modellkorrektur“ gehoben.
+
+
+## Fortsetzung 2026-09-23 – Contract v2 trennt Source und Runtime
+
+Auf Basis des vollständig bestätigten `catering-target-runtime-inventory.json` wird der Target-Update-Contract auf Schema v2 gehoben. `repositorySourcePaths` enthält ausschließlich die sechs versionierten Repository-Quellen; `installedRuntime` enthält ausschließlich die tatsächlich beobachteten Compose-Projekte, Working Directories und Runtime-Dateipfade.
+
+Der Produktionsrunner validiert Contract und Inventar lokal gegeneinander, verwendet die Source-Pfade für lokale Hash-/Releasearbeit und übergibt die Runtime-Pfade explizit an den read-only Remote-Preflight. Der Remote-Preflight konstruiert keine Runtime-Dateinamen mehr aus Repository-Namen. Zusätzlich bindet er alle sechs Runtime-Dateien an root:root:0644 und SHA-256 und prüft die Docker-Compose-Labels aller sechs Platformcontainer sowie des Edge-Containers gegen Projekt, Working Directory, Config-Dateien und Service. Kein Serverzustand wird durch diese Korrektur verändert.

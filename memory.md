@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.406
+version: 5.407
 date: 2026-09-23
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -38,6 +38,7 @@ repo: AlexanderSmyslowski/catering-agents-platform
 - Der echte read-only Preflight auf `25a62be3a18142977e552081b90b802933971ef0` lief genau einmal und stoppte ohne Mutation mit `platform_base_file` / `remote_target_invariants`.
 - Zwei separat freigegebene read-only Diagnosen mit je genau einer SSH-Sitzung bestätigten das Runtime-Layout vollständig: Platform-Projekt `platform-infra` unter `/opt/catering-agents-platform/platform-infra` mit `compose.json` + `operations.json`; Edge-Projekt `catering-edge` unter `/opt/catering-edge` mit `compose.json` + `operations.json`. Diese vier Dateien plus `/opt/catering-edge/Caddyfile` und `/opt/catering-agents-platform/platform-infra/sites/catering-target.caddy` sind root:root 0644 und stimmen jeweils per SHA-256 mit der zugeordneten Repository-Quelldatei am Vergleichscommit überein.
 - Die vier alten Remote-Erwartungen `docker-compose.catering-target*.json` fehlen tatsächlich. Ursache ist ein Contract-Modellfehler: Repository-Source-Namen wurden zugleich als Remote-Runtime-Namen verwendet. `platform-infra/catering-target-runtime-inventory.json` führt jetzt die vollständig bestätigten Runtime-Pfade und Source-Bindungen maschinenlesbar; Source- und Runtime-Pfade werden im nächsten Contract-Schritt getrennt.
+- Contract-v2-Kandidat trennt jetzt `repositorySourcePaths` und `installedRuntime` strikt. Der Produktionsrunner validiert beide gegen das bestätigte Runtime-Inventar, nutzt Source-Pfade für Hash/Release und übergibt installierte Runtime-Pfade explizit an den Preflight. Zusätzlich werden root:root:0644 sowie Docker-Compose-Projekt/Working-Dir/Config-Files/Service-Labels der laufenden Platform- und Edge-Container fail-closed geprüft; Runtimepfade werden nicht mehr aus Repository-Dateinamen konstruiert.
 - **Noch kein erfolgreich abgeschlossener echter Zielserver-Preflight und kein Deployment.** Der erste echte Updateversuch bleibt separat freigabepflichtig und setzt einen vollständig grünen read-only Zielcheck voraus.
 - Reale Küchenprüfung, belastbare Zukaufspezifikationen und Rezept-/Allergenfreigaben bleiben fachlich getrennt und werden durch den technischen Updateweg nicht ersetzt.
 
