@@ -98,6 +98,8 @@ Fehler im read-only Preflight müssen dabei einen nicht-sensitiven Gate-Namen au
 
 `TARGET_PREFLIGHT_FAIL gate=<gate>`
 
+Bei den sechs statisch gebundenen Target-Dateien wird zusätzlich zwischen fehlender Datei (`*_file`), Symlink (`*_symlink`), nicht lesbarem/ungültigem SHA-256 (`*_hash_read`) und einem tatsächlich abweichenden SHA-256 (`*_hash`) unterschieden. Damit schwächt die Diagnose keinen Hashvergleich ab und gibt weder Soll- noch Ist-Hash aus.
+
 Die Gate-Namen beschreiben nur die fehlgeschlagene Prüfkategorie, z. B. `platform_base_hash`, `backup_observer_health`, `docker_network_set`, `schema_version`, `web_network`, `edge_ports` oder `postgres_volume`. Tatsächliche Secretwerte, Hashes, Pfade, Hostdaten oder sonstige Zielwerte werden durch diese Diagnose nicht ausgegeben. Zusätzlich existieren grobe Marker für Fehler beim installierten Schemaquell-Read, beim Runtime-DDL-Manifest und im gesamten Remote-Invariantenblock.
 
 

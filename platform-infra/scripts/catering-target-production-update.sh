@@ -351,17 +351,21 @@ edge_caddy="$edge_path/Caddyfile"
 target_site="$deploy_path/platform-infra/sites/catering-target.caddy"
 
 check_regular_hash() {
-  local path="$1" expected="$2"
-  sudo -n test -f "$path" || return 1
-  sudo -n test ! -L "$path" || return 1
-  [[ "$(sudo -n sha256sum "$path" | awk '{print $1}')" == "$expected" ]]
+  local path="$1" expected="$2" gate="$3" actual
+  sudo -n test -f "$path" || preflight_fail "${gate}_file"
+  sudo -n test ! -L "$path" || preflight_fail "${gate}_symlink"
+  if ! actual="$(sudo -n sha256sum "$path" | awk '{print $1}')"; then
+    preflight_fail "${gate}_hash_read"
+  fi
+  [[ "$actual" =~ ^[0-9a-f]{64}$ ]] || preflight_fail "${gate}_hash_read"
+  [[ "$actual" == "$expected" ]] || preflight_fail "${gate}_hash"
 }
-check_regular_hash "$platform_base" "$platform_base_hash" || preflight_fail platform_base_hash
-check_regular_hash "$platform_ops" "$platform_ops_hash" || preflight_fail platform_ops_hash
-check_regular_hash "$edge_base" "$edge_base_hash" || preflight_fail edge_base_hash
-check_regular_hash "$edge_ops" "$edge_ops_hash" || preflight_fail edge_ops_hash
-check_regular_hash "$edge_caddy" "$edge_caddy_hash" || preflight_fail edge_caddy_hash
-check_regular_hash "$target_site" "$target_site_hash" || preflight_fail target_site_hash
+check_regular_hash "$platform_base" "$platform_base_hash" platform_base
+check_regular_hash "$platform_ops" "$platform_ops_hash" platform_ops
+check_regular_hash "$edge_base" "$edge_base_hash" edge_base
+check_regular_hash "$edge_ops" "$edge_ops_hash" edge_ops
+check_regular_hash "$edge_caddy" "$edge_caddy_hash" edge_caddy
+check_regular_hash "$target_site" "$target_site_hash" target_site
 
 if [[ -z "$expected_owner" ]]; then
   [[ ! -e "$update_lock" && ! -L "$update_lock" ]] || preflight_fail target_update_lock_absent

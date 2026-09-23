@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.403
+version: 5.404
 date: 2026-09-22
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -33,6 +33,8 @@ repo: AlexanderSmyslowski/catering-agents-platform
 - Ursache: Der unlocked Preflight übergab einen absichtlich leeren Lock-Owner als Remote-SSH-Argument; leere Remote-Argumente bleiben über OpenSSH nicht zuverlässig als Positionsparameter erhalten, wodurch `${13}` fehlte. Fix: nichtleerer Sentinel plus fail-closed `$# == 13`-Prüfung; DDL-Pythonquote warnungsfrei.
 - Der echte read-only Preflight auf `5bb4fcd9c9d91450b049097fd3a242a565ca05b0` lief genau einmal und stoppte ohne Mutation mit `runtime_env_file` / `remote_target_invariants`.
 - Historische Zielnachweise belegen `/etc/catering-target/runtime.env` als installierte, genutzte root-only-0600-Datei. Der unprivilegierte Preflight-`test/stat` kann bei fehlendem Traversalrecht fälschlich „fehlend“ melden; Korrektur: ausschließlich read-only `sudo -n test/stat`, ohne Secretinhalt zu lesen.
+- Der echte read-only Preflight auf `2a7216d9e854d76a4faa7cdd71c4040c711d5829` lief genau einmal und stoppte ohne Mutation mit `platform_base_hash` / `remote_target_invariants`.
+- Die Platform-Base-Datei ist in Git am aktuellen Stand, am dokumentierten installierten Betriebsartefaktstand `3c5f6076…` und am späteren `f6c0aee4…` identisch; der Sollzustand wird nicht abgeschwächt. Der bisherige Hashhelper unterschied aber nicht zwischen Datei-/Symlinkfehler, `sha256sum`-Lesefehler und echtem Hashdrift. Diagnose wird deshalb in `*_file`, `*_symlink`, `*_hash_read`, `*_hash` getrennt.
 - **Noch kein erfolgreich abgeschlossener echter Zielserver-Preflight und kein Deployment.** Der erste echte Updateversuch bleibt separat freigabepflichtig und setzt einen vollständig grünen read-only Zielcheck voraus.
 - Reale Küchenprüfung, belastbare Zukaufspezifikationen und Rezept-/Allergenfreigaben bleiben fachlich getrennt und werden durch den technischen Updateweg nicht ersetzt.
 
