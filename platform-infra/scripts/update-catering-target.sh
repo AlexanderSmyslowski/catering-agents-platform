@@ -22,14 +22,28 @@ import json, sys
 value = json.load(open(sys.argv[1], encoding="utf-8"))
 required = {
     "schemaVersion", "targetId", "deployPath", "edgePath", "releaseRoot",
-    "platformComposeFiles", "edgeComposeFiles", "applicationServices",
+    "repositorySourcePaths", "installedRuntime", "applicationServices",
     "databaseService", "requiredNetworks", "forbiddenNetworks",
     "protectedRemotePaths", "migrationPolicy",
 }
 if set(value) != required:
     raise SystemExit("unexpected target update contract fields")
-if value["schemaVersion"] != 1:
+if value["schemaVersion"] != 2:
     raise SystemExit("unsupported target update contract version")
+if set(value["repositorySourcePaths"]) != {
+    "platformBase", "platformOperations", "edgeBase", "edgeOperations", "edgeCaddy", "targetSite",
+}:
+    raise SystemExit("unexpected repository source path fields")
+if set(value["installedRuntime"]) != {"platform", "edge"}:
+    raise SystemExit("unexpected installed runtime fields")
+if set(value["installedRuntime"]["platform"]) != {
+    "composeProject", "workingDirectory", "baseCompose", "operationsCompose", "targetSite",
+}:
+    raise SystemExit("unexpected platform runtime fields")
+if set(value["installedRuntime"]["edge"]) != {
+    "composeProject", "workingDirectory", "baseCompose", "operationsCompose", "caddyfile",
+}:
+    raise SystemExit("unexpected edge runtime fields")
 PY
 }
 
