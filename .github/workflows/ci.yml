@@ -317,8 +317,6 @@ jobs:
           set -euo pipefail
           bundle="$RUNNER_TEMP/catering-target-release-bundle"
           test_iid="$RUNNER_TEMP/runtime-adapter-check.iid"
-          printf 'CATERING_TARGET_ADAPTER_PRECHECK root=%s head=%s\n' "$(git -C source rev-parse --show-toplevel)" "$(git -C source rev-parse HEAD)"
-          git -C source status --porcelain --untracked-files=all
           (
             cd source
             CATERING_TARGET_PREBUILT_BUNDLE_DIR="$bundle" PATH="$bundle/bin:$PATH"               docker build --iidfile "$test_iid" --tag "catering-target-runtime:$SOURCE_COMMIT"               --file "$PWD/platform-infra/docker/Dockerfile.runtime" "$PWD"
