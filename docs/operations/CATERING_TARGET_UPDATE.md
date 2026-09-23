@@ -92,6 +92,8 @@ Jeder unbekannte oder nicht lesbare kritische Zustand führt zum Abbruch.
 
 Der isolierte Zielaufbau enthält absichtlich keinen vollständigen Repository-Quellbaum unter `/opt/catering-agents-platform`; dort wurden nur die Ziel-Plattformdefinition und servereigene Zustände installiert. Die Migrations- und DDL-Driftprüfung liest den installierten Quellstand deshalb read-only aus `/app` der laufenden immutable Runtime-Appcontainer `intake`, `offer`, `production` und `exports`. Alle vier Fingerprints müssen dem Kandidaten entsprechen; es wird nichts in die Container oder auf den Host geschrieben.
 
+Der Remote-Preflight transportiert den absichtlich leeren Lock-Owner im unlocked/read-only Lauf als festen nichtleeren Sentinel, weil OpenSSH leere Remote-Argumente beim Aufbau der Remote-Kommandozeile nicht zuverlässig als Positionsparameter erhält. Vor dem Lesen der 13 Remote-Argumente wird deren Anzahl fail-closed geprüft; eine Abweichung meldet `TARGET_PREFLIGHT_FAIL gate=remote_argument_count`.
+
 Fehler im read-only Preflight müssen dabei einen nicht-sensitiven Gate-Namen auf stderr ausgeben:
 
 `TARGET_PREFLIGHT_FAIL gate=<gate>`

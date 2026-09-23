@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.401
+version: 5.402
 date: 2026-09-22
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -29,6 +29,8 @@ repo: AlexanderSmyslowski/catering-agents-platform
 - Die Diagnose umfasst auch die groben Phasen `runtime_schema_source`, `runtime_ddl_manifest` und `remote_target_invariants` sowie feine Gates für Zielidentität, Target-Datei-Hashes, Update-Lock-Abwesenheit, Backup-Observer, Compose-Render, Docker-Netzsatz, Containerlaufzustand, Writer-Modus, Schema-Version, Service-Netze/Ports, PostgreSQL-Volume und Edge-Image.
 - Der erste diagnostisch aussagekräftige echte read-only Preflight auf `cfda8ae04295f3adfe3133ce5587eedd099319a6` lief genau einmal und stoppte ohne Mutation mit `runtime_schema_source_file` / `runtime_schema_source`.
 - Der Befund ist ein Preflight-Layoutfehler: Der isolierte Zielaufbau enthält absichtlich nur die Plattformdefinition unter `/opt/catering-agents-platform/platform-infra/`, nicht den vollständigen Repository-Quellbaum. Runtime-Schema- und DDL-Fingerprints müssen deshalb aus `/app` der laufenden immutable Runtime-Appcontainer gelesen und über intake/offer/production/exports gegen den Kandidaten gebunden werden.
+- Der echte read-only Preflight auf `a24191a4484c204af17afcae417a167b7b5fc2dd` lief genau einmal und stoppte ohne Mutation mit Python-`SyntaxWarning`, anschließend `bash: line 7: 13: unbound variable` und grob `remote_target_invariants`.
+- Ursache: Der unlocked Preflight übergab einen absichtlich leeren Lock-Owner als Remote-SSH-Argument; leere Remote-Argumente bleiben über OpenSSH nicht zuverlässig als Positionsparameter erhalten, wodurch `${13}` fehlte. Fix: nichtleerer Sentinel plus fail-closed `$# == 13`-Prüfung; DDL-Pythonquote warnungsfrei.
 - **Noch kein erfolgreich abgeschlossener echter Zielserver-Preflight und kein Deployment.** Der erste echte Updateversuch bleibt separat freigabepflichtig und setzt einen vollständig grünen read-only Zielcheck voraus.
 - Reale Küchenprüfung, belastbare Zukaufspezifikationen und Rezept-/Allergenfreigaben bleiben fachlich getrennt und werden durch den technischen Updateweg nicht ersetzt.
 
