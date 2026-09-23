@@ -178,7 +178,7 @@ def literals(source: str):
     i = 0
     while i < len(source):
         quote = source[i]
-        if quote not in "'\"\`":
+        if quote not in ("'", '"', "`"):
             i += 1
             continue
         i += 1
@@ -306,6 +306,13 @@ verify_runtime_ddl_unchanged() {
 
 remote_preflight() {
   local expected_lock_owner="${1:-}"
+  local expected_lock_owner_arg
+  if [[ -z "${expected_lock_owner}" ]]; then
+    expected_lock_owner_arg="__CATERING_NO_LOCK_OWNER__"
+  else
+    [[ "${expected_lock_owner}" != "__CATERING_NO_LOCK_OWNER__" ]] || fail "reserved target lock owner token"
+    expected_lock_owner_arg="${expected_lock_owner}"
+  fi
   local platform_base_hash platform_ops_hash edge_base_hash edge_ops_hash edge_caddy_hash target_site_hash
   platform_base_hash="$(local_sha256 "${REPO_ROOT}/platform-infra/docker-compose.catering-target.json")"
   platform_ops_hash="$(local_sha256 "${REPO_ROOT}/platform-infra/docker-compose.catering-target.operations.json")"
@@ -314,13 +321,19 @@ remote_preflight() {
   edge_caddy_hash="$(local_sha256 "${REPO_ROOT}/edge-infra/Caddyfile.catering-target.operations")"
   target_site_hash="$(local_sha256 "${REPO_ROOT}/platform-infra/target-sites/catering-target.caddy")"
 
-  ssh_target bash -s --     "${TARGET_ID}" "${DEPLOY_PATH}" "${EDGE_PATH}" "${TARGET_RUNTIME_ENV}"     "${TARGET_UPDATE_LOCK}" "${BACKUP_OBSERVER}" "${expected_lock_owner}"     "${platform_base_hash}" "${platform_ops_hash}" "${edge_base_hash}" "${edge_ops_hash}"     "${edge_caddy_hash}" "${target_site_hash}" <<'REMOTE_PREFLIGHT'
+  ssh_target bash -s --     "${TARGET_ID}" "${DEPLOY_PATH}" "${EDGE_PATH}" "${TARGET_RUNTIME_ENV}"     "${TARGET_UPDATE_LOCK}" "${BACKUP_OBSERVER}" "${expected_lock_owner_arg}"     "${platform_base_hash}" "${platform_ops_hash}" "${edge_base_hash}" "${edge_ops_hash}"     "${edge_caddy_hash}" "${target_site_hash}" <<'REMOTE_PREFLIGHT'
 set -euo pipefail
 preflight_fail() {
   printf 'TARGET_PREFLIGHT_FAIL gate=%s\n' "$1" >&2
   exit 1
 }
-target_id="$1"; deploy_path="$2"; edge_path="$3"; runtime_env="$4"; update_lock="$5"; observer="$6"; expected_owner="$7"
+[[ "$#" -eq 13 ]] || preflight_fail remote_argument_count
+target_id="$1"; deploy_path="$2"; edge_path="$3"; runtime_env="$4"; update_lock="$5"; observer="$6"; expected_owner_arg="$7"
+if [[ "$expected_owner_arg" == "__CATERING_NO_LOCK_OWNER__" ]]; then
+  expected_owner=""
+else
+  expected_owner="$expected_owner_arg"
+fi
 platform_base_hash="$8"; platform_ops_hash="$9"; edge_base_hash="${10}"; edge_ops_hash="${11}"; edge_caddy_hash="${12}"; target_site_hash="${13}"
 
 [[ "$(hostname -s)" == "$target_id" ]] || preflight_fail target_hostname

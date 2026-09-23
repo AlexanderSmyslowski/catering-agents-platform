@@ -64,6 +64,36 @@ describe("Catering target production command boundary", () => {
     expect(production).toContain('fail "TARGET_PREFLIGHT_FAIL gate=runtime_ddl_manifest"');
   });
 
+  it("preserves the empty unlocked-preflight owner across SSH argument serialization", () => {
+    const production = readFileSync(
+      path.join(root, "platform-infra/scripts/catering-target-production-update.sh"),
+      "utf8"
+    );
+    expect(production).toContain('expected_lock_owner_arg="__CATERING_NO_LOCK_OWNER__"');
+    expect(production).toContain('"${expected_lock_owner_arg}"');
+    const match = production.match(/<<'REMOTE_PREFLIGHT'\n([\s\S]*?)\nREMOTE_PREFLIGHT/);
+    expect(match?.[1], "REMOTE_PREFLIGHT block missing").toBeTruthy();
+    const remotePreflight = match?.[1] ?? "";
+    expect(remotePreflight).toContain('[[ "$#" -eq 13 ]] || preflight_fail remote_argument_count');
+    expect(remotePreflight).toContain('expected_owner_arg="$7"');
+    expect(remotePreflight).toContain('expected_owner=""');
+  });
+
+  it("runs the local runtime DDL scanner with Python warnings treated as errors", () => {
+    const production = readFileSync(
+      path.join(root, "platform-infra/scripts/catering-target-production-update.sh"),
+      "utf8"
+    );
+    const match = production.match(/runtime_ddl_manifest_hash\(\) \{[\s\S]*?python3 - "\$root" <<'PY'\n([\s\S]*?)\nPY\n\}/);
+    expect(match?.[1], "local runtime DDL Python block missing").toBeTruthy();
+    const check = spawnSync("python3", ["-W", "error", "-", root], {
+      input: match?.[1] ?? "",
+      encoding: "utf8"
+    });
+    expect(check.status, check.stderr).toBe(0);
+    expect(check.stdout.trim()).toMatch(/^[0-9a-f]{64}$/);
+  });
+
   it("names critical read-only preflight failure gates without exposing values", () => {
     const production = readFileSync(
       path.join(root, "platform-infra/scripts/catering-target-production-update.sh"),
@@ -73,6 +103,7 @@ describe("Catering target production command boundary", () => {
     expect(match?.[1], "REMOTE_PREFLIGHT block missing").toBeTruthy();
     const remotePreflight = match?.[1] ?? "";
     for (const gate of [
+      "remote_argument_count",
       "target_hostname",
       "deploy_path",
       "runtime_env_mode",

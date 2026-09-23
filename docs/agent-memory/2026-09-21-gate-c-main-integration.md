@@ -115,3 +115,10 @@ Der erste diagnostisch aussagekräftige echte read-only Preflight auf `cfda8ae04
 Die Ursache liegt im Preflight-Vertrag: Der isolierte Zielaufbau installierte gemäß TARGET-REHEARSAL nur die Plattformdefinition unter `/opt/catering-agents-platform/platform-infra/`, nicht den vollständigen Repository-Quellbaum. Deshalb darf die Driftprüfung nicht `/opt/catering-agents-platform/shared-core/src/persistence.ts` oder die Runtime-Quellwurzeln auf dem Host voraussetzen.
 
 Die Korrektur liest migrationsrelevante Quelle und Runtime-DDL read-only aus `/app` aller vier laufenden immutable Runtime-Appcontainer (intake, offer, production, exports) und bindet jeden Fingerprint an den Kandidaten. Kein Serverzustand wird dafür ergänzt oder repariert.
+
+
+## Fortsetzung 2026-09-23 – Remote-Argumentbindung nach zweitem echten Preflight
+
+Der echte read-only Preflight auf `a24191a4484c204af17afcae417a167b7b5fc2dd` wurde genau einmal ausgeführt und stoppte ohne Mutation. stderr zeigte zuerst eine lokale Python-`SyntaxWarning` wegen der Backtick-Darstellung im DDL-Scanner, danach `bash: line 7: 13: unbound variable` und grob `TARGET_PREFLIGHT_FAIL gate=remote_target_invariants`.
+
+Ursache des Bash-Abbruchs: Im unlocked Preflight ist der erwartete Lock-Owner absichtlich leer. Ein leeres Argument in `ssh ... bash -s -- "" ...` wird beim Remote-Kommandoaufbau nicht zuverlässig als Positionsparameter transportiert; dadurch fehlte remote `${13}`. Die Korrektur verwendet für den leeren Owner einen festen nichtleeren Sentinel und prüft remote vor jeder Positionsauswertung exakt 13 Argumente. Der lokale DDL-Scanner verwendet zugleich eine warnungsfreie Quote-Tupeldarstellung.
