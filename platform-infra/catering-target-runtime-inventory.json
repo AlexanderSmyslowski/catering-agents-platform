@@ -3,11 +3,12 @@
   "targetId": "catering-prod-1",
   "observedAt": "2026-09-23",
   "observation": {
-    "source": "single-read-only-ssh-diagnosis",
+    "source": "two-single-session-read-only-diagnostics",
     "boundMainCommit": "25a62be3a18142977e552081b90b802933971ef0",
-    "sshSessions": 1,
+    "sshSessionsTotal": 2,
     "mutation": false,
-    "contentsRead": false
+    "contentsRead": false,
+    "hashValuesExposed": false
   },
   "platform": {
     "composeProject": "platform-infra",
@@ -38,46 +39,84 @@
         "service": "web"
       }
     ],
-    "configFilesFromAllContainerLabels": [
+    "runtimeFiles": [
       {
+        "role": "base_compose",
         "path": "/opt/catering-agents-platform/platform-infra/compose.json",
-        "labelEvidence": "confirmed_all_six_platform_containers",
-        "currentFileState": {
-          "status": "regular_file",
-          "owner": "root",
-          "group": "root",
-          "mode": "0644",
-          "evidence": "confirmed_path_inventory"
-        }
+        "sourcePath": "platform-infra/docker-compose.catering-target.json",
+        "status": "regular_file",
+        "owner": "root",
+        "group": "root",
+        "mode": "0644",
+        "sourceMatch": true,
+        "evidence": "container_labels_plus_read_only_metadata_and_sha256_comparison"
       },
       {
+        "role": "operations_compose",
         "path": "/opt/catering-agents-platform/platform-infra/operations.json",
-        "labelEvidence": "confirmed_all_six_platform_containers",
-        "currentFileState": {
-          "status": "not_separately_checked"
-        }
+        "sourcePath": "platform-infra/docker-compose.catering-target.operations.json",
+        "status": "regular_file",
+        "owner": "root",
+        "group": "root",
+        "mode": "0644",
+        "sourceMatch": true,
+        "evidence": "container_labels_plus_read_only_metadata_and_sha256_comparison"
+      },
+      {
+        "role": "target_site",
+        "path": "/opt/catering-agents-platform/platform-infra/sites/catering-target.caddy",
+        "sourcePath": "platform-infra/target-sites/catering-target.caddy",
+        "status": "regular_file",
+        "owner": "root",
+        "group": "root",
+        "mode": "0644",
+        "sourceMatch": true,
+        "evidence": "read_only_metadata_and_sha256_comparison"
       }
     ]
   },
   "edge": {
-    "observedComposeFiles": [
-      {
-        "path": "/opt/catering-edge/compose.json",
-        "currentFileState": {
-          "status": "regular_file",
-          "owner": "root",
-          "group": "root",
-          "mode": "0644",
-          "evidence": "confirmed_path_inventory"
-        }
-      }
-    ],
-    "containerComposeLabels": {
-      "status": "not_checked"
+    "composeProject": "catering-edge",
+    "workingDirectory": "/opt/catering-edge",
+    "container": {
+      "name": "catering-edge-edge-1",
+      "service": "edge"
     },
-    "operationsFile": {
-      "status": "unknown"
-    }
+    "runtimeFiles": [
+      {
+        "role": "base_compose",
+        "path": "/opt/catering-edge/compose.json",
+        "sourcePath": "edge-infra/docker-compose.catering-target.json",
+        "status": "regular_file",
+        "owner": "root",
+        "group": "root",
+        "mode": "0644",
+        "sourceMatch": true,
+        "evidence": "container_labels_plus_read_only_metadata_and_sha256_comparison"
+      },
+      {
+        "role": "operations_compose",
+        "path": "/opt/catering-edge/operations.json",
+        "sourcePath": "edge-infra/docker-compose.catering-target.operations.json",
+        "status": "regular_file",
+        "owner": "root",
+        "group": "root",
+        "mode": "0644",
+        "sourceMatch": true,
+        "evidence": "container_labels_plus_read_only_metadata_and_sha256_comparison"
+      },
+      {
+        "role": "caddyfile",
+        "path": "/opt/catering-edge/Caddyfile",
+        "sourcePath": "edge-infra/Caddyfile.catering-target.operations",
+        "status": "regular_file",
+        "owner": "root",
+        "group": "root",
+        "mode": "0644",
+        "sourceMatch": true,
+        "evidence": "read_only_metadata_and_sha256_comparison"
+      }
+    ]
   },
   "legacyExpectedRemotePaths": [
     {
@@ -98,8 +137,8 @@
     }
   ],
   "contractAlignment": {
-    "currentProblem": "repository source compose names are currently reused as remote runtime compose names",
+    "currentProblem": "repository source compose names are reused as remote runtime compose names",
     "requiredModel": "separate repository source paths from installed remote runtime paths",
-    "preflightAlignment": "pending_until_remaining_runtime_paths_are_confirmed"
+    "preflightAlignment": "ready_for_contract_model_fix"
   }
 }
