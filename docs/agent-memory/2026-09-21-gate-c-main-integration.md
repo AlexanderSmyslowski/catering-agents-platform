@@ -163,3 +163,10 @@ Der Edge-Container bestätigt per Compose-Labels Projekt `catering-edge`, Workin
 Auf Basis des vollständig bestätigten `catering-target-runtime-inventory.json` wird der Target-Update-Contract auf Schema v2 gehoben. `repositorySourcePaths` enthält ausschließlich die sechs versionierten Repository-Quellen; `installedRuntime` enthält ausschließlich die tatsächlich beobachteten Compose-Projekte, Working Directories und Runtime-Dateipfade.
 
 Der Produktionsrunner validiert Contract und Inventar lokal gegeneinander, verwendet die Source-Pfade für lokale Hash-/Releasearbeit und übergibt die Runtime-Pfade explizit an den read-only Remote-Preflight. Der Remote-Preflight konstruiert keine Runtime-Dateinamen mehr aus Repository-Namen. Zusätzlich bindet er alle sechs Runtime-Dateien an root:root:0644 und SHA-256 und prüft die Docker-Compose-Labels aller sechs Platformcontainer sowie des Edge-Containers gegen Projekt, Working Directory, Config-Dateien und Service. Kein Serverzustand wird durch diese Korrektur verändert.
+
+
+## Fortsetzung 2026-09-23 – erster vollständig grüner echter Target-Preflight
+
+Der echte read-only Target-Preflight auf dem gemergten Contract-v2-Commit `5b2c77089e7fd9051b4a55e38240cd69d6e9ed99` wurde genau einmal ausgeführt. Er endete mit Exit 0, leerem stderr und `TARGET_PREFLIGHT_OK`. Zusätzliche SSH-/Target-Aufrufe außerhalb dieses Preflights: 0. Keine Target-, Container-, Daten-, Netzwerk-, Volume-, Backup-, Firewall- oder DNS-Mutation.
+
+Die Erfolgslinie band Ziel `catering-prod-1`, `backup=healthy`, Writer `enabled`, Schema-Version 3, PostgreSQL-Volume `platform-infra_postgres_data` und Edge-Image `sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648`. Der maschinenlesbare Nachweis liegt in `platform-infra/catering-target-readonly-preflight-evidence.json`. Dieser Erfolg ist ausdrücklich keine Produktupdate- oder Deploymentfreigabe.
