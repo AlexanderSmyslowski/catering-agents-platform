@@ -5,7 +5,7 @@ bundle_dir="${CATERING_TARGET_PREBUILT_BUNDLE_DIR:?CATERING_TARGET_PREBUILT_BUND
 manifest="${bundle_dir}/manifest.json"
 
 fail() {
-  printf '%s\n' "catering target prebuilt docker adapter rejected input" >&2
+  printf 'CATERING_TARGET_PREBUILT_ADAPTER_FAIL line=%s\n' "${BASH_LINENO[0]:-0}" >&2
   exit 1
 }
 
