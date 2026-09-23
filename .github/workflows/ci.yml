@@ -322,7 +322,11 @@ jobs:
             CATERING_TARGET_PREBUILT_BUNDLE_DIR="$bundle" PATH="$bundle/bin:$PATH"               docker build --iidfile "$test_iid" --tag "catering-target-runtime:$SOURCE_COMMIT"               --file "$PWD/platform-infra/docker/Dockerfile.runtime" "$PWD"
           )
           test "$(cat "$test_iid")" = "$(cat "$bundle/runtime.iid")"
-          CATERING_TARGET_PREBUILT_BUNDLE_DIR="$bundle" PATH="$bundle/bin:$PATH"             docker save "$(cat "$bundle/runtime.iid")" | sha256sum > "$RUNNER_TEMP/adapter-save.sha256"
+          (
+            cd source
+            CATERING_TARGET_PREBUILT_BUNDLE_DIR="$bundle" PATH="$bundle/bin:$PATH" \
+              docker save "$(cat "$bundle/runtime.iid")" | sha256sum > "$RUNNER_TEMP/adapter-save.sha256"
+          )
           gzip -dc "$bundle/runtime-image.tar.gz" | sha256sum > "$RUNNER_TEMP/archive-save.sha256"
           cmp "$RUNNER_TEMP/adapter-save.sha256" "$RUNNER_TEMP/archive-save.sha256"
 
