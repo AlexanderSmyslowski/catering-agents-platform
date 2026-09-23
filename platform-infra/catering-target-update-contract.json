@@ -1,17 +1,33 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "targetId": "catering-prod-1",
   "deployPath": "/opt/catering-agents-platform",
   "edgePath": "/opt/catering-edge",
   "releaseRoot": "/opt/catering-releases",
-  "platformComposeFiles": [
-    "platform-infra/docker-compose.catering-target.json",
-    "platform-infra/docker-compose.catering-target.operations.json"
-  ],
-  "edgeComposeFiles": [
-    "edge-infra/docker-compose.catering-target.json",
-    "edge-infra/docker-compose.catering-target.operations.json"
-  ],
+  "repositorySourcePaths": {
+    "platformBase": "platform-infra/docker-compose.catering-target.json",
+    "platformOperations": "platform-infra/docker-compose.catering-target.operations.json",
+    "edgeBase": "edge-infra/docker-compose.catering-target.json",
+    "edgeOperations": "edge-infra/docker-compose.catering-target.operations.json",
+    "edgeCaddy": "edge-infra/Caddyfile.catering-target.operations",
+    "targetSite": "platform-infra/target-sites/catering-target.caddy"
+  },
+  "installedRuntime": {
+    "platform": {
+      "composeProject": "platform-infra",
+      "workingDirectory": "/opt/catering-agents-platform/platform-infra",
+      "baseCompose": "/opt/catering-agents-platform/platform-infra/compose.json",
+      "operationsCompose": "/opt/catering-agents-platform/platform-infra/operations.json",
+      "targetSite": "/opt/catering-agents-platform/platform-infra/sites/catering-target.caddy"
+    },
+    "edge": {
+      "composeProject": "catering-edge",
+      "workingDirectory": "/opt/catering-edge",
+      "baseCompose": "/opt/catering-edge/compose.json",
+      "operationsCompose": "/opt/catering-edge/operations.json",
+      "caddyfile": "/opt/catering-edge/Caddyfile"
+    }
+  },
   "applicationServices": [
     "intake",
     "offer",
@@ -30,10 +46,14 @@
   ],
   "protectedRemotePaths": [
     "/etc/catering-target/runtime.env",
-    "/opt/catering-edge/Caddyfile",
+    "/opt/catering-agents-platform/platform-infra/compose.json",
+    "/opt/catering-agents-platform/platform-infra/operations.json",
     "/opt/catering-agents-platform/platform-infra/.env",
     "/opt/catering-agents-platform/platform-infra/sites",
-    "/opt/catering-agents-platform/data"
+    "/opt/catering-agents-platform/data",
+    "/opt/catering-edge/compose.json",
+    "/opt/catering-edge/operations.json",
+    "/opt/catering-edge/Caddyfile"
   ],
   "migrationPolicy": {
     "mode": "explicit-only",
