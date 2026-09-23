@@ -108,6 +108,22 @@ describe("Catering target production command boundary", () => {
     expect(remotePreflight).not.toContain('sudo -n cat "$runtime_env"');
   });
 
+  it("distinguishes target file absence, symlink, hash read failure, and actual hash drift", () => {
+    const production = readFileSync(
+      path.join(root, "platform-infra/scripts/catering-target-production-update.sh"),
+      "utf8"
+    );
+    const match = production.match(/<<'REMOTE_PREFLIGHT'\n([\s\S]*?)\nREMOTE_PREFLIGHT/);
+    expect(match?.[1], "REMOTE_PREFLIGHT block missing").toBeTruthy();
+    const remotePreflight = match?.[1] ?? "";
+    expect(remotePreflight).toContain('preflight_fail "${gate}_file"');
+    expect(remotePreflight).toContain('preflight_fail "${gate}_symlink"');
+    expect(remotePreflight).toContain('preflight_fail "${gate}_hash_read"');
+    expect(remotePreflight).toContain('preflight_fail "${gate}_hash"');
+    expect(remotePreflight).toContain('check_regular_hash "$platform_base" "$platform_base_hash" platform_base');
+    expect(remotePreflight).not.toContain('check_regular_hash "$platform_base" "$platform_base_hash" ||');
+  });
+
   it("names critical read-only preflight failure gates without exposing values", () => {
     const production = readFileSync(
       path.join(root, "platform-infra/scripts/catering-target-production-update.sh"),
@@ -122,6 +138,9 @@ describe("Catering target production command boundary", () => {
       "deploy_path",
       "runtime_env_symlink",
       "runtime_env_mode",
+      "platform_base_file",
+      "platform_base_symlink",
+      "platform_base_hash_read",
       "platform_base_hash",
       "target_site_hash",
       "target_update_lock_absent",

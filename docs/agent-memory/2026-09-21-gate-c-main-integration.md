@@ -131,3 +131,12 @@ Der echte read-only Preflight auf `5bb4fcd9c9d91450b049097fd3a242a565ca05b0` wur
 Der vorhandene Zielaufbau-Nachweis dokumentiert ausdrücklich, dass `/etc/catering-target/runtime.env` auf dem echten Ziel installiert war, von den Plattformdiensten genutzt wurde und root-only 0600 blieb. Der Preflight prüfte die Datei jedoch als unprivilegierter SSH-Benutzer mit `test/stat`. Bei einem nicht traversierbaren root-only Elternpfad kann dies fälschlich wie eine fehlende Datei erscheinen.
 
 Die Korrektur ändert keine erwartete Datei und liest keine Secrets: Existenz, Nicht-Symlink und root:root-0600-Metadaten werden ausschließlich read-only mit `sudo -n test` bzw. `sudo -n stat` geprüft. Fehlt die Datei tatsächlich, bleibt `runtime_env_file` fail-closed.
+
+
+## Fortsetzung 2026-09-23 – Hashdiagnose nach platform_base_hash
+
+Der echte read-only Preflight auf `2a7216d9e854d76a4faa7cdd71c4040c711d5829` wurde genau einmal ausgeführt und stoppte ohne Mutation mit `TARGET_PREFLIGHT_FAIL gate=platform_base_hash`, danach grob `remote_target_invariants`.
+
+Die Repository-Gegenprüfung zeigt: `platform-infra/docker-compose.catering-target.json` ist am aktuellen Stand, am dokumentierten installierten Betriebsartefaktstand `3c5f6076…` und am späteren Backup-/Observer-Installationsstand `f6c0aee4…` derselbe Git-Blob. Die Betriebsdokumentation bezeichnet die Base-Compose zudem bei der Operatorprobe ausdrücklich als unverändert. Deshalb wird der Sollhash nicht geändert und die Ziel-Datei nicht repariert.
+
+Der bisherige Hilfscheck fasste jedoch fehlende Datei, Symlink, fehlgeschlagenes `sudo sha256sum` und echten Hash-Mismatch unter demselben Gate zusammen. Die Korrektur trennt diese ausschließlich diagnostisch in `*_file`, `*_symlink`, `*_hash_read` und `*_hash`; Soll-/Istwerte werden weiterhin nicht ausgegeben und der Vergleich bleibt fail-closed.
