@@ -149,3 +149,10 @@ Der echte read-only Preflight auf `25a62be3a18142977e552081b90b802933971ef0` wur
 Unter `/opt/catering-edge` wurde `compose.json` ebenfalls als reguläre root:root-0644-Datei gefunden. Edge-Containerlabels und ein möglicher `operations.json`-Pfad wurden noch nicht geprüft. Alle vier bisher vom Preflight erwarteten Remote-Pfade mit den Repository-Dateinamen `docker-compose.catering-target*.json` wurden als fehlend bestätigt.
 
 Damit ist die Ursache des aktuellen Gates kein Hash- oder Berechtigungsproblem, sondern eine Vermischung zweier Namensräume: Repository-Source-Dateien und installierte Runtime-Dateien. Die bestätigten Fakten und expliziten Unbekannten werden ab jetzt in `platform-infra/catering-target-runtime-inventory.json` maschinenlesbar geführt. Der Update-Contract bleibt bis zur Bestätigung der verbleibenden Runtime-Pfade unverändert; kein Serverzustand wird ergänzt oder repariert.
+
+
+### Abschluss des Runtime-Inventars 2026-09-23
+
+Eine zweite separat freigegebene read-only Diagnose mit genau einer SSH-Sitzung vervollständigte die noch offenen Fakten. Platform `compose.json`/`operations.json`, Edge `compose.json`/`operations.json`, `/opt/catering-edge/Caddyfile` und die Target-Site `/opt/catering-agents-platform/platform-infra/sites/catering-target.caddy` sind jeweils reguläre root:root-0644-Dateien und stimmen per read-only SHA-256-Vergleich exakt mit ihren Repository-Quelldateien am gebundenen Vergleichscommit überein. Hashwerte oder Datei-/Environmentinhalte wurden nicht ausgegeben.
+
+Der Edge-Container bestätigt per Compose-Labels Projekt `catering-edge`, Working Directory `/opt/catering-edge`, Config-Dateien `compose.json` und `operations.json`, Service `edge`. Damit sind die sechs für den Preflight relevanten Runtime-Dateipfade vollständig belegt. Das maschinenlesbare Inventar wurde entsprechend von „teilweise bestätigt“ auf „bereit für Contract-Modellkorrektur“ gehoben.
