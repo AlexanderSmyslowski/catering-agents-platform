@@ -110,6 +110,14 @@ Read-only bedeutet hier: Der Preflight legt **keinen** `/opt/catering-target-upd
 Der Backup-Observer darf bei `--check` zur konsistenten Beobachtung kurzzeitig einen exklusiven, nicht blockierenden `flock` auf seiner **bereits vorhandenen, read-only geöffneten** Observer-Lockdatei halten. Dieser Synchronisations-Lock ist kein Deployment-/Update-Lock. Laut Observer-Vertrag schreibt `--check` keinen Observerstatus und führt weder Docker, Restic, Dump, Restore noch Reparaturen aus.
 
 
+## Kanonisches Laufzeitinventar
+
+Der tatsächliche Zielzustand wird ab 23.09.2026 zusätzlich in `platform-infra/catering-target-runtime-inventory.json` maschinenlesbar geführt. Das Inventar unterscheidet ausdrücklich zwischen bestätigten Beobachtungen, aus laufenden Docker-Compose-Labels abgeleiteten Pfaden und noch nicht separat bestätigten Zuständen; unbekannte Werte dürfen nicht als Annahmen ergänzt werden.
+
+Die einmalige read-only Diagnose auf dem an `25a62be3a18142977e552081b90b802933971ef0` gebundenen Stand hat für alle sechs Plattformcontainer dasselbe Compose-Projekt `platform-infra`, Working Directory `/opt/catering-agents-platform/platform-infra` und die Config-Dateien `compose.json` sowie `operations.json` in diesem Verzeichnis bestätigt. `compose.json` ist dort als reguläre root:root-0644-Datei vorhanden. `operations.json` ist durch alle sechs Containerlabels belegt, seine aktuelle Dateiexistenz wurde in dieser Diagnose jedoch nicht separat geprüft. Unter `/opt/catering-edge` wurde `compose.json` als reguläre root:root-0644-Datei bestätigt; Edge-Containerlabels und eine mögliche `operations.json`-Datei bleiben noch separat zu bestätigen.
+
+Die vier zuvor vom Preflight erwarteten Remote-Pfade mit Repository-Dateinamen `docker-compose.catering-target*.json` sind auf dem Ziel nicht vorhanden. Das ist ein Vertragsmodellfehler: Die bestehenden Contract-Felder `platformComposeFiles` und `edgeComposeFiles` bezeichnen Repository-Quelldateien, wurden im Preflight aber zugleich als installierte Remote-Dateinamen verwendet. Der nächste Contract-Schritt muss deshalb Repository-Source-Pfade und installierte Runtime-Pfade getrennt modellieren. Bis die noch offenen Runtime-Pfade bestätigt und diese Trennung umgesetzt ist, bleibt der echte Preflight fail-closed und es gibt kein Deployment-GO.
+
 ## Migrationsgrenze
 
 Der Contract lautet:
