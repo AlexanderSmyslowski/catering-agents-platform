@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.407
+version: 5.408
 date: 2026-09-23
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -39,7 +39,8 @@ repo: AlexanderSmyslowski/catering-agents-platform
 - Zwei separat freigegebene read-only Diagnosen mit je genau einer SSH-Sitzung bestätigten das Runtime-Layout vollständig: Platform-Projekt `platform-infra` unter `/opt/catering-agents-platform/platform-infra` mit `compose.json` + `operations.json`; Edge-Projekt `catering-edge` unter `/opt/catering-edge` mit `compose.json` + `operations.json`. Diese vier Dateien plus `/opt/catering-edge/Caddyfile` und `/opt/catering-agents-platform/platform-infra/sites/catering-target.caddy` sind root:root 0644 und stimmen jeweils per SHA-256 mit der zugeordneten Repository-Quelldatei am Vergleichscommit überein.
 - Die vier alten Remote-Erwartungen `docker-compose.catering-target*.json` fehlen tatsächlich. Ursache ist ein Contract-Modellfehler: Repository-Source-Namen wurden zugleich als Remote-Runtime-Namen verwendet. `platform-infra/catering-target-runtime-inventory.json` führt jetzt die vollständig bestätigten Runtime-Pfade und Source-Bindungen maschinenlesbar; Source- und Runtime-Pfade werden im nächsten Contract-Schritt getrennt.
 - Contract-v2-Kandidat trennt jetzt `repositorySourcePaths` und `installedRuntime` strikt. Der Produktionsrunner validiert beide gegen das bestätigte Runtime-Inventar, nutzt Source-Pfade für Hash/Release und übergibt installierte Runtime-Pfade explizit an den Preflight. Zusätzlich werden root:root:0644 sowie Docker-Compose-Projekt/Working-Dir/Config-Files/Service-Labels der laufenden Platform- und Edge-Container fail-closed geprüft; Runtimepfade werden nicht mehr aus Repository-Dateinamen konstruiert.
-- **Noch kein erfolgreich abgeschlossener echter Zielserver-Preflight und kein Deployment.** Der erste echte Updateversuch bleibt separat freigabepflichtig und setzt einen vollständig grünen read-only Zielcheck voraus.
+- Der erste vollständig grüne echte read-only Target-Preflight auf `5b2c77089e7fd9051b4a55e38240cd69d6e9ed99` ist bestanden: genau 1 Aufruf, 0 zusätzliche Targetkontakte, Exit 0, stderr leer, `TARGET_PREFLIGHT_OK`; gebunden sind backup healthy, Writer enabled, Schema-Version 3, PostgreSQL-Volume `platform-infra_postgres_data` und Edge-Image `sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648`. Maschinenlesbarer Beleg: `platform-infra/catering-target-readonly-preflight-evidence.json`. Keine Mutation und ausdrücklich noch keine Update-/Deploymentfreigabe.
+- **Noch kein Produktupdate und kein Deployment.** Der erste echte Updateversuch bleibt separat freigabepflichtig; der erforderliche vollständig grüne read-only Zielcheck liegt jetzt erstmals vor. Der erste echte Updateversuch bleibt separat freigabepflichtig und setzt einen vollständig grünen read-only Zielcheck voraus.
 - Reale Küchenprüfung, belastbare Zukaufspezifikationen und Rezept-/Allergenfreigaben bleiben fachlich getrennt und werden durch den technischen Updateweg nicht ersetzt.
 
 ## Zweck

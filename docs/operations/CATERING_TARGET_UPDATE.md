@@ -120,6 +120,12 @@ Zwei separat freigegebene, jeweils auf genau eine SSH-Sitzung begrenzte read-onl
 
 Die vier zuvor vom Preflight erwarteten Remote-Pfade mit Repository-Dateinamen `docker-compose.catering-target*.json` sind auf dem Ziel nicht vorhanden. Das war ein Vertragsmodellfehler: Repository-Quelldateien wurden zugleich als installierte Remote-Dateinamen verwendet. Contract-Schema v2 trennt deshalb `repositorySourcePaths` strikt von `installedRuntime`. Der Produktionsrunner validiert diese Bindung lokal gegen das bestätigte `catering-target-runtime-inventory.json`, übergibt dem Remote-Preflight die installierten Pfade explizit und prüft zusätzlich root:root:0644, SHA-256 sowie die Docker-Compose-Labels der laufenden Platform- und Edge-Container. Runtimepfade werden nicht mehr aus Repository-Dateinamen konstruiert. Bis dieser v2-Stand CI-geprüft und gemergt ist, bleibt der echte Preflight fail-closed und es gibt kein Deployment-GO.
 
+## Erster vollständig grüner echter Read-only-Preflight
+
+Am 23.09.2026 bestand der echte Zielserver-Preflight auf dem gemergten Contract-v2-Stand `5b2c77089e7fd9051b4a55e38240cd69d6e9ed99` erstmals vollständig: genau ein Preflight-Aufruf, keine zusätzlichen Targetkontakte, Exit 0, leeres stderr und `TARGET_PREFLIGHT_OK`. Gebunden wurden dabei unter anderem `backup=healthy`, Writer-Modus `enabled`, Business-Records-Schema-Version 3, PostgreSQL-Volume `platform-infra_postgres_data` und das immutable Edge-Image `sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648`.
+
+Der maschinenlesbare Nachweis liegt in `platform-infra/catering-target-readonly-preflight-evidence.json`. Dieser Beleg ist ausdrücklich **keine Update- oder Deploymentfreigabe**. Er bestätigt nur, dass der aktuelle Contract-v2-Preflight den tatsächlichen Zielzustand read-only vollständig akzeptiert hat.
+
 ## Migrationsgrenze
 
 Der Contract lautet:
