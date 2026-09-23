@@ -121,6 +121,11 @@ describe("Catering target production command boundary", () => {
     expect(remotePreflight).toContain('preflight_fail "${gate}_hash_read"');
     expect(remotePreflight).toContain('preflight_fail "${gate}_hash"');
     expect(remotePreflight).toContain('check_regular_hash "$platform_base" "$platform_base_hash" platform_base');
+    expect(remotePreflight).toContain('check_regular_hash "$platform_ops" "$platform_ops_hash" platform_ops');
+    expect(remotePreflight).toContain('check_regular_hash "$edge_base" "$edge_base_hash" edge_base');
+    expect(remotePreflight).toContain('check_regular_hash "$edge_ops" "$edge_ops_hash" edge_ops');
+    expect(remotePreflight).toContain('check_regular_hash "$edge_caddy" "$edge_caddy_hash" edge_caddy');
+    expect(remotePreflight).toContain('check_regular_hash "$target_site" "$target_site_hash" target_site');
     expect(remotePreflight).not.toContain('check_regular_hash "$platform_base" "$platform_base_hash" ||');
   });
 
@@ -138,10 +143,6 @@ describe("Catering target production command boundary", () => {
       "deploy_path",
       "runtime_env_symlink",
       "runtime_env_mode",
-      "platform_base_file",
-      "platform_base_symlink",
-      "platform_base_hash_read",
-      "platform_base_hash",
       "target_site_hash",
       "target_update_lock_absent",
       "backup_observer_health",
