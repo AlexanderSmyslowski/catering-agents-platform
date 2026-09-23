@@ -5,6 +5,7 @@ MODE="${1:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 CONTRACT_PATH="${REPO_ROOT}/platform-infra/catering-target-update-contract.json"
+RUNTIME_INVENTORY_PATH="${REPO_ROOT}/platform-infra/catering-target-runtime-inventory.json"
 EXPECTED_TARGET_ID="catering-prod-1"
 TARGET_RUNTIME_ENV="/etc/catering-target/runtime.env"
 TARGET_UPDATE_LOCK="/opt/catering-target-update.lock"
@@ -16,6 +17,22 @@ TARGET_ID=""
 DEPLOY_PATH=""
 EDGE_PATH=""
 RELEASE_ROOT=""
+SOURCE_PLATFORM_BASE=""
+SOURCE_PLATFORM_OPS=""
+SOURCE_EDGE_BASE=""
+SOURCE_EDGE_OPS=""
+SOURCE_EDGE_CADDY=""
+SOURCE_TARGET_SITE=""
+PLATFORM_COMPOSE_PROJECT=""
+PLATFORM_WORKING_DIR=""
+RUNTIME_PLATFORM_BASE=""
+RUNTIME_PLATFORM_OPS=""
+RUNTIME_TARGET_SITE=""
+EDGE_COMPOSE_PROJECT=""
+EDGE_WORKING_DIR=""
+RUNTIME_EDGE_BASE=""
+RUNTIME_EDGE_OPS=""
+RUNTIME_EDGE_CADDY=""
 LOCK_OWNER=""
 LOCK_HELD=false
 LOCAL_RELEASE_DIR=""
@@ -32,8 +49,11 @@ fail() {
 contract_value() {
   python3 - "${CONTRACT_PATH}" "$1" <<'PY'
 import json, sys
-value = json.load(open(sys.argv[1], encoding="utf-8"))
-item = value.get(sys.argv[2])
+item = json.load(open(sys.argv[1], encoding="utf-8"))
+for part in sys.argv[2].split("."):
+    if not isinstance(item, dict) or part not in item:
+        raise SystemExit(1)
+    item = item[part]
 if not isinstance(item, str) or not item:
     raise SystemExit(1)
 print(item)
@@ -42,20 +62,64 @@ PY
 
 load_production_contract() {
   [[ -f "${CONTRACT_PATH}" && ! -L "${CONTRACT_PATH}" ]] || fail "target update contract missing"
-  python3 - "${CONTRACT_PATH}" <<'PY'
+  [[ -f "${RUNTIME_INVENTORY_PATH}" && ! -L "${RUNTIME_INVENTORY_PATH}" ]] || fail "target runtime inventory missing"
+  python3 - "${CONTRACT_PATH}" "${RUNTIME_INVENTORY_PATH}" <<'PY'
 import json, sys
-value = json.load(open(sys.argv[1], encoding="utf-8"))
-if value.get("schemaVersion") != 1:
+contract = json.load(open(sys.argv[1], encoding="utf-8"))
+inventory = json.load(open(sys.argv[2], encoding="utf-8"))
+if contract.get("schemaVersion") != 2:
     raise SystemExit("unsupported target update contract")
-if value.get("targetId") != "catering-prod-1":
+if contract.get("targetId") != "catering-prod-1" or inventory.get("targetId") != contract.get("targetId"):
     raise SystemExit("unexpected target id")
-if value.get("migrationPolicy") != {"mode": "explicit-only", "supportedCommand": None}:
+if contract.get("migrationPolicy") != {"mode": "explicit-only", "supportedCommand": None}:
     raise SystemExit("unsupported migration policy")
+sources = contract.get("repositorySourcePaths")
+runtime = contract.get("installedRuntime")
+if set(sources or {}) != {"platformBase", "platformOperations", "edgeBase", "edgeOperations", "edgeCaddy", "targetSite"}:
+    raise SystemExit("unexpected repository source paths")
+if set(runtime or {}) != {"platform", "edge"}:
+    raise SystemExit("unexpected installed runtime")
+platform_files = {item["role"]: item for item in inventory["platform"]["runtimeFiles"]}
+edge_files = {item["role"]: item for item in inventory["edge"]["runtimeFiles"]}
+expected = {
+    ("platform", "base_compose"): (runtime["platform"]["baseCompose"], sources["platformBase"]),
+    ("platform", "operations_compose"): (runtime["platform"]["operationsCompose"], sources["platformOperations"]),
+    ("platform", "target_site"): (runtime["platform"]["targetSite"], sources["targetSite"]),
+    ("edge", "base_compose"): (runtime["edge"]["baseCompose"], sources["edgeBase"]),
+    ("edge", "operations_compose"): (runtime["edge"]["operationsCompose"], sources["edgeOperations"]),
+    ("edge", "caddyfile"): (runtime["edge"]["caddyfile"], sources["edgeCaddy"]),
+}
+for (scope, role), (runtime_path, source_path) in expected.items():
+    item = (platform_files if scope == "platform" else edge_files).get(role)
+    if not item or item.get("path") != runtime_path or item.get("sourcePath") != source_path:
+        raise SystemExit("target runtime inventory binding mismatch")
+    if item.get("status") != "regular_file" or item.get("owner") != "root" or item.get("group") != "root" or item.get("mode") != "0644" or item.get("sourceMatch") is not True:
+        raise SystemExit("target runtime inventory is not fully confirmed")
+if inventory["platform"].get("composeProject") != runtime["platform"]["composeProject"] or inventory["platform"].get("workingDirectory") != runtime["platform"]["workingDirectory"]:
+    raise SystemExit("platform compose identity mismatch")
+if inventory["edge"].get("composeProject") != runtime["edge"]["composeProject"] or inventory["edge"].get("workingDirectory") != runtime["edge"]["workingDirectory"]:
+    raise SystemExit("edge compose identity mismatch")
 PY
   TARGET_ID="$(contract_value targetId)"
   DEPLOY_PATH="$(contract_value deployPath)"
   EDGE_PATH="$(contract_value edgePath)"
   RELEASE_ROOT="$(contract_value releaseRoot)"
+  SOURCE_PLATFORM_BASE="$(contract_value repositorySourcePaths.platformBase)"
+  SOURCE_PLATFORM_OPS="$(contract_value repositorySourcePaths.platformOperations)"
+  SOURCE_EDGE_BASE="$(contract_value repositorySourcePaths.edgeBase)"
+  SOURCE_EDGE_OPS="$(contract_value repositorySourcePaths.edgeOperations)"
+  SOURCE_EDGE_CADDY="$(contract_value repositorySourcePaths.edgeCaddy)"
+  SOURCE_TARGET_SITE="$(contract_value repositorySourcePaths.targetSite)"
+  PLATFORM_COMPOSE_PROJECT="$(contract_value installedRuntime.platform.composeProject)"
+  PLATFORM_WORKING_DIR="$(contract_value installedRuntime.platform.workingDirectory)"
+  RUNTIME_PLATFORM_BASE="$(contract_value installedRuntime.platform.baseCompose)"
+  RUNTIME_PLATFORM_OPS="$(contract_value installedRuntime.platform.operationsCompose)"
+  RUNTIME_TARGET_SITE="$(contract_value installedRuntime.platform.targetSite)"
+  EDGE_COMPOSE_PROJECT="$(contract_value installedRuntime.edge.composeProject)"
+  EDGE_WORKING_DIR="$(contract_value installedRuntime.edge.workingDirectory)"
+  RUNTIME_EDGE_BASE="$(contract_value installedRuntime.edge.baseCompose)"
+  RUNTIME_EDGE_OPS="$(contract_value installedRuntime.edge.operationsCompose)"
+  RUNTIME_EDGE_CADDY="$(contract_value installedRuntime.edge.caddyfile)"
   [[ "${TARGET_ID}" == "${EXPECTED_TARGET_ID}" ]] || fail "target identity contract mismatch"
   [[ "${DEPLOY_PATH}" == "/opt/catering-agents-platform" ]] || fail "unexpected deploy path"
   [[ "${EDGE_PATH}" == "/opt/catering-edge" ]] || fail "unexpected edge path"
@@ -314,46 +378,58 @@ remote_preflight() {
     expected_lock_owner_arg="${expected_lock_owner}"
   fi
   local platform_base_hash platform_ops_hash edge_base_hash edge_ops_hash edge_caddy_hash target_site_hash
-  platform_base_hash="$(local_sha256 "${REPO_ROOT}/platform-infra/docker-compose.catering-target.json")"
-  platform_ops_hash="$(local_sha256 "${REPO_ROOT}/platform-infra/docker-compose.catering-target.operations.json")"
-  edge_base_hash="$(local_sha256 "${REPO_ROOT}/edge-infra/docker-compose.catering-target.json")"
-  edge_ops_hash="$(local_sha256 "${REPO_ROOT}/edge-infra/docker-compose.catering-target.operations.json")"
-  edge_caddy_hash="$(local_sha256 "${REPO_ROOT}/edge-infra/Caddyfile.catering-target.operations")"
-  target_site_hash="$(local_sha256 "${REPO_ROOT}/platform-infra/target-sites/catering-target.caddy")"
+  platform_base_hash="$(local_sha256 "${REPO_ROOT}/${SOURCE_PLATFORM_BASE}")"
+  platform_ops_hash="$(local_sha256 "${REPO_ROOT}/${SOURCE_PLATFORM_OPS}")"
+  edge_base_hash="$(local_sha256 "${REPO_ROOT}/${SOURCE_EDGE_BASE}")"
+  edge_ops_hash="$(local_sha256 "${REPO_ROOT}/${SOURCE_EDGE_OPS}")"
+  edge_caddy_hash="$(local_sha256 "${REPO_ROOT}/${SOURCE_EDGE_CADDY}")"
+  target_site_hash="$(local_sha256 "${REPO_ROOT}/${SOURCE_TARGET_SITE}")"
 
-  ssh_target bash -s --     "${TARGET_ID}" "${DEPLOY_PATH}" "${EDGE_PATH}" "${TARGET_RUNTIME_ENV}"     "${TARGET_UPDATE_LOCK}" "${BACKUP_OBSERVER}" "${expected_lock_owner_arg}"     "${platform_base_hash}" "${platform_ops_hash}" "${edge_base_hash}" "${edge_ops_hash}"     "${edge_caddy_hash}" "${target_site_hash}" <<'REMOTE_PREFLIGHT'
+  ssh_target bash -s -- \
+    "${TARGET_ID}" "${DEPLOY_PATH}" "${EDGE_PATH}" "${TARGET_RUNTIME_ENV}" \
+    "${TARGET_UPDATE_LOCK}" "${BACKUP_OBSERVER}" "${expected_lock_owner_arg}" \
+    "${PLATFORM_COMPOSE_PROJECT}" "${PLATFORM_WORKING_DIR}" "${RUNTIME_PLATFORM_BASE}" "${RUNTIME_PLATFORM_OPS}" \
+    "${EDGE_COMPOSE_PROJECT}" "${EDGE_WORKING_DIR}" "${RUNTIME_EDGE_BASE}" "${RUNTIME_EDGE_OPS}" \
+    "${RUNTIME_EDGE_CADDY}" "${RUNTIME_TARGET_SITE}" \
+    "${platform_base_hash}" "${platform_ops_hash}" "${edge_base_hash}" "${edge_ops_hash}" \
+    "${edge_caddy_hash}" "${target_site_hash}" <<'REMOTE_PREFLIGHT'
 set -euo pipefail
 preflight_fail() {
   printf 'TARGET_PREFLIGHT_FAIL gate=%s\n' "$1" >&2
   exit 1
 }
-[[ "$#" -eq 13 ]] || preflight_fail remote_argument_count
+[[ "$#" -eq 23 ]] || preflight_fail remote_argument_count
 target_id="$1"; deploy_path="$2"; edge_path="$3"; runtime_env="$4"; update_lock="$5"; observer="$6"; expected_owner_arg="$7"
+platform_project="$8"; platform_working_dir="$9"; platform_base="${10}"; platform_ops="${11}"
+edge_project="${12}"; edge_working_dir="${13}"; edge_base="${14}"; edge_ops="${15}"; edge_caddy="${16}"; target_site="${17}"
+platform_base_hash="${18}"; platform_ops_hash="${19}"; edge_base_hash="${20}"; edge_ops_hash="${21}"; edge_caddy_hash="${22}"; target_site_hash="${23}"
 if [[ "$expected_owner_arg" == "__CATERING_NO_LOCK_OWNER__" ]]; then
   expected_owner=""
 else
   expected_owner="$expected_owner_arg"
 fi
-platform_base_hash="$8"; platform_ops_hash="$9"; edge_base_hash="${10}"; edge_ops_hash="${11}"; edge_caddy_hash="${12}"; target_site_hash="${13}"
 
 [[ "$(hostname -s)" == "$target_id" ]] || preflight_fail target_hostname
 [[ -d "$deploy_path" && ! -L "$deploy_path" && "$(realpath -e "$deploy_path")" == "$deploy_path" ]] || preflight_fail deploy_path
 [[ -d "$edge_path" && ! -L "$edge_path" && "$(realpath -e "$edge_path")" == "$edge_path" ]] || preflight_fail edge_path
+[[ "$platform_working_dir" == "$deploy_path/platform-infra" ]] || preflight_fail platform_working_dir
+[[ "$edge_working_dir" == "$edge_path" ]] || preflight_fail edge_working_dir
+case "$platform_base" in "$platform_working_dir/"*) ;; *) preflight_fail platform_base_path ;; esac
+case "$platform_ops" in "$platform_working_dir/"*) ;; *) preflight_fail platform_ops_path ;; esac
+case "$target_site" in "$platform_working_dir/sites/"*) ;; *) preflight_fail target_site_path ;; esac
+case "$edge_base" in "$edge_working_dir/"*) ;; *) preflight_fail edge_base_path ;; esac
+case "$edge_ops" in "$edge_working_dir/"*) ;; *) preflight_fail edge_ops_path ;; esac
+case "$edge_caddy" in "$edge_working_dir/"*) ;; *) preflight_fail edge_caddy_path ;; esac
+
 sudo -n test -f "$runtime_env" || preflight_fail runtime_env_file
 sudo -n test ! -L "$runtime_env" || preflight_fail runtime_env_symlink
 [[ "$(sudo -n stat -c '%u:%g:%a' "$runtime_env")" == "0:0:600" ]] || preflight_fail runtime_env_mode
-
-platform_base="$deploy_path/platform-infra/docker-compose.catering-target.json"
-platform_ops="$deploy_path/platform-infra/docker-compose.catering-target.operations.json"
-edge_base="$deploy_path/edge-infra/docker-compose.catering-target.json"
-edge_ops="$deploy_path/edge-infra/docker-compose.catering-target.operations.json"
-edge_caddy="$edge_path/Caddyfile"
-target_site="$deploy_path/platform-infra/sites/catering-target.caddy"
 
 check_regular_hash() {
   local path="$1" expected="$2" gate="$3" actual
   sudo -n test -f "$path" || preflight_fail "${gate}_file"
   sudo -n test ! -L "$path" || preflight_fail "${gate}_symlink"
+  [[ "$(sudo -n stat -c '%u:%g:%a' "$path")" == "0:0:644" ]] || preflight_fail "${gate}_mode"
   if ! actual="$(sudo -n sha256sum "$path" | awk '{print $1}')"; then
     preflight_fail "${gate}_hash_read"
   fi
@@ -380,6 +456,41 @@ else
 fi
 
 command -v docker >/dev/null || preflight_fail docker_command
+check_compose_labels() {
+  local container="$1" expected_project="$2" expected_working_dir="$3" expected_files="$4" expected_service="$5" gate="$6" result
+  if ! result="$(sudo -n docker inspect "$container" | python3 -c 'import json,sys
+value=json.load(sys.stdin)
+if len(value) != 1:
+    raise SystemExit(1)
+labels=(value[0].get("Config") or {}).get("Labels") or {}
+checks=[
+    ("project", labels.get("com.docker.compose.project"), sys.argv[1]),
+    ("working_dir", labels.get("com.docker.compose.project.working_dir"), sys.argv[2]),
+    ("config_files", labels.get("com.docker.compose.project.config_files"), sys.argv[3]),
+    ("service", labels.get("com.docker.compose.service"), sys.argv[4]),
+]
+for name, actual, expected in checks:
+    if actual != expected:
+        print(name)
+        break
+else:
+    print("ok")
+' "$expected_project" "$expected_working_dir" "$expected_files" "$expected_service")"; then
+    preflight_fail "${gate}_compose_labels_read"
+  fi
+  case "$result" in
+    ok) ;;
+    project|working_dir|config_files|service) preflight_fail "${gate}_compose_${result}" ;;
+    *) preflight_fail "${gate}_compose_labels_read" ;;
+  esac
+}
+platform_config_files="$platform_base,$platform_ops"
+for service in postgres intake offer production exports web; do
+  check_compose_labels "platform-infra-${service}-1" "$platform_project" "$platform_working_dir" "$platform_config_files" "$service" "platform_${service}"
+done
+edge_config_files="$edge_base,$edge_ops"
+check_compose_labels "catering-edge-edge-1" "$edge_project" "$edge_working_dir" "$edge_config_files" edge edge
+
 [[ -f "$observer" && ! -L "$observer" ]] || preflight_fail backup_observer_file
 if ! observer_json="$(sudo -n /usr/bin/python3 -I "$observer" --check)"; then
   preflight_fail backup_observer_command
@@ -417,7 +528,6 @@ image_of() {
 require_running() {
   [[ "$(sudo -n docker inspect --format '{{.State.Running}}' "$1")" == true ]]
 }
-
 for service in postgres intake offer production exports web; do
   require_running "platform-infra-${service}-1" || preflight_fail "container_running_${service}"
 done
@@ -428,17 +538,17 @@ if ! writer_mode="$(sudo -n docker inspect catering-edge-edge-1 | python3 -c 'im
 fi
 [[ "$writer_mode" == "enabled" ]] || preflight_fail writer_mode
 
-if ! schema_version="$(sudo -n docker exec platform-infra-postgres-1 psql --no-psqlrc --no-password --username=catering --dbname=catering_agents --tuples-only --no-align --command="SELECT version_number FROM catering_schema_migrations WHERE unit_name = 'catering_business_records'" | tr -d '[:space:]')"; then
+if ! schema_version="$(sudo -n docker exec platform-infra-postgres-1 psql --no-psqlrc -U catering -d catering_agents -Atqc "SELECT version FROM catering_schema_migrations WHERE name = 'business_records_v3' LIMIT 1")"; then
   preflight_fail schema_version_read
 fi
 [[ "$schema_version" == "3" ]] || preflight_fail schema_version
+
 [[ "$(networks_of platform-infra-postgres-1)" == "catering_private" ]] || preflight_fail postgres_network
 for service in intake offer production exports; do
   [[ "$(networks_of "platform-infra-${service}-1")" == "catering_private" ]] || preflight_fail "app_network_${service}"
 done
 [[ "$(networks_of platform-infra-web-1)" == "catering_ingress,catering_private" ]] || preflight_fail web_network
 [[ "$(networks_of catering-edge-edge-1)" == "catering_ingress,catering_public" ]] || preflight_fail edge_network
-
 for service in postgres intake offer production exports web; do
   [[ -z "$(ports_of "platform-infra-${service}-1")" ]] || preflight_fail "app_ports_${service}"
 done
@@ -452,81 +562,8 @@ if ! edge_image="$(image_of catering-edge-edge-1)"; then
   preflight_fail edge_image_read
 fi
 [[ "$edge_image" =~ ^sha256:[0-9a-f]{64}$ ]] || preflight_fail edge_image
-
 printf 'TARGET_PREFLIGHT_OK target=%s backup=healthy writer=enabled schema_version=3 postgres_volume=%s edge_image=%s\n' "$target_id" "$postgres_volume" "$edge_image"
 REMOTE_PREFLIGHT
-}
-
-parse_preflight_binding() {
-  local output="$1"
-  POSTGRES_VOLUME="$(printf '%s\n' "$output" | sed -n 's/.* postgres_volume=\([^ ]*\).*/\1/p' | tail -n 1)"
-  EDGE_IMAGE="$(printf '%s\n' "$output" | sed -n 's/.* edge_image=\([^ ]*\).*/\1/p' | tail -n 1)"
-  [[ -n "${POSTGRES_VOLUME}" && "${EDGE_IMAGE}" =~ ^sha256:[0-9a-f]{64}$ ]] || fail "preflight binding output invalid"
-}
-
-run_production_preflight() {
-  load_production_contract
-  validate_production_inputs
-  verify_runtime_schema_migration_unchanged
-  verify_runtime_ddl_unchanged
-  local output
-  if ! output="$(remote_preflight "")"; then
-    fail "TARGET_PREFLIGHT_FAIL gate=remote_target_invariants"
-  fi
-  parse_preflight_binding "${output}"
-  printf '%s\n' "${output}"
-}
-
-
-cleanup_local_candidate() {
-  if [[ -n "${LOCAL_RELEASE_DIR}" && -d "${LOCAL_RELEASE_DIR}" ]]; then
-    rm -rf -- "${LOCAL_RELEASE_DIR}"
-  fi
-}
-
-migration_declaration_present() {
-  [[ -e "${REPO_ROOT}/platform-infra/catering-target-migration.json" || "${CATERING_TARGET_MIGRATION_REQUIRED:-0}" == "1" ]]
-}
-
-prepare_local_candidate() {
-  command -v docker >/dev/null || fail "docker is required on the workflow runner"
-  command -v rsync >/dev/null || fail "rsync is required on the workflow runner"
-  command -v gzip >/dev/null || fail "gzip is required on the workflow runner"
-  if migration_declaration_present; then
-    fail "manual_migration_approval_required"
-  fi
-
-  LOCAL_RELEASE_DIR="$(mktemp -d "${RUNNER_TEMP:-/tmp}/catering-target-release.XXXXXX")"
-  local runtime_tag="catering-target-runtime:${DEPLOY_COMMIT_SHA}"
-  local web_tag="catering-target-web:${DEPLOY_COMMIT_SHA}"
-
-  docker build     --iidfile "${LOCAL_RELEASE_DIR}/runtime.iid"     --tag "${runtime_tag}"     --file "${REPO_ROOT}/platform-infra/docker/Dockerfile.runtime"     "${REPO_ROOT}"
-  docker build     --iidfile "${LOCAL_RELEASE_DIR}/web.iid"     --tag "${web_tag}"     --file "${REPO_ROOT}/platform-infra/docker/Dockerfile.web"     "${REPO_ROOT}"
-
-  RUNTIME_IMAGE="$(cat "${LOCAL_RELEASE_DIR}/runtime.iid")"
-  WEB_IMAGE="$(cat "${LOCAL_RELEASE_DIR}/web.iid")"
-  [[ "${RUNTIME_IMAGE}" =~ ^sha256:[0-9a-f]{64}$ ]] || fail "runtime candidate is not immutable"
-  [[ "${WEB_IMAGE}" =~ ^sha256:[0-9a-f]{64}$ ]] || fail "web candidate is not immutable"
-
-  python3 - "${LOCAL_RELEASE_DIR}/candidate-images.json" "${RUNTIME_IMAGE}" "${WEB_IMAGE}" <<'PY'
-import json, sys
-path, runtime_image, web_image = sys.argv[1:]
-value = {
-    "services": {
-        "intake": {"image": runtime_image},
-        "offer": {"image": runtime_image},
-        "production": {"image": runtime_image},
-        "exports": {"image": runtime_image},
-        "web": {"image": web_image},
-    }
-}
-with open(path, "w", encoding="utf-8") as handle:
-    json.dump(value, handle, indent=2, sort_keys=True)
-    handle.write("\n")
-PY
-
-  docker save "${RUNTIME_IMAGE}" | gzip -1 > "${LOCAL_RELEASE_DIR}/runtime-image.tar.gz"
-  docker save "${WEB_IMAGE}" | gzip -1 > "${LOCAL_RELEASE_DIR}/web-image.tar.gz"
 }
 
 acquire_remote_lock() {
@@ -597,9 +634,9 @@ REMOTE_RELEASE
 
 capture_previous_and_load_candidates() {
   local release_dir="${RELEASE_ROOT}/${DEPLOY_COMMIT_SHA}"
-  ssh_target bash -s -- "${release_dir}" "${TARGET_RUNTIME_ENV}" "${RUNTIME_IMAGE}" "${WEB_IMAGE}" <<'REMOTE_LOAD'
+  ssh_target bash -s -- "${release_dir}" "${TARGET_RUNTIME_ENV}" "${RUNTIME_IMAGE}" "${WEB_IMAGE}" "${SOURCE_PLATFORM_BASE}" "${SOURCE_PLATFORM_OPS}" <<'REMOTE_LOAD'
 set -euo pipefail
-release_dir="$1"; runtime_env="$2"; runtime_image="$3"; web_image="$4"
+release_dir="$1"; runtime_env="$2"; runtime_image="$3"; web_image="$4"; source_platform_base="$5"; source_platform_ops="$6"
 [[ "$release_dir" =~ ^/opt/catering-releases/[0-9a-fA-F]{40}$ ]] || exit 1
 for value in "$runtime_image" "$web_image"; do [[ "$value" =~ ^sha256:[0-9a-f]{64}$ ]] || exit 1; done
 
@@ -643,8 +680,10 @@ sudo -n gzip -dc "$release_dir/web-image.tar.gz" | sudo -n docker load >/dev/nul
 sudo -n docker image inspect "$runtime_image" >/dev/null
 sudo -n docker image inspect "$web_image" >/dev/null
 
-platform_base="$release_dir/source/platform-infra/docker-compose.catering-target.json"
-platform_ops="$release_dir/source/platform-infra/docker-compose.catering-target.operations.json"
+[[ "$source_platform_base" == platform-infra/* && "$source_platform_base" != *".."* ]] || exit 1
+[[ "$source_platform_ops" == platform-infra/* && "$source_platform_ops" != *".."* ]] || exit 1
+platform_base="$release_dir/source/$source_platform_base"
+platform_ops="$release_dir/source/$source_platform_ops"
 sudo -n docker compose --env-file "$runtime_env"   -f "$platform_base" -f "$platform_ops" -f "$release_dir/candidate-images.json"   config --format json >/dev/null
 REMOTE_LOAD
 }
@@ -653,14 +692,16 @@ REMOTE_LOAD
 activate_remote_override() {
   local override_path="$1"
   local release_dir="${RELEASE_ROOT}/${DEPLOY_COMMIT_SHA}"
-  ssh_target bash -s -- "${release_dir}" "${TARGET_RUNTIME_ENV}" "${override_path}" <<'REMOTE_ACTIVATE'
+  ssh_target bash -s -- "${release_dir}" "${TARGET_RUNTIME_ENV}" "${override_path}" "${SOURCE_PLATFORM_BASE}" "${SOURCE_PLATFORM_OPS}" <<'REMOTE_ACTIVATE'
 set -euo pipefail
-release_dir="$1"; runtime_env="$2"; override="$3"
+release_dir="$1"; runtime_env="$2"; override="$3"; source_platform_base="$4"; source_platform_ops="$5"
 [[ "$release_dir" =~ ^/opt/catering-releases/[0-9a-fA-F]{40}$ ]] || exit 1
 [[ "$override" == "$release_dir/candidate-images.json" || "$override" == "$release_dir/previous-images.json" ]] || exit 1
 [[ -f "$override" && ! -L "$override" ]] || exit 1
-platform_base="$release_dir/source/platform-infra/docker-compose.catering-target.json"
-platform_ops="$release_dir/source/platform-infra/docker-compose.catering-target.operations.json"
+[[ "$source_platform_base" == platform-infra/* && "$source_platform_base" != *".."* ]] || exit 1
+[[ "$source_platform_ops" == platform-infra/* && "$source_platform_ops" != *".."* ]] || exit 1
+platform_base="$release_dir/source/$source_platform_base"
+platform_ops="$release_dir/source/$source_platform_ops"
 sudo -n docker compose --env-file "$runtime_env"   -f "$platform_base" -f "$platform_ops" -f "$override"   up -d --no-deps intake offer production exports web
 REMOTE_ACTIVATE
 }
