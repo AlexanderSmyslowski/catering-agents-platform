@@ -277,58 +277,115 @@ jobs:
           set -euo pipefail
           bundle="$RUNNER_TEMP/catering-target-release-bundle"
           mkdir -p "$bundle/bin"
-          docker build --iidfile "$bundle/runtime.iid" --tag "catering-target-runtime:$SOURCE_COMMIT" --file source/platform-infra/docker/Dockerfile.runtime source
-          docker build --iidfile "$bundle/web.iid" --tag "catering-target-web:$SOURCE_COMMIT" --file source/platform-infra/docker/Dockerfile.web source
+          docker build --iidfile "$bundle/runtime.config.iid" --tag "catering-target-runtime:$SOURCE_COMMIT" --file source/platform-infra/docker/Dockerfile.runtime source
+          docker build --iidfile "$bundle/web.config.iid" --tag "catering-target-web:$SOURCE_COMMIT" --file source/platform-infra/docker/Dockerfile.web source
           if [[ -n "$(git -C source status --porcelain --untracked-files=all)" ]]; then
             printf '%s\n' 'CATERING_TARGET_RELEASE_SOURCE_DIRTY_AFTER_BUILD' >&2
             git -C source status --porcelain --untracked-files=all >&2
             exit 1
           fi
-          runtime_image="$(cat "$bundle/runtime.iid")"
-          web_image="$(cat "$bundle/web.iid")"
-          [[ "$runtime_image" =~ ^sha256:[0-9a-f]{64}$ ]]
-          [[ "$web_image" =~ ^sha256:[0-9a-f]{64}$ ]]
-          docker save "$runtime_image" | gzip -1 > "$bundle/runtime-image.tar.gz"
-          docker save "$web_image" | gzip -1 > "$bundle/web-image.tar.gz"
+          runtime_config_image="$(cat "$bundle/runtime.config.iid")"
+          web_config_image="$(cat "$bundle/web.config.iid")"
+          [[ "$runtime_config_image" =~ ^sha256:[0-9a-f]{64}$ ]]
+          [[ "$web_config_image" =~ ^sha256:[0-9a-f]{64}$ ]]
+          docker save "$runtime_config_image" | gzip -1 > "$bundle/runtime-image.tar.gz"
+          docker save "$web_config_image" | gzip -1 > "$bundle/web-image.tar.gz"
           install -m 0755 platform-infra/scripts/catering-target-prebuilt-docker-adapter.sh "$bundle/bin/docker"
-          python3 - "$bundle" "$SOURCE_COMMIT" "$runtime_image" "$web_image" <<'PY'
+          python3 - "$bundle" "$SOURCE_COMMIT" "$runtime_config_image" "$web_config_image" <<'PY'
+          import gzip
           import hashlib
+          import io
           import json
           import pathlib
+          import re
           import sys
+          import tarfile
           bundle = pathlib.Path(sys.argv[1])
-          commit, runtime_image, web_image = sys.argv[2:]
-          files = {}
-          for name in ("runtime-image.tar.gz", "web-image.tar.gz"):
-              files[name] = hashlib.sha256((bundle / name).read_bytes()).hexdigest()
+          commit, runtime_config, web_config = sys.argv[2:]
+          digest_pattern = re.compile(r"^sha256:[0-9a-f]{64}$")
+          if not digest_pattern.fullmatch(runtime_config) or not digest_pattern.fullmatch(web_config):
+              raise SystemExit(1)
+          def archive_identity(name, expected_config):
+              path = bundle / name
+              raw = path.read_bytes()
+              archive_sha = hashlib.sha256(raw).hexdigest()
+              archive = tarfile.open(fileobj=io.BytesIO(gzip.decompress(raw)), mode="r:")
+              index = json.load(archive.extractfile(archive.getmember("index.json")))
+              manifests = index.get("manifests")
+              if index.get("schemaVersion") != 2 or not isinstance(manifests, list) or len(manifests) != 1:
+                  raise SystemExit(1)
+              descriptor = manifests[0]
+              if descriptor.get("mediaType") != "application/vnd.oci.image.manifest.v1+json":
+                  raise SystemExit(1)
+              target = descriptor.get("digest")
+              if not digest_pattern.fullmatch(target or ""):
+                  raise SystemExit(1)
+              target_hex = target.split(":", 1)[1]
+              manifest_bytes = archive.extractfile(archive.getmember(f"blobs/sha256/{target_hex}")).read()
+              if hashlib.sha256(manifest_bytes).hexdigest() != target_hex:
+                  raise SystemExit(1)
+              image_manifest = json.loads(manifest_bytes)
+              config_digest = (image_manifest.get("config") or {}).get("digest")
+              if config_digest != expected_config:
+                  raise SystemExit(1)
+              config_hex = config_digest.split(":", 1)[1]
+              config_bytes = archive.extractfile(archive.getmember(f"blobs/sha256/{config_hex}")).read()
+              if hashlib.sha256(config_bytes).hexdigest() != config_hex:
+                  raise SystemExit(1)
+              return archive_sha, target
+          runtime_archive_sha, runtime_target = archive_identity("runtime-image.tar.gz", runtime_config)
+          web_archive_sha, web_target = archive_identity("web-image.tar.gz", web_config)
+          (bundle / "runtime.target.iid").write_text(runtime_target + "\n", encoding="utf-8")
+          (bundle / "web.target.iid").write_text(web_target + "\n", encoding="utf-8")
           (bundle / "manifest.json").write_text(json.dumps({
-              "schemaVersion": 1,
+              "schemaVersion": 2,
               "sourceCommit": commit,
-              "runtimeImage": runtime_image,
-              "webImage": web_image,
-              "files": files,
+              "runtimeConfigImage": runtime_config,
+              "runtimeTargetImage": runtime_target,
+              "webConfigImage": web_config,
+              "webTargetImage": web_target,
+              "files": {
+                  "runtime-image.tar.gz": runtime_archive_sha,
+                  "web-image.tar.gz": web_archive_sha,
+              },
           }, indent=2, sort_keys=True) + "\n", encoding="utf-8")
           PY
           manifest_sha="$(sha256sum "$bundle/manifest.json" | awk '{print $1}')"
-          printf 'CATERING_TARGET_RELEASE_BUNDLE_OK source_commit=%s manifest_sha256=%s runtime_image=%s web_image=%s\n'             "$SOURCE_COMMIT" "$manifest_sha" "$runtime_image" "$web_image"
+          runtime_target_image="$(cat "$bundle/runtime.target.iid")"
+          web_target_image="$(cat "$bundle/web.target.iid")"
+          printf 'CATERING_TARGET_RELEASE_BUNDLE_OK source_commit=%s manifest_sha256=%s runtime_config=%s runtime_target=%s web_config=%s web_target=%s\n' \
+            "$SOURCE_COMMIT" "$manifest_sha" "$runtime_config_image" "$runtime_target_image" "$web_config_image" "$web_target_image"
 
       - name: Verify adapter against exact source
         run: |
           set -euo pipefail
           bundle="$RUNNER_TEMP/catering-target-release-bundle"
-          test_iid="$RUNNER_TEMP/runtime-adapter-check.iid"
-          (
-            cd source
-            CATERING_TARGET_PREBUILT_BUNDLE_DIR="$bundle" PATH="$bundle/bin:$PATH"               docker build --iidfile "$test_iid" --tag "catering-target-runtime:$SOURCE_COMMIT"               --file "$PWD/platform-infra/docker/Dockerfile.runtime" "$PWD"
-          )
-          test "$(cat "$test_iid")" = "$(cat "$bundle/runtime.iid")"
+          runtime_iid="$RUNNER_TEMP/runtime-adapter-check.iid"
+          web_iid="$RUNNER_TEMP/web-adapter-check.iid"
           (
             cd source
             CATERING_TARGET_PREBUILT_BUNDLE_DIR="$bundle" PATH="$bundle/bin:$PATH" \
-              docker save "$(cat "$bundle/runtime.iid")" | sha256sum > "$RUNNER_TEMP/adapter-save.sha256"
+              docker build --iidfile "$runtime_iid" --tag "catering-target-runtime:$SOURCE_COMMIT" \
+              --file "$PWD/platform-infra/docker/Dockerfile.runtime" "$PWD"
+            CATERING_TARGET_PREBUILT_BUNDLE_DIR="$bundle" PATH="$bundle/bin:$PATH" \
+              docker build --iidfile "$web_iid" --tag "catering-target-web:$SOURCE_COMMIT" \
+              --file "$PWD/platform-infra/docker/Dockerfile.web" "$PWD"
           )
-          gzip -dc "$bundle/runtime-image.tar.gz" | sha256sum > "$RUNNER_TEMP/archive-save.sha256"
-          cmp "$RUNNER_TEMP/adapter-save.sha256" "$RUNNER_TEMP/archive-save.sha256"
+          test "$(cat "$runtime_iid")" = "$(cat "$bundle/runtime.target.iid")"
+          test "$(cat "$web_iid")" = "$(cat "$bundle/web.target.iid")"
+          test "$(cat "$runtime_iid")" != "$(cat "$bundle/runtime.config.iid")"
+          test "$(cat "$web_iid")" != "$(cat "$bundle/web.config.iid")"
+          (
+            cd source
+            CATERING_TARGET_PREBUILT_BUNDLE_DIR="$bundle" PATH="$bundle/bin:$PATH" \
+              docker save "$(cat "$bundle/runtime.target.iid")" | sha256sum > "$RUNNER_TEMP/runtime-adapter-save.sha256"
+            CATERING_TARGET_PREBUILT_BUNDLE_DIR="$bundle" PATH="$bundle/bin:$PATH" \
+              docker save "$(cat "$bundle/web.target.iid")" | sha256sum > "$RUNNER_TEMP/web-adapter-save.sha256"
+          )
+          gzip -dc "$bundle/runtime-image.tar.gz" | sha256sum > "$RUNNER_TEMP/runtime-archive-save.sha256"
+          gzip -dc "$bundle/web-image.tar.gz" | sha256sum > "$RUNNER_TEMP/web-archive-save.sha256"
+          cmp "$RUNNER_TEMP/runtime-adapter-save.sha256" "$RUNNER_TEMP/runtime-archive-save.sha256"
+          cmp "$RUNNER_TEMP/web-adapter-save.sha256" "$RUNNER_TEMP/web-archive-save.sha256"
 
       - name: Upload exact release bundle
         uses: actions/upload-artifact@v4
