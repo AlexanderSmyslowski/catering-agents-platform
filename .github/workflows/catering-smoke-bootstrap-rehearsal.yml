@@ -79,6 +79,7 @@ jobs:
           import pty
           import select
           import sys
+          import termios
           import time
 
           network, image, login_code, business_id, postgres_password, pin, output_path = sys.argv[1:]
@@ -104,11 +105,14 @@ jobs:
 
           captured = bytearray()
           pin_sent = False
+          marker_seen = False
+          raw_mode_seen = False
           deadline = time.monotonic() + 90
           child_status = None
+          eof_seen = False
           try:
               while time.monotonic() < deadline:
-                  readable, _, _ = select.select([fd], [], [], 0.2)
+                  readable, _, _ = select.select([fd], [], [], 0.1)
                   if fd in readable:
                       try:
                           chunk = os.read(fd, 4096)
@@ -116,23 +120,34 @@ jobs:
                           chunk = b""
                       if chunk:
                           captured.extend(chunk)
-                          if not pin_sent and b"BOOTSTRAP_PIN_READY" in captured:
-                              os.write(fd, pin.encode("ascii") + b"\n")
-                              pin_sent = True
+                          marker_seen = marker_seen or b"BOOTSTRAP_PIN_READY" in captured
                       else:
-                          break
+                          eof_seen = True
+
+                  if marker_seen and not pin_sent:
+                      try:
+                          local_flags = termios.tcgetattr(fd)[3]
+                          raw_mode_seen = (local_flags & termios.ECHO) == 0 and (local_flags & termios.ICANON) == 0
+                      except termios.error:
+                          raw_mode_seen = False
+                      if raw_mode_seen:
+                          os.write(fd, pin.encode("ascii") + b"\n")
+                          pin_sent = True
+
                   waited, status = os.waitpid(pid, os.WNOHANG)
                   if waited == pid:
                       child_status = status
                       break
-              if child_status is None:
-                  waited, status = os.waitpid(pid, os.WNOHANG)
-                  if waited == pid:
-                      child_status = status
+                  if eof_seen:
+                      _, child_status = os.waitpid(pid, 0)
+                      break
+
               if child_status is None:
                   os.kill(pid, 9)
                   _, child_status = os.waitpid(pid, 0)
-                  raise SystemExit("rehearsal child timed out")
+                  raise SystemExit(
+                      f"rehearsal child timed out marker_seen={marker_seen} raw_mode_seen={raw_mode_seen} pin_sent={pin_sent}"
+                  )
           finally:
               try:
                   os.close(fd)
@@ -145,8 +160,12 @@ jobs:
 
           if pin.encode("ascii") in data:
               raise SystemExit("synthetic PIN appeared in PTY output")
-          if not pin_sent:
+          if not marker_seen:
               raise SystemExit("PIN readiness marker was never observed")
+          if not raw_mode_seen:
+              raise SystemExit("protected raw mode was never observed")
+          if not pin_sent:
+              raise SystemExit("synthetic PIN was not sent")
           if not os.WIFEXITED(child_status) or os.WEXITSTATUS(child_status) != 0:
               raise SystemExit(f"admin create exited nonzero: {child_status}")
           if b'"status":"success"' not in data:
