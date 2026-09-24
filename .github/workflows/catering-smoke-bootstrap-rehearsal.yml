@@ -91,9 +91,10 @@ jobs:
 
           python3 - "$network" "$image" "$SYNTHETIC_LOGIN_CODE" "$SYNTHETIC_BUSINESS_ID" "$SYNTHETIC_POSTGRES_PASSWORD" "$SYNTHETIC_PIN" <<'PY'
           import os
+          import pty
           import select
-          import subprocess
           import sys
+          import termios
           import time
           import urllib.parse
 
@@ -110,7 +111,7 @@ jobs:
           exec ./node_modules/.bin/tsx scripts/manage-catering-user.ts "$@"
           '''
           argv = [
-              "docker", "run", "--rm", "-i", "-t", "--pull", "never",
+              "docker", "run", "--rm", "-it", "--pull", "never",
               "--network", network,
               "-e", f"CATERING_DATABASE_URL={database_url}",
               "-e", f"CATERING_DEFAULT_BUSINESS_ID={business_id}",
@@ -121,78 +122,80 @@ jobs:
               "--display-name", "Release Smoke",
               "--role", "read_only_operator",
           ]
-          proc = subprocess.Popen(
-              argv,
-              stdin=subprocess.PIPE,
-              stdout=subprocess.PIPE,
-              stderr=subprocess.PIPE,
-          )
-          assert proc.stdin is not None and proc.stdout is not None and proc.stderr is not None
+
+          pid, fd = pty.fork()
+          if pid == 0:
+              os.execvp(argv[0], argv)
+
+          attrs = termios.tcgetattr(fd)
+          attrs[3] &= ~termios.ECHO
+          termios.tcsetattr(fd, termios.TCSANOW, attrs)
 
           captured = bytearray()
-          stderr = bytearray()
           marker = b"BOOTSTRAP_PIN_READY"
           marker_seen = False
-          deadline = time.monotonic() + 30
-
-          while time.monotonic() < deadline and not marker_seen:
-              readable, _, _ = select.select([proc.stdout, proc.stderr], [], [], 0.2)
-              for stream in readable:
-                  chunk = os.read(stream.fileno(), 4096)
-                  if stream is proc.stdout:
-                      captured.extend(chunk)
-                      marker_seen = marker in captured
-                  else:
-                      stderr.extend(chunk)
-              if proc.poll() is not None:
-                  break
-
-          if not marker_seen:
-              proc.kill()
-              proc.wait()
-              print(
-                  f"BOOTSTRAP_SECURE_TTY_DIAG marker_seen=false rc={proc.returncode} stderr_nonempty={bool(stderr)}",
-                  flush=True,
-              )
-              raise SystemExit(1)
-
-          proc.stdin.write(pin.encode("ascii") + b"\n")
-          proc.stdin.flush()
-          proc.stdin.close()
-          proc.stdin = None
+          pin_sent = False
+          child_status = None
+          deadline = time.monotonic() + 60
 
           try:
-              out_rest, err_rest = proc.communicate(timeout=60)
-          except subprocess.TimeoutExpired:
-              proc.kill()
-              out_rest, err_rest = proc.communicate()
-              raise SystemExit("secure TTY rehearsal timed out")
+              while time.monotonic() < deadline:
+                  readable, _, _ = select.select([fd], [], [], 0.1)
+                  if fd in readable:
+                      try:
+                          chunk = os.read(fd, 4096)
+                      except OSError:
+                          chunk = b""
+                      if chunk:
+                          captured.extend(chunk)
+                          if not marker_seen and marker in captured:
+                              marker_seen = True
+                              os.write(fd, pin.encode("ascii") + b"\n")
+                              pin_sent = True
+                      else:
+                          waited, status = os.waitpid(pid, os.WNOHANG)
+                          if waited == pid:
+                              child_status = status
+                          else:
+                              _, child_status = os.waitpid(pid, 0)
+                          break
 
-          captured.extend(out_rest)
-          stderr.extend(err_rest)
+                  waited, status = os.waitpid(pid, os.WNOHANG)
+                  if waited == pid:
+                      child_status = status
+                      break
+
+              if child_status is None:
+                  os.kill(pid, 9)
+                  _, child_status = os.waitpid(pid, 0)
+                  raise SystemExit("secure PTY rehearsal timed out")
+          finally:
+              try:
+                  os.close(fd)
+              except OSError:
+                  pass
+
           data = bytes(captured)
-          err = bytes(stderr)
-
-          pin_echo = pin.encode("ascii") in data or pin.encode("ascii") in err
+          pin_echo = pin.encode("ascii") in data
           success_marker = b'"status":"success"' in data
           display_marker = b'"displayName":"Release Smoke"' in data
           role_marker = b'"role":"read_only_operator"' in data
           active_marker = b'"active":true' in data
-          error_marker = b'"status":"error"' in data or b'"status":"error"' in err
+          error_marker = b'"status":"error"' in data
+          rc = os.WEXITSTATUS(child_status) if os.WIFEXITED(child_status) else 255
 
           print(
-              "BOOTSTRAP_SECURE_TTY_DIAG "
-              f"rc={proc.returncode} marker_seen={str(marker_seen).lower()} "
-              f"stderr_nonempty={str(bool(err)).lower()} pin_echo={str(pin_echo).lower()} "
-              f"success_marker={str(success_marker).lower()} display_marker={str(display_marker).lower()} "
-              f"role_marker={str(role_marker).lower()} active_marker={str(active_marker).lower()} "
-              f"error_marker={str(error_marker).lower()}",
+              "BOOTSTRAP_SECURE_PTY_DIAG "
+              f"rc={rc} marker_seen={str(marker_seen).lower()} pin_sent={str(pin_sent).lower()} "
+              f"pin_echo={str(pin_echo).lower()} success_marker={str(success_marker).lower()} "
+              f"display_marker={str(display_marker).lower()} role_marker={str(role_marker).lower()} "
+              f"active_marker={str(active_marker).lower()} error_marker={str(error_marker).lower()}",
               flush=True,
           )
 
-          if proc.returncode != 0:
+          if rc != 0 or not marker_seen or not pin_sent:
               raise SystemExit(1)
-          if pin_echo or err or error_marker:
+          if pin_echo or error_marker:
               raise SystemExit(1)
           if not all((success_marker, display_marker, role_marker, active_marker)):
               raise SystemExit(1)
