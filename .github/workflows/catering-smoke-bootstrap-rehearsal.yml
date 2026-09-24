@@ -194,6 +194,10 @@ jobs:
           if not pin_sent:
               raise SystemExit("synthetic PIN was not sent")
           if not os.WIFEXITED(child_status) or os.WEXITSTATUS(child_status) != 0:
+              safe = data.replace(pin.encode("ascii"), b"[SYNTHETIC_PIN_REDACTED]")
+              sys.stderr.write("SANITIZED_PTY_OUTPUT_BEGIN\n")
+              sys.stderr.write(safe.decode("utf-8", errors="replace")[-4000:])
+              sys.stderr.write("\nSANITIZED_PTY_OUTPUT_END\n")
               raise SystemExit(f"admin create exited nonzero: {child_status}")
           if b'"status":"success"' not in data:
               raise SystemExit("success output missing")
