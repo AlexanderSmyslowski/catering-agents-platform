@@ -85,6 +85,7 @@ jobs:
           network, image, login_code, business_id, postgres_password, pin, output_path = sys.argv[1:]
           shell = r'''
           set -eu
+          stty -echo
           export CATERING_DATABASE_URL="$(node -e 'const u=new URL("postgresql://catering@postgres:5432/catering_agents");u.password=process.env.POSTGRES_PASSWORD;process.stdout.write(u.toString())')"
           test -n "$CATERING_DATABASE_URL"
           printf '%s\n' BOOTSTRAP_PIN_READY
@@ -131,6 +132,9 @@ jobs:
                       except termios.error:
                           raw_mode_seen = False
                       if raw_mode_seen:
+                          attrs = termios.tcgetattr(fd)
+                          attrs[3] &= ~termios.ECHO
+                          termios.tcsetattr(fd, termios.TCSANOW, attrs)
                           os.write(fd, pin.encode("ascii") + b"\n")
                           pin_sent = True
 
