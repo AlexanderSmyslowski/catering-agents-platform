@@ -112,7 +112,11 @@ jobs:
           export CATERING_DATABASE_URL="$(node -e 'const u=new URL("postgresql://catering@postgres:5432/catering_agents");u.password=process.env.POSTGRES_PASSWORD;process.stdout.write(u.toString())')"
           test -n "$CATERING_DATABASE_URL"
           printf '%s\n' BOOTSTRAP_PIN_READY
-          exec ./scripts/manage-catering-user create             --login-code "$1"             --display-name "Release Smoke"             --role read_only_operator
+          test -f ./node_modules/tsx/dist/cli.mjs
+          exec node ./node_modules/tsx/dist/cli.mjs scripts/manage-catering-user.ts create \
+            --login-code "$1" \
+            --display-name "Release Smoke" \
+            --role read_only_operator
           '''
           argv = [
               "docker", "run", "--rm", "-it", "--pull", "never",
