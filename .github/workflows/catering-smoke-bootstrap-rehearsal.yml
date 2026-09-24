@@ -86,60 +86,117 @@ jobs:
       - name: Run real TTY admin create against PostgreSQL
         run: |
           set -euo pipefail
-          command -v script >/dev/null
-          script --help | grep -F -- '--echo' >/dev/null
-
           network="$(cat "$RUNNER_TEMP/bootstrap-network")"
           image="catering-bootstrap-rehearsal:$SOURCE_COMMIT"
-          output="$RUNNER_TEMP/bootstrap-tty-output.txt"
-          stderr="$RUNNER_TEMP/bootstrap-tty-stderr.txt"
 
-          database_url="postgresql://catering:$SYNTHETIC_POSTGRES_PASSWORD@postgres:5432/catering_agents"
-          command_string="docker run --rm -it --pull never --network '$network' -e CATERING_DATABASE_URL='$database_url' -e CATERING_DEFAULT_BUSINESS_ID='$SYNTHETIC_BUSINESS_ID' '$image' ./node_modules/.bin/tsx scripts/manage-catering-user.ts create --login-code '$SYNTHETIC_LOGIN_CODE' --display-name 'Release Smoke' --role read_only_operator"
+          python3 - "$network" "$image" "$SYNTHETIC_LOGIN_CODE" "$SYNTHETIC_BUSINESS_ID" "$SYNTHETIC_POSTGRES_PASSWORD" "$SYNTHETIC_PIN" <<'PY'
+          import os
+          import select
+          import subprocess
+          import sys
+          import time
+          import urllib.parse
 
-          set +e
-          printf '%s\n' "$SYNTHETIC_PIN" | script -q -e -E never -c "$command_string" /dev/null >"$output" 2>"$stderr"
-          rc=$?
-          set -e
+          network, image, login_code, business_id, postgres_password, pin = sys.argv[1:]
+          database_url = (
+              "postgresql://catering:"
+              + urllib.parse.quote(postgres_password, safe="")
+              + "@postgres:5432/catering_agents"
+          )
+          shell = r'''
+          set -eu
+          stty -echo
+          printf '%s\n' BOOTSTRAP_PIN_READY
+          exec ./node_modules/.bin/tsx scripts/manage-catering-user.ts "$@"
+          '''
+          argv = [
+              "docker", "run", "--rm", "-i", "-t", "--pull", "never",
+              "--network", network,
+              "-e", f"CATERING_DATABASE_URL={database_url}",
+              "-e", f"CATERING_DEFAULT_BUSINESS_ID={business_id}",
+              image,
+              "/bin/sh", "-eu", "-c", shell, "bootstrap",
+              "create",
+              "--login-code", login_code,
+              "--display-name", "Release Smoke",
+              "--role", "read_only_operator",
+          ]
+          proc = subprocess.Popen(
+              argv,
+              stdin=subprocess.PIPE,
+              stdout=subprocess.PIPE,
+              stderr=subprocess.PIPE,
+          )
+          assert proc.stdin is not None and proc.stdout is not None and proc.stderr is not None
 
-          stderr_nonempty=false
-          pin_echo=false
-          success_marker=false
-          display_marker=false
-          role_marker=false
-          active_marker=false
-          error_marker=false
+          captured = bytearray()
+          stderr = bytearray()
+          marker = b"BOOTSTRAP_PIN_READY"
+          marker_seen = False
+          deadline = time.monotonic() + 30
 
-          test -s "$stderr" && stderr_nonempty=true
-          grep -Fq -- "$SYNTHETIC_PIN" "$output" && pin_echo=true
-          grep -Fq -- '"status":"success"' "$output" && success_marker=true
-          grep -Fq -- '"displayName":"Release Smoke"' "$output" && display_marker=true
-          grep -Fq -- '"role":"read_only_operator"' "$output" && role_marker=true
-          grep -Fq -- '"active":true' "$output" && active_marker=true
-          if grep -Fq -- '"status":"error"' "$output" || grep -Fq -- '"status":"error"' "$stderr"; then
-            error_marker=true
-          fi
+          while time.monotonic() < deadline and not marker_seen:
+              readable, _, _ = select.select([proc.stdout, proc.stderr], [], [], 0.2)
+              for stream in readable:
+                  chunk = os.read(stream.fileno(), 4096)
+                  if stream is proc.stdout:
+                      captured.extend(chunk)
+                      marker_seen = marker in captured
+                  else:
+                      stderr.extend(chunk)
+              if proc.poll() is not None:
+                  break
 
-          postgres="$(cat "$RUNNER_TEMP/bootstrap-postgres")"
-          records_table="$(docker exec "$postgres" psql --no-psqlrc --no-password -U catering -d catering_agents --tuples-only --no-align --command="SELECT COALESCE(to_regclass('public.catering_business_records')::text,'')" | tr -d '[:space:]')"
-          if [[ "$records_table" == "catering_business_records" ]]; then
-            auth_users="$(docker exec "$postgres" psql --no-psqlrc --no-password -U catering -d catering_agents --tuples-only --no-align --command="SELECT count(*) FROM catering_business_records WHERE collection_name='auth/users'" | tr -d '[:space:]')"
-          else
-            auth_users=0
-          fi
+          if not marker_seen:
+              proc.kill()
+              proc.wait()
+              print(
+                  f"BOOTSTRAP_SECURE_TTY_DIAG marker_seen=false rc={proc.returncode} stderr_nonempty={bool(stderr)}",
+                  flush=True,
+              )
+              raise SystemExit(1)
 
-          printf 'BOOTSTRAP_REHEARSAL_DIAG rc=%s stderr_nonempty=%s pin_echo=%s success_marker=%s display_marker=%s role_marker=%s active_marker=%s error_marker=%s records_table=%s auth_users=%s\n' \
-            "$rc" "$stderr_nonempty" "$pin_echo" "$success_marker" "$display_marker" "$role_marker" "$active_marker" "$error_marker" "${records_table:-missing}" "$auth_users"
+          proc.stdin.write(pin.encode("ascii") + b"\n")
+          proc.stdin.flush()
+          proc.stdin.close()
+          proc.stdin = None
 
-          test "$rc" -eq 0
-          test "$stderr_nonempty" = false
-          test "$pin_echo" = false
-          test "$success_marker" = true
-          test "$display_marker" = true
-          test "$role_marker" = true
-          test "$active_marker" = true
-          test "$error_marker" = false
-          test "$auth_users" = 1
+          try:
+              out_rest, err_rest = proc.communicate(timeout=60)
+          except subprocess.TimeoutExpired:
+              proc.kill()
+              out_rest, err_rest = proc.communicate()
+              raise SystemExit("secure TTY rehearsal timed out")
+
+          captured.extend(out_rest)
+          stderr.extend(err_rest)
+          data = bytes(captured)
+          err = bytes(stderr)
+
+          pin_echo = pin.encode("ascii") in data or pin.encode("ascii") in err
+          success_marker = b'"status":"success"' in data
+          display_marker = b'"displayName":"Release Smoke"' in data
+          role_marker = b'"role":"read_only_operator"' in data
+          active_marker = b'"active":true' in data
+          error_marker = b'"status":"error"' in data or b'"status":"error"' in err
+
+          print(
+              "BOOTSTRAP_SECURE_TTY_DIAG "
+              f"rc={proc.returncode} marker_seen={str(marker_seen).lower()} "
+              f"stderr_nonempty={str(bool(err)).lower()} pin_echo={str(pin_echo).lower()} "
+              f"success_marker={str(success_marker).lower()} display_marker={str(display_marker).lower()} "
+              f"role_marker={str(role_marker).lower()} active_marker={str(active_marker).lower()} "
+              f"error_marker={str(error_marker).lower()}",
+              flush=True,
+          )
+
+          if proc.returncode != 0:
+              raise SystemExit(1)
+          if pin_echo or err or error_marker:
+              raise SystemExit(1)
+          if not all((success_marker, display_marker, role_marker, active_marker)):
+              raise SystemExit(1)
+          PY
 
       - name: Verify PostgreSQL record and schema
         run: |
