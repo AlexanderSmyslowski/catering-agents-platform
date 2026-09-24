@@ -98,17 +98,43 @@ jobs:
           command_string="docker run --rm -it --pull never --network '$network' -e CATERING_DATABASE_URL='$database_url' -e CATERING_DEFAULT_BUSINESS_ID='$SYNTHETIC_BUSINESS_ID' '$image' ./scripts/manage-catering-user create --login-code '$SYNTHETIC_LOGIN_CODE' --display-name 'Release Smoke' --role read_only_operator"
 
           set +e
-          printf '%s\n' "$SYNTHETIC_PIN"             | script -q -e -E never -c "$command_string" /dev/null               >"$output" 2>"$stderr"
+          printf '%s\n' "$SYNTHETIC_PIN" | script -q -e -E never -c "$command_string" /dev/null >"$output" 2>"$stderr"
           rc=$?
           set -e
 
+          stderr_nonempty=false
+          pin_echo=false
+          success_marker=false
+          display_marker=false
+          role_marker=false
+          active_marker=false
+          error_marker=false
+
+          test -s "$stderr" && stderr_nonempty=true
+          grep -Fq -- "$SYNTHETIC_PIN" "$output" && pin_echo=true
+          grep -Fq -- '"status":"success"' "$output" && success_marker=true
+          grep -Fq -- '"displayName":"Release Smoke"' "$output" && display_marker=true
+          grep -Fq -- '"role":"read_only_operator"' "$output" && role_marker=true
+          grep -Fq -- '"active":true' "$output" && active_marker=true
+          if grep -Fq -- '"status":"error"' "$output" || grep -Fq -- '"status":"error"' "$stderr"; then
+            error_marker=true
+          fi
+
+          postgres="$(cat "$RUNNER_TEMP/bootstrap-postgres")"
+          auth_users="$(docker exec "$postgres" psql --no-psqlrc --no-password -U catering -d catering_agents --tuples-only --no-align --command="SELECT CASE WHEN to_regclass('public.catering_business_records') IS NULL THEN 0 ELSE (SELECT count(*) FROM catering_business_records WHERE collection_name='auth/users') END" | tr -d '[:space:]')"
+
+          printf 'BOOTSTRAP_REHEARSAL_DIAG rc=%s stderr_nonempty=%s pin_echo=%s success_marker=%s display_marker=%s role_marker=%s active_marker=%s error_marker=%s auth_users=%s\n' \
+            "$rc" "$stderr_nonempty" "$pin_echo" "$success_marker" "$display_marker" "$role_marker" "$active_marker" "$error_marker" "$auth_users"
+
           test "$rc" -eq 0
-          test ! -s "$stderr"
-          ! grep -F -- "$SYNTHETIC_PIN" "$output"
-          grep -F -- '"status":"success"' "$output"
-          grep -F -- '"displayName":"Release Smoke"' "$output"
-          grep -F -- '"role":"read_only_operator"' "$output"
-          grep -F -- '"active":true' "$output"
+          test "$stderr_nonempty" = false
+          test "$pin_echo" = false
+          test "$success_marker" = true
+          test "$display_marker" = true
+          test "$role_marker" = true
+          test "$active_marker" = true
+          test "$error_marker" = false
+          test "$auth_users" = 1
 
       - name: Verify PostgreSQL record and schema
         run: |
