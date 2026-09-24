@@ -121,10 +121,15 @@ jobs:
           fi
 
           postgres="$(cat "$RUNNER_TEMP/bootstrap-postgres")"
-          auth_users="$(docker exec "$postgres" psql --no-psqlrc --no-password -U catering -d catering_agents --tuples-only --no-align --command="SELECT CASE WHEN to_regclass('public.catering_business_records') IS NULL THEN 0 ELSE (SELECT count(*) FROM catering_business_records WHERE collection_name='auth/users') END" | tr -d '[:space:]')"
+          records_table="$(docker exec "$postgres" psql --no-psqlrc --no-password -U catering -d catering_agents --tuples-only --no-align --command="SELECT COALESCE(to_regclass('public.catering_business_records')::text,'')" | tr -d '[:space:]')"
+          if [[ "$records_table" == "catering_business_records" ]]; then
+            auth_users="$(docker exec "$postgres" psql --no-psqlrc --no-password -U catering -d catering_agents --tuples-only --no-align --command="SELECT count(*) FROM catering_business_records WHERE collection_name='auth/users'" | tr -d '[:space:]')"
+          else
+            auth_users=0
+          fi
 
-          printf 'BOOTSTRAP_REHEARSAL_DIAG rc=%s stderr_nonempty=%s pin_echo=%s success_marker=%s display_marker=%s role_marker=%s active_marker=%s error_marker=%s auth_users=%s\n' \
-            "$rc" "$stderr_nonempty" "$pin_echo" "$success_marker" "$display_marker" "$role_marker" "$active_marker" "$error_marker" "$auth_users"
+          printf 'BOOTSTRAP_REHEARSAL_DIAG rc=%s stderr_nonempty=%s pin_echo=%s success_marker=%s display_marker=%s role_marker=%s active_marker=%s error_marker=%s records_table=%s auth_users=%s\n' \
+            "$rc" "$stderr_nonempty" "$pin_echo" "$success_marker" "$display_marker" "$role_marker" "$active_marker" "$error_marker" "${records_table:-missing}" "$auth_users"
 
           test "$rc" -eq 0
           test "$stderr_nonempty" = false
