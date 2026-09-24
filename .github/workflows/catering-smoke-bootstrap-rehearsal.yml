@@ -86,132 +86,28 @@ jobs:
       - name: Run real TTY admin create against PostgreSQL
         run: |
           set -euo pipefail
+          command -v script >/dev/null
+          script --help | grep -F -- '--echo' >/dev/null
+
           network="$(cat "$RUNNER_TEMP/bootstrap-network")"
           image="catering-bootstrap-rehearsal:$SOURCE_COMMIT"
-          output="$RUNNER_TEMP/bootstrap-pty-output.bin"
+          output="$RUNNER_TEMP/bootstrap-tty-output.txt"
+          stderr="$RUNNER_TEMP/bootstrap-tty-stderr.txt"
 
-          python3 - "$network" "$image" "$SYNTHETIC_LOGIN_CODE" "$SYNTHETIC_BUSINESS_ID" "$SYNTHETIC_POSTGRES_PASSWORD" "$SYNTHETIC_PIN" "$output" <<'PY'
-          import os
-          import pty
-          import select
-          import sys
-          import termios
-          import time
+          command_string="docker run --rm -it --pull never --network '$network' -e POSTGRES_PASSWORD='$SYNTHETIC_POSTGRES_PASSWORD' -e CATERING_DEFAULT_BUSINESS_ID='$SYNTHETIC_BUSINESS_ID' '$image' ./scripts/manage-catering-user create --login-code '$SYNTHETIC_LOGIN_CODE' --display-name 'Release Smoke' --role read_only_operator"
 
-          network, image, login_code, business_id, postgres_password, pin, output_path = sys.argv[1:]
-          shell = r'''
-          set -eu
-          if command -v stty >/dev/null 2>&1; then
-            stty -echo
-          elif /bin/busybox --list | grep -qx stty; then
-            /bin/busybox stty -echo
-          else
-            printf '%s\n' TTY_ECHO_CONTROL_UNAVAILABLE >&2
-            exit 127
-          fi
-          export CATERING_DATABASE_URL="$(node -e 'const u=new URL("postgresql://catering@postgres:5432/catering_agents");u.password=process.env.POSTGRES_PASSWORD;process.stdout.write(u.toString())')"
-          test -n "$CATERING_DATABASE_URL"
-          printf '%s\n' BOOTSTRAP_PIN_READY
-          test -f ./node_modules/tsx/dist/cli.mjs
-          exec node ./node_modules/tsx/dist/cli.mjs scripts/manage-catering-user.ts create \
-            --login-code "$1" \
-            --display-name "Release Smoke" \
-            --role read_only_operator
-          '''
-          argv = [
-              "docker", "run", "--rm", "-it", "--pull", "never",
-              "--network", network,
-              "-e", f"POSTGRES_PASSWORD={postgres_password}",
-              "-e", f"CATERING_DEFAULT_BUSINESS_ID={business_id}",
-              image,
-              "/bin/sh", "-eu", "-c", shell, "bootstrap", login_code,
-          ]
+          set +e
+          printf '%s\n' "$SYNTHETIC_PIN"             | script -q -e -E never -c "$command_string" /dev/null               >"$output" 2>"$stderr"
+          rc=$?
+          set -e
 
-          pid, fd = pty.fork()
-          if pid == 0:
-              os.execvp(argv[0], argv)
-
-          captured = bytearray()
-          pin_sent = False
-          marker_seen = False
-          raw_mode_seen = False
-          deadline = time.monotonic() + 90
-          child_status = None
-          eof_seen = False
-          try:
-              while time.monotonic() < deadline:
-                  readable, _, _ = select.select([fd], [], [], 0.1)
-                  if fd in readable:
-                      try:
-                          chunk = os.read(fd, 4096)
-                      except OSError:
-                          chunk = b""
-                      if chunk:
-                          captured.extend(chunk)
-                          marker_seen = marker_seen or b"BOOTSTRAP_PIN_READY" in captured
-                      else:
-                          eof_seen = True
-
-                  if marker_seen and not pin_sent:
-                      try:
-                          local_flags = termios.tcgetattr(fd)[3]
-                          raw_mode_seen = (local_flags & termios.ECHO) == 0 and (local_flags & termios.ICANON) == 0
-                      except termios.error:
-                          raw_mode_seen = False
-                      if raw_mode_seen:
-                          attrs = termios.tcgetattr(fd)
-                          attrs[3] &= ~termios.ECHO
-                          termios.tcsetattr(fd, termios.TCSANOW, attrs)
-                          os.write(fd, pin.encode("ascii") + b"\n")
-                          pin_sent = True
-
-                  waited, status = os.waitpid(pid, os.WNOHANG)
-                  if waited == pid:
-                      child_status = status
-                      break
-                  if eof_seen:
-                      _, child_status = os.waitpid(pid, 0)
-                      break
-
-              if child_status is None:
-                  os.kill(pid, 9)
-                  _, child_status = os.waitpid(pid, 0)
-                  raise SystemExit(
-                      f"rehearsal child timed out marker_seen={marker_seen} raw_mode_seen={raw_mode_seen} pin_sent={pin_sent}"
-                  )
-          finally:
-              try:
-                  os.close(fd)
-              except OSError:
-                  pass
-
-          data = bytes(captured)
-          with open(output_path, "wb") as handle:
-              handle.write(data)
-
-          if pin.encode("ascii") in data:
-              raise SystemExit("synthetic PIN appeared in PTY output")
-          if not marker_seen:
-              raise SystemExit("PIN readiness marker was never observed")
-          if not raw_mode_seen:
-              raise SystemExit("protected raw mode was never observed")
-          if not pin_sent:
-              raise SystemExit("synthetic PIN was not sent")
-          if not os.WIFEXITED(child_status) or os.WEXITSTATUS(child_status) != 0:
-              safe = data.replace(pin.encode("ascii"), b"[SYNTHETIC_PIN_REDACTED]")
-              sys.stderr.write("SANITIZED_PTY_OUTPUT_BEGIN\n")
-              sys.stderr.write(safe.decode("utf-8", errors="replace")[-4000:])
-              sys.stderr.write("\nSANITIZED_PTY_OUTPUT_END\n")
-              raise SystemExit(f"admin create exited nonzero: {child_status}")
-          if b'"status":"success"' not in data:
-              raise SystemExit("success output missing")
-          if b'"displayName":"Release Smoke"' not in data:
-              raise SystemExit("display name missing")
-          if b'"role":"read_only_operator"' not in data:
-              raise SystemExit("role missing")
-          if b'"active":true' not in data:
-              raise SystemExit("active state missing")
-          PY
+          test "$rc" -eq 0
+          test ! -s "$stderr"
+          ! grep -F -- "$SYNTHETIC_PIN" "$output"
+          grep -F -- '"status":"success"' "$output"
+          grep -F -- '"displayName":"Release Smoke"' "$output"
+          grep -F -- '"role":"read_only_operator"' "$output"
+          grep -F -- '"active":true' "$output"
 
       - name: Verify PostgreSQL record and schema
         run: |
