@@ -67,6 +67,22 @@ jobs:
           echo "PostgreSQL rehearsal did not become ready" >&2
           exit 1
 
+      - name: Inspect runtime TTY prerequisites
+        run: |
+          set -euo pipefail
+          image="catering-bootstrap-rehearsal:$SOURCE_COMMIT"
+          docker run --rm --pull never "$image" /bin/sh -eu -c '
+            test -x ./node_modules/.bin/tsx
+            test -x /bin/busybox
+            if command -v stty >/dev/null 2>&1; then
+              printf "RUNTIME_TTY_PREREQ stty=command tsx=present\n"
+            elif /bin/busybox --list | grep -qx stty; then
+              printf "RUNTIME_TTY_PREREQ stty=busybox tsx=present\n"
+            else
+              printf "RUNTIME_TTY_PREREQ stty=missing tsx=present\n"
+            fi
+          '
+
       - name: Run real TTY admin create against PostgreSQL
         run: |
           set -euo pipefail
@@ -85,7 +101,14 @@ jobs:
           network, image, login_code, business_id, postgres_password, pin, output_path = sys.argv[1:]
           shell = r'''
           set -eu
-          stty -echo
+          if command -v stty >/dev/null 2>&1; then
+            stty -echo
+          elif /bin/busybox --list | grep -qx stty; then
+            /bin/busybox stty -echo
+          else
+            printf '%s\n' TTY_ECHO_CONTROL_UNAVAILABLE >&2
+            exit 127
+          fi
           export CATERING_DATABASE_URL="$(node -e 'const u=new URL("postgresql://catering@postgres:5432/catering_agents");u.password=process.env.POSTGRES_PASSWORD;process.stdout.write(u.toString())')"
           test -n "$CATERING_DATABASE_URL"
           printf '%s\n' BOOTSTRAP_PIN_READY
