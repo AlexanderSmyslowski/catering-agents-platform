@@ -94,7 +94,8 @@ jobs:
           output="$RUNNER_TEMP/bootstrap-tty-output.txt"
           stderr="$RUNNER_TEMP/bootstrap-tty-stderr.txt"
 
-          command_string="docker run --rm -it --pull never --network '$network' -e POSTGRES_PASSWORD='$SYNTHETIC_POSTGRES_PASSWORD' -e CATERING_DEFAULT_BUSINESS_ID='$SYNTHETIC_BUSINESS_ID' '$image' ./scripts/manage-catering-user create --login-code '$SYNTHETIC_LOGIN_CODE' --display-name 'Release Smoke' --role read_only_operator"
+          database_url="postgresql://catering:$SYNTHETIC_POSTGRES_PASSWORD@postgres:5432/catering_agents"
+          command_string="docker run --rm -it --pull never --network '$network' -e CATERING_DATABASE_URL='$database_url' -e CATERING_DEFAULT_BUSINESS_ID='$SYNTHETIC_BUSINESS_ID' '$image' ./scripts/manage-catering-user create --login-code '$SYNTHETIC_LOGIN_CODE' --display-name 'Release Smoke' --role read_only_operator"
 
           set +e
           printf '%s\n' "$SYNTHETIC_PIN"             | script -q -e -E never -c "$command_string" /dev/null               >"$output" 2>"$stderr"
