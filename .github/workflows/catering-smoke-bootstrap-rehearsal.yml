@@ -219,12 +219,35 @@ jobs:
           postgres="$(cat "$RUNNER_TEMP/bootstrap-postgres")"
 
           schema_version="$(docker exec "$postgres"             psql --no-psqlrc --no-password -U catering -d catering_agents             --tuples-only --no-align             --command="SELECT version_number FROM catering_schema_migrations WHERE unit_name='catering_business_records'"             | tr -d '[:space:]')"
+          printf 'REHEARSAL_DB schema_version=%s\n' "$schema_version"
           test "$schema_version" = "3"
 
           count="$(docker exec "$postgres"             psql --no-psqlrc --no-password -U catering -d catering_agents             --tuples-only --no-align             --command="SELECT count(*) FROM catering_business_records WHERE collection_name='auth/users'"             | tr -d '[:space:]')"
+          printf 'REHEARSAL_DB auth_users=%s\n' "$count"
           test "$count" = "1"
 
-          verdict="$(docker exec "$postgres"             psql --no-psqlrc --no-password -U catering -d catering_agents             --tuples-only --no-align             --command="SELECT CASE WHEN count(*) = 1 AND bool_and(payload->>'schemaVersion'='1.0') AND bool_and(payload->>'displayName'='Release Smoke') AND bool_and(payload->>'role'='read_only_operator') AND bool_and(payload->>'active'='true') AND bool_and(payload->>'businessId'=business_id) AND bool_and(payload->>'authEpoch'='0') AND bool_and(payload->>'failedLoginCount'='0') AND bool_and(payload->>'version'='0') AND bool_and(payload->>'loginCodeCanonical'='release-smoke-ci') AND bool_and((payload->>'pinHash') ~ '^scrypt\\$16384\\$8\\$1\\$[0-9a-f]{32}\\$[0-9a-f]{64}$') THEN 'ok' ELSE 'fail' END FROM catering_business_records WHERE collection_name='auth/users'"             | tr -d '[:space:]')"
+          verdict="$(
+            docker exec -i "$postgres"               psql --no-psqlrc --no-password -U catering -d catering_agents               --tuples-only --no-align <<'SQL'             | tr -d '[:space:]'
+          SELECT CASE
+            WHEN count(*) = 1
+             AND bool_and(payload->>'schemaVersion' = '1.0')
+             AND bool_and(payload->>'displayName' = 'Release Smoke')
+             AND bool_and(payload->>'role' = 'read_only_operator')
+             AND bool_and(payload->>'active' = 'true')
+             AND bool_and(payload->>'businessId' = business_id)
+             AND bool_and(payload->>'authEpoch' = '0')
+             AND bool_and(payload->>'failedLoginCount' = '0')
+             AND bool_and(payload->>'version' = '0')
+             AND bool_and(payload->>'loginCodeCanonical' = 'release-smoke-ci')
+             AND bool_and((payload->>'pinHash') ~ '^scrypt\$16384\$8\$1\$[0-9a-f]{32}\$[0-9a-f]{64}$')
+            THEN 'ok'
+            ELSE 'fail'
+          END
+          FROM catering_business_records
+          WHERE collection_name = 'auth/users';
+          SQL
+          )"
+          printf 'REHEARSAL_DB verdict=%s\n' "$verdict"
           test "$verdict" = "ok"
 
           printf 'CATERING_SMOKE_BOOTSTRAP_REHEARSAL_OK source_commit=%s schema_version=3 auth_users=1 role=read_only_operator tty=true postgres=true\n' "$SOURCE_COMMIT"
