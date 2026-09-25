@@ -91,4 +91,18 @@ describe("Catering target runtime identity recovery", () => {
     expect(smoke).toContain("authenticated_read_smoke_ok");
   });
 
+  it("exposes fail-closed release stage markers without changing the smoke route", () => {
+    expect(production).toContain("TARGET_UPDATE_STAGE stage=activate status=start");
+    expect(production).toContain("TARGET_UPDATE_STAGE stage=activate status=success");
+    expect(production).toContain("TARGET_UPDATE_STAGE stage=postflight status=success");
+    expect(production).toContain("TARGET_UPDATE_STAGE stage=health service=intake status=success");
+    expect(production).toContain("TARGET_UPDATE_STAGE stage=health service=exports status=success");
+    expect(production).toContain("TARGET_UPDATE_STAGE stage=auth_smoke status=start");
+    expect(production).toContain("TARGET_AUTH_SMOKE_STAGE stage=login status=success");
+    expect(production).toContain("TARGET_AUTH_SMOKE_STAGE stage=session status=success");
+    expect(production).toContain("TARGET_AUTH_SMOKE_STAGE stage=production_read status=success");
+    expect(production).toContain("/api/production/v1/production/plans");
+    expect(production).not.toContain("/api/production/v1/production/cases");
+  });
+
 });
