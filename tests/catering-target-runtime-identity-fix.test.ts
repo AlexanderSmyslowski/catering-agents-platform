@@ -105,4 +105,12 @@ describe("Catering target runtime identity recovery", () => {
     expect(production).not.toContain("/api/production/v1/production/cases");
   });
 
+  it("exposes safe authenticated-smoke response status markers", () => {
+    expect(production).toContain("TARGET_AUTH_SMOKE_STAGE stage=script_start status=success");
+    expect(production).toContain("TARGET_AUTH_SMOKE_STAGE stage=payload_valid status=success");
+    expect(production).toContain("TARGET_AUTH_SMOKE_STAGE stage=login_response status=");
+    expect(production).toContain("TARGET_AUTH_SMOKE_STAGE stage=session_response status=");
+    expect(production).toContain("TARGET_AUTH_SMOKE_STAGE stage=production_read_response status=");
+  });
+
 });
