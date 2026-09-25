@@ -1,0 +1,79 @@
+name: PR712 E1 release gates
+
+on:
+  push:
+    branches:
+      - ops/pr712-e1-proof-20260925
+
+permissions:
+  contents: read
+
+jobs:
+  ubuntu-release-gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact proof head
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Bind proof to PR 712 head
+        env:
+          EXPECTED_PARENT: baf076baf065868709f6363c388841ab9558f52a
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "$EXPECTED_PARENT"
+          test -z "$(git diff --name-only HEAD^ HEAD -- . ':!.github/workflows/pr712-e1-proof.yml')"
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Bash 5 syntax
+        run: |
+          set -euo pipefail
+          bash --version | head -n 1
+          bash -n platform-infra/scripts/catering-target-production-update.sh
+
+      - name: Three release suites
+        run: |
+          set -euo pipefail
+          npx vitest run             tests/catering-target-production-controlflow.test.ts             tests/catering-target-update-production-boundary.test.ts             tests/catering-target-runtime-identity-fix.test.ts             --maxWorkers=1
+
+  macos-bash32-syntax:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact proof head
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Bind proof to PR 712 head
+        env:
+          EXPECTED_PARENT: baf076baf065868709f6363c388841ab9558f52a
+        shell: /bin/bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "$EXPECTED_PARENT"
+          test -z "$(git diff --name-only HEAD^ HEAD -- . ':!.github/workflows/pr712-e1-proof.yml')"
+
+      - name: Bash 3.2 syntax
+        shell: /bin/bash
+        run: |
+          set -euo pipefail
+          version="$(/bin/bash --version | head -n 1)"
+          printf '%s\n' "$version"
+          case "$version" in
+            *"version 3.2"*) ;;
+            *) echo "Expected Apple Bash 3.2" >&2; exit 1 ;;
+          esac
+          /bin/bash -n platform-infra/scripts/catering-target-production-update.sh
