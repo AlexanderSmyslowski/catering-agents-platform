@@ -61,8 +61,8 @@ describe("Catering target runtime identity recovery", () => {
     const prepare = production.slice(start, end);
 
     const sourceChown = prepare.indexOf('sudo -n chown -R root:root -- "$source_dir"');
-    const bundleChown = prepare.indexOf('sudo -n chown root:root -- \\');
-    const chmod = prepare.indexOf('sudo -n chmod 0644 \\');
+    const bundleChown = prepare.indexOf('sudo -n chown root:root --');
+    const chmod = prepare.indexOf('sudo -n chmod 0644');
     expect(sourceChown).toBeGreaterThanOrEqual(0);
     expect(bundleChown).toBeGreaterThan(sourceChown);
     expect(chmod).toBeGreaterThan(bundleChown);
