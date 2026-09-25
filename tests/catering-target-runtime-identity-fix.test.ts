@@ -78,4 +78,17 @@ describe("Catering target runtime identity recovery", () => {
     );
   });
 
+  it("uses an allowed read-only Production route for the authenticated smoke", () => {
+    const start = production.indexOf("authenticated_read_smoke() {");
+    const end = production.indexOf("\n}\n\nwrite_install_receipt() {", start);
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    const smoke = production.slice(start, end);
+
+    expect(smoke).toContain("/api/production/v1/production/plans");
+    expect(smoke).not.toContain("/api/production/v1/production/cases");
+    expect(smoke).toContain('includes("production_read")');
+    expect(smoke).toContain("authenticated_read_smoke_ok");
+  });
+
 });
