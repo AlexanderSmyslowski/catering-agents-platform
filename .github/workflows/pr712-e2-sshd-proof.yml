@@ -1,0 +1,191 @@
+name: PR712 E2 real sshd smoke proof
+
+on:
+  push:
+    branches:
+      - ops/pr712-e2-sshd-proof-20260925
+
+permissions:
+  contents: read
+
+jobs:
+  real-sshd-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact proof head
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Bind proof to PR 712 head
+        env:
+          EXPECTED_PARENT: baf076baf065868709f6363c388841ab9558f52a
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "$EXPECTED_PARENT"
+          test -z "$(git diff --name-only HEAD^ HEAD -- . ':!.github/workflows/pr712-e2-sshd-proof.yml')"
+
+      - name: Install and configure localhost sshd
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y openssh-server
+          sudo ssh-keygen -A
+          ssh-keygen -q -t ed25519 -N '' -f /tmp/catering-e2-key
+          for spec in 'catering-bash:/bin/bash' 'catering-dash:/bin/dash'; do
+            user="${spec%%:*}"
+            shell="${spec#*:}"
+            sudo useradd -m -s "$shell" "$user"
+            sudo passwd -d "$user"
+            sudo install -d -m 0700 -o "$user" -g "$user" "/home/$user/.ssh"
+            sudo install -m 0600 -o "$user" -g "$user" /tmp/catering-e2-key.pub "/home/$user/.ssh/authorized_keys"
+            printf '%s ALL=(ALL) NOPASSWD: ALL\n' "$user" | sudo tee "/etc/sudoers.d/$user" >/dev/null
+            sudo chmod 0440 "/etc/sudoers.d/$user"
+          done
+          cat >/tmp/catering-e2-sshd_config <<'EOF'
+          Port 2222
+          ListenAddress 127.0.0.1
+          HostKey /etc/ssh/ssh_host_ed25519_key
+          PidFile /tmp/catering-e2-sshd.pid
+          PubkeyAuthentication yes
+          PasswordAuthentication no
+          KbdInteractiveAuthentication no
+          ChallengeResponseAuthentication no
+          UsePAM no
+          PermitRootLogin no
+          AuthorizedKeysFile .ssh/authorized_keys
+          AllowUsers catering-bash catering-dash
+          LogLevel VERBOSE
+          EOF
+          sudo mkdir -p /run/sshd
+          sudo /usr/sbin/sshd -f /tmp/catering-e2-sshd_config -E /tmp/catering-e2-sshd.log
+          for i in $(seq 1 20); do
+            if ssh-keyscan -p 2222 127.0.0.1 >/tmp/catering-e2-known-hosts 2>/dev/null; then
+              break
+            fi
+            sleep 0.2
+          done
+          test -s /tmp/catering-e2-known-hosts
+
+      - name: Start exact-shape Node containers
+        run: |
+          set -euo pipefail
+          docker pull node:22-alpine
+          docker network create catering-e2
+          cat >/tmp/catering-e2-web.mjs <<'NODE'
+          import http from "node:http";
+          const expectedAuth = "Basic " + Buffer.from("proof-user:proof-password", "utf8").toString("base64");
+          const sessionCookie = "__Host-catering_session=proof-token";
+          const server = http.createServer(async (req, res) => {
+            const url = new URL(req.url, "http://web:8081");
+            if (req.headers.authorization !== expectedAuth) {
+              res.writeHead(401, {"content-type":"application/json"});
+              res.end(JSON.stringify({message:"basic auth required"}));
+              return;
+            }
+            if (req.headers.origin !== "https://web:8081") {
+              res.writeHead(403, {"content-type":"application/json"});
+              res.end(JSON.stringify({message:"bad origin"}));
+              return;
+            }
+            if (req.method === "POST" && url.pathname === "/api/intake/v1/auth/login") {
+              let body = "";
+              for await (const chunk of req) body += chunk;
+              const input = JSON.parse(body);
+              if (input.loginCode !== "PROOF" || input.pin !== "123456") {
+                res.writeHead(401, {"content-type":"application/json"});
+                res.end(JSON.stringify({message:"bad credentials"}));
+                return;
+              }
+              res.writeHead(200, {
+                "content-type":"application/json",
+                "set-cookie": sessionCookie + "; Path=/; Secure; HttpOnly; SameSite=Strict"
+              });
+              res.end(JSON.stringify({authenticated:true}));
+              return;
+            }
+            if (req.headers.cookie !== sessionCookie) {
+              res.writeHead(401, {"content-type":"application/json"});
+              res.end(JSON.stringify({message:"bad cookie"}));
+              return;
+            }
+            if (req.method === "GET" && url.pathname === "/api/intake/v1/auth/session") {
+              res.writeHead(200, {"content-type":"application/json"});
+              res.end(JSON.stringify({
+                authenticated:true,
+                user:{userId:"proof",displayName:"Proof"},
+                access:{capabilities:["production_read"]}
+              }));
+              return;
+            }
+            if (req.method === "GET" && url.pathname === "/api/production/v1/production/plans") {
+              res.writeHead(200, {"content-type":"application/json"});
+              res.end(JSON.stringify({access:{canOperateProduction:false},items:[]}));
+              return;
+            }
+            res.writeHead(404, {"content-type":"application/json"});
+            res.end(JSON.stringify({message:"not found"}));
+          });
+          server.listen(8081, "0.0.0.0");
+          NODE
+          docker run -d --rm --name web --network catering-e2 -v /tmp/catering-e2-web.mjs:/mock.mjs:ro node:22-alpine node /mock.mjs
+          docker run -d --rm --name platform-infra-intake-1 --network catering-e2 node:22-alpine sh -c 'sleep 600'
+          for i in $(seq 1 30); do
+            if docker exec platform-infra-intake-1 node -e 'fetch("http://web:8081").then(()=>process.exit(0)).catch(()=>process.exit(1))'; then
+              break
+            fi
+            sleep 0.2
+          done
+
+      - name: Run exact embedded smoke over real OpenSSH with Bash and Dash login shells
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source=Path("platform-infra/scripts/catering-target-production-update.sh").read_text()
+          marker="  read -r -d '' smoke_script <<'NODE' || true\n"
+          start=source.index(marker)+len(marker)
+          end=source.index("\nNODE\n",start)
+          Path("/tmp/catering-e2-smoke.js").write_text(source[start:end])
+          PY
+          smoke_script="$(cat /tmp/catering-e2-smoke.js)"
+          remote_command="$(python3 -c 'import shlex,sys; print(" ".join(shlex.quote(value) for value in sys.argv[1:]))' \
+            sudo -n docker exec -i platform-infra-intake-1 node --input-type=module -e "$smoke_script")"
+          payload='{"basicUser":"proof-user","basicPassword":"proof-password","loginCode":"PROOF","pin":"123456"}'
+          for user in catering-bash catering-dash; do
+            stdout="/tmp/${user}.stdout"
+            stderr="/tmp/${user}.stderr"
+            printf '%s' "$payload" | ssh \
+              -i /tmp/catering-e2-key \
+              -o BatchMode=yes \
+              -o IdentitiesOnly=yes \
+              -o StrictHostKeyChecking=yes \
+              -o UserKnownHostsFile=/tmp/catering-e2-known-hosts \
+              -o ConnectTimeout=10 \
+              -o ServerAliveInterval=15 \
+              -o ServerAliveCountMax=4 \
+              -p 2222 \
+              "$user@127.0.0.1" "$remote_command" >"$stdout" 2>"$stderr"
+            test "$(cat "$stdout")" = "authenticated_read_smoke_ok"
+            grep -Fxq 'TARGET_AUTH_SMOKE_STAGE stage=script_start status=success' "$stderr"
+            grep -Fxq 'TARGET_AUTH_SMOKE_STAGE stage=payload_valid status=success' "$stderr"
+            grep -Fxq 'TARGET_AUTH_SMOKE_STAGE stage=login_response status=200' "$stderr"
+            grep -Fxq 'TARGET_AUTH_SMOKE_STAGE stage=login status=success' "$stderr"
+            grep -Fxq 'TARGET_AUTH_SMOKE_STAGE stage=session_response status=200' "$stderr"
+            grep -Fxq 'TARGET_AUTH_SMOKE_STAGE stage=session status=success' "$stderr"
+            grep -Fxq 'TARGET_AUTH_SMOKE_STAGE stage=production_read_response status=200' "$stderr"
+            grep -Fxq 'TARGET_AUTH_SMOKE_STAGE stage=production_read status=success' "$stderr"
+            if grep -Fq 'proof-password' "$stdout" "$stderr" || grep -Fq '123456' "$stdout" "$stderr"; then
+              echo "secret material leaked to smoke output" >&2
+              exit 1
+            fi
+          done
+          printf 'PR712_E2_REAL_SSHD_SMOKE_OK shells=bash,dash credentials_on_stdin=true\n'
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker rm -f platform-infra-intake-1 web 2>/dev/null || true
+          docker network rm catering-e2 2>/dev/null || true
