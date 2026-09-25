@@ -40,6 +40,7 @@ RUNTIME_IMAGE=""
 WEB_IMAGE=""
 POSTGRES_VOLUME=""
 EDGE_IMAGE=""
+SOURCE_ROOT=""
 
 fail() {
   printf '%s\n' "$*" >&2
@@ -128,9 +129,14 @@ PY
 
 validate_production_inputs() {
   [[ "${DEPLOY_COMMIT_SHA}" =~ ^[0-9a-fA-F]{40}$ ]] || fail "DEPLOY_COMMIT_SHA must be an exact 40-character Git commit SHA"
-  local checked_out
-  checked_out="$(git -C "${REPO_ROOT}" rev-parse HEAD)"
-  [[ "${checked_out}" == "${DEPLOY_COMMIT_SHA}" ]] || fail "checked out commit does not match DEPLOY_COMMIT_SHA"
+  : "${CATERING_TARGET_SOURCE_ROOT:?CATERING_TARGET_SOURCE_ROOT is required}"
+  [[ -d "${CATERING_TARGET_SOURCE_ROOT}" && ! -L "${CATERING_TARGET_SOURCE_ROOT}" ]] || fail "source root must be a real directory"
+  SOURCE_ROOT="$(cd "${CATERING_TARGET_SOURCE_ROOT}" && pwd -P)"
+  [[ "$(git -C "${SOURCE_ROOT}" rev-parse HEAD)" == "${DEPLOY_COMMIT_SHA}" ]] || fail "source root commit does not match DEPLOY_COMMIT_SHA"
+  if git -C "${SOURCE_ROOT}" symbolic-ref -q HEAD >/dev/null 2>&1; then
+    fail "source root must be detached"
+  fi
+  [[ -z "$(git -C "${SOURCE_ROOT}" status --porcelain --untracked-files=all)" ]] || fail "source root must be clean"
 
   : "${CATERING_TARGET_DEPLOY_HOST:?CATERING_TARGET_DEPLOY_HOST is required}"
   : "${CATERING_TARGET_DEPLOY_USER:?CATERING_TARGET_DEPLOY_USER is required}"
@@ -150,6 +156,8 @@ validate_production_inputs() {
     -o StrictHostKeyChecking=yes
     -o "UserKnownHostsFile=${CATERING_TARGET_SSH_KNOWN_HOSTS_FILE}"
     -o ConnectTimeout=10
+    -o ServerAliveInterval=15
+    -o ServerAliveCountMax=4
     -p 22
   )
 }
@@ -204,7 +212,7 @@ REMOTE_SCHEMA_SOURCE
 }
 
 verify_runtime_schema_migration_unchanged() {
-  local local_path="${REPO_ROOT}/shared-core/src/persistence.ts"
+  local local_path="${SOURCE_ROOT}/shared-core/src/persistence.ts"
   [[ -f "${local_path}" && ! -L "${local_path}" ]] || fail "candidate persistence source missing"
 
   local candidate_hash installed_hashes expected
@@ -359,7 +367,7 @@ REMOTE_DDL_MANIFEST
 
 verify_runtime_ddl_unchanged() {
   local candidate_hash installed_hashes expected
-  candidate_hash="$(runtime_ddl_manifest_hash "${REPO_ROOT}")"
+  candidate_hash="$(runtime_ddl_manifest_hash "${SOURCE_ROOT}")"
   if ! installed_hashes="$(remote_runtime_ddl_manifest_hashes)"; then
     fail "TARGET_PREFLIGHT_FAIL gate=runtime_ddl_manifest"
   fi
@@ -380,12 +388,12 @@ remote_preflight() {
     expected_lock_owner_arg="${expected_lock_owner}"
   fi
   local platform_base_hash platform_ops_hash edge_base_hash edge_ops_hash edge_caddy_hash target_site_hash
-  platform_base_hash="$(local_sha256 "${REPO_ROOT}/${SOURCE_PLATFORM_BASE}")"
-  platform_ops_hash="$(local_sha256 "${REPO_ROOT}/${SOURCE_PLATFORM_OPS}")"
-  edge_base_hash="$(local_sha256 "${REPO_ROOT}/${SOURCE_EDGE_BASE}")"
-  edge_ops_hash="$(local_sha256 "${REPO_ROOT}/${SOURCE_EDGE_OPS}")"
-  edge_caddy_hash="$(local_sha256 "${REPO_ROOT}/${SOURCE_EDGE_CADDY}")"
-  target_site_hash="$(local_sha256 "${REPO_ROOT}/${SOURCE_TARGET_SITE}")"
+  platform_base_hash="$(local_sha256 "${SOURCE_ROOT}/${SOURCE_PLATFORM_BASE}")"
+  platform_ops_hash="$(local_sha256 "${SOURCE_ROOT}/${SOURCE_PLATFORM_OPS}")"
+  edge_base_hash="$(local_sha256 "${SOURCE_ROOT}/${SOURCE_EDGE_BASE}")"
+  edge_ops_hash="$(local_sha256 "${SOURCE_ROOT}/${SOURCE_EDGE_OPS}")"
+  edge_caddy_hash="$(local_sha256 "${SOURCE_ROOT}/${SOURCE_EDGE_CADDY}")"
+  target_site_hash="$(local_sha256 "${SOURCE_ROOT}/${SOURCE_TARGET_SITE}")"
 
   ssh_target bash -s -- \
     "${TARGET_ID}" "${DEPLOY_PATH}" "${EDGE_PATH}" "${TARGET_RUNTIME_ENV}" \
@@ -668,29 +676,23 @@ cleanup_local_candidate() {
 }
 
 migration_declaration_present() {
-  [[ -e "${REPO_ROOT}/platform-infra/catering-target-migration.json" || "${CATERING_TARGET_MIGRATION_REQUIRED:-0}" == "1" ]]
+  [[ -e "${SOURCE_ROOT}/platform-infra/catering-target-migration.json" || "${CATERING_TARGET_MIGRATION_REQUIRED:-0}" == "1" ]]
 }
 
 prepare_local_candidate() {
-  command -v docker >/dev/null || fail "docker is required on the workflow runner"
   command -v rsync >/dev/null || fail "rsync is required on the workflow runner"
-  command -v gzip >/dev/null || fail "gzip is required on the workflow runner"
   if migration_declaration_present; then
     fail "manual_migration_approval_required"
   fi
 
+  : "${CATERING_TARGET_CANDIDATE_RUNTIME_IMAGE:?CATERING_TARGET_CANDIDATE_RUNTIME_IMAGE is required}"
+  : "${CATERING_TARGET_CANDIDATE_WEB_IMAGE:?CATERING_TARGET_CANDIDATE_WEB_IMAGE is required}"
+  RUNTIME_IMAGE="${CATERING_TARGET_CANDIDATE_RUNTIME_IMAGE}"
+  WEB_IMAGE="${CATERING_TARGET_CANDIDATE_WEB_IMAGE}"
+  [[ "${RUNTIME_IMAGE}" =~ ^sha256:[0-9a-f]{64}$ ]] || fail "runtime candidate is not an immutable sha256 image"
+  [[ "${WEB_IMAGE}" =~ ^sha256:[0-9a-f]{64}$ ]] || fail "web candidate is not an immutable sha256 image"
+
   LOCAL_RELEASE_DIR="$(mktemp -d "${RUNNER_TEMP:-/tmp}/catering-target-release.XXXXXX")"
-  local runtime_tag="catering-target-runtime:${DEPLOY_COMMIT_SHA}"
-  local web_tag="catering-target-web:${DEPLOY_COMMIT_SHA}"
-
-  docker build     --iidfile "${LOCAL_RELEASE_DIR}/runtime.iid"     --tag "${runtime_tag}"     --file "${REPO_ROOT}/platform-infra/docker/Dockerfile.runtime"     "${REPO_ROOT}"
-  docker build     --iidfile "${LOCAL_RELEASE_DIR}/web.iid"     --tag "${web_tag}"     --file "${REPO_ROOT}/platform-infra/docker/Dockerfile.web"     "${REPO_ROOT}"
-
-  RUNTIME_IMAGE="$(cat "${LOCAL_RELEASE_DIR}/runtime.iid")"
-  WEB_IMAGE="$(cat "${LOCAL_RELEASE_DIR}/web.iid")"
-  [[ "${RUNTIME_IMAGE}" =~ ^sha256:[0-9a-f]{64}$ ]] || fail "runtime candidate is not immutable"
-  [[ "${WEB_IMAGE}" =~ ^sha256:[0-9a-f]{64}$ ]] || fail "web candidate is not immutable"
-
   python3 - "${LOCAL_RELEASE_DIR}/candidate-images.json" "${RUNTIME_IMAGE}" "${WEB_IMAGE}" <<'PY'
 import json, sys
 path, runtime_image, web_image = sys.argv[1:]
@@ -707,9 +709,7 @@ with open(path, "w", encoding="utf-8") as handle:
     json.dump(value, handle, indent=2, sort_keys=True)
     handle.write("\n")
 PY
-
-  docker save "${RUNTIME_IMAGE}" | gzip -1 > "${LOCAL_RELEASE_DIR}/runtime-image.tar.gz"
-  docker save "${WEB_IMAGE}" | gzip -1 > "${LOCAL_RELEASE_DIR}/web-image.tar.gz"
+  printf 'TARGET_CANDIDATE_BINDING runtime=%s web=%s\n' "${RUNTIME_IMAGE}" "${WEB_IMAGE}"
 }
 
 acquire_remote_lock() {
@@ -777,15 +777,37 @@ else
       *) exit 1 ;;
     esac
   done
+  for legacy in "$release_dir/runtime-image.tar.gz" "$release_dir/web-image.tar.gz"; do
+    if [[ -L "$legacy" ]]; then
+      exit 1
+    elif [[ -f "$legacy" ]]; then
+      sudo -n unlink "$legacy"
+    elif [[ -e "$legacy" ]]; then
+      exit 1
+    fi
+  done
 fi
 REMOTE_RELEASE
 
   local rsync_rsh
-  rsync_rsh="ssh -i ${CATERING_TARGET_SSH_KEY_FILE} -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=${CATERING_TARGET_SSH_KNOWN_HOSTS_FILE} -o ConnectTimeout=10 -p 22"
+  rsync_rsh="ssh -i ${CATERING_TARGET_SSH_KEY_FILE} -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=${CATERING_TARGET_SSH_KNOWN_HOSTS_FILE} -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -p 22"
 
-  rsync -az --delete     --rsync-path="sudo -n rsync"     -e "${rsync_rsh}"     --exclude=.git     --exclude=node_modules     --exclude=backoffice-ui/dist     --exclude=platform-infra/.env     --exclude=platform-infra/sites     --exclude=data     "${REPO_ROOT}/" "${REMOTE}:${release_dir}/source/"
+  rsync -az --delete \
+    --rsync-path="sudo -n rsync" \
+    -e "${rsync_rsh}" \
+    --exclude=.git \
+    --exclude=node_modules \
+    --exclude=backoffice-ui/dist \
+    --exclude=platform-infra/.env \
+    --exclude=platform-infra/sites \
+    --exclude=data \
+    "${SOURCE_ROOT}/" "${REMOTE}:${release_dir}/source/"
 
-  rsync -az     --rsync-path="sudo -n rsync"     -e "${rsync_rsh}"     "${LOCAL_RELEASE_DIR}/candidate-images.json"     "${LOCAL_RELEASE_DIR}/runtime-image.tar.gz"     "${LOCAL_RELEASE_DIR}/web-image.tar.gz"     "${REMOTE}:${release_dir}/"
+  rsync -az \
+    --rsync-path="sudo -n rsync" \
+    -e "${rsync_rsh}" \
+    "${LOCAL_RELEASE_DIR}/candidate-images.json" \
+    "${REMOTE}:${release_dir}/"
 
   ssh_target bash -s -- "${release_dir}" "${SOURCE_PLATFORM_BASE}" "${SOURCE_PLATFORM_OPS}" <<'REMOTE_RELEASE_OWNERSHIP'
 set -euo pipefail
@@ -800,13 +822,13 @@ for path in "$release_dir" "$source_dir"; do
   sudo -n test -d "$path"
   sudo -n test ! -L "$path"
 done
-for path in "$platform_base" "$platform_ops" "$release_dir/candidate-images.json" "$release_dir/runtime-image.tar.gz" "$release_dir/web-image.tar.gz"; do
+for path in "$platform_base" "$platform_ops" "$release_dir/candidate-images.json"; do
   sudo -n test -f "$path"
   sudo -n test ! -L "$path"
 done
 sudo -n chown -R root:root -- "$source_dir"
-sudo -n chown root:root --   "$release_dir/candidate-images.json"   "$release_dir/runtime-image.tar.gz"   "$release_dir/web-image.tar.gz"
-sudo -n chmod 0644   "$release_dir/candidate-images.json"   "$release_dir/runtime-image.tar.gz"   "$release_dir/web-image.tar.gz"
+sudo -n chown root:root -- "$release_dir/candidate-images.json"
+sudo -n chmod 0644 "$platform_base" "$platform_ops" "$release_dir/candidate-images.json"
 [[ "$(sudo -n stat -c '%u:%g:%a' "$platform_base")" == "0:0:644" ]]
 [[ "$(sudo -n stat -c '%u:%g:%a' "$platform_ops")" == "0:0:644" ]]
 [[ "$(sudo -n stat -c '%u:%g:%a' "$release_dir/candidate-images.json")" == "0:0:644" ]]
@@ -856,8 +878,6 @@ finally:
         os.unlink(temporary)
 PY
 
-sudo -n gzip -dc "$release_dir/runtime-image.tar.gz" | sudo -n docker load >/dev/null
-sudo -n gzip -dc "$release_dir/web-image.tar.gz" | sudo -n docker load >/dev/null
 sudo -n docker image inspect "$runtime_image" >/dev/null
 sudo -n docker image inspect "$web_image" >/dev/null
 
@@ -987,7 +1007,12 @@ async function request(path, init = {}) {
   const headers = new Headers(init.headers);
   headers.set("authorization", authorization);
   headers.set("origin", origin);
-  const response = await fetch(base + path, { ...init, headers, redirect: "manual" });
+  const response = await fetch(base + path, {
+    ...init,
+    headers,
+    redirect: "manual",
+    signal: AbortSignal.timeout(20000)
+  });
   return response;
 }
 
@@ -1027,7 +1052,10 @@ process.stderr.write("TARGET_AUTH_SMOKE_STAGE stage=production_read status=succe
 
 process.stdout.write("authenticated_read_smoke_ok\n");
 NODE
-  output="$(printf '%s' "${payload}" | ssh_target sudo -n docker exec -i     platform-infra-intake-1 node --input-type=module -e "${smoke_script}")"
+  local remote_command
+  remote_command="$(python3 -c 'import shlex, sys; print(" ".join(shlex.quote(value) for value in sys.argv[1:]))' \
+    sudo -n docker exec -i platform-infra-intake-1 node --input-type=module -e "${smoke_script}")" || return 1
+  output="$(printf '%s' "${payload}" | ssh_target "${remote_command}")" || return 1
   [[ "${output}" == "authenticated_read_smoke_ok" ]] || return 1
 }
 
@@ -1182,7 +1210,10 @@ run_production_update() {
   fi
   printf 'TARGET_UPDATE_STAGE stage=auth_smoke status=success\n' >&2
 
-  write_install_receipt
+  if ! write_install_receipt; then
+    printf '%s\n' "TARGET_UPDATE_RESULT manual_recovery_required stage=receipt lock_retained=true" >&2
+    return 1
+  fi
   release_remote_lock
   printf 'TARGET_UPDATE_RESULT updated commit=%s runtime_image=%s web_image=%s\n'     "${DEPLOY_COMMIT_SHA}" "${RUNTIME_IMAGE}" "${WEB_IMAGE}"
 }

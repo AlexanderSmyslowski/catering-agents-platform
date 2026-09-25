@@ -8,7 +8,6 @@ const runner = () => [
   readFileSync(path.join(root, "platform-infra/scripts/update-catering-target.sh"), "utf8"),
   readFileSync(path.join(root, "platform-infra/scripts/catering-target-production-update.sh"), "utf8")
 ].join("\n");
-const smoke = () => readFileSync(path.join(root, "platform-infra/scripts/catering-target-authenticated-smoke.mjs"), "utf8");
 
 describe("Catering target production command boundary", () => {
 
@@ -25,9 +24,11 @@ describe("Catering target production command boundary", () => {
       "REMOTE_LOCK",
       "REMOTE_UNLOCK",
       "REMOTE_RELEASE",
+      "REMOTE_RELEASE_OWNERSHIP",
       "REMOTE_LOAD",
       "REMOTE_ACTIVATE",
-      "REMOTE_VERIFY"
+      "REMOTE_VERIFY",
+      "REMOTE_RESTORE_CURRENT"
     ]);
     for (const match of blocks) {
       const check = spawnSync("/bin/bash", ["-n"], {
@@ -74,7 +75,7 @@ describe("Catering target production command boundary", () => {
     const match = production.match(/<<'REMOTE_PREFLIGHT'\n([\s\S]*?)\nREMOTE_PREFLIGHT/);
     expect(match?.[1], "REMOTE_PREFLIGHT block missing").toBeTruthy();
     const remotePreflight = match?.[1] ?? "";
-    expect(remotePreflight).toContain('[[ "$#" -eq 23 ]] || preflight_fail remote_argument_count');
+    expect(remotePreflight).toContain('[[ "$#" -eq 26 ]] || preflight_fail remote_argument_count');
     expect(remotePreflight).toContain('expected_owner_arg="$7"');
     expect(remotePreflight).toContain('expected_owner=""');
   });
@@ -208,8 +209,12 @@ describe("Catering target production command boundary", () => {
     expect(text).toContain("--update");
     expect(text).toContain("CATERING_TARGET_CONFIRMATION");
     expect(text).toContain("UPDATE_CATERING_TARGET");
-    expect(text).toContain("docker build");
-    expect(text).toContain("docker load");
+    expect(text).not.toContain("docker build");
+    expect(text).not.toContain("docker save");
+    expect(text).not.toContain("docker load");
+    expect(text).toContain("CATERING_TARGET_CANDIDATE_RUNTIME_IMAGE");
+    expect(text).toContain("CATERING_TARGET_CANDIDATE_WEB_IMAGE");
+    expect(text).toContain("docker image inspect");
     const contract = JSON.parse(readFileSync(path.join(root, "platform-infra/catering-target-update-contract.json"), "utf8"));
     expect(contract.repositorySourcePaths.platformBase).toBe("platform-infra/docker-compose.catering-target.json");
     expect(contract.repositorySourcePaths.platformOperations).toBe("platform-infra/docker-compose.catering-target.operations.json");
@@ -226,13 +231,14 @@ describe("Catering target production command boundary", () => {
 
   it("performs an authenticated application-session read smoke without embedding credentials", () => {
     const runnerText = runner();
-    const smokeText = smoke();
-    expect(runnerText).toContain("catering-target-authenticated-smoke.mjs");
-    expect(smokeText).toContain("/api/intake/v1/auth/login");
-    expect(smokeText).toContain("/api/intake/v1/auth/session");
-    expect(smokeText).toContain("/api/production/v1/production/cases");
-    expect(smokeText).toContain("process.stdin");
-    expect(smokeText).not.toContain("synthetic-password");
+    expect(runnerText).toContain("/api/intake/v1/auth/login");
+    expect(runnerText).toContain("/api/intake/v1/auth/session");
+    expect(runnerText).toContain("/api/production/v1/production/plans");
+    expect(runnerText).not.toContain("/api/production/v1/production/cases");
+    expect(runnerText).toContain("process.stdin");
+    expect(runnerText).toContain("shlex.quote");
+    expect(runnerText).toContain("AbortSignal.timeout(20000)");
+    expect(runnerText).not.toContain("synthetic-password");
   });
 
   it("protects the server-owned configuration in production sync", () => {
@@ -241,5 +247,10 @@ describe("Catering target production command boundary", () => {
       expect(text).toContain("--exclude=" + excluded);
     }
     expect(text).toContain("/etc/catering-target/runtime.env");
+    expect(text).toContain("CATERING_TARGET_SOURCE_ROOT");
+    expect(text).toContain("source root must be detached");
+    expect(text).toContain("status --porcelain --untracked-files=all");
+    expect(text).toContain("ServerAliveInterval=15");
+    expect(text).toContain("ServerAliveCountMax=4");
   });
 });

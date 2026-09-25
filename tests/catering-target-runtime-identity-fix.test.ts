@@ -103,6 +103,8 @@ describe("Catering target runtime identity recovery", () => {
     expect(production).toContain("TARGET_AUTH_SMOKE_STAGE stage=production_read status=success");
     expect(production).toContain("/api/production/v1/production/plans");
     expect(production).not.toContain("/api/production/v1/production/cases");
+    expect(production).toContain("shlex.quote");
+    expect(production).toContain("AbortSignal.timeout(20000)");
   });
 
   it("exposes safe authenticated-smoke response status markers", () => {
@@ -111,6 +113,17 @@ describe("Catering target runtime identity recovery", () => {
     expect(production).toContain("TARGET_AUTH_SMOKE_STAGE stage=login_response status=");
     expect(production).toContain("TARGET_AUTH_SMOKE_STAGE stage=session_response status=");
     expect(production).toContain("TARGET_AUTH_SMOKE_STAGE stage=production_read_response status=");
+  });
+
+  it("reuses fixed immutable candidates from a clean detached source root", () => {
+    expect(production).toContain("CATERING_TARGET_CANDIDATE_RUNTIME_IMAGE");
+    expect(production).toContain("CATERING_TARGET_CANDIDATE_WEB_IMAGE");
+    expect(production).toContain("CATERING_TARGET_SOURCE_ROOT");
+    expect(production).not.toContain("docker build");
+    expect(production).not.toContain("docker save");
+    expect(production).not.toContain("docker load");
+    expect(production).toContain('sudo -n docker image inspect "$runtime_image"');
+    expect(production).toContain('sudo -n chmod 0644 "$platform_base" "$platform_ops" "$release_dir/candidate-images.json"');
   });
 
 });
