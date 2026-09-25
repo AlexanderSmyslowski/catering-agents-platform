@@ -6,8 +6,11 @@ control flow remains real; only ssh/docker/rsync are substituted.
 """
 from __future__ import annotations
 
+import hashlib
 import os
 from pathlib import Path
+import shlex
+import subprocess
 import sys
 
 state_root = Path(os.environ["CATERING_TARGET_FAKE_STATE"])
@@ -38,34 +41,7 @@ def strict_ssh_options_present(values: list[str]) -> bool:
 
 
 if command == "docker":
-    if not args:
-        fail("synthetic docker: missing command")
-    if args[0] == "build":
-        try:
-            iidfile = Path(args[args.index("--iidfile") + 1])
-            dockerfile = args[args.index("--file") + 1]
-        except (ValueError, IndexError):
-            fail("synthetic docker: malformed build")
-        if dockerfile.endswith("Dockerfile.runtime"):
-            kind = "runtime"
-            image = "sha256:" + "1" * 64
-        elif dockerfile.endswith("Dockerfile.web"):
-            kind = "web"
-            image = "sha256:" + "2" * 64
-        else:
-            fail("synthetic docker: unexpected Dockerfile")
-        log(f"local_docker build {kind}")
-        iidfile.write_text(image + "\n", encoding="utf-8")
-        raise SystemExit(0)
-
-    if args[0] == "save":
-        if len(args) != 2 or not args[1].startswith("sha256:"):
-            fail("synthetic docker: malformed save")
-        log("local_docker save")
-        sys.stdout.buffer.write(b"synthetic-docker-image")
-        raise SystemExit(0)
-
-    fail("synthetic docker: unexpected command " + " ".join(args))
+    fail("synthetic docker: local Docker is forbidden for fixed production candidates")
 
 
 if command == "rsync":
@@ -87,6 +63,12 @@ if not strict_ssh_options_present(args):
 stdin_bytes = sys.stdin.buffer.read()
 stdin_text = stdin_bytes.decode("utf-8", errors="replace")
 joined_args = " ".join(args)
+try:
+    remote_index = args.index("operator@target.invalid")
+except ValueError:
+    fail("synthetic ssh: remote target missing")
+remote_args = args[remote_index + 1:]
+remote_command = " ".join(remote_args)
 
 
 def classify_override() -> str:
@@ -98,8 +80,31 @@ def classify_override() -> str:
     return "unknown"
 
 
-if "docker exec -i" in joined_args and "catering-target-authenticated-smoke.mjs" in joined_args:
+if "docker exec -i" in remote_command and "node" in remote_command and "--input-type=module" in remote_command:
+    for shell in ("/bin/bash", "/bin/dash"):
+        syntax = subprocess.run([shell, "-n", "-c", remote_command], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if syntax.returncode != 0:
+            fail(f"synthetic ssh: remote shell parse failed under {shell}: {syntax.stderr.strip()}")
+    try:
+        parsed = shlex.split(remote_command, posix=True)
+        script = parsed[parsed.index("-e") + 1]
+    except (ValueError, IndexError):
+        fail("synthetic ssh: smoke argv parse failed")
+    production = (Path.cwd() / "platform-infra/scripts/catering-target-production-update.sh").read_text(encoding="utf-8")
+    marker = "  read -r -d '' smoke_script <<'NODE' || true\n"
+    start = production.find(marker)
+    end = production.find("\nNODE\n", start + len(marker))
+    if start < 0 or end < 0:
+        fail("synthetic ssh: embedded smoke source missing")
+    expected_script = production[start + len(marker):end]
+    actual_hash = hashlib.sha256(script.encode("utf-8")).hexdigest()
+    expected_hash = hashlib.sha256(expected_script.encode("utf-8")).hexdigest()
+    if actual_hash != expected_hash:
+        fail("synthetic ssh: smoke -e payload changed across SSH transport")
+    if "/api/production/v1/production/plans" not in script or "/api/production/v1/production/cases" in script:
+        fail("synthetic ssh: wrong read-only smoke route")
     log("ssh smoke")
+    log(f"ssh smoke script_sha256={actual_hash}")
     if scenario == "smoke-fails":
         raise SystemExit(1)
     sys.stdout.write("authenticated_read_smoke_ok\n")
@@ -203,8 +208,8 @@ if "TARGET_PREFLIGHT_OK target=" in stdin_text:
     if scenario == "preflight-fails" and count == 1:
         raise SystemExit(1)
     sys.stdout.write(
-        "TARGET_PREFLIGHT_OK target=catering-prod-1 backup=healthy "
-        "postgres_volume=platform-infra_postgres_data "
+        "TARGET_PREFLIGHT_OK target=catering-prod-1 backup=healthy writer=enabled schema_version=3 "
+        "runtime_state=baseline postgres_volume=platform-infra_postgres_data "
         "edge_image=sha256:" + "e" * 64 + "\n"
     )
     raise SystemExit(0)
@@ -220,22 +225,31 @@ if 'sudo -n unlink "$lock/owner"' in stdin_text and 'sudo -n rmdir "$lock"' in s
     raise SystemExit(0)
 
 
-if "release directory already exists" in stdin_text and "release_root" in stdin_text:
+if 'release_root="$1"; release_dir="$2"' in stdin_text and "for legacy in" in stdin_text:
     log("ssh release")
     raise SystemExit(0)
 
+if 'source_dir="$release_dir/source"' in stdin_text and "chown -R root:root" in stdin_text:
+    log("ssh release-ownership")
+    raise SystemExit(0)
 
-if "previous-images.json" in stdin_text and "docker load" in stdin_text:
-    log("ssh load")
+if "previous-images.json" in stdin_text and "docker image inspect" in stdin_text and "candidate-images.json" in stdin_text:
+    log("ssh candidate-bind")
+    if scenario == "candidate-image-missing":
+        raise SystemExit(1)
+    raise SystemExit(0)
+
+if 'installed="$release_root/installed"' in stdin_text and "force-recreate" in stdin_text:
+    log("ssh restore-current")
+    if scenario == "rollback-fails":
+        raise SystemExit(1)
     raise SystemExit(0)
 
 
 if "up -d --no-deps" in stdin_text:
     which = classify_override()
     log(f"ssh activate {which}")
-    if scenario == "activate-fails" and which == "candidate":
-        raise SystemExit(1)
-    if scenario == "rollback-fails":
+    if scenario in {"activate-fails", "rollback-fails"} and which == "candidate":
         raise SystemExit(1)
     raise SystemExit(0)
 
@@ -248,11 +262,6 @@ if "check_health()" in stdin_text:
 
 if "install-receipt" in stdin_text and "installed_at=" in stdin_text:
     log("ssh receipt")
-    raise SystemExit(0)
-
-
-if not stdin_text and "chmod 0644" in joined_args:
-    log("ssh chmod")
     raise SystemExit(0)
 
 

@@ -40,6 +40,7 @@ RUNTIME_IMAGE=""
 WEB_IMAGE=""
 POSTGRES_VOLUME=""
 EDGE_IMAGE=""
+SOURCE_ROOT=""
 
 fail() {
   printf '%s\n' "$*" >&2
@@ -128,9 +129,14 @@ PY
 
 validate_production_inputs() {
   [[ "${DEPLOY_COMMIT_SHA}" =~ ^[0-9a-fA-F]{40}$ ]] || fail "DEPLOY_COMMIT_SHA must be an exact 40-character Git commit SHA"
-  local checked_out
-  checked_out="$(git -C "${REPO_ROOT}" rev-parse HEAD)"
-  [[ "${checked_out}" == "${DEPLOY_COMMIT_SHA}" ]] || fail "checked out commit does not match DEPLOY_COMMIT_SHA"
+  : "${CATERING_TARGET_SOURCE_ROOT:?CATERING_TARGET_SOURCE_ROOT is required}"
+  [[ -d "${CATERING_TARGET_SOURCE_ROOT}" && ! -L "${CATERING_TARGET_SOURCE_ROOT}" ]] || fail "source root must be a real directory"
+  SOURCE_ROOT="$(cd "${CATERING_TARGET_SOURCE_ROOT}" && pwd -P)"
+  [[ "$(git -C "${SOURCE_ROOT}" rev-parse HEAD)" == "${DEPLOY_COMMIT_SHA}" ]] || fail "source root commit does not match DEPLOY_COMMIT_SHA"
+  if git -C "${SOURCE_ROOT}" symbolic-ref -q HEAD >/dev/null 2>&1; then
+    fail "source root must be detached"
+  fi
+  [[ -z "$(git -C "${SOURCE_ROOT}" status --porcelain --untracked-files=all)" ]] || fail "source root must be clean"
 
   : "${CATERING_TARGET_DEPLOY_HOST:?CATERING_TARGET_DEPLOY_HOST is required}"
   : "${CATERING_TARGET_DEPLOY_USER:?CATERING_TARGET_DEPLOY_USER is required}"
@@ -150,6 +156,8 @@ validate_production_inputs() {
     -o StrictHostKeyChecking=yes
     -o "UserKnownHostsFile=${CATERING_TARGET_SSH_KNOWN_HOSTS_FILE}"
     -o ConnectTimeout=10
+    -o ServerAliveInterval=15
+    -o ServerAliveCountMax=4
     -p 22
   )
 }
@@ -204,7 +212,7 @@ REMOTE_SCHEMA_SOURCE
 }
 
 verify_runtime_schema_migration_unchanged() {
-  local local_path="${REPO_ROOT}/shared-core/src/persistence.ts"
+  local local_path="${SOURCE_ROOT}/shared-core/src/persistence.ts"
   [[ -f "${local_path}" && ! -L "${local_path}" ]] || fail "candidate persistence source missing"
 
   local candidate_hash installed_hashes expected
@@ -359,7 +367,7 @@ REMOTE_DDL_MANIFEST
 
 verify_runtime_ddl_unchanged() {
   local candidate_hash installed_hashes expected
-  candidate_hash="$(runtime_ddl_manifest_hash "${REPO_ROOT}")"
+  candidate_hash="$(runtime_ddl_manifest_hash "${SOURCE_ROOT}")"
   if ! installed_hashes="$(remote_runtime_ddl_manifest_hashes)"; then
     fail "TARGET_PREFLIGHT_FAIL gate=runtime_ddl_manifest"
   fi
@@ -370,6 +378,8 @@ verify_runtime_ddl_unchanged() {
 
 remote_preflight() {
   local expected_lock_owner="${1:-}"
+  local runtime_expectation="${2:-current}"
+  [[ "${runtime_expectation}" == "current" || "${runtime_expectation}" =~ ^[0-9a-fA-F]{40}$ ]] || fail "invalid runtime expectation"
   local expected_lock_owner_arg
   if [[ -z "${expected_lock_owner}" ]]; then
     expected_lock_owner_arg="__CATERING_NO_LOCK_OWNER__"
@@ -378,12 +388,12 @@ remote_preflight() {
     expected_lock_owner_arg="${expected_lock_owner}"
   fi
   local platform_base_hash platform_ops_hash edge_base_hash edge_ops_hash edge_caddy_hash target_site_hash
-  platform_base_hash="$(local_sha256 "${REPO_ROOT}/${SOURCE_PLATFORM_BASE}")"
-  platform_ops_hash="$(local_sha256 "${REPO_ROOT}/${SOURCE_PLATFORM_OPS}")"
-  edge_base_hash="$(local_sha256 "${REPO_ROOT}/${SOURCE_EDGE_BASE}")"
-  edge_ops_hash="$(local_sha256 "${REPO_ROOT}/${SOURCE_EDGE_OPS}")"
-  edge_caddy_hash="$(local_sha256 "${REPO_ROOT}/${SOURCE_EDGE_CADDY}")"
-  target_site_hash="$(local_sha256 "${REPO_ROOT}/${SOURCE_TARGET_SITE}")"
+  platform_base_hash="$(local_sha256 "${SOURCE_ROOT}/${SOURCE_PLATFORM_BASE}")"
+  platform_ops_hash="$(local_sha256 "${SOURCE_ROOT}/${SOURCE_PLATFORM_OPS}")"
+  edge_base_hash="$(local_sha256 "${SOURCE_ROOT}/${SOURCE_EDGE_BASE}")"
+  edge_ops_hash="$(local_sha256 "${SOURCE_ROOT}/${SOURCE_EDGE_OPS}")"
+  edge_caddy_hash="$(local_sha256 "${SOURCE_ROOT}/${SOURCE_EDGE_CADDY}")"
+  target_site_hash="$(local_sha256 "${SOURCE_ROOT}/${SOURCE_TARGET_SITE}")"
 
   ssh_target bash -s -- \
     "${TARGET_ID}" "${DEPLOY_PATH}" "${EDGE_PATH}" "${TARGET_RUNTIME_ENV}" \
@@ -392,17 +402,18 @@ remote_preflight() {
     "${EDGE_COMPOSE_PROJECT}" "${EDGE_WORKING_DIR}" "${RUNTIME_EDGE_BASE}" "${RUNTIME_EDGE_OPS}" \
     "${RUNTIME_EDGE_CADDY}" "${RUNTIME_TARGET_SITE}" \
     "${platform_base_hash}" "${platform_ops_hash}" "${edge_base_hash}" "${edge_ops_hash}" \
-    "${edge_caddy_hash}" "${target_site_hash}" <<'REMOTE_PREFLIGHT'
+    "${edge_caddy_hash}" "${target_site_hash}" "${SOURCE_PLATFORM_BASE}" "${SOURCE_PLATFORM_OPS}" "${runtime_expectation}" <<'REMOTE_PREFLIGHT'
 set -euo pipefail
 preflight_fail() {
   printf 'TARGET_PREFLIGHT_FAIL gate=%s\n' "$1" >&2
   exit 1
 }
-[[ "$#" -eq 23 ]] || preflight_fail remote_argument_count
+[[ "$#" -eq 26 ]] || preflight_fail remote_argument_count
 target_id="$1"; deploy_path="$2"; edge_path="$3"; runtime_env="$4"; update_lock="$5"; observer="$6"; expected_owner_arg="$7"
 platform_project="$8"; platform_working_dir="$9"; platform_base="${10}"; platform_ops="${11}"
 edge_project="${12}"; edge_working_dir="${13}"; edge_base="${14}"; edge_ops="${15}"; edge_caddy="${16}"; target_site="${17}"
 platform_base_hash="${18}"; platform_ops_hash="${19}"; edge_base_hash="${20}"; edge_ops_hash="${21}"; edge_caddy_hash="${22}"; target_site_hash="${23}"
+source_platform_base="${24}"; source_platform_ops="${25}"; runtime_expectation="${26}"
 if [[ "$expected_owner_arg" == "__CATERING_NO_LOCK_OWNER__" ]]; then
   expected_owner=""
 else
@@ -455,6 +466,68 @@ else
   sudo -n grep -Fxq "owner_token=$expected_owner" "$update_lock/owner" || preflight_fail target_update_lock_owner
 fi
 
+release_root=/opt/catering-releases
+installed_marker="$release_root/installed"
+expected_app_working_dir="$platform_working_dir"
+expected_app_config_files="$platform_base,$platform_ops"
+expected_app_images_json=""
+runtime_state=baseline
+
+bind_release_runtime() {
+  local commit="$1" require_receipt="$2"
+  [[ "$commit" =~ ^[0-9a-fA-F]{40}$ ]] || preflight_fail installed_commit
+  [[ "$source_platform_base" == platform-infra/* && "$source_platform_base" != *".."* ]] || preflight_fail release_platform_base_source
+  [[ "$source_platform_ops" == platform-infra/* && "$source_platform_ops" != *".."* ]] || preflight_fail release_platform_ops_source
+  local release_dir="$release_root/$commit"
+  local release_base="$release_dir/source/$source_platform_base"
+  local release_ops="$release_dir/source/$source_platform_ops"
+  local override="$release_dir/candidate-images.json"
+  sudo -n test -d "$release_dir" || preflight_fail release_dir
+  sudo -n test ! -L "$release_dir" || preflight_fail release_dir_symlink
+  for item in "$release_base" "$release_ops" "$override"; do
+    sudo -n test -f "$item" || preflight_fail release_runtime_file
+    sudo -n test ! -L "$item" || preflight_fail release_runtime_symlink
+  done
+  [[ "$(sudo -n stat -c '%u:%g:%a' "$release_base")" == "0:0:644" ]] || preflight_fail release_platform_base_mode
+  [[ "$(sudo -n stat -c '%u:%g:%a' "$release_ops")" == "0:0:644" ]] || preflight_fail release_platform_ops_mode
+  [[ "$(sudo -n stat -c '%u:%g:%a' "$override")" == "0:0:644" ]] || preflight_fail release_override_mode
+  local images
+  images="$(sudo -n cat "$override")" || preflight_fail release_override_read
+  python3 - "$images" <<'PY' || preflight_fail release_override_shape
+import json, re, sys
+value=json.loads(sys.argv[1])
+if set(value) != {"services"} or set(value["services"]) != {"intake","offer","production","exports","web"}:
+    raise SystemExit(1)
+for item in value["services"].values():
+    if set(item) != {"image"} or not re.fullmatch(r"sha256:[0-9a-f]{64}", item["image"]):
+        raise SystemExit(1)
+PY
+  if [[ "$require_receipt" == "true" ]]; then
+    local receipt="$release_dir/install-receipt"
+    sudo -n test -f "$receipt" || preflight_fail install_receipt_file
+    sudo -n test ! -L "$receipt" || preflight_fail install_receipt_symlink
+    [[ "$(sudo -n stat -c '%u:%g:%a' "$receipt")" == "0:0:600" ]] || preflight_fail install_receipt_mode
+    sudo -n grep -Fxq "status=installed" "$receipt" || preflight_fail install_receipt_status
+    sudo -n grep -Fxq "commit=$commit" "$receipt" || preflight_fail install_receipt_commit
+  fi
+  expected_app_working_dir="$(dirname "$release_base")"
+  expected_app_config_files="$release_base,$release_ops,$override"
+  expected_app_images_json="$images"
+  runtime_state="release:$commit"
+}
+
+if [[ "$runtime_expectation" == "current" ]]; then
+  if sudo -n test -e "$installed_marker" || sudo -n test -L "$installed_marker"; then
+    sudo -n test -f "$installed_marker" || preflight_fail installed_marker_file
+    sudo -n test ! -L "$installed_marker" || preflight_fail installed_marker_symlink
+    [[ "$(sudo -n stat -c '%u:%g:%a' "$installed_marker")" == "0:0:644" ]] || preflight_fail installed_marker_mode
+    installed_commit="$(sudo -n cat "$installed_marker" | tr -d '\r\n')" || preflight_fail installed_marker_read
+    bind_release_runtime "$installed_commit" true
+  fi
+else
+  bind_release_runtime "$runtime_expectation" false
+fi
+
 command -v docker >/dev/null || preflight_fail docker_command
 check_compose_labels() {
   local container="$1" expected_project="$2" expected_working_dir="$3" expected_files="$4" expected_service="$5" gate="$6" result
@@ -485,9 +558,16 @@ else:
   esac
 }
 platform_config_files="$platform_base,$platform_ops"
-for service in postgres intake offer production exports web; do
-  check_compose_labels "platform-infra-${service}-1" "$platform_project" "$platform_working_dir" "$platform_config_files" "$service" "platform_${service}"
+check_compose_labels "platform-infra-postgres-1" "$platform_project" "$platform_working_dir" "$platform_config_files" postgres platform_postgres
+for service in intake offer production exports web; do
+  check_compose_labels "platform-infra-${service}-1" "$platform_project" "$expected_app_working_dir" "$expected_app_config_files" "$service" "platform_${service}"
 done
+if [[ -n "$expected_app_images_json" ]]; then
+  for service in intake offer production exports web; do
+    expected_image="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["services"][sys.argv[2]]["image"])' "$expected_app_images_json" "$service")"
+    [[ "$(sudo -n docker inspect --format '{{.Image}}' "platform-infra-${service}-1")" == "$expected_image" ]] || preflight_fail "platform_${service}_image"
+  done
+fi
 edge_config_files="$edge_base,$edge_ops"
 check_compose_labels "catering-edge-edge-1" "$edge_project" "$edge_working_dir" "$edge_config_files" edge edge
 
@@ -564,7 +644,7 @@ if ! edge_image="$(image_of catering-edge-edge-1)"; then
 fi
 [[ "$edge_image" =~ ^sha256:[0-9a-f]{64}$ ]] || preflight_fail edge_image
 
-printf 'TARGET_PREFLIGHT_OK target=%s backup=healthy writer=enabled schema_version=3 postgres_volume=%s edge_image=%s\n' "$target_id" "$postgres_volume" "$edge_image"
+printf 'TARGET_PREFLIGHT_OK target=%s backup=healthy writer=enabled schema_version=3 runtime_state=%s postgres_volume=%s edge_image=%s\n' "$target_id" "$runtime_state" "$postgres_volume" "$edge_image"
 REMOTE_PREFLIGHT
 }
 
@@ -581,7 +661,7 @@ run_production_preflight() {
   verify_runtime_schema_migration_unchanged
   verify_runtime_ddl_unchanged
   local output
-  if ! output="$(remote_preflight "")"; then
+  if ! output="$(remote_preflight "" current)"; then
     fail "TARGET_PREFLIGHT_FAIL gate=remote_target_invariants"
   fi
   parse_preflight_binding "${output}"
@@ -596,29 +676,23 @@ cleanup_local_candidate() {
 }
 
 migration_declaration_present() {
-  [[ -e "${REPO_ROOT}/platform-infra/catering-target-migration.json" || "${CATERING_TARGET_MIGRATION_REQUIRED:-0}" == "1" ]]
+  [[ -e "${SOURCE_ROOT}/platform-infra/catering-target-migration.json" || "${CATERING_TARGET_MIGRATION_REQUIRED:-0}" == "1" ]]
 }
 
 prepare_local_candidate() {
-  command -v docker >/dev/null || fail "docker is required on the workflow runner"
   command -v rsync >/dev/null || fail "rsync is required on the workflow runner"
-  command -v gzip >/dev/null || fail "gzip is required on the workflow runner"
   if migration_declaration_present; then
     fail "manual_migration_approval_required"
   fi
 
+  : "${CATERING_TARGET_CANDIDATE_RUNTIME_IMAGE:?CATERING_TARGET_CANDIDATE_RUNTIME_IMAGE is required}"
+  : "${CATERING_TARGET_CANDIDATE_WEB_IMAGE:?CATERING_TARGET_CANDIDATE_WEB_IMAGE is required}"
+  RUNTIME_IMAGE="${CATERING_TARGET_CANDIDATE_RUNTIME_IMAGE}"
+  WEB_IMAGE="${CATERING_TARGET_CANDIDATE_WEB_IMAGE}"
+  [[ "${RUNTIME_IMAGE}" =~ ^sha256:[0-9a-f]{64}$ ]] || fail "runtime candidate is not an immutable sha256 image"
+  [[ "${WEB_IMAGE}" =~ ^sha256:[0-9a-f]{64}$ ]] || fail "web candidate is not an immutable sha256 image"
+
   LOCAL_RELEASE_DIR="$(mktemp -d "${RUNNER_TEMP:-/tmp}/catering-target-release.XXXXXX")"
-  local runtime_tag="catering-target-runtime:${DEPLOY_COMMIT_SHA}"
-  local web_tag="catering-target-web:${DEPLOY_COMMIT_SHA}"
-
-  docker build     --iidfile "${LOCAL_RELEASE_DIR}/runtime.iid"     --tag "${runtime_tag}"     --file "${REPO_ROOT}/platform-infra/docker/Dockerfile.runtime"     "${REPO_ROOT}"
-  docker build     --iidfile "${LOCAL_RELEASE_DIR}/web.iid"     --tag "${web_tag}"     --file "${REPO_ROOT}/platform-infra/docker/Dockerfile.web"     "${REPO_ROOT}"
-
-  RUNTIME_IMAGE="$(cat "${LOCAL_RELEASE_DIR}/runtime.iid")"
-  WEB_IMAGE="$(cat "${LOCAL_RELEASE_DIR}/web.iid")"
-  [[ "${RUNTIME_IMAGE}" =~ ^sha256:[0-9a-f]{64}$ ]] || fail "runtime candidate is not immutable"
-  [[ "${WEB_IMAGE}" =~ ^sha256:[0-9a-f]{64}$ ]] || fail "web candidate is not immutable"
-
   python3 - "${LOCAL_RELEASE_DIR}/candidate-images.json" "${RUNTIME_IMAGE}" "${WEB_IMAGE}" <<'PY'
 import json, sys
 path, runtime_image, web_image = sys.argv[1:]
@@ -635,9 +709,7 @@ with open(path, "w", encoding="utf-8") as handle:
     json.dump(value, handle, indent=2, sort_keys=True)
     handle.write("\n")
 PY
-
-  docker save "${RUNTIME_IMAGE}" | gzip -1 > "${LOCAL_RELEASE_DIR}/runtime-image.tar.gz"
-  docker save "${WEB_IMAGE}" | gzip -1 > "${LOCAL_RELEASE_DIR}/web-image.tar.gz"
+  printf 'TARGET_CANDIDATE_BINDING runtime=%s web=%s\n' "${RUNTIME_IMAGE}" "${WEB_IMAGE}"
 }
 
 acquire_remote_lock() {
@@ -692,18 +764,75 @@ if [[ ! -e "$release_root" ]]; then
   sudo -n mkdir -m 0755 -- "$release_root"
 fi
 [[ -d "$release_root" && ! -L "$release_root" && "$(realpath -e "$release_root")" == "$release_root" ]] || exit 1
-[[ ! -e "$release_dir" && ! -L "$release_dir" ]] || { echo "release directory already exists" >&2; exit 1; }
-sudo -n mkdir -m 0755 -- "$release_dir" "$release_dir/source"
+if [[ ! -e "$release_dir" && ! -L "$release_dir" ]]; then
+  sudo -n mkdir -m 0755 -- "$release_dir" "$release_dir/source"
+else
+  [[ -d "$release_dir" && ! -L "$release_dir" ]] || exit 1
+  [[ ! -e "$release_dir/install-receipt" && ! -L "$release_dir/install-receipt" ]] || exit 1
+  [[ -d "$release_dir/source" && ! -L "$release_dir/source" ]] || exit 1
+  for item in "$release_dir"/*; do
+    [[ -e "$item" || -L "$item" ]] || continue
+    case "$(basename "$item")" in
+      source|candidate-images.json|runtime-image.tar.gz|web-image.tar.gz|previous-images.json) ;;
+      *) exit 1 ;;
+    esac
+  done
+  for legacy in "$release_dir/runtime-image.tar.gz" "$release_dir/web-image.tar.gz"; do
+    if [[ -L "$legacy" ]]; then
+      exit 1
+    elif [[ -f "$legacy" ]]; then
+      sudo -n unlink "$legacy"
+    elif [[ -e "$legacy" ]]; then
+      exit 1
+    fi
+  done
+fi
 REMOTE_RELEASE
 
   local rsync_rsh
-  rsync_rsh="ssh -i ${CATERING_TARGET_SSH_KEY_FILE} -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=${CATERING_TARGET_SSH_KNOWN_HOSTS_FILE} -o ConnectTimeout=10 -p 22"
+  rsync_rsh="ssh -i ${CATERING_TARGET_SSH_KEY_FILE} -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=${CATERING_TARGET_SSH_KNOWN_HOSTS_FILE} -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -p 22"
 
-  rsync -az --delete     --rsync-path="sudo -n rsync"     -e "${rsync_rsh}"     --exclude=.git     --exclude=node_modules     --exclude=backoffice-ui/dist     --exclude=platform-infra/.env     --exclude=platform-infra/sites     --exclude=data     "${REPO_ROOT}/" "${REMOTE}:${release_dir}/source/"
+  rsync -az --delete \
+    --rsync-path="sudo -n rsync" \
+    -e "${rsync_rsh}" \
+    --exclude=.git \
+    --exclude=node_modules \
+    --exclude=backoffice-ui/dist \
+    --exclude=platform-infra/.env \
+    --exclude=platform-infra/sites \
+    --exclude=data \
+    "${SOURCE_ROOT}/" "${REMOTE}:${release_dir}/source/"
 
-  rsync -az     --rsync-path="sudo -n rsync"     -e "${rsync_rsh}"     "${LOCAL_RELEASE_DIR}/candidate-images.json"     "${LOCAL_RELEASE_DIR}/runtime-image.tar.gz"     "${LOCAL_RELEASE_DIR}/web-image.tar.gz"     "${REMOTE}:${release_dir}/"
+  rsync -az \
+    --rsync-path="sudo -n rsync" \
+    -e "${rsync_rsh}" \
+    "${LOCAL_RELEASE_DIR}/candidate-images.json" \
+    "${REMOTE}:${release_dir}/"
 
-  ssh_target sudo -n chmod 0644     "${release_dir}/candidate-images.json"     "${release_dir}/runtime-image.tar.gz"     "${release_dir}/web-image.tar.gz"
+  ssh_target bash -s -- "${release_dir}" "${SOURCE_PLATFORM_BASE}" "${SOURCE_PLATFORM_OPS}" <<'REMOTE_RELEASE_OWNERSHIP'
+set -euo pipefail
+release_dir="$1"; source_platform_base="$2"; source_platform_ops="$3"
+[[ "$release_dir" =~ ^/opt/catering-releases/[0-9a-fA-F]{40}$ ]] || exit 1
+[[ "$source_platform_base" == platform-infra/* && "$source_platform_base" != *".."* ]] || exit 1
+[[ "$source_platform_ops" == platform-infra/* && "$source_platform_ops" != *".."* ]] || exit 1
+source_dir="$release_dir/source"
+platform_base="$source_dir/$source_platform_base"
+platform_ops="$source_dir/$source_platform_ops"
+for path in "$release_dir" "$source_dir"; do
+  sudo -n test -d "$path"
+  sudo -n test ! -L "$path"
+done
+for path in "$platform_base" "$platform_ops" "$release_dir/candidate-images.json"; do
+  sudo -n test -f "$path"
+  sudo -n test ! -L "$path"
+done
+sudo -n chown -R root:root -- "$source_dir"
+sudo -n chown root:root -- "$release_dir/candidate-images.json"
+sudo -n chmod 0644 "$platform_base" "$platform_ops" "$release_dir/candidate-images.json"
+[[ "$(sudo -n stat -c '%u:%g:%a' "$platform_base")" == "0:0:644" ]]
+[[ "$(sudo -n stat -c '%u:%g:%a' "$platform_ops")" == "0:0:644" ]]
+[[ "$(sudo -n stat -c '%u:%g:%a' "$release_dir/candidate-images.json")" == "0:0:644" ]]
+REMOTE_RELEASE_OWNERSHIP
 }
 
 capture_previous_and_load_candidates() {
@@ -749,8 +878,6 @@ finally:
         os.unlink(temporary)
 PY
 
-sudo -n gzip -dc "$release_dir/runtime-image.tar.gz" | sudo -n docker load >/dev/null
-sudo -n gzip -dc "$release_dir/web-image.tar.gz" | sudo -n docker load >/dev/null
 sudo -n docker image inspect "$runtime_image" >/dev/null
 sudo -n docker image inspect "$web_image" >/dev/null
 
@@ -825,9 +952,13 @@ check_health() {
   return 1
 }
 check_health platform-infra-intake-1 http://127.0.0.1:3101/health
+printf 'TARGET_UPDATE_STAGE stage=health service=intake status=success\n' >&2
 check_health platform-infra-offer-1 http://127.0.0.1:3102/health
+printf 'TARGET_UPDATE_STAGE stage=health service=offer status=success\n' >&2
 check_health platform-infra-production-1 http://127.0.0.1:3103/health
+printf 'TARGET_UPDATE_STAGE stage=health service=production status=success\n' >&2
 check_health platform-infra-exports-1 http://127.0.0.1:3104/health
+printf 'TARGET_UPDATE_STAGE stage=health service=exports status=success\n' >&2
 REMOTE_VERIFY
 }
 
@@ -837,7 +968,7 @@ authenticated_read_smoke() {
   : "${CATERING_TARGET_SMOKE_LOGIN_CODE:?CATERING_TARGET_SMOKE_LOGIN_CODE is required}"
   : "${CATERING_TARGET_SMOKE_PIN:?CATERING_TARGET_SMOKE_PIN is required}"
 
-  local payload output
+  local payload output smoke_script
   payload="$(python3 - <<'PY'
 import json, os
 print(json.dumps({
@@ -848,7 +979,83 @@ print(json.dumps({
 }, separators=(",", ":")))
 PY
 )"
-  output="$(printf '%s' "${payload}" | ssh_target sudo -n docker exec -i     platform-infra-intake-1 node /app/platform-infra/scripts/catering-target-authenticated-smoke.mjs)"
+  read -r -d '' smoke_script <<'NODE' || true
+process.stderr.write("TARGET_AUTH_SMOKE_STAGE stage=script_start status=success\n");
+const chunks = [];
+for await (const chunk of process.stdin) chunks.push(chunk);
+const raw = Buffer.concat(chunks).toString("utf8");
+if (raw.length === 0 || raw.length > 4096) throw new Error("Smoke credentials are missing or oversized.");
+
+const input = JSON.parse(raw);
+const expectedKeys = ["basicPassword", "basicUser", "loginCode", "pin"].sort();
+if (
+  !input ||
+  typeof input !== "object" ||
+  Array.isArray(input) ||
+  Object.keys(input).sort().join("\0") !== expectedKeys.join("\0") ||
+  expectedKeys.some((key) => typeof input[key] !== "string" || input[key].length === 0 || /[\0\r\n]/u.test(input[key]))
+) {
+  throw new Error("Smoke credential payload is invalid.");
+}
+process.stderr.write("TARGET_AUTH_SMOKE_STAGE stage=payload_valid status=success\n");
+
+const base = "http://web:8081";
+const origin = "https://web:8081";
+const authorization = "Basic " + Buffer.from(input.basicUser + ":" + input.basicPassword, "utf8").toString("base64");
+
+async function request(path, init = {}) {
+  const headers = new Headers(init.headers);
+  headers.set("authorization", authorization);
+  headers.set("origin", origin);
+  const response = await fetch(base + path, {
+    ...init,
+    headers,
+    redirect: "manual",
+    signal: AbortSignal.timeout(20000)
+  });
+  return response;
+}
+
+const login = await request("/api/intake/v1/auth/login", {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({ loginCode: input.loginCode, pin: input.pin })
+});
+process.stderr.write("TARGET_AUTH_SMOKE_STAGE stage=login_response status=" + String(login.status) + "\n");
+if (login.status !== 200) throw new Error("Authenticated smoke login failed.");
+process.stderr.write("TARGET_AUTH_SMOKE_STAGE stage=login status=success\n");
+
+const setCookie = typeof login.headers.getSetCookie === "function"
+  ? login.headers.getSetCookie()[0]
+  : login.headers.get("set-cookie");
+const cookie = typeof setCookie === "string" ? setCookie.split(";", 1)[0] : "";
+if (!cookie.includes("=")) throw new Error("Authenticated smoke session cookie missing.");
+
+const session = await request("/api/intake/v1/auth/session", { headers: { cookie } });
+process.stderr.write("TARGET_AUTH_SMOKE_STAGE stage=session_response status=" + String(session.status) + "\n");
+if (session.status !== 200) throw new Error("Authenticated smoke session read failed.");
+const sessionBody = await session.json();
+if (
+  sessionBody?.authenticated !== true ||
+  !Array.isArray(sessionBody?.access?.capabilities) ||
+  !sessionBody.access.capabilities.includes("production_read")
+) {
+  throw new Error("Authenticated smoke account lacks production_read.");
+}
+process.stderr.write("TARGET_AUTH_SMOKE_STAGE stage=session status=success\n");
+
+const plans = await request("/api/production/v1/production/plans", { headers: { cookie } });
+process.stderr.write("TARGET_AUTH_SMOKE_STAGE stage=production_read_response status=" + String(plans.status) + "\n");
+if (plans.status !== 200) throw new Error("Authenticated production read smoke failed.");
+await plans.json();
+process.stderr.write("TARGET_AUTH_SMOKE_STAGE stage=production_read status=success\n");
+
+process.stdout.write("authenticated_read_smoke_ok\n");
+NODE
+  local remote_command
+  remote_command="$(python3 -c 'import shlex, sys; print(" ".join(shlex.quote(value) for value in sys.argv[1:]))' \
+    sudo -n docker exec -i platform-infra-intake-1 node --input-type=module -e "${smoke_script}")" || return 1
+  output="$(printf '%s' "${payload}" | ssh_target "${remote_command}")" || return 1
   [[ "${output}" == "authenticated_read_smoke_ok" ]] || return 1
 }
 
@@ -885,13 +1092,37 @@ atomic(installed_path, commit + "\n", 0o644)
 PY
 }
 
+activate_current_installed_runtime() {
+  ssh_target bash -s -- "${RELEASE_ROOT}" "${TARGET_RUNTIME_ENV}" "${RUNTIME_PLATFORM_BASE}" "${RUNTIME_PLATFORM_OPS}" "${SOURCE_PLATFORM_BASE}" "${SOURCE_PLATFORM_OPS}" <<'REMOTE_RESTORE_CURRENT'
+set -euo pipefail
+release_root="$1"; runtime_env="$2"; canonical_base="$3"; canonical_ops="$4"; source_platform_base="$5"; source_platform_ops="$6"
+installed="$release_root/installed"
+if [[ -e "$installed" || -L "$installed" ]]; then
+  [[ -f "$installed" && ! -L "$installed" ]] || exit 1
+  commit="$(cat "$installed" | tr -d '\r\n')"
+  [[ "$commit" =~ ^[0-9a-fA-F]{40}$ ]] || exit 1
+  release_dir="$release_root/$commit"
+  base="$release_dir/source/$source_platform_base"
+  ops="$release_dir/source/$source_platform_ops"
+  override="$release_dir/candidate-images.json"
+  [[ -f "$base" && ! -L "$base" && -f "$ops" && ! -L "$ops" && -f "$override" && ! -L "$override" ]] || exit 1
+  cd "$(dirname "$base")"
+  sudo -n docker compose --env-file "$runtime_env" -f "$base" -f "$ops" -f "$override" up -d --no-deps --force-recreate intake offer production exports web
+else
+  [[ -f "$canonical_base" && ! -L "$canonical_base" && -f "$canonical_ops" && ! -L "$canonical_ops" ]] || exit 1
+  cd "$(dirname "$canonical_base")"
+  sudo -n docker compose --env-file "$runtime_env" -f "$canonical_base" -f "$canonical_ops" up -d --no-deps --force-recreate intake offer production exports web
+fi
+REMOTE_RESTORE_CURRENT
+}
+
 rollback_remote_application() {
   local release_dir="${RELEASE_ROOT}/${DEPLOY_COMMIT_SHA}"
-  if ! activate_remote_override "${release_dir}/previous-images.json"; then
+  if ! activate_current_installed_runtime; then
     return 1
   fi
   local rebound
-  if ! rebound="$(remote_preflight "${LOCK_OWNER}")"; then
+  if ! rebound="$(remote_preflight "${LOCK_OWNER}" current)"; then
     return 1
   fi
   parse_preflight_binding "${rebound}"
@@ -929,7 +1160,7 @@ run_production_update() {
   verify_runtime_ddl_unchanged
 
   local initial
-  if ! initial="$(remote_preflight "")"; then
+  if ! initial="$(remote_preflight "" current)"; then
     fail "TARGET_PREFLIGHT_FAIL gate=remote_target_invariants"
   fi
   parse_preflight_binding "${initial}"
@@ -940,7 +1171,7 @@ run_production_update() {
 
   acquire_remote_lock
   local locked
-  locked="$(remote_preflight "${LOCK_OWNER}")"
+  locked="$(remote_preflight "${LOCK_OWNER}" current)"
   parse_preflight_binding "${locked}"
 
   prepare_remote_release
@@ -951,27 +1182,38 @@ run_production_update() {
   fi
 
   local release_dir="${RELEASE_ROOT}/${DEPLOY_COMMIT_SHA}"
+  printf 'TARGET_UPDATE_STAGE stage=activate status=start\n' >&2
   if ! activate_remote_override "${release_dir}/candidate-images.json"; then
     handle_production_failure
     return $?
   fi
+  printf 'TARGET_UPDATE_STAGE stage=activate status=success\n' >&2
 
   local postflight
-  if ! postflight="$(remote_preflight "${LOCK_OWNER}")"; then
+  printf 'TARGET_UPDATE_STAGE stage=postflight status=start\n' >&2
+  if ! postflight="$(remote_preflight "${LOCK_OWNER}" "${DEPLOY_COMMIT_SHA}")"; then
     handle_production_failure
     return $?
   fi
   parse_preflight_binding "${postflight}"
+  printf 'TARGET_UPDATE_STAGE stage=postflight status=success\n' >&2
+  printf 'TARGET_UPDATE_STAGE stage=health status=start\n' >&2
   if ! verify_remote_override_and_health "${release_dir}/candidate-images.json"; then
     handle_production_failure
     return $?
   fi
+  printf 'TARGET_UPDATE_STAGE stage=health status=success\n' >&2
+  printf 'TARGET_UPDATE_STAGE stage=auth_smoke status=start\n' >&2
   if ! authenticated_read_smoke; then
     handle_production_failure
     return $?
   fi
+  printf 'TARGET_UPDATE_STAGE stage=auth_smoke status=success\n' >&2
 
-  write_install_receipt
+  if ! write_install_receipt; then
+    printf '%s\n' "TARGET_UPDATE_RESULT manual_recovery_required stage=receipt lock_retained=true" >&2
+    return 1
+  fi
   release_remote_lock
   printf 'TARGET_UPDATE_RESULT updated commit=%s runtime_image=%s web_image=%s\n'     "${DEPLOY_COMMIT_SHA}" "${RUNTIME_IMAGE}" "${WEB_IMAGE}"
 }
