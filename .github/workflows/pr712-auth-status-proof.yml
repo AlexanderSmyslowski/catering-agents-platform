@@ -1,0 +1,46 @@
+name: PR712 auth status proof
+
+on:
+  push:
+    branches:
+      - ops/pr712-auth-status-proof-20260925
+
+permissions:
+  contents: read
+
+jobs:
+  targeted-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact proof head
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Bind proof to PR 712 head
+        env:
+          EXPECTED_PARENT: 91818d8d86cf4557fb73e008ef2b8c30d6826dfc
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "$EXPECTED_PARENT"
+          test -z "$(git diff --name-only HEAD^ HEAD -- . ':!.github/workflows/pr712-auth-status-proof.yml')"
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Syntax check updater
+        run: bash -n platform-infra/scripts/catering-target-production-update.sh
+
+      - name: Run targeted runtime identity tests
+        run: npx vitest run tests/catering-target-runtime-identity-fix.test.ts --maxWorkers=1
+
+      - name: Proof marker
+        run: printf 'PR712_AUTH_STATUS_PROOF_OK\n'
