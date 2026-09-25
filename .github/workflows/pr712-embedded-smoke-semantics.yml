@@ -1,0 +1,85 @@
+name: PR712 embedded smoke semantics
+
+on:
+  push:
+    branches:
+      - ops/pr712-embedded-smoke-semantics-20260925
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-semantics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact parent
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Bind proof to PR 712 head
+        env:
+          EXPECTED_PARENT: 6bc619801ce030250de9b2ba35ad49216e9003d0
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "$EXPECTED_PARENT"
+          test -z "$(git diff --name-only HEAD^ HEAD -- . ':!.github/workflows/pr712-embedded-smoke-semantics.yml')"
+
+      - name: Extract embedded smoke script
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source=Path("platform-infra/scripts/catering-target-production-update.sh").read_text()
+          start=source.index("  read -r -d '' smoke_script <<'NODE' || true\n") + len("  read -r -d '' smoke_script <<'NODE' || true\n")
+          end=source.index("\nNODE\n", start)
+          smoke=source[start:end]
+          prelude = r"""
+          let call = 0;
+          globalThis.fetch = async function(url, init) {
+            call += 1;
+            if (call === 1) {
+              return {
+                status: 200,
+                headers: {
+                  getSetCookie: () => ["__Host-catering_session=test-token; Path=/; Secure; HttpOnly"],
+                  get: () => "__Host-catering_session=test-token; Path=/; Secure; HttpOnly"
+                },
+                json: async () => ({})
+              };
+            }
+            if (call === 2) {
+              return {
+                status: 200,
+                headers: { getSetCookie: () => [], get: () => null },
+                json: async () => ({
+                  authenticated: true,
+                  access: { capabilities: ["production_read"] }
+                })
+              };
+            }
+            if (call === 3) {
+              return {
+                status: 200,
+                headers: { getSetCookie: () => [], get: () => null },
+                json: async () => ({ items: [] })
+              };
+            }
+            throw new Error("unexpected fetch call");
+          };
+          """
+          Path("/tmp/catering-smoke-semantics.mjs").write_text(prelude + "\n" + smoke + "\n")
+          PY
+
+      - name: Execute exact embedded smoke semantics
+        run: |
+          set -euo pipefail
+          payload='{"basicUser":"proof","basicPassword":"proof-password","loginCode":"proof-code","pin":"123456"}'
+          printf '%s' "$payload" | node /tmp/catering-smoke-semantics.mjs >/tmp/smoke.stdout 2>/tmp/smoke.stderr
+          test "$(cat /tmp/smoke.stdout)" = "authenticated_read_smoke_ok"
+          grep -Fxq 'TARGET_AUTH_SMOKE_STAGE stage=login status=success' /tmp/smoke.stderr
+          grep -Fxq 'TARGET_AUTH_SMOKE_STAGE stage=session status=success' /tmp/smoke.stderr
+          grep -Fxq 'TARGET_AUTH_SMOKE_STAGE stage=production_read status=success' /tmp/smoke.stderr
+          printf 'PR712_EMBEDDED_SMOKE_SEMANTICS_OK\n'
