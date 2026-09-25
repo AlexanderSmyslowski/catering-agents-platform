@@ -1,0 +1,65 @@
+name: PR712 E1 release gates v3
+
+on:
+  push:
+    branches:
+      - ops/pr712-e1-proof-v3-20260925
+
+permissions:
+  contents: read
+
+jobs:
+  ubuntu-release-gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Bind proof to PR 712 head
+        env:
+          EXPECTED_PARENT: f2546468c5bce0e8f2298ee1a92c6c6da3b2ae71
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "$EXPECTED_PARENT"
+          test -z "$(git diff --name-only HEAD^ HEAD -- . ':!.github/workflows/pr712-e1-proof-v3.yml')"
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Bash 5 syntax
+        run: |
+          set -euo pipefail
+          bash --version | head -n 1
+          bash -n platform-infra/scripts/catering-target-production-update.sh
+      - name: Three release suites
+        run: |
+          set -euo pipefail
+          npx vitest run             tests/catering-target-production-controlflow.test.ts             tests/catering-target-update-production-boundary.test.ts             tests/catering-target-runtime-identity-fix.test.ts             --maxWorkers=1
+
+  macos-bash32-syntax:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Bind proof to PR 712 head
+        env:
+          EXPECTED_PARENT: f2546468c5bce0e8f2298ee1a92c6c6da3b2ae71
+        shell: "/bin/bash {0}"
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "$EXPECTED_PARENT"
+          test -z "$(git diff --name-only HEAD^ HEAD -- . ':!.github/workflows/pr712-e1-proof-v3.yml')"
+      - name: Bash 3.2 syntax
+        shell: "/bin/bash {0}"
+        run: |
+          set -euo pipefail
+          version="$(/bin/bash --version | head -n 1)"
+          printf '%s\n' "$version"
+          case "$version" in *"version 3.2"*) ;; *) exit 1 ;; esac
+          /bin/bash -n platform-infra/scripts/catering-target-production-update.sh
