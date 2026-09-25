@@ -787,7 +787,30 @@ REMOTE_RELEASE
 
   rsync -az     --rsync-path="sudo -n rsync"     -e "${rsync_rsh}"     "${LOCAL_RELEASE_DIR}/candidate-images.json"     "${LOCAL_RELEASE_DIR}/runtime-image.tar.gz"     "${LOCAL_RELEASE_DIR}/web-image.tar.gz"     "${REMOTE}:${release_dir}/"
 
-  ssh_target sudo -n chmod 0644     "${release_dir}/candidate-images.json"     "${release_dir}/runtime-image.tar.gz"     "${release_dir}/web-image.tar.gz"
+  ssh_target bash -s -- "${release_dir}" "${SOURCE_PLATFORM_BASE}" "${SOURCE_PLATFORM_OPS}" <<'REMOTE_RELEASE_OWNERSHIP'
+set -euo pipefail
+release_dir="$1"; source_platform_base="$2"; source_platform_ops="$3"
+[[ "$release_dir" =~ ^/opt/catering-releases/[0-9a-fA-F]{40}$ ]] || exit 1
+[[ "$source_platform_base" == platform-infra/* && "$source_platform_base" != *".."* ]] || exit 1
+[[ "$source_platform_ops" == platform-infra/* && "$source_platform_ops" != *".."* ]] || exit 1
+source_dir="$release_dir/source"
+platform_base="$source_dir/$source_platform_base"
+platform_ops="$source_dir/$source_platform_ops"
+for path in "$release_dir" "$source_dir"; do
+  sudo -n test -d "$path"
+  sudo -n test ! -L "$path"
+done
+for path in "$platform_base" "$platform_ops" "$release_dir/candidate-images.json" "$release_dir/runtime-image.tar.gz" "$release_dir/web-image.tar.gz"; do
+  sudo -n test -f "$path"
+  sudo -n test ! -L "$path"
+done
+sudo -n chown -R root:root -- "$source_dir"
+sudo -n chown root:root --   "$release_dir/candidate-images.json"   "$release_dir/runtime-image.tar.gz"   "$release_dir/web-image.tar.gz"
+sudo -n chmod 0644   "$release_dir/candidate-images.json"   "$release_dir/runtime-image.tar.gz"   "$release_dir/web-image.tar.gz"
+[[ "$(sudo -n stat -c '%u:%g:%a' "$platform_base")" == "0:0:644" ]]
+[[ "$(sudo -n stat -c '%u:%g:%a' "$platform_ops")" == "0:0:644" ]]
+[[ "$(sudo -n stat -c '%u:%g:%a' "$release_dir/candidate-images.json")" == "0:0:644" ]]
+REMOTE_RELEASE_OWNERSHIP
 }
 
 capture_previous_and_load_candidates() {
