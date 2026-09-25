@@ -225,7 +225,7 @@ if 'sudo -n unlink "$lock/owner"' in stdin_text and 'sudo -n rmdir "$lock"' in s
     raise SystemExit(0)
 
 
-if "release directory already exists" in stdin_text and "release_root" in stdin_text:
+if 'release_root="$1"; release_dir="$2"' in stdin_text and "for legacy in" in stdin_text:
     log("ssh release")
     raise SystemExit(0)
 
