@@ -370,6 +370,8 @@ verify_runtime_ddl_unchanged() {
 
 remote_preflight() {
   local expected_lock_owner="${1:-}"
+  local runtime_expectation="${2:-current}"
+  [[ "${runtime_expectation}" == "current" || "${runtime_expectation}" =~ ^[0-9a-fA-F]{40}$ ]] || fail "invalid runtime expectation"
   local expected_lock_owner_arg
   if [[ -z "${expected_lock_owner}" ]]; then
     expected_lock_owner_arg="__CATERING_NO_LOCK_OWNER__"
@@ -392,17 +394,18 @@ remote_preflight() {
     "${EDGE_COMPOSE_PROJECT}" "${EDGE_WORKING_DIR}" "${RUNTIME_EDGE_BASE}" "${RUNTIME_EDGE_OPS}" \
     "${RUNTIME_EDGE_CADDY}" "${RUNTIME_TARGET_SITE}" \
     "${platform_base_hash}" "${platform_ops_hash}" "${edge_base_hash}" "${edge_ops_hash}" \
-    "${edge_caddy_hash}" "${target_site_hash}" <<'REMOTE_PREFLIGHT'
+    "${edge_caddy_hash}" "${target_site_hash}" "${SOURCE_PLATFORM_BASE}" "${SOURCE_PLATFORM_OPS}" "${runtime_expectation}" <<'REMOTE_PREFLIGHT'
 set -euo pipefail
 preflight_fail() {
   printf 'TARGET_PREFLIGHT_FAIL gate=%s\n' "$1" >&2
   exit 1
 }
-[[ "$#" -eq 23 ]] || preflight_fail remote_argument_count
+[[ "$#" -eq 26 ]] || preflight_fail remote_argument_count
 target_id="$1"; deploy_path="$2"; edge_path="$3"; runtime_env="$4"; update_lock="$5"; observer="$6"; expected_owner_arg="$7"
 platform_project="$8"; platform_working_dir="$9"; platform_base="${10}"; platform_ops="${11}"
 edge_project="${12}"; edge_working_dir="${13}"; edge_base="${14}"; edge_ops="${15}"; edge_caddy="${16}"; target_site="${17}"
 platform_base_hash="${18}"; platform_ops_hash="${19}"; edge_base_hash="${20}"; edge_ops_hash="${21}"; edge_caddy_hash="${22}"; target_site_hash="${23}"
+source_platform_base="${24}"; source_platform_ops="${25}"; runtime_expectation="${26}"
 if [[ "$expected_owner_arg" == "__CATERING_NO_LOCK_OWNER__" ]]; then
   expected_owner=""
 else
@@ -455,6 +458,68 @@ else
   sudo -n grep -Fxq "owner_token=$expected_owner" "$update_lock/owner" || preflight_fail target_update_lock_owner
 fi
 
+release_root=/opt/catering-releases
+installed_marker="$release_root/installed"
+expected_app_working_dir="$platform_working_dir"
+expected_app_config_files="$platform_base,$platform_ops"
+expected_app_images_json=""
+runtime_state=baseline
+
+bind_release_runtime() {
+  local commit="$1" require_receipt="$2"
+  [[ "$commit" =~ ^[0-9a-fA-F]{40}$ ]] || preflight_fail installed_commit
+  [[ "$source_platform_base" == platform-infra/* && "$source_platform_base" != *".."* ]] || preflight_fail release_platform_base_source
+  [[ "$source_platform_ops" == platform-infra/* && "$source_platform_ops" != *".."* ]] || preflight_fail release_platform_ops_source
+  local release_dir="$release_root/$commit"
+  local release_base="$release_dir/source/$source_platform_base"
+  local release_ops="$release_dir/source/$source_platform_ops"
+  local override="$release_dir/candidate-images.json"
+  sudo -n test -d "$release_dir" || preflight_fail release_dir
+  sudo -n test ! -L "$release_dir" || preflight_fail release_dir_symlink
+  for item in "$release_base" "$release_ops" "$override"; do
+    sudo -n test -f "$item" || preflight_fail release_runtime_file
+    sudo -n test ! -L "$item" || preflight_fail release_runtime_symlink
+  done
+  [[ "$(sudo -n stat -c '%u:%g:%a' "$release_base")" == "0:0:644" ]] || preflight_fail release_platform_base_mode
+  [[ "$(sudo -n stat -c '%u:%g:%a' "$release_ops")" == "0:0:644" ]] || preflight_fail release_platform_ops_mode
+  [[ "$(sudo -n stat -c '%u:%g:%a' "$override")" == "0:0:644" ]] || preflight_fail release_override_mode
+  local images
+  images="$(sudo -n cat "$override")" || preflight_fail release_override_read
+  python3 - "$images" <<'PY' || preflight_fail release_override_shape
+import json, re, sys
+value=json.loads(sys.argv[1])
+if set(value) != {"services"} or set(value["services"]) != {"intake","offer","production","exports","web"}:
+    raise SystemExit(1)
+for item in value["services"].values():
+    if set(item) != {"image"} or not re.fullmatch(r"sha256:[0-9a-f]{64}", item["image"]):
+        raise SystemExit(1)
+PY
+  if [[ "$require_receipt" == "true" ]]; then
+    local receipt="$release_dir/install-receipt"
+    sudo -n test -f "$receipt" || preflight_fail install_receipt_file
+    sudo -n test ! -L "$receipt" || preflight_fail install_receipt_symlink
+    [[ "$(sudo -n stat -c '%u:%g:%a' "$receipt")" == "0:0:600" ]] || preflight_fail install_receipt_mode
+    sudo -n grep -Fxq "status=installed" "$receipt" || preflight_fail install_receipt_status
+    sudo -n grep -Fxq "commit=$commit" "$receipt" || preflight_fail install_receipt_commit
+  fi
+  expected_app_working_dir="$(dirname "$release_base")"
+  expected_app_config_files="$release_base,$release_ops,$override"
+  expected_app_images_json="$images"
+  runtime_state="release:$commit"
+}
+
+if [[ "$runtime_expectation" == "current" ]]; then
+  if sudo -n test -e "$installed_marker" || sudo -n test -L "$installed_marker"; then
+    sudo -n test -f "$installed_marker" || preflight_fail installed_marker_file
+    sudo -n test ! -L "$installed_marker" || preflight_fail installed_marker_symlink
+    [[ "$(sudo -n stat -c '%u:%g:%a' "$installed_marker")" == "0:0:644" ]] || preflight_fail installed_marker_mode
+    installed_commit="$(sudo -n cat "$installed_marker" | tr -d '\r\n')" || preflight_fail installed_marker_read
+    bind_release_runtime "$installed_commit" true
+  fi
+else
+  bind_release_runtime "$runtime_expectation" false
+fi
+
 command -v docker >/dev/null || preflight_fail docker_command
 check_compose_labels() {
   local container="$1" expected_project="$2" expected_working_dir="$3" expected_files="$4" expected_service="$5" gate="$6" result
@@ -485,9 +550,16 @@ else:
   esac
 }
 platform_config_files="$platform_base,$platform_ops"
-for service in postgres intake offer production exports web; do
-  check_compose_labels "platform-infra-${service}-1" "$platform_project" "$platform_working_dir" "$platform_config_files" "$service" "platform_${service}"
+check_compose_labels "platform-infra-postgres-1" "$platform_project" "$platform_working_dir" "$platform_config_files" postgres platform_postgres
+for service in intake offer production exports web; do
+  check_compose_labels "platform-infra-${service}-1" "$platform_project" "$expected_app_working_dir" "$expected_app_config_files" "$service" "platform_${service}"
 done
+if [[ -n "$expected_app_images_json" ]]; then
+  for service in intake offer production exports web; do
+    expected_image="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["services"][sys.argv[2]]["image"])' "$expected_app_images_json" "$service")"
+    [[ "$(sudo -n docker inspect --format '{{.Image}}' "platform-infra-${service}-1")" == "$expected_image" ]] || preflight_fail "platform_${service}_image"
+  done
+fi
 edge_config_files="$edge_base,$edge_ops"
 check_compose_labels "catering-edge-edge-1" "$edge_project" "$edge_working_dir" "$edge_config_files" edge edge
 
@@ -564,7 +636,7 @@ if ! edge_image="$(image_of catering-edge-edge-1)"; then
 fi
 [[ "$edge_image" =~ ^sha256:[0-9a-f]{64}$ ]] || preflight_fail edge_image
 
-printf 'TARGET_PREFLIGHT_OK target=%s backup=healthy writer=enabled schema_version=3 postgres_volume=%s edge_image=%s\n' "$target_id" "$postgres_volume" "$edge_image"
+printf 'TARGET_PREFLIGHT_OK target=%s backup=healthy writer=enabled schema_version=3 runtime_state=%s postgres_volume=%s edge_image=%s\n' "$target_id" "$runtime_state" "$postgres_volume" "$edge_image"
 REMOTE_PREFLIGHT
 }
 
@@ -581,7 +653,7 @@ run_production_preflight() {
   verify_runtime_schema_migration_unchanged
   verify_runtime_ddl_unchanged
   local output
-  if ! output="$(remote_preflight "")"; then
+  if ! output="$(remote_preflight "" current)"; then
     fail "TARGET_PREFLIGHT_FAIL gate=remote_target_invariants"
   fi
   parse_preflight_binding "${output}"
@@ -692,8 +764,20 @@ if [[ ! -e "$release_root" ]]; then
   sudo -n mkdir -m 0755 -- "$release_root"
 fi
 [[ -d "$release_root" && ! -L "$release_root" && "$(realpath -e "$release_root")" == "$release_root" ]] || exit 1
-[[ ! -e "$release_dir" && ! -L "$release_dir" ]] || { echo "release directory already exists" >&2; exit 1; }
-sudo -n mkdir -m 0755 -- "$release_dir" "$release_dir/source"
+if [[ ! -e "$release_dir" && ! -L "$release_dir" ]]; then
+  sudo -n mkdir -m 0755 -- "$release_dir" "$release_dir/source"
+else
+  [[ -d "$release_dir" && ! -L "$release_dir" ]] || exit 1
+  [[ ! -e "$release_dir/install-receipt" && ! -L "$release_dir/install-receipt" ]] || exit 1
+  [[ -d "$release_dir/source" && ! -L "$release_dir/source" ]] || exit 1
+  for item in "$release_dir"/*; do
+    [[ -e "$item" || -L "$item" ]] || continue
+    case "$(basename "$item")" in
+      source|candidate-images.json|runtime-image.tar.gz|web-image.tar.gz|previous-images.json) ;;
+      *) exit 1 ;;
+    esac
+  done
+fi
 REMOTE_RELEASE
 
   local rsync_rsh
@@ -885,13 +969,37 @@ atomic(installed_path, commit + "\n", 0o644)
 PY
 }
 
+activate_current_installed_runtime() {
+  ssh_target bash -s -- "${RELEASE_ROOT}" "${TARGET_RUNTIME_ENV}" "${RUNTIME_PLATFORM_BASE}" "${RUNTIME_PLATFORM_OPS}" "${SOURCE_PLATFORM_BASE}" "${SOURCE_PLATFORM_OPS}" <<'REMOTE_RESTORE_CURRENT'
+set -euo pipefail
+release_root="$1"; runtime_env="$2"; canonical_base="$3"; canonical_ops="$4"; source_platform_base="$5"; source_platform_ops="$6"
+installed="$release_root/installed"
+if [[ -e "$installed" || -L "$installed" ]]; then
+  [[ -f "$installed" && ! -L "$installed" ]] || exit 1
+  commit="$(cat "$installed" | tr -d '\r\n')"
+  [[ "$commit" =~ ^[0-9a-fA-F]{40}$ ]] || exit 1
+  release_dir="$release_root/$commit"
+  base="$release_dir/source/$source_platform_base"
+  ops="$release_dir/source/$source_platform_ops"
+  override="$release_dir/candidate-images.json"
+  [[ -f "$base" && ! -L "$base" && -f "$ops" && ! -L "$ops" && -f "$override" && ! -L "$override" ]] || exit 1
+  cd "$(dirname "$base")"
+  sudo -n docker compose --env-file "$runtime_env" -f "$base" -f "$ops" -f "$override" up -d --no-deps --force-recreate intake offer production exports web
+else
+  [[ -f "$canonical_base" && ! -L "$canonical_base" && -f "$canonical_ops" && ! -L "$canonical_ops" ]] || exit 1
+  cd "$(dirname "$canonical_base")"
+  sudo -n docker compose --env-file "$runtime_env" -f "$canonical_base" -f "$canonical_ops" up -d --no-deps --force-recreate intake offer production exports web
+fi
+REMOTE_RESTORE_CURRENT
+}
+
 rollback_remote_application() {
   local release_dir="${RELEASE_ROOT}/${DEPLOY_COMMIT_SHA}"
-  if ! activate_remote_override "${release_dir}/previous-images.json"; then
+  if ! activate_current_installed_runtime; then
     return 1
   fi
   local rebound
-  if ! rebound="$(remote_preflight "${LOCK_OWNER}")"; then
+  if ! rebound="$(remote_preflight "${LOCK_OWNER}" current)"; then
     return 1
   fi
   parse_preflight_binding "${rebound}"
@@ -929,7 +1037,7 @@ run_production_update() {
   verify_runtime_ddl_unchanged
 
   local initial
-  if ! initial="$(remote_preflight "")"; then
+  if ! initial="$(remote_preflight "" current)"; then
     fail "TARGET_PREFLIGHT_FAIL gate=remote_target_invariants"
   fi
   parse_preflight_binding "${initial}"
@@ -940,7 +1048,7 @@ run_production_update() {
 
   acquire_remote_lock
   local locked
-  locked="$(remote_preflight "${LOCK_OWNER}")"
+  locked="$(remote_preflight "${LOCK_OWNER}" current)"
   parse_preflight_binding "${locked}"
 
   prepare_remote_release
@@ -957,7 +1065,7 @@ run_production_update() {
   fi
 
   local postflight
-  if ! postflight="$(remote_preflight "${LOCK_OWNER}")"; then
+  if ! postflight="$(remote_preflight "${LOCK_OWNER}" "${DEPLOY_COMMIT_SHA}")"; then
     handle_production_failure
     return $?
   fi
