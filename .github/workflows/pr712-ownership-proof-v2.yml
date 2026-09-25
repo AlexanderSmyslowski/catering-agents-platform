@@ -1,0 +1,47 @@
+name: PR712 ownership proof v2
+
+on:
+  push:
+    branches:
+      - ops/pr712-runtime-identity-proof-ownership-v2-20260925
+
+permissions:
+  contents: read
+
+jobs:
+  targeted-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact proof head
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Bind proof to PR 712 head
+        env:
+          EXPECTED_PARENT: db744926b84b4b669472667fcc116388d55dbfb4
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "$EXPECTED_PARENT"
+          test -z "$(git diff --name-only HEAD^ HEAD -- . ':!.github/workflows/pr712-ownership-proof-v2.yml')"
+          printf 'PR712_OWNERSHIP_PROOF_V2_BINDING_OK parent=%s\n' "$EXPECTED_PARENT"
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Syntax check updater
+        run: bash -n platform-infra/scripts/catering-target-production-update.sh
+
+      - name: Run targeted runtime identity test
+        run: npx vitest run tests/catering-target-runtime-identity-fix.test.ts --maxWorkers=1
+
+      - name: Proof marker
+        run: printf 'PR712_OWNERSHIP_PROOF_V2_OK\n'
