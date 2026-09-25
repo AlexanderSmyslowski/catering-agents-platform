@@ -932,9 +932,13 @@ check_health() {
   return 1
 }
 check_health platform-infra-intake-1 http://127.0.0.1:3101/health
+printf 'TARGET_UPDATE_STAGE stage=health service=intake status=success\n' >&2
 check_health platform-infra-offer-1 http://127.0.0.1:3102/health
+printf 'TARGET_UPDATE_STAGE stage=health service=offer status=success\n' >&2
 check_health platform-infra-production-1 http://127.0.0.1:3103/health
+printf 'TARGET_UPDATE_STAGE stage=health service=production status=success\n' >&2
 check_health platform-infra-exports-1 http://127.0.0.1:3104/health
+printf 'TARGET_UPDATE_STAGE stage=health service=exports status=success\n' >&2
 REMOTE_VERIFY
 }
 
@@ -991,6 +995,7 @@ const login = await request("/api/intake/v1/auth/login", {
   body: JSON.stringify({ loginCode: input.loginCode, pin: input.pin })
 });
 if (login.status !== 200) throw new Error("Authenticated smoke login failed.");
+process.stderr.write("TARGET_AUTH_SMOKE_STAGE stage=login status=success\n");
 
 const setCookie = typeof login.headers.getSetCookie === "function"
   ? login.headers.getSetCookie()[0]
@@ -1008,10 +1013,12 @@ if (
 ) {
   throw new Error("Authenticated smoke account lacks production_read.");
 }
+process.stderr.write("TARGET_AUTH_SMOKE_STAGE stage=session status=success\n");
 
 const plans = await request("/api/production/v1/production/plans", { headers: { cookie } });
 if (plans.status !== 200) throw new Error("Authenticated production read smoke failed.");
 await plans.json();
+process.stderr.write("TARGET_AUTH_SMOKE_STAGE stage=production_read status=success\n");
 
 process.stdout.write("authenticated_read_smoke_ok\n");
 NODE
@@ -1142,25 +1149,33 @@ run_production_update() {
   fi
 
   local release_dir="${RELEASE_ROOT}/${DEPLOY_COMMIT_SHA}"
+  printf 'TARGET_UPDATE_STAGE stage=activate status=start\n' >&2
   if ! activate_remote_override "${release_dir}/candidate-images.json"; then
     handle_production_failure
     return $?
   fi
+  printf 'TARGET_UPDATE_STAGE stage=activate status=success\n' >&2
 
   local postflight
+  printf 'TARGET_UPDATE_STAGE stage=postflight status=start\n' >&2
   if ! postflight="$(remote_preflight "${LOCK_OWNER}" "${DEPLOY_COMMIT_SHA}")"; then
     handle_production_failure
     return $?
   fi
   parse_preflight_binding "${postflight}"
+  printf 'TARGET_UPDATE_STAGE stage=postflight status=success\n' >&2
+  printf 'TARGET_UPDATE_STAGE stage=health status=start\n' >&2
   if ! verify_remote_override_and_health "${release_dir}/candidate-images.json"; then
     handle_production_failure
     return $?
   fi
+  printf 'TARGET_UPDATE_STAGE stage=health status=success\n' >&2
+  printf 'TARGET_UPDATE_STAGE stage=auth_smoke status=start\n' >&2
   if ! authenticated_read_smoke; then
     handle_production_failure
     return $?
   fi
+  printf 'TARGET_UPDATE_STAGE stage=auth_smoke status=success\n' >&2
 
   write_install_receipt
   release_remote_lock
