@@ -53,4 +53,29 @@ describe("Catering target runtime identity recovery", () => {
     expect(production).toContain('sudo -n grep -Fxq "status=installed" "$receipt"');
     expect(production).toContain('sudo -n grep -Fxq "commit=$commit" "$receipt"');
   });
+  it("normalizes release ownership after rsync before candidate activation", () => {
+    const start = production.indexOf("prepare_remote_release() {");
+    const end = production.indexOf("\n}\n\ncapture_previous_and_load_candidates() {", start);
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    const prepare = production.slice(start, end);
+
+    const sourceChown = prepare.indexOf('sudo -n chown -R root:root -- "$source_dir"');
+    const bundleChown = prepare.indexOf('sudo -n chown root:root -- \\');
+    const chmod = prepare.indexOf('sudo -n chmod 0644 \\');
+    expect(sourceChown).toBeGreaterThanOrEqual(0);
+    expect(bundleChown).toBeGreaterThan(sourceChown);
+    expect(chmod).toBeGreaterThan(bundleChown);
+
+    expect(prepare).toContain(
+      '[[ "$(sudo -n stat -c \'%u:%g:%a\' "$platform_base")" == "0:0:644" ]]',
+    );
+    expect(prepare).toContain(
+      '[[ "$(sudo -n stat -c \'%u:%g:%a\' "$platform_ops")" == "0:0:644" ]]',
+    );
+    expect(prepare).toContain(
+      '[[ "$(sudo -n stat -c \'%u:%g:%a\' "$release_dir/candidate-images.json")" == "0:0:644" ]]',
+    );
+  });
+
 });
