@@ -249,7 +249,7 @@ if 'installed="$release_root/installed"' in stdin_text and "force-recreate" in s
 if "up -d --no-deps" in stdin_text:
     which = classify_override()
     log(f"ssh activate {which}")
-    if scenario == "activate-fails" and which == "candidate":
+    if scenario in {"activate-fails", "rollback-fails"} and which == "candidate":
         raise SystemExit(1)
     raise SystemExit(0)
 
