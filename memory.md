@@ -1,9 +1,25 @@
 # memory.md
 
-version: 5.407
-date: 2026-09-23
+version: 5.409
+date: 2026-09-26
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
+
+## Aktueller Stand – Catering-Zielserver-Release 5b2c7708 abgeschlossen (2026-09-26)
+
+- **Release am 26.09.2026 erfolgreich durchgeführt und verifiziert.** Produktcommit `5b2c77089e7fd9051b4a55e38240cd69d6e9ed99` läuft unverändert auf `catering-prod-1`: genau ein freigegebener One-shot-Lauf, 09:55:11–09:56:14 UTC, Wrapper-Exit 0.
+- Separat verwendeter Operationscommit `f2546468c5bce0e8f2298ee1a92c6c6da3b2ae71` aus dem ungemergten Draft-PR #712. Ausgeführt vom Mac des Projektverantwortlichen, nicht über den GitHub-Workflow `update-catering-target.yml`.
+- Wiederverwendete V2-Images ohne Rebuild, Image-Load oder Migration: Runtime `sha256:778c2daadc272666192a1212095275c1cafb5bdb4b0845f49ce16312207050b2` (intake, offer, production, exports), Web `sha256:d95343680e0b02491b3fb668b1ecd70bd9120f29c27c3dcf8c8f5fb9992099ab`.
+- Authentisierter Smoke mit dem bestehenden `read_only_operator`-Smoke-User: Login, Session und `production_read` (`GET /api/production/v1/production/plans`) jeweils HTTP 200.
+- `TARGET_FINAL_VERIFY_OK` und `CATERING_RELEASE_AND_VERIFY_OK`: Schema-Version 3, `auth/users`=1, Smoke-User-Version 2, `failedLoginCount`=0, Update-Lock absent, Install-Receipt vorhanden, `runtime_state=release:5b2c77089e7fd9051b4a55e38240cd69d6e9ed99`. PostgreSQL- und Edge-Container laut Vorher-/Nachher-Prüfung unverändert; Volume `platform-infra_postgres_data`.
+- **Einmalfreigabe verbraucht.** Den One-shot-Runner nicht erneut ausführen; One-shot-Marker und redigiertes Protokoll liegen lokal unter `~/.codex/private/catering-final-release-20260926-f2546468/`.
+- Vollständige Markerausgabe, Bindungen, Belegpfade und Vorgeschichte: `docs/agent-memory/2026-09-26-catering-target-release-5b2c7708.md`.
+- Betriebshinweise:
+  - PR #712 ist noch ungemergt; seine dauerhafte Integration ist ein separater, noch nicht freigegebener Arbeitsschritt.
+  - Der alte Produkt-Preflight kennt die Release-Verzeichnisse nicht und bewertet die App-Container abweichend. Diese Abweichung nicht durch Abschwächen von Prüfungen „reparieren“.
+  - Die alten kanonischen Compose-Dateien (`compose.json`, `operations.json` unter `/opt/catering-agents-platform/platform-infra/`) pinnen weiterhin die alten App-Images. Sie und Legacy-Deploywege (`Deploy production`, `deploy-hetzner.sh`, `deploy-web-listener-hetzner.sh`) nicht für ein manuelles Update verwenden.
+  - Ein technisch erfolgreicher Release ist nicht gleich einer vollständigen fachlichen Abnahme aller CateringOS-Funktionen. Reale Küchenprüfung, Rezept- und Allergenfreigaben bleiben offen.
+- Der folgende Abschnitt vom 22.09.2026 beschreibt den damaligen Stand; dessen Aussage „Noch kein … Deployment“ ist durch diesen Abschnitt überholt, aber als Historie erhalten. Der offene Draft-PR #709 (grüner Read-only-Preflight vom 23.09.2026, Version 5.408) bleibt davon getrennt.
 
 ## Aktueller Stand – eigenständiger Catering-Zielserver-Updateweg (2026-09-22)
 
@@ -2241,3 +2257,14 @@ Quelle: `8de2e96c8604f12da2ec14c39b187db04dfb61cf`. Der folgende Betriebsbericht
 - Versionierte Fortsetzung und Quellenbindung: `docs/agent-memory/2026-09-21-gate-c-main-integration.md`. Eingehende Betriebsdokumentation aus #697 wird nur als Quellenstand erhalten, nicht als neuer Serverzugriff oder Produktdeployment ausgegeben.
 - Vor Merge von #682 nach main weiterhin HALT. Weder Alt- noch Zielserver aktualisieren. Alter `Deploy production`-Weg mit `zeiterfassung_default`/alter Compose-Kette nicht für den neuen Server freigegeben; eigenständigen Updateweg vor erstem Produktdeployment gesondert prüfen und DB-, Netzwerk-, Zugangs- und Backupkonfiguration erhalten. Kein Gate-C-Gesamt-GO, Echtdaten- oder kostenpflichtiger Providerlauf.
 - Vier npm-Advisories bleiben paketbezogen ungeprüft. Reale Küchenprüfung und fachliche Freigaben bleiben offen. Kein separater Dokumentations-PR, keine zusätzliche Vollsuite allein für Dokumentation und kein behaupteter lokaler Hub-Writeback.
+
+### 5.409 - 2026-09-26 — Catering-Zielserver-Release 5b2c7708 abgeschlossen
+
+- Versionsnummer: 5.408 ist durch den offenen Draft-PR #709 (grüner Read-only-Preflight vom 23.09.2026) belegt; dieser Nachtrag verwendet deshalb 5.409.
+- Release am 26.09.2026 erfolgreich durchgeführt und verifiziert: genau ein freigegebener One-shot-Lauf, 09:55:11–09:56:14 UTC, Wrapper-Exit 0. Installierter Produktcommit `5b2c77089e7fd9051b4a55e38240cd69d6e9ed99` (unverändert), separat verwendeter Operationscommit `f2546468c5bce0e8f2298ee1a92c6c6da3b2ae71` (Draft-PR #712, ungemergt).
+- Wiederverwendete V2-Images: Runtime `sha256:778c2daadc272666192a1212095275c1cafb5bdb4b0845f49ce16312207050b2`, Web `sha256:d95343680e0b02491b3fb668b1ecd70bd9120f29c27c3dcf8c8f5fb9992099ab`. Kein Rebuild, kein Image-Load, keine Migration.
+- Login, Session und `production_read` jeweils HTTP 200. `TARGET_FINAL_VERIFY_OK` und `CATERING_RELEASE_AND_VERIFY_OK`; Schema 3, `auth/users`=1, Smoke-Version 2, `failedLoginCount`=0, Lock absent, Install-Receipt vorhanden. PostgreSQL- und Edge-Container laut Vorher-/Nachher-Prüfung unverändert.
+- Historische Einordnung: Der vorherige Operationsstand `91818d8` bleibt als NO-GO bewertet (SSH-argv-Transport des eingebetteten Node-Smokes, Syntaxfehler vor Node-Start; zusätzlich Rebuild statt fester V2-Bindung). Die Korrekturen in `f2546468…` sind durch CI #3155, E1 v3 und E2 (echter sshd, bash und dash) belegt.
+- Einmalfreigabe verbraucht; den One-shot-Runner nicht erneut ausführen. Nach dem Lauf kein weiterer Targetzugriff.
+- Offene Betriebsnachträge: Integration von PR #712 ist separat freizugeben; alter Produkt-Preflight nicht durch Abschwächung „reparieren“; alte kanonische Compose-Dateien und Legacy-Deploywege nicht für manuelle Updates verwenden. Technischer Release ist keine fachliche Gesamtabnahme.
+- Snapshot: `docs/agent-memory/2026-09-26-catering-target-release-5b2c7708.md`. Hub-Writeback zu diesem Stand nur als Dry-run vorbereitet, nicht ausgeführt.
