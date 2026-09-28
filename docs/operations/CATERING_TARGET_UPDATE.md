@@ -2,7 +2,7 @@
 
 **Stand:** 2026-09-28
 **Ziel:** `catering-prod-1`  
-**Status:** Versionierter Mac-Operator mit getrennten Commit- und Artefaktbindungen. **Der P1-Stand wurde nicht gegen den echten Zielserver ausgeführt. Kein Deployment-GO.**
+**Status:** Versionierter Mac-Operator mit getrennten Commit- und Artefaktbindungen. **P1.1 wurde nicht gegen einen echten Zielserver ausgeführt. Kein Deployment-GO.**
 
 ## Zweck und Grenze
 
@@ -44,36 +44,68 @@ python3 "$operator" preflight \
   --operations-commit "$operations" \
   --product-source "$product_source"
 
+python3 "$operator" stage \
+  --product-commit "$product" \
+  --operations-commit "$operations" \
+  --product-source "$product_source" \
+  --bundle-dir "$bundle" \
+  --manifest-sha256 "$manifest_sha" \
+  --confirm STAGE_CATERING_TARGET
+
 python3 "$operator" apply \
   --product-commit "$product" \
   --operations-commit "$operations" \
   --product-source "$product_source" \
   --bundle-dir "$bundle" \
   --manifest-sha256 "$manifest_sha" \
-  --confirm UPDATE_CATERING_TARGET
+  --confirm ACTIVATE_CATERING_TARGET
+
+python3 "$operator" verify \
+  --product-commit "$product" \
+  --operations-commit "$operations" \
+  --product-source "$product_source" \
+  --bundle-dir "$bundle" \
+  --manifest-sha256 "$manifest_sha"
 ```
 
 `validate` prüft beide Commitbindungen ohne Zielkontakt. Jeder Commit muss in der aktualisierten `origin/main`-Historie liegen und einen abgeschlossenen, erfolgreichen Lauf **CI** mit exakt `event=push`, `head_branch=main` und `head_sha=<gebundener Commit>` besitzen. Ein `pull_request`-Lauf reicht nicht. Historische Commits sind zulässig; der Commit muss nicht dem aktuellen `main`-Head entsprechen.
 
-Die Betriebswerkzeug-Mindestannahme ist dieselbe überprüfbare Kombination: Integration in `origin/main` plus erfolgreiche CI genau auf diesem SHA. Die grüne CI enthält die vollständigen Repositorytests, die neuen Commit-/Manifest-Gates, den synthetischen Produktionskontrollfluss und die Remote-Befehlsgrenzen; ein zusätzlicher Zertifizierungsdienst oder ein separates Draft-PR-Merkmal ist nicht Teil des Gates. Die historischen E1-/E2-Läufe vom 25.09. waren an #712 und dessen damaligen Head gebundene Nachweise; sie werden nicht als Freigabe für spätere Tool-SHAs wiederverwendet.
+Die Betriebswerkzeug-Mindestannahme ist dieselbe überprüfbare Kombination: Integration in `origin/main` plus erfolgreicher `CI`-Pushlauf genau auf diesem SHA. Das belegt Herkunft und den erfolgreichen Push-CI-Nachweis. Es belegt weder menschliches Review noch eine reale Produktionsausführung dieses Betriebswerkzeug-Commits. Ein zusätzlicher Zertifizierungsdienst oder ein separates Draft-PR-Merkmal ist nicht Teil des Gates. Die historischen E1-/E2-Läufe vom 25.09. waren an #712 und dessen damaligen Head gebundene Nachweise; sie werden nicht als Freigabe für spätere Tool-SHAs wiederverwendet.
 
-`bundle` baut Runtime- und Web-Image für `linux/amd64`, exportiert nur getrackte Dateien des exakten Produktcommits und schließt damit ignorierte lokale Dateien wie `.env` aus dem Docker-Buildkontext aus. Das Manifest bindet Repository, Ziel, Produktcommit, Betriebswerkzeug-Commit, Image-IDs, Anwendungsdienste und SHA-256-Werte von Images und Compose-Override. Sein SHA-256 wird ausgegeben und muss beim späteren `apply` explizit wieder übergeben werden.
+`bundle` baut Runtime- und Web-Image für `linux/amd64`, exportiert nur getrackte Dateien des exakten Produktcommits und schließt damit ignorierte lokale Dateien wie `.env` aus dem Docker-Buildkontext aus. Manifest v2 bindet Repository, Ziel, Produktcommit, Betriebswerkzeug-Commit, Image-IDs, Anwendungsdienste, SHA-256-Werte von Images und Compose-Override sowie die beiden vom Ziel-Compose-Aufruf tatsächlich verwendeten Produkt-Compose-Dateien. `stage` vergleicht diese Quelldatei-Digests vor Zielkontakt und bindet sie im Stage-Receipt an den bereitgestellten Releasepfad. Sein SHA-256 wird ausgegeben und muss beim späteren `apply` explizit wieder übergeben werden.
 
-Die Phasen bleiben getrennt:
+Der Ziel-Release-Validator verlangt Manifest v2 für einen Kandidaten und vergleicht beide `sourceFiles`-Digests auch bei installierten v2-Releases sowie beim Rollback. Manifest v1 bleibt ausschließlich für bereits installierte historische Releases mit Install-Receipt lesbar; es kann nicht als Kandidat gestagt oder aktiviert werden.
+
+Die freigebbaren Phasen bleiben getrennt:
 
 1. `validate`: Commit-/CI-Gates und Checkoutzustand, ohne Zielkontakt.
 2. `bundle`: lokaler secret-freier Build und unveränderlich gebundene Artefakte, ohne Zielkontakt.
 3. `preflight`: read-only Zielprüfung.
-4. `apply`: frischer read-only Preflight, Lock und Bereitstellung des gebundenen Releases, danach gesonderte Aktivierung.
-5. Verifikation: Postflight, Health- und authentisierter Read-Smoke; Receipt erst nach Erfolg.
+4. `stage`: erneuter Preflight und Übertragung der exakt gebundenen Produktquelle, Manifestdatei, Image-Archive und Override in einen neuen Releasepfad. Die Produkt-Compose-Dateien müssen den Manifest-Digests entsprechen. Stage schreibt einen root-owned, mode-0600 Stage-Receipt einschließlich ihrer Quelldatei-Digests; es lädt keine Images und führt kein Compose-`up` aus.
+5. `apply`: prüft Commit-, CI-, Manifest-, Stage-Receipt- und Digestbindungen erneut, erwirbt den Update-Lock und aktiviert ausschließlich die bereits gestagten Artefakte. `apply` baut nicht neu und überträgt keine Dateien.
+6. `verify`: read-only Postflight-, Health-, Install-Receipt-, Stage-/Manifest- und Commitprüfung des installierten Releases. Diese Phase führt keinen authentisierten Anwendungssmoke aus.
 
-Vor jeder zielverändernden Phase werden Commit-, CI- und Bundlebindungen erneut fail-closed geprüft. Der Rollback-Snapshot wird aus dem Preflight unter gehaltenem Update-Lock gebunden, damit er bei konkurrierenden Operatorläufen zum tatsächlich aktiven Vorgänger gehört. Rollback und Lockfreigabe sind ausschließlich interne Wiederherstellungs-/Aufräumpfade eines bereits validierten Laufs. Jeder fehlende oder abweichende Commit, Lauf, Manifestwert, Digest oder Artefakt stoppt vor der nächsten Phase.
+Vor `stage` und `apply` werden Herkunfts-, CI- und Bundle-Gates mit begrenzten Git-/GitHub-Timeouts fail-closed abgeschlossen. Der Update-Lock wird während des Aktivierungslaufs gehalten. Vor dem Compose-Preflight im `apply` und unmittelbar vor `docker compose up` prüft ein Remote-Schritt im selben SSH-Aufruf erneut Stage-Receipt, Produkt-/Betriebswerkzeug-Commit, Manifest, Override, Image-Archive und beide konsumierten Compose-Quelldateien. Nach Beginn der Aktivierung verwenden Postflight, Smoke, Receipt, Rollback und die separate `verify`-Phase keine GitHub- oder Git-Netzabfrage. Jeder fehlende oder abweichende Commit, Lauf, Manifestwert, Digest oder Stage-Receipt stoppt vor der nächsten Phase.
 
-`apply` ist ein ausdrücklicher Produktionsbefehl. Er wurde in P1 nicht ausgeführt. Die zwei bestehenden GitHub-Workflows `update-catering-target.yml` und `catering-target-preflight.yml` bleiben unverändert; sie sind nicht der neue Einstieg und dürfen bis zur gesonderten Entscheidung nicht ausgelöst werden. Der historische `Deploy production`-Workflow, `deploy-hetzner.sh` und `deploy-web-listener-hetzner.sh` gehören ebenfalls nicht zum neuen Pfad.
+`stage`, `apply` und `verify` sind Zielbefehle. Keiner wurde in P1.1 gegen einen echten Zielserver ausgeführt. Die zwei bestehenden GitHub-Workflows `update-catering-target.yml` und `catering-target-preflight.yml` bleiben unverändert; sie sind nicht der neue Einstieg und dürfen bis zur gesonderten Entscheidung nicht ausgelöst werden. Für Kompatibilität bleibt der historische Workflow-Kontext `Update Catering target` technisch als einziger ungebundener `--update`-Aufrufer zugelassen: exakt dieses Repository, `workflow_dispatch`, `refs/heads/main`, die versionierte Workflow-Referenz, übereinstimmender Workflow-SHA, Event-Input `confirmation=UPDATE_CATERING_TARGET` und identischer `commit_sha`. Dieses Zulassen ist keine Auslösefreigabe; das Auslösen bleibt organisatorisch untersagt. Der Mac-Operator verwendet ausschließlich `stage` und `apply`. Der historische `Deploy production`-Workflow, `deploy-hetzner.sh` und `deploy-web-listener-hetzner.sh` gehören nicht zum neuen Pfad.
 
 ## Bestehende GitHub-Zielworkflows
 
 `.github/workflows/update-catering-target.yml` und `.github/workflows/catering-target-preflight.yml` bleiben vorhanden. Sie laufen manuell und erzwingen den aktuellen `main`-Head; sie sind nicht Teil des neuen Operatorwegs. Ihr Auslösen ist bis zu einer gesonderten Entscheidung organisatorisch untersagt. Der neue Operator ruft sie nicht auf.
+
+## Spätere Reconciliation der PR-#712-Fixes
+
+PR #712 wurde in P1.1 ausschließlich lesend als Referenz verwendet. Keine seiner Änderungen wurde in diese führende P1-Operatorlinie übernommen. Vor einer späteren, separat freigegebenen Integration sind mindestens diese Punkte einzeln gegen Runner, Operator, Tests und Zielvertrag abzugleichen:
+
+- [ ] Request- und Smoke-Timeouts: den 20-Sekunden-Abbruch der authentisierten HTTP-Smoke-Requests sowie SSH-Connect-/Keepalive-Grenzen gegen die getrennten `preflight`-, `stage`-, `apply`- und `verify`-Phasen abgleichen.
+- [ ] Quoting: die sichere Shell-Quotierung des entfernten Node-Smoke-Kommandos und seiner Pfadargumente erhalten; Geheimnisse bleiben im stdin-/Laufzeitkanal und erscheinen nicht in Argumenten oder Logs.
+- [ ] Ownership und Rechte: root:root-Eigentum und erwartete Modi nach `rsync` für Source-/Bundle-Dateien prüfen; Receipts bleiben root-owned und mode 0600.
+- [ ] Receipt-Marker: Status, Commit, Manifest-/Image-Bindungen, Dateityp, Symlinkfreiheit und Modus der Install-/Stage-Receipts vergleichen; Phasenmarker müssen weiterhin eindeutig erkennen lassen, an welcher Stufe ein Lauf stoppte.
+- [ ] Source-Root: expliziten realen, nicht symlinkenden Quellroot, kanonischen Pfad, exakt gebundenen `HEAD`, detached Checkout und Sauberkeit einschließlich untracked Dateien gegen die P1-Prüfungen abgleichen.
+- [ ] Laufzeitidentität und Smoke: Compose-Projekt-/Working-Directory-Bindung über Releases und den rein lesenden `/api/production/v1/production/plans`-Smoke gezielt vergleichen.
+- [ ] Kandidaten- und Rollback-Bindung: die unveränderlichen Image-IDs, Manifest-Digests und vorherige Install-Receipt-Bindung gegen die Stage-/Apply-Grenze vergleichen.
+
+Konflikte werden bei einer späteren Freigabe einzeln entschieden; es gibt keine automatische Konfliktauflösung oder pauschale Übernahme von #712. Die niedrigeren Reviewpunkte O-1 bis O-6 bleiben offene Beobachtungen aus dem unabhängigen Review und werden von P1.1 nicht als erledigt bewertet. Ihre vollständigen Einzeltexte sind in diesem Repository-Dokument nicht hinterlegt und werden hier nicht erfunden.
 
 ## Zugangsdaten der unveränderten GitHub-Zielworkflows
 
@@ -81,7 +113,7 @@ Die vorhandenen GitHub-Zielworkflows verwenden ausschließlich dedizierte `CATER
 
 ## Lokale Zugangsdaten für den Mac-Operator
 
-Für die lokalen Phasen `preflight` und `apply` erwartet der Runner die Umgebungsvariablen `CATERING_TARGET_DEPLOY_HOST`, `CATERING_TARGET_DEPLOY_USER`, `CATERING_TARGET_SSH_KEY_FILE` und `CATERING_TARGET_SSH_KNOWN_HOSTS_FILE`. `apply` benötigt zusätzlich `CATERING_TARGET_SMOKE_BASIC_AUTH_USER`, `CATERING_TARGET_SMOKE_BASIC_AUTH_PASSWORD`, `CATERING_TARGET_SMOKE_LOGIN_CODE` und `CATERING_TARGET_SMOKE_PIN`. Werte werden nur zur Laufzeit lokal bereitgestellt; sie gehören weder in Shellargumente noch in Dateien, Logs oder Bundle-Artefakte.
+Für die Zielphasen `preflight`, `stage`, `apply` und `verify` erwartet der Runner die Umgebungsvariablen `CATERING_TARGET_DEPLOY_HOST`, `CATERING_TARGET_DEPLOY_USER`, `CATERING_TARGET_SSH_KEY_FILE` und `CATERING_TARGET_SSH_KNOWN_HOSTS_FILE`. `apply` benötigt zusätzlich `CATERING_TARGET_SMOKE_BASIC_AUTH_USER`, `CATERING_TARGET_SMOKE_BASIC_AUTH_PASSWORD`, `CATERING_TARGET_SMOKE_LOGIN_CODE` und `CATERING_TARGET_SMOKE_PIN`. Werte werden nur zur Laufzeit lokal bereitgestellt; sie gehören weder in Shellargumente noch in Dateien, Logs oder Bundle-Artefakte.
 
 SSH erzwingt:
 
@@ -92,7 +124,7 @@ SSH erzwingt:
 - festen Port 22.
 
 Secretwerte werden weder in dieses Dokument noch in das Repository geschrieben.
-`apply` prüft, dass alle vier Smoke-Variablen vor einem Zielkontakt gesetzt und nicht leer sind; spätere Prüfungen kehren kontrolliert mit Fehler zurück, damit die vorhandene Rollback-Behandlung greifen kann.
+`apply` prüft, dass alle vier Smoke-Variablen vor einem Zielkontakt gesetzt und nicht leer sind; spätere Prüfungen kehren kontrolliert mit Fehler zurück, damit die vorhandene Rollback-Behandlung greifen kann. `stage` und `apply` verlangen getrennte Bestätigungen: `STAGE_CATERING_TARGET` überträgt Artefakte, `ACTIVATE_CATERING_TARGET` startet die spätere Aktivierung. `verify` benötigt keine Smoke-Secrets und führt keine GitHub-Abfrage aus.
 
 ## Read-only Preflight des unveränderten GitHub-Workflows
 
@@ -198,7 +230,7 @@ Der versionierte Operator baut das lokale Bundle getrennt von Zielprüfung und A
 4. PostgreSQL und Edge werden nicht als Kandidaten gebaut oder ersetzt;
 5. Manifest, Override und komprimierte Image-Archive werden gegenseitig über SHA-256 gebunden.
 
-Der spätere `apply` baut keine Images neu. Er prüft das Manifest und die Archive erneut, überträgt sie in den Releasepfad und prüft die Bindungen vor dem Laden und nochmals unmittelbar vor der Aktivierung.
+`stage` überträgt die bereits gebauten Images, den Candidate-Override, das Manifest und die Produktquelle in einen neuen Releasepfad; es baut nicht und lädt keine Images. `apply` baut nicht neu und überträgt keine Dateien. Es prüft lokales Bundle, remote Stage-Receipt und alle Artefakt-Digests erneut, lädt die gebundenen Images und prüft Manifest, Stage-Receipt und Override unmittelbar vor der Aktivierung erneut im selben Remote-Aufruf.
 
 ## Geschützter Release-Sync
 
@@ -217,9 +249,9 @@ Zusätzlich bleiben die im Contract geschützten Zielzustände wie `/etc/caterin
 
 ## Lock und vorheriger Stand
 
-Vor Remote-Mutationen wird `/opt/catering-target-update.lock` exklusiv angelegt. Owner-Datei und Modi werden fail-closed geprüft.
+`stage` schreibt ausschließlich in einen noch nicht vorhandenen, durch den Produktcommit benannten Releasepfad. Es scheitert, wenn dieser Pfad bereits existiert. Vor der Aktivierung in `apply` wird `/opt/catering-target-update.lock` exklusiv angelegt; Owner-Datei und Modi werden fail-closed geprüft.
 
-Vor Aktivierung werden die aktuell laufenden Image-IDs von Intake, Offer, Production, Exports und Web als `previous-images.json` im Release gebunden. Die unveränderten PostgreSQL-Volume- und Edge-Image-Bindungen stammen aus dem Preflight.
+Vor Aktivierung werden die aktuell laufenden Image-IDs von Intake, Offer, Production, Exports und Web als `previous-images.json` im Release gebunden. Die unveränderten PostgreSQL-Volume- und Edge-Image-Bindungen stammen aus dem Preflight. Der Stage-Receipt bindet Produktcommit, Betriebswerkzeug-Commit, Manifest-Digest, Override-Digest, beide Archiv-Digests und Image-IDs.
 
 ## Aktivierung
 

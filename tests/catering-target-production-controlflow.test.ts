@@ -1,4 +1,5 @@
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -9,7 +10,7 @@ const productionRunner = path.join(root, "platform-infra/scripts/catering-target
 const fakeCommand = path.join(root, "tests/support/catering-target-production-command.py");
 const fakePythonCommand = path.join(root, "tests/support/catering-target-python-command.sh");
 
-function runProduction(scenario: string, mode: "preflight" | "update" = "update", extraEnv: Record<string, string> = {}) {
+function runProduction(scenario: string, mode: "preflight" | "update" | "stage" | "apply" | "verify" = "update", extraEnv: Record<string, string> = {}) {
   expect(existsSync(fakeCommand), "production command fixture must exist").toBe(true);
 
   const state = mkdtempSync(path.join(tmpdir(), "catering-target-production-controlflow-"));
@@ -22,6 +23,25 @@ function runProduction(scenario: string, mode: "preflight" | "update" = "update"
   fs.mkdirSync(bundle);
   for (const artifact of ["candidate-images.json", "manifest.json", "runtime-image.tar.gz", "web-image.tar.gz"]) {
     writeFileSync(path.join(bundle, artifact), "synthetic-bound-artifact\n");
+  }
+  const sourceSyncRoot = path.join(state, "source");
+  const sourcePlatform = path.join(sourceSyncRoot, "platform-infra");
+  fs.mkdirSync(sourcePlatform, { recursive: true });
+  const composeFiles = [
+    "docker-compose.catering-target.json",
+    "docker-compose.catering-target.operations.json",
+  ];
+  const sourceFiles = Object.fromEntries(composeFiles.map((name, index) => {
+    const relative = `platform-infra/${name}`;
+    const content = JSON.stringify({ source: index }) + "\n";
+    writeFileSync(path.join(sourcePlatform, name), content, { mode: 0o644 });
+    return [relative, createHash("sha256").update(content).digest("hex")];
+  }));
+  const manifestText = JSON.stringify({ schemaVersion: 2, sourceFiles });
+  writeFileSync(path.join(bundle, "manifest.json"), manifestText);
+  const manifestSha256 = createHash("sha256").update(manifestText).digest("hex");
+  if (scenario === "operator-stage-source-root-mismatch") {
+    writeFileSync(path.join(sourcePlatform, composeFiles[0]), '{"services":{"web":{"privileged":true}}}\n');
   }
 
   for (const name of ["ssh", "docker", "rsync"]) {
@@ -36,7 +56,12 @@ function runProduction(scenario: string, mode: "preflight" | "update" = "update"
   writeFileSync(knownHosts, "target.invalid ssh-ed25519 synthetic\n", { mode: 0o600 });
 
   const commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
-  const result = spawnSync("/bin/bash", [productionRunner, mode === "preflight" ? "--preflight" : "--update"], {
+  const eventPath = path.join(state, "event.json");
+  writeFileSync(eventPath, JSON.stringify({ inputs: { commit_sha: commit, confirmation: "UPDATE_CATERING_TARGET" } }));
+  const compatibilityContext = mode === "update" && scenario !== "direct-unbound";
+  const operatorPhase = ["stage", "apply", "verify"].includes(mode) || scenario.startsWith("operator-");
+  const runnerMode = { preflight: "--preflight", update: "--update", stage: "--stage", apply: "--apply", verify: "--verify" }[mode];
+  const result = spawnSync("/bin/bash", [productionRunner, runnerMode], {
     cwd: root,
     encoding: "utf8",
     env: {
@@ -45,21 +70,29 @@ function runProduction(scenario: string, mode: "preflight" | "update" = "update"
       CATERING_TARGET_REAL_PYTHON3: realPython,
       RUNNER_TEMP: state,
       DEPLOY_COMMIT_SHA: commit,
-      CATERING_TARGET_OPERATIONS_COMMIT: scenario.startsWith("operator-") ? "f".repeat(40) : "",
-      CATERING_TARGET_BUNDLE_DIR: scenario.startsWith("operator-") ? bundle : "",
-      CATERING_TARGET_MANIFEST_SHA256: scenario.startsWith("operator-") ? "c".repeat(64) : "",
-      CATERING_TARGET_SOURCE_SYNC_ROOT: scenario.startsWith("operator-") ? root : "",
+      CATERING_TARGET_OPERATIONS_COMMIT: operatorPhase ? commit : "",
+      CATERING_TARGET_BUNDLE_DIR: operatorPhase ? bundle : "",
+      CATERING_TARGET_MANIFEST_SHA256: operatorPhase ? manifestSha256 : "",
+      CATERING_TARGET_SOURCE_SYNC_ROOT: mode === "stage" ? sourceSyncRoot : "",
       CATERING_TARGET_DEPLOY_HOST: "target.invalid",
       CATERING_TARGET_DEPLOY_USER: "operator",
       CATERING_TARGET_SSH_KEY_FILE: key,
       CATERING_TARGET_SSH_KNOWN_HOSTS_FILE: knownHosts,
-      CATERING_TARGET_CONFIRMATION: "UPDATE_CATERING_TARGET",
+      CATERING_TARGET_CONFIRMATION: mode === "stage" ? "STAGE_CATERING_TARGET" : mode === "apply" ? "ACTIVATE_CATERING_TARGET" : "UPDATE_CATERING_TARGET",
       CATERING_TARGET_SMOKE_BASIC_AUTH_USER: "synthetic-user",
       CATERING_TARGET_SMOKE_BASIC_AUTH_PASSWORD: "synthetic-password",
       CATERING_TARGET_SMOKE_LOGIN_CODE: "SYNTHETIC",
       CATERING_TARGET_SMOKE_PIN: "123456",
       CATERING_TARGET_FAKE_STATE: state,
       CATERING_TARGET_FAKE_SCENARIO: scenario,
+      GITHUB_ACTIONS: compatibilityContext ? "true" : "",
+      GITHUB_REPOSITORY: compatibilityContext ? "AlexanderSmyslowski/catering-agents-platform" : "",
+      GITHUB_WORKFLOW: compatibilityContext ? "Update Catering target" : "",
+      GITHUB_EVENT_NAME: compatibilityContext ? "workflow_dispatch" : "",
+      GITHUB_REF: compatibilityContext ? "refs/heads/main" : "",
+      GITHUB_WORKFLOW_REF: compatibilityContext ? "AlexanderSmyslowski/catering-agents-platform/.github/workflows/update-catering-target.yml@refs/heads/main" : "",
+      GITHUB_WORKFLOW_SHA: compatibilityContext ? commit : "",
+      GITHUB_EVENT_PATH: compatibilityContext ? eventPath : "",
       ...extraEnv
     }
   });
@@ -69,6 +102,13 @@ function runProduction(scenario: string, mode: "preflight" | "update" = "update"
 }
 
 describe("Catering target production control flow", () => {
+  it("rejects an unbound direct mutating update before contacting the target", () => {
+    const { result, commands } = runProduction("direct-unbound", "update");
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("direct target mutation requires an approved operator binding");
+    expect(commands).toBe("");
+  });
+
   it("keeps healthy preflight read-only", () => {
     const { result, commands } = runProduction("healthy", "preflight");
     expect(result.status, result.stderr).toBe(0);
@@ -109,6 +149,65 @@ describe("Catering target production control flow", () => {
     }
   });
 
+  it("stages bound artifacts without loading images or activating services", () => {
+    const { result, commands } = runProduction("operator-stage", "stage");
+    expect(result.status, result.stderr + "\n" + commands).toBe(0);
+    expect(result.stdout).toContain("TARGET_UPDATE_RESULT staged");
+    expect(commands).toContain("rsync source");
+    expect(commands).toContain("rsync artifacts");
+    expect(commands).toContain("ssh stage receipt write");
+    expect(commands).not.toContain("local_docker build");
+    expect(commands).not.toContain("ssh load");
+    expect(commands).not.toContain("ssh activate");
+  });
+
+  it("rejects a source-root Compose mismatch before contacting the target", () => {
+    const { result, commands } = runProduction("operator-stage-source-root-mismatch", "stage");
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("staged product Compose bindings are invalid");
+    expect(commands).not.toContain("ssh preflight");
+    expect(commands).not.toContain("rsync source");
+  });
+
+  it("fails closed on a stage binding changed before apply", () => {
+    const { result, commands } = runProduction("operator-stage-binding-drift", "apply");
+    expect(result.status).not.toBe(0);
+    expect(commands).toContain("ssh stage receipt verify failed");
+    expect(commands).not.toContain("ssh load");
+    expect(commands).not.toContain("ssh activate candidate");
+  });
+
+  it("rechecks bound stage artifacts in the same remote command before image loading", () => {
+    const { result, commands } = runProduction("operator-stage-binding-drift-before-load", "apply");
+    expect(result.status).not.toBe(0);
+    expect(commands).toContain("ssh stage receipt verify capture failed");
+    expect(commands).not.toContain("ssh load");
+    expect(commands).not.toContain("ssh activate candidate");
+  });
+
+  it("keeps the standalone target verification phase GitHub-free", () => {
+    const { result, commands } = runProduction("operator-verify", "verify");
+    expect(result.status, result.stderr + "\n" + commands).toBe(0);
+    expect(result.stdout).toContain("TARGET_UPDATE_VERIFY status=success");
+    expect(commands).toContain("local_bundle_bindings");
+    expect(commands).not.toContain("operator_gate");
+    expect(commands).not.toContain("operator_bundle_bindings");
+  });
+
+  it("finishes GitHub gates before activation and performs later checks offline", () => {
+    const { result, commands } = runProduction("operator-offline-after-activate", "apply");
+    expect(result.status, result.stderr + "\n" + commands).toBe(0);
+    const activation = commands.indexOf("ssh activate candidate");
+    expect(activation).toBeGreaterThan(-1);
+    expect(commands.lastIndexOf("operator_gate", activation)).toBeGreaterThan(-1);
+    expect(commands.slice(activation + 1)).not.toContain("operator_gate");
+    expect(commands.slice(activation + 1)).not.toContain("operator_bundle_bindings");
+    expect(commands).toContain("ssh receipt");
+    expect(commands).not.toContain("rsync source");
+    expect(commands).not.toContain("rsync artifacts");
+    expect(commands).not.toContain("local_docker build");
+  });
+
   it("rolls back through the real previous-image path when candidate activation fails", () => {
     const { result, commands } = runProduction("activate-fails");
     expect(result.status).not.toBe(0);
@@ -120,7 +219,7 @@ describe("Catering target production control flow", () => {
   });
 
   it("uses the release observed under the acquired lock when another update wins the race", () => {
-    const { result, commands } = runProduction("operator-rollback-snapshot-race");
+    const { result, commands } = runProduction("operator-rollback-snapshot-race", "apply");
     const releaseA = "a".repeat(40);
     const releaseB = "b".repeat(40);
     expect(result.status).not.toBe(0);
@@ -134,9 +233,9 @@ describe("Catering target production control flow", () => {
   });
 
   it("runs the operations-bound smoke through stdin without putting credentials in the remote command", () => {
-    const { result, commands } = runProduction("operator-smoke");
+    const { result, commands } = runProduction("operator-smoke", "apply");
     expect(result.status, result.stderr + "\n" + commands).toBe(0);
-    expect(result.stdout).toContain("TARGET_UPDATE_RESULT updated");
+    expect(result.stdout).toContain("TARGET_UPDATE_RESULT activated");
     expect(commands).toContain("ssh smoke operator plans");
     expect(commands).toContain("ssh receipt");
     expect(commands).toContain("ssh unlock");
@@ -145,22 +244,20 @@ describe("Catering target production control flow", () => {
   });
 
   it("rejects missing smoke credentials before contacting the target", () => {
-    const { result, commands } = runProduction("operator-smoke", "update", { CATERING_TARGET_SMOKE_PIN: "" });
+    const { result, commands } = runProduction("operator-smoke", "apply", { CATERING_TARGET_SMOKE_PIN: "" });
     expect(result.status, result.stderr + "\n" + commands).not.toBe(0);
     expect(result.stderr).toContain("CATERING_TARGET_SMOKE_PIN is required");
     expect(commands).toBe("");
   });
 
-  it("rolls back when the operator bundle recheck fails during postflight", () => {
-    const { result, commands } = runProduction("operator-postflight-bundle-fails");
-    expect(result.status).not.toBe(0);
-    expect(result.stdout).toContain("TARGET_UPDATE_RESULT rolled_back");
-    expect(commands).toContain("ssh verify bundle failed");
-    expect(commands).toContain("ssh activate candidate");
-    expect(commands).toContain("ssh activate previous");
-    expect(commands).toContain("ssh verify previous");
-    expect(commands).not.toContain("ssh receipt");
-    expect(commands).toContain("ssh unlock");
+  it("completes bundle verification before activation and does not recheck GitHub in postflight", () => {
+    const { result, commands } = runProduction("operator-postflight-bundle-fails", "apply");
+    expect(result.status, result.stderr + "\n" + commands).toBe(0);
+    const activation = commands.indexOf("ssh activate candidate");
+    expect(activation).toBeGreaterThan(-1);
+    expect(commands.lastIndexOf("ssh verify bundle", activation)).toBeGreaterThan(-1);
+    expect(commands.slice(activation + 1)).not.toContain("ssh verify bundle");
+    expect(commands).toContain("ssh receipt");
   });
 
   it("rolls back after an authenticated smoke failure", () => {

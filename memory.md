@@ -2287,3 +2287,14 @@ Quelle: `8de2e96c8604f12da2ec14c39b187db04dfb61cf`. Der folgende Betriebsbericht
 - Versionierter Operator-Einstieg mit getrennten Produkt-/Betriebswerkzeug-Gates, secret-freiem `linux/amd64`-Bundle und manifest-/digest-gebundener Phase für späteren Zielbetrieb ergänzt. Produkt- und Tool-Commit müssen jeweils in `origin/main` liegen und einen erfolgreichen exakten `CI`-Pushlauf auf `main` besitzen; historische passende Commits bleiben zulässig.
 - Read-only Release-State-Prüfung für die Release-Verzeichnisse sowie gebundener Rollback und zielseitig root-owned Transfers ergänzt. Der operationsgebundene Read-Smoke nutzt `/plans`; Preflight-Gatefehler stoppen explizit. Gezielt geprüft: 42/42 Vitest- und 21/21 Python-Tests; darin CI-Ereignisbindung, Checkout-/Commitgrenzen, Manifest-/Digestfehler, fehlende Artefakte, Legacy-Pfad-Sperre, Mac-Grenze, Receipt-Rollback, konkurrierender Releasewechsel, Read-Smoke-Transport, fehlende Smoke-Eingabe vor Zielkontakt und Postflight-Bundlefehler. Der vollständige P1-PR-/CI-Status wird separat am tatsächlichen Head ausgewiesen.
 - Keine Zielverbindung, Aktivierung, Deployment, manuelle CI-Ausführung oder Hub-Schreibwirkung im P1-Implementierungsschritt.
+
+### 5.412 - 2026-09-28 — P1.1 Operator-Härtung
+
+- Der Operator trennt `validate`, `bundle`, `preflight`, `stage`, `apply` und `verify`. `stage` überträgt nur gebundene Artefakte und schreibt einen root-owned Stage-Receipt; `apply` baut nicht neu, prüft Manifest-/Commit-/Digestbindungen vor dem Laden und direkt vor der Aktivierung und kann nur vorhandene Stage-Artefakte verwenden. `verify`, Postflight, Smoke, Receipt und Rollback sind GitHub-frei.
+- Direkter ungebundener `--update` wird abgelehnt; der unveränderte historische Workflow-Kontext bleibt technisch eng zugelassen, organisatorisch aber weiterhin verboten. Contract-/Inventory-Steuerwerte werden durch feldspezifische feste Allowlist geprüft. Git-/GitHub-Aufrufe der Herkunftsgates haben begrenzte Timeouts.
+- Dokumentiert ist eine spätere, nicht automatische #712-Reconciliation zu Smoke-Timeouts, Quoting, Ownership/Rechten, Receipt-Markern, Source-Root sowie zusätzlichen Laufzeit-/Rollbackbindungen. O-1 bis O-6 bleiben offen; ihre Einzeltexte liegen im Repo-Kontext nicht vor. Keine #712-Integration und keine reale Hostausführung in P1.1.
+
+### 5.413 - 2026-09-28 — P1.1 Review-Korrekturen
+
+- Release-State validiert Manifest v2 einschließlich beider Produkt-Compose-Digests für Kandidat, installierten Release und Rollback. Manifest v1 bleibt ausschließlich für bereits installierte historische Releases mit Install-Receipt lesbar; Kandidaten mit v1 werden abgewiesen.
+- Der operationsgebundene Node-Smoke wird als einzeln sicher gequoteter SSH-Argumentvektor ausgeführt; die Zugangsdaten bleiben auf stdin. Gezielte Tests decken den echten Release-State-Verbraucher und die transportierte Kommandoform ab.

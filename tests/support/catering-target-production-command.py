@@ -9,6 +9,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import re
+import shlex
+import subprocess
 import sys
 
 state_root = Path(os.environ["CATERING_TARGET_FAKE_STATE"])
@@ -114,7 +116,37 @@ if not strict_ssh_options_present(args):
 
 stdin_bytes = sys.stdin.buffer.read()
 stdin_text = stdin_bytes.decode("utf-8", errors="replace")
-joined_args = " ".join(args)
+try:
+    separator = args.index("--")
+    remote_parts = args[separator + 2:]
+    remote_argv = shlex.split(" ".join(remote_parts))
+except (ValueError, IndexError):
+    fail("synthetic ssh: remote command was malformed")
+joined_args = " ".join(remote_argv)
+
+if scenario == "operator-smoke" and "node -e" in joined_args:
+    expected_prefix = [
+        "sudo", "-n", "docker", "exec", "-i", "platform-infra-intake-1", "node", "-e"
+    ]
+    if remote_argv[:len(expected_prefix)] != expected_prefix or len(remote_argv) != len(expected_prefix) + 1:
+        fail("synthetic operator smoke: command was not transported as a bound argument vector")
+
+if 'stage_tool_sha="${12}"' in stdin_text:
+    try:
+        # OpenSSH sends remote argv as one shell command string; empty values
+        # disappear unless the caller quotes each argument for that shell.
+        script_separator = remote_argv.index("--")
+        activation_parameters = remote_argv[script_separator + 1:]
+    except ValueError:
+        fail("synthetic ssh: remote activation command was malformed")
+    probe = subprocess.run(
+        ["bash", "-euo", "pipefail", "-c", 'stage_tool_sha="${12}"', "remote-activation", *activation_parameters],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if probe.returncode != 0:
+        fail("synthetic ssh: remote activation arguments were not preserved")
 
 
 def classify_override() -> str:
@@ -141,12 +173,9 @@ if "docker exec -i" in joined_args and "catering-target-authenticated-smoke.mjs"
 
 
 if "docker exec -i" in joined_args and "node -e" in joined_args:
-    import base64
-
-    match = re.search(r"printf '%s' '([A-Za-z0-9+/=]+)' \| base64 -d", joined_args)
-    if match is None:
-        fail("synthetic operator smoke: encoded source missing")
-    smoke_source = base64.b64decode(match.group(1), validate=True).decode("utf-8")
+    if len(remote_argv) < 9 or remote_argv[6:8] != ["node", "-e"]:
+        fail("synthetic operator smoke: node source was not one remote argument")
+    smoke_source = remote_argv[8]
     if "/api/production/v1/production/plans" not in smoke_source:
         fail("synthetic operator smoke: plans read route missing")
     if "/api/production/v1/production/cases" in smoke_source:
@@ -272,22 +301,53 @@ if "TARGET_PREFLIGHT_OK target=" in stdin_text:
     raise SystemExit(0)
 
 
-if "--rollback" in args:
-    rollback_sha = args[args.index("--rollback") + 1]
+if "--rollback" in remote_argv:
+    rollback_sha = remote_argv[remote_argv.index("--rollback") + 1]
     installed_sha = (state_root / "installed-release").read_text(encoding="ascii")
     log(f"ssh verify rollback {rollback_sha}")
     raise SystemExit(0 if rollback_sha == installed_sha else 1)
 
 
-if "manifest_path = regular(\"manifest.json\")" in stdin_text:
+if "bundle manifest binding invalid" in stdin_text:
     count_file = state_root / "bundle-verify-count"
     count = int(count_file.read_text(encoding="utf-8")) if count_file.exists() else 0
     count += 1
     count_file.write_text(str(count), encoding="utf-8")
-    if scenario == "operator-postflight-bundle-fails" and count == 3:
-        log("ssh verify bundle failed")
-        raise SystemExit(1)
     log("ssh verify bundle")
+    raise SystemExit(0)
+
+if 'python3 "$tool" write' in stdin_text:
+    log("ssh stage receipt write")
+    raise SystemExit(0)
+
+if 'python3 "$tool" verify' in stdin_text:
+    if scenario == "operator-stage-binding-drift":
+        log("ssh stage receipt verify failed")
+        raise SystemExit(1)
+    log("ssh stage receipt verify")
+    raise SystemExit(0)
+
+if "# TARGET_STAGE_BINDING_CAPTURE" in stdin_text and len(remote_argv) > 9 and remote_argv[9] == "true":
+    if scenario == "operator-stage-binding-drift-before-load":
+        log("ssh stage receipt verify capture failed")
+        raise SystemExit(1)
+    log("ssh stage receipt verify capture")
+    log("ssh load")
+    raise SystemExit(0)
+
+if "stage receipt binding mismatch" in stdin_text and "python3" in joined_args and "verify" in remote_argv:
+    if scenario == "operator-stage-binding-drift":
+        log("ssh stage receipt verify failed")
+        raise SystemExit(1)
+    log("ssh stage receipt verify")
+    raise SystemExit(0)
+
+if "stage receipt already exists" in stdin_text and "python3" in joined_args and "write" in remote_argv:
+    log("ssh stage receipt write")
+    raise SystemExit(0)
+
+if "install receipt binding mismatch" in stdin_text:
+    log("ssh verify install receipt")
     raise SystemExit(0)
 
 

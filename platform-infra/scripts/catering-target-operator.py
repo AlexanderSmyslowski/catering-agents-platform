@@ -22,6 +22,10 @@ REPOSITORY = "AlexanderSmyslowski/catering-agents-platform"
 TARGET_ID = "catering-prod-1"
 CI_WORKFLOW = "ci.yml"
 APPLICATION_SERVICES = ("intake", "offer", "production", "exports", "web")
+SOURCE_COMPOSE_FILES = (
+    "platform-infra/docker-compose.catering-target.json",
+    "platform-infra/docker-compose.catering-target.operations.json",
+)
 IMAGE_ID_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -45,6 +49,7 @@ def _safe_run(
     *,
     cwd: Path | None = None,
     binary: bool = False,
+    timeout: float = 30,
     runner: Callable[..., Any] = subprocess.run,
 ) -> Any:
     try:
@@ -54,7 +59,10 @@ def _safe_run(
             capture_output=True,
             text=not binary,
             check=False,
+            timeout=timeout,
         )
+    except subprocess.TimeoutExpired as exc:
+        raise OperatorError("required local or GitHub read timed out") from exc
     except OSError as exc:
         raise OperatorError("required local command is unavailable") from exc
     if result.returncode != 0:
@@ -98,12 +106,13 @@ def _validate_checkout(root_arg: Path, expected_commit: str, label: str) -> Path
             capture_output=True,
             text=True,
             check=False,
+            timeout=10,
         )
         if symbolic.returncode not in (0, 1):
             raise OperatorError(f"{label} checkout state could not be verified")
         detached = symbolic.returncode == 1
         origin = _git(root, "remote", "get-url", "origin")
-    except OperatorError:
+    except (OperatorError, OSError, subprocess.TimeoutExpired):
         raise OperatorError(f"{label} checkout could not be verified") from None
     if reported_root != root:
         raise OperatorError(f"{label} path is not the checkout root")
@@ -162,7 +171,7 @@ def _workflow_runs(commit: str) -> list[dict[str, str]]:
         "--jq",
         query,
     ]
-    result = _safe_run(command)
+    result = _safe_run(command, timeout=30)
     rows: list[dict[str, str]] = []
     for line in result.stdout.splitlines():
         fields = line.split("\t")
@@ -172,13 +181,17 @@ def _workflow_runs(commit: str) -> list[dict[str, str]]:
 
 
 def _is_ancestor(root: Path, commit: str) -> bool:
-    result = subprocess.run(
-        ["git", "-C", str(root), "merge-base", "--is-ancestor", commit, "refs/remotes/origin/main"],
-        cwd=str(root),
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "merge-base", "--is-ancestor", commit, "refs/remotes/origin/main"],
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise OperatorError("origin/main ancestry check timed out") from exc
     if result.returncode not in (0, 1):
         raise OperatorError("origin/main ancestry could not be verified")
     return result.returncode == 0
@@ -198,6 +211,7 @@ def verify_commit_gates(
         _safe_run(
             ["git", "-C", str(operations), "fetch", "--no-tags", "origin", "+refs/heads/main:refs/remotes/origin/main"],
             cwd=operations,
+            timeout=30,
         )
         product_in_main = _is_ancestor(operations, product_commit)
         operations_in_main = _is_ancestor(operations, operations_commit)
@@ -219,6 +233,12 @@ def _file_sha256(path: Path) -> str:
     except OSError as exc:
         raise OperatorError("bundle artifact is unavailable or unreadable") from exc
     return digest.hexdigest()
+
+
+def _source_compose_digests(source_root: Path) -> dict[str, str]:
+    if source_root.is_symlink() or not source_root.is_dir():
+        raise OperatorError("bound product source is not a real directory")
+    return {relative: _file_sha256(_regular_file(source_root, relative)) for relative in SOURCE_COMPOSE_FILES}
 
 
 def _regular_file(root: Path, name: str) -> Path:
@@ -284,6 +304,7 @@ def verify_bundle(
     product_commit: str,
     operations_commit: str,
     expected_manifest_sha256: str,
+    product_source_root: Path,
 ) -> dict[str, Any]:
     if not COMMIT_RE.fullmatch(product_commit) or not COMMIT_RE.fullmatch(operations_commit):
         raise OperatorError("bundle requires full product and operations commit SHAs")
@@ -308,10 +329,11 @@ def verify_bundle(
         "operationsCommit",
         "images",
         "artifacts",
+        "sourceFiles",
     }:
         raise OperatorError("bundle manifest shape is unsupported")
     if (
-        manifest.get("schemaVersion") != 1
+        manifest.get("schemaVersion") != 2
         or manifest.get("repository") != REPOSITORY
         or manifest.get("targetId") != TARGET_ID
         or manifest.get("platform") != "linux/amd64"
@@ -322,6 +344,14 @@ def verify_bundle(
 
     images = manifest.get("images")
     artifacts = manifest.get("artifacts")
+    source_files = manifest.get("sourceFiles")
+    if (
+        not isinstance(source_files, dict)
+        or set(source_files) != set(SOURCE_COMPOSE_FILES)
+        or any(not isinstance(value, str) or not SHA256_RE.fullmatch(value) for value in source_files.values())
+        or source_files != _source_compose_digests(product_source_root)
+    ):
+        raise OperatorError("bundle Compose source binding does not match the product checkout")
     if not isinstance(images, dict) or set(images) != {"runtime", "web"}:
         raise OperatorError("bundle image set is incomplete or unexpected")
     if not isinstance(artifacts, dict) or set(artifacts) != {
@@ -535,8 +565,9 @@ def create_bundle(
         "runtime-image.tar.gz": _file_sha256(staging / "runtime-image.tar.gz"),
         "web-image.tar.gz": _file_sha256(staging / "web-image.tar.gz"),
     }
+    source_files = _source_compose_digests(source_context)
     manifest = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "repository": REPOSITORY,
         "targetId": TARGET_ID,
         "platform": "linux/amd64",
@@ -555,11 +586,12 @@ def create_bundle(
             },
         },
         "artifacts": artifacts,
+        "sourceFiles": source_files,
     }
     manifest_path = staging / "manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     manifest_sha256 = _file_sha256(manifest_path)
-    verify_bundle(staging, product_commit, operations_commit, manifest_sha256)
+    verify_bundle(staging, product_commit, operations_commit, manifest_sha256, source_context)
     try:
         staging.rename(output)
     except OSError as exc:
@@ -573,7 +605,7 @@ def create_bundle(
 
 
 def production_runner_command(root: Path, mode: str) -> list[str]:
-    if mode not in {"--preflight", "--update"}:
+    if mode not in {"--preflight", "--stage", "--apply", "--verify", "--update"}:
         raise OperatorError("unsupported production runner mode")
     runner = root / "platform-infra/scripts/catering-target-production-update.sh"
     if not runner.is_file() or runner.is_symlink():
@@ -639,11 +671,22 @@ def _arguments() -> argparse.ArgumentParser:
     preflight = subparsers.add_parser("preflight", help="run the separate read-only target preflight")
     bound_inputs(preflight)
 
-    apply = subparsers.add_parser("apply", help="stage and activate an already verified bundle on the target")
+    stage = subparsers.add_parser("stage", help="transfer an already verified bundle without activation")
+    bound_inputs(stage)
+    stage.add_argument("--bundle-dir", type=Path, required=True)
+    stage.add_argument("--manifest-sha256", required=True)
+    stage.add_argument("--confirm", required=True)
+
+    apply = subparsers.add_parser("apply", help="activate only an already staged and bound bundle")
     bound_inputs(apply)
     apply.add_argument("--bundle-dir", type=Path, required=True)
     apply.add_argument("--manifest-sha256", required=True)
     apply.add_argument("--confirm", required=True)
+
+    verify = subparsers.add_parser("verify", help="perform GitHub-free read-only verification of an installed binding")
+    bound_inputs(verify)
+    verify.add_argument("--bundle-dir", type=Path, required=True)
+    verify.add_argument("--manifest-sha256", required=True)
 
     gate = subparsers.add_parser("_gate", help=argparse.SUPPRESS)
     bound_inputs(gate)
@@ -654,6 +697,11 @@ def _arguments() -> argparse.ArgumentParser:
     bound_inputs(bundle_bindings)
     bundle_bindings.add_argument("--bundle-dir", type=Path, required=True)
     bundle_bindings.add_argument("--manifest-sha256", required=True)
+
+    local_bundle_bindings = subparsers.add_parser("_bundle-bindings-local", help=argparse.SUPPRESS)
+    bound_inputs(local_bundle_bindings)
+    local_bundle_bindings.add_argument("--bundle-dir", type=Path, required=True)
+    local_bundle_bindings.add_argument("--manifest-sha256", required=True)
     return parser
 
 
@@ -664,12 +712,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         ops_root = repository_root()
         product_sha = args.product_commit
         operations_sha = args.operations_commit
-        operations, product = verify_commit_gates(
-            ops_root,
-            operations_sha,
-            args.product_source,
-            product_sha,
-        )
+        if args.phase in {"verify", "_bundle-bindings-local"}:
+            operations = _validate_checkout(ops_root, operations_sha, "operations")
+            product = _validate_checkout(args.product_source, product_sha, "product")
+            if operations == product:
+                raise OperatorError("product and operations checkouts must be separate")
+        else:
+            operations, product = verify_commit_gates(
+                ops_root,
+                operations_sha,
+                args.product_source,
+                product_sha,
+            )
         if args.phase == "validate":
             print(f"CATERING_OPERATOR_GATES_OK product={product_sha} operations={operations_sha}")
             return 0
@@ -681,10 +735,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             if (args.bundle_dir is None) != (args.manifest_sha256 is None):
                 raise OperatorError("bundle directory and manifest SHA must be supplied together")
             if args.bundle_dir is not None:
-                verify_bundle(args.bundle_dir, product_sha, operations_sha, args.manifest_sha256)
+                verify_bundle(args.bundle_dir, product_sha, operations_sha, args.manifest_sha256, product)
             return 0
-        if args.phase == "_bundle-bindings":
-            manifest = verify_bundle(args.bundle_dir, product_sha, operations_sha, args.manifest_sha256)
+        if args.phase in {"_bundle-bindings", "_bundle-bindings-local"}:
+            manifest = verify_bundle(args.bundle_dir, product_sha, operations_sha, args.manifest_sha256, product)
             print(f"{manifest['images']['runtime']['imageId']}\t{manifest['images']['web']['imageId']}")
             return 0
 
@@ -692,10 +746,25 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.phase == "preflight":
             _run_production_phase(production_runner_command(operations, "--preflight"), environment)
             return 0
+        if args.phase == "stage":
+            if args.confirm != "STAGE_CATERING_TARGET":
+                raise OperatorError("stage requires --confirm STAGE_CATERING_TARGET")
+            verify_bundle(args.bundle_dir, product_sha, operations_sha, args.manifest_sha256, product)
+            environment.update(_runner_environment(
+                product_sha, operations_sha, product,
+                bundle_dir=args.bundle_dir, manifest_sha256=args.manifest_sha256,
+            ))
+            environment["CATERING_TARGET_CONFIRMATION"] = "STAGE_CATERING_TARGET"
+            with tempfile.TemporaryDirectory(prefix="catering-target-source-") as temporary:
+                sync_source = Path(temporary) / "source"
+                export_product_context(product, product_sha, sync_source)
+                environment["CATERING_TARGET_SOURCE_SYNC_ROOT"] = str(sync_source)
+                _run_production_phase(production_runner_command(operations, "--stage"), environment)
+            return 0
         if args.phase == "apply":
-            if args.confirm != "UPDATE_CATERING_TARGET":
-                raise OperatorError("apply requires --confirm UPDATE_CATERING_TARGET")
-            verify_bundle(args.bundle_dir, product_sha, operations_sha, args.manifest_sha256)
+            if args.confirm != "ACTIVATE_CATERING_TARGET":
+                raise OperatorError("apply requires --confirm ACTIVATE_CATERING_TARGET")
+            verify_bundle(args.bundle_dir, product_sha, operations_sha, args.manifest_sha256, product)
             environment.update(
                 _runner_environment(
                     product_sha,
@@ -705,12 +774,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                     manifest_sha256=args.manifest_sha256,
                 )
             )
-            environment["CATERING_TARGET_CONFIRMATION"] = "UPDATE_CATERING_TARGET"
-            with tempfile.TemporaryDirectory(prefix="catering-target-source-") as temporary:
-                sync_source = Path(temporary) / "source"
-                export_product_context(product, product_sha, sync_source)
-                environment["CATERING_TARGET_SOURCE_SYNC_ROOT"] = str(sync_source)
-                _run_production_phase(production_runner_command(operations, "--update"), environment)
+            environment["CATERING_TARGET_CONFIRMATION"] = "ACTIVATE_CATERING_TARGET"
+            _run_production_phase(production_runner_command(operations, "--apply"), environment)
+            return 0
+        if args.phase == "verify":
+            verify_bundle(args.bundle_dir, product_sha, operations_sha, args.manifest_sha256, product)
+            environment.update(_runner_environment(
+                product_sha, operations_sha, product,
+                bundle_dir=args.bundle_dir, manifest_sha256=args.manifest_sha256,
+            ))
+            _run_production_phase(production_runner_command(operations, "--verify"), environment)
             return 0
     except OperatorError as exc:
         print(f"CATERING_OPERATOR_FAIL reason={exc}", file=sys.stderr)

@@ -23,6 +23,21 @@ SERVICES = {
 }
 ARCHIVES = {"runtime": "runtime-image.tar.gz", "web": "web-image.tar.gz"}
 ARTIFACTS = {"candidate-images.json", "runtime-image.tar.gz", "web-image.tar.gz"}
+SOURCE_COMPOSE_FILES = {
+    "platform-infra/docker-compose.catering-target.json",
+    "platform-infra/docker-compose.catering-target.operations.json",
+}
+LEGACY_MANIFEST_KEYS = {
+    "schemaVersion",
+    "repository",
+    "targetId",
+    "platform",
+    "productCommit",
+    "operationsCommit",
+    "images",
+    "artifacts",
+}
+CURRENT_MANIFEST_KEYS = LEGACY_MANIFEST_KEYS | {"sourceFiles"}
 
 
 class ReleaseBindingError(Exception):
@@ -94,6 +109,8 @@ def _verify_manifest(
     web_image: str,
     expected_uid: int,
     expected_gid: int,
+    *,
+    allow_legacy_schema: bool = False,
 ) -> None:
     _require(SHA256_RE.fullmatch(manifest_sha256) is not None)
     manifest_path = _regular_file(release / "manifest.json", 0o644, expected_uid, expected_gid)
@@ -102,23 +119,28 @@ def _verify_manifest(
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise ReleaseBindingError("release manifest is invalid") from exc
+    _require(isinstance(manifest, dict))
+    schema_version = manifest.get("schemaVersion")
+    if type(schema_version) is int and schema_version == 1:
+        # Schema 1 is retained only so an existing installed release can be verified or rolled back.
+        _require(allow_legacy_schema and set(manifest) == LEGACY_MANIFEST_KEYS)
+    elif type(schema_version) is int and schema_version == 2:
+        _require(set(manifest) == CURRENT_MANIFEST_KEYS)
+        source_files = manifest.get("sourceFiles")
+        _require(
+            isinstance(source_files, dict)
+            and set(source_files) == SOURCE_COMPOSE_FILES
+            and all(isinstance(value, str) and SHA256_RE.fullmatch(value) is not None for value in source_files.values())
+        )
+        source = _directory(release / "source")
+        _directory(source / "platform-infra")
+        for relative, expected_sha256 in source_files.items():
+            source_path = _regular_file(source / relative, 0o644, expected_uid, expected_gid)
+            _require(_digest(source_path) == expected_sha256)
+    else:
+        raise ReleaseBindingError("release state is not bound to the expected commit and artifacts")
     _require(
-        isinstance(manifest, dict)
-        and set(manifest)
-        == {
-            "schemaVersion",
-            "repository",
-            "targetId",
-            "platform",
-            "productCommit",
-            "operationsCommit",
-            "images",
-            "artifacts",
-        }
-    )
-    _require(
-        manifest["schemaVersion"] == 1
-        and manifest["repository"] == REPOSITORY
+        manifest["repository"] == REPOSITORY
         and manifest["targetId"] == TARGET_ID
         and manifest["platform"] == "linux/amd64"
         and manifest["productCommit"] == product_commit
@@ -191,6 +213,7 @@ def _installed_receipt(
             web_image,
             expected_uid,
             expected_gid,
+            allow_legacy_schema=True,
         )
 
 
