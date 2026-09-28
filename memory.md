@@ -1,7 +1,7 @@
 # memory.md
 
-version: 5.409
-date: 2026-09-26
+version: 5.410
+date: 2026-09-28
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
 
@@ -19,7 +19,7 @@ repo: AlexanderSmyslowski/catering-agents-platform
   - Der alte Produkt-Preflight kennt die Release-Verzeichnisse nicht und bewertet die App-Container abweichend. Diese Abweichung nicht durch Abschwächen von Prüfungen „reparieren“.
   - Die alten kanonischen Compose-Dateien (`compose.json`, `operations.json` unter `/opt/catering-agents-platform/platform-infra/`) pinnen weiterhin die alten App-Images. Sie und Legacy-Deploywege (`Deploy production`, `deploy-hetzner.sh`, `deploy-web-listener-hetzner.sh`) nicht für ein manuelles Update verwenden.
   - Ein technisch erfolgreicher Release ist nicht gleich einer vollständigen fachlichen Abnahme aller CateringOS-Funktionen. Reale Küchenprüfung, Rezept- und Allergenfreigaben bleiben offen.
-- Der folgende Abschnitt vom 22.09.2026 beschreibt den damaligen Stand; dessen Aussage „Noch kein … Deployment“ ist durch diesen Abschnitt überholt, aber als Historie erhalten. Der offene Draft-PR #709 (grüner Read-only-Preflight vom 23.09.2026, Version 5.408) bleibt davon getrennt.
+- Der folgende Abschnitt vom 22.09.2026 beschreibt den damaligen Stand; dessen Aussage „Noch kein … Deployment“ ist durch diesen Abschnitt überholt, aber als Historie erhalten. Der offene Draft-PR #709 dokumentiert einen grünen Read-only-Preflight vom 23.09.2026, also einen historischen Vorabnachweis vor dem Release. Das Preflight-Ergebnis selbst belegt weder eine PR-Integration oder -Schließung noch eine Updatefreigabe.
 
 ## Aktueller Stand – eigenständiger Catering-Zielserver-Updateweg (2026-09-22)
 
@@ -2260,7 +2260,7 @@ Quelle: `8de2e96c8604f12da2ec14c39b187db04dfb61cf`. Der folgende Betriebsbericht
 
 ### 5.409 - 2026-09-26 — Catering-Zielserver-Release 5b2c7708 abgeschlossen
 
-- Versionsnummer: 5.408 ist durch den offenen Draft-PR #709 (grüner Read-only-Preflight vom 23.09.2026) belegt; dieser Nachtrag verwendet deshalb 5.409.
+- Versionsnummer: Der Draft-PR #709 führte auf seinem Head die Versionsangabe 5.408. Sein Read-only-Preflight vom 23.09.2026 war ein historischer Vorabnachweis vor dem Release am 26.09.2026; daraus folgt weder eine Integration oder Schließung von #709 noch eine Freigabe des Updatewegs. Dieser Release-Nachtrag von #713 verwendet Version 5.409.
 - Release am 26.09.2026 erfolgreich durchgeführt und verifiziert: genau ein freigegebener One-shot-Lauf, 09:55:11–09:56:14 UTC, Wrapper-Exit 0. Installierter Produktcommit `5b2c77089e7fd9051b4a55e38240cd69d6e9ed99` (unverändert), separat verwendeter Operationscommit `f2546468c5bce0e8f2298ee1a92c6c6da3b2ae71` (Draft-PR #712, ungemergt).
 - Wiederverwendete V2-Images: Runtime `sha256:778c2daadc272666192a1212095275c1cafb5bdb4b0845f49ce16312207050b2`, Web `sha256:d95343680e0b02491b3fb668b1ecd70bd9120f29c27c3dcf8c8f5fb9992099ab`. Kein Rebuild, kein Image-Load, keine Migration.
 - Login, Session und `production_read` jeweils HTTP 200. `TARGET_FINAL_VERIFY_OK` und `CATERING_RELEASE_AND_VERIFY_OK`; Schema 3, `auth/users`=1, Smoke-Version 2, `failedLoginCount`=0, Lock absent, Install-Receipt vorhanden. PostgreSQL- und Edge-Container laut Vorher-/Nachher-Prüfung unverändert.
@@ -2268,3 +2268,8 @@ Quelle: `8de2e96c8604f12da2ec14c39b187db04dfb61cf`. Der folgende Betriebsbericht
 - Einmalfreigabe verbraucht; den One-shot-Runner nicht erneut ausführen. Nach dem Lauf kein weiterer Targetzugriff.
 - Offene Betriebsnachträge: Integration von PR #712 ist separat freizugeben; alter Produkt-Preflight nicht durch Abschwächung „reparieren“; alte kanonische Compose-Dateien und Legacy-Deploywege nicht für manuelle Updates verwenden. Technischer Release ist keine fachliche Gesamtabnahme.
 - Snapshot: `docs/agent-memory/2026-09-26-catering-target-release-5b2c7708.md`. Hub-Writeback zu diesem Stand nur als Dry-run vorbereitet, nicht ausgeführt.
+
+### 5.410 - 2026-09-28 — Lokale Nachbesserung PR #713
+
+- Die Versionszeile wird nach dem PR-#713-Head von 5.409 auf 5.410 fortgeschrieben. Der #709-Hinweis ordnet den Read-only-Preflight vom 23.09.2026 als historischen Vorabnachweis vor dem Release ein; daraus wird keine Integration, Schließung oder Updatefreigabe abgeleitet.
+- Der historische Release-Eintrag 5.409 und seine Belege, Marker, Hashes und Commit-Bindungen bleiben erhalten.
