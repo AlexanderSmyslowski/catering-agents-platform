@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 const root = path.resolve(import.meta.dirname, "..");
 const productionRunner = path.join(root, "platform-infra/scripts/catering-target-production-update.sh");
 const fakeCommand = path.join(root, "tests/support/catering-target-production-command.py");
+const fakePythonCommand = path.join(root, "tests/support/catering-target-python-command.sh");
 
 function runProduction(scenario: string, mode: "preflight" | "update" = "update", extraEnv: Record<string, string> = {}) {
   expect(existsSync(fakeCommand), "production command fixture must exist").toBe(true);
@@ -16,14 +17,21 @@ function runProduction(scenario: string, mode: "preflight" | "update" = "update"
   const fs = require("node:fs") as typeof import("node:fs");
   fs.mkdirSync(bin);
   writeFileSync(path.join(state, "commands.log"), "");
+  const realPython = execFileSync("/bin/sh", ["-c", "command -v python3"], { encoding: "utf8" }).trim();
+  const bundle = path.join(state, "bundle");
+  fs.mkdirSync(bundle);
+  for (const artifact of ["candidate-images.json", "manifest.json", "runtime-image.tar.gz", "web-image.tar.gz"]) {
+    writeFileSync(path.join(bundle, artifact), "synthetic-bound-artifact\n");
+  }
 
   for (const name of ["ssh", "docker", "rsync"]) {
     symlinkSync(fakeCommand, path.join(bin, name));
   }
+  symlinkSync(fakePythonCommand, path.join(bin, "python3"));
   chmodSync(fakeCommand, 0o700);
 
-  const key = path.join(state, "id_ed25519");
-  const knownHosts = path.join(state, "known_hosts");
+  const key = path.join(state, "id ed25519");
+  const knownHosts = path.join(state, "known hosts");
   writeFileSync(key, "synthetic-key\n", { mode: 0o600 });
   writeFileSync(knownHosts, "target.invalid ssh-ed25519 synthetic\n", { mode: 0o600 });
 
@@ -34,8 +42,13 @@ function runProduction(scenario: string, mode: "preflight" | "update" = "update"
     env: {
       ...process.env,
       PATH: bin + ":" + (process.env.PATH ?? "/usr/bin:/bin"),
+      CATERING_TARGET_REAL_PYTHON3: realPython,
       RUNNER_TEMP: state,
       DEPLOY_COMMIT_SHA: commit,
+      CATERING_TARGET_OPERATIONS_COMMIT: scenario.startsWith("operator-") ? "f".repeat(40) : "",
+      CATERING_TARGET_BUNDLE_DIR: scenario.startsWith("operator-") ? bundle : "",
+      CATERING_TARGET_MANIFEST_SHA256: scenario.startsWith("operator-") ? "c".repeat(64) : "",
+      CATERING_TARGET_SOURCE_SYNC_ROOT: scenario.startsWith("operator-") ? root : "",
       CATERING_TARGET_DEPLOY_HOST: "target.invalid",
       CATERING_TARGET_DEPLOY_USER: "operator",
       CATERING_TARGET_SSH_KEY_FILE: key,
@@ -103,6 +116,50 @@ describe("Catering target production control flow", () => {
     expect(commands).toContain("ssh activate candidate");
     expect(commands).toContain("ssh activate previous");
     expect(commands).toContain("ssh verify previous");
+    expect(commands).toContain("ssh unlock");
+  });
+
+  it("uses the release observed under the acquired lock when another update wins the race", () => {
+    const { result, commands } = runProduction("operator-rollback-snapshot-race");
+    const releaseA = "a".repeat(40);
+    const releaseB = "b".repeat(40);
+    expect(result.status).not.toBe(0);
+    expect(result.stdout, result.stderr + "\n" + commands).toContain("TARGET_UPDATE_RESULT rolled_back");
+    expect(commands).toContain(`ssh preflight release=${releaseA}`);
+    expect(commands).toContain(`ssh preflight release=${releaseB}`);
+    expect(commands).toContain(`ssh verify rollback ${releaseB}`);
+    expect(commands).not.toContain(`ssh verify rollback ${releaseA}`);
+    expect(commands).toContain("ssh activate previous");
+    expect(commands).toContain("ssh unlock");
+  });
+
+  it("runs the operations-bound smoke through stdin without putting credentials in the remote command", () => {
+    const { result, commands } = runProduction("operator-smoke");
+    expect(result.status, result.stderr + "\n" + commands).toBe(0);
+    expect(result.stdout).toContain("TARGET_UPDATE_RESULT updated");
+    expect(commands).toContain("ssh smoke operator plans");
+    expect(commands).toContain("ssh receipt");
+    expect(commands).toContain("ssh unlock");
+    expect(commands).not.toContain("synthetic-password");
+    expect(commands).not.toContain("synthetic-user");
+  });
+
+  it("rejects missing smoke credentials before contacting the target", () => {
+    const { result, commands } = runProduction("operator-smoke", "update", { CATERING_TARGET_SMOKE_PIN: "" });
+    expect(result.status, result.stderr + "\n" + commands).not.toBe(0);
+    expect(result.stderr).toContain("CATERING_TARGET_SMOKE_PIN is required");
+    expect(commands).toBe("");
+  });
+
+  it("rolls back when the operator bundle recheck fails during postflight", () => {
+    const { result, commands } = runProduction("operator-postflight-bundle-fails");
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).toContain("TARGET_UPDATE_RESULT rolled_back");
+    expect(commands).toContain("ssh verify bundle failed");
+    expect(commands).toContain("ssh activate candidate");
+    expect(commands).toContain("ssh activate previous");
+    expect(commands).toContain("ssh verify previous");
+    expect(commands).not.toContain("ssh receipt");
     expect(commands).toContain("ssh unlock");
   });
 

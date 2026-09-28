@@ -1,16 +1,24 @@
 # memory.md
 
-version: 5.410
+version: 5.411
 date: 2026-09-28
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
+
+## Aktueller Stand – P1 dauerhafter CateringOS-Updateweg (2026-09-28)
+
+- Ein versionierter Mac-Operator bindet Produkt- und Betriebswerkzeug-Commit getrennt. Beide Checkouts müssen sauber, detached, aus dem erwarteten Repository und auf dem explizit gebundenen vollständigen SHA stehen. Der Build- und Transfersync exportiert nur die getrackte Produktquelle; der root-seitige Empfänger übernimmt Dateien ohne Mac-UID/GID.
+- Beide Commitbindungen werden fail-closed gegen `origin/main`-Historie und einen erfolgreichen Workflow `CI` mit `event=push`, `head_branch=main` und exakt passendem `head_sha` geprüft. Ein PR-Lauf allein und ein Zwang auf den aktuellen `main`-HEAD genügen beziehungsweise gelten nicht.
+- Der lokale secret-freie Bundlebau bindet Produkt-/Operations-SHA, `linux/amd64`-Image-IDs, Appdienste, Image-Archive, Candidate-Override und Manifest-SHA-256. Der spätere Runner revalidiert diese Bindungen vor Bereitstellung, Image-Laden und Aktivierung.
+- Die Phasen `validate`, `bundle`, read-only `preflight`, Zielbereitstellung, Aktivierung und Verifikation sind getrennt markiert. Ein release-aware Read-only-Gate validiert Kandidatenmanifest und Imagearchive sowie installierten Marker/Receipt; der Rollback validiert den unter gehaltenem Update-Lock gebundenen Vorgänger-Receipt unabhängig vom Candidate-/GitHub-Gate. Der authentisierte Read-Smoke wird aus dem geprüften Betriebswerkzeug-Commit ausgeführt und liest `/plans` für `read_only_operator`. Legacy-Deploypfade und die bestehenden GitHub-Zielworkflows bleiben außerhalb des neuen Operatorwegs.
+- Lokale gezielte Prüfungen: 42/42 Tests in drei Vitest-Dateien, 21/21 Python-Tests, Bash-/Node-Syntax, Python-AST, CI-YAML-Parse und Diffcheck erfolgreich. `apply` verlangt alle vier nichtleeren Smoke-Eingaben vor Zielkontakt; die späte Funktionsprüfung liefert kontrolliert Fehler zurück, damit die Rollback-Behandlung nicht durch einen Bash-Abbruch umgangen wird. Kein Zielzugriff, Bundle-/Release-Einsatz, GitHub-Zielworkflow, Hub-Writeback oder Deployment wurde ausgeführt. Der P1-PR- und CI-Stand wird separat anhand seines tatsächlichen Commits berichtet.
 
 ## Aktueller Stand – Catering-Zielserver-Release 5b2c7708 abgeschlossen (2026-09-26)
 
 - **Release am 26.09.2026 erfolgreich durchgeführt und verifiziert.** Produktcommit `5b2c77089e7fd9051b4a55e38240cd69d6e9ed99` läuft unverändert auf `catering-prod-1`: genau ein freigegebener One-shot-Lauf, 09:55:11–09:56:14 UTC, Wrapper-Exit 0.
 - Separat verwendeter Operationscommit `f2546468c5bce0e8f2298ee1a92c6c6da3b2ae71` aus dem ungemergten Draft-PR #712. Ausgeführt vom Mac des Projektverantwortlichen, nicht über den GitHub-Workflow `update-catering-target.yml`.
 - Wiederverwendete V2-Images ohne Rebuild, Image-Load oder Migration: Runtime `sha256:778c2daadc272666192a1212095275c1cafb5bdb4b0845f49ce16312207050b2` (intake, offer, production, exports), Web `sha256:d95343680e0b02491b3fb668b1ecd70bd9120f29c27c3dcf8c8f5fb9992099ab`.
-- Authentisierter Smoke mit dem bestehenden `read_only_operator`-Smoke-User: Login, Session und `production_read` (`GET /api/production/v1/production/plans`) jeweils HTTP 200.
+- Authentisierter Smoke mit dem bestehenden `read_only_operator`-Smoke-User: Login, Session und `production_read` (`GET /api/production/v1/production/plans`) jeweils HTTP 200. Der neue Mac-Operator bindet das `/plans`-Smoke-Skript an den geprüften Betriebswerkzeug-Commit; Credentials bleiben im SSH/Docker-stdin.
 - `TARGET_FINAL_VERIFY_OK` und `CATERING_RELEASE_AND_VERIFY_OK`: Schema-Version 3, `auth/users`=1, Smoke-User-Version 2, `failedLoginCount`=0, Update-Lock absent, Install-Receipt vorhanden, `runtime_state=release:5b2c77089e7fd9051b4a55e38240cd69d6e9ed99`. PostgreSQL- und Edge-Container laut Vorher-/Nachher-Prüfung unverändert; Volume `platform-infra_postgres_data`.
 - **Einmalfreigabe verbraucht.** Den One-shot-Runner nicht erneut ausführen; One-shot-Marker und redigiertes Protokoll liegen lokal unter `~/.codex/private/catering-final-release-20260926-f2546468/`.
 - Vollständige Markerausgabe, Bindungen, Belegpfade und Vorgeschichte: `docs/agent-memory/2026-09-26-catering-target-release-5b2c7708.md`.
@@ -2273,3 +2281,9 @@ Quelle: `8de2e96c8604f12da2ec14c39b187db04dfb61cf`. Der folgende Betriebsbericht
 
 - Die Versionszeile wird nach dem PR-#713-Head von 5.409 auf 5.410 fortgeschrieben. Der #709-Hinweis ordnet den Read-only-Preflight vom 23.09.2026 als historischen Vorabnachweis vor dem Release ein; daraus wird keine Integration, Schließung oder Updatefreigabe abgeleitet.
 - Der historische Release-Eintrag 5.409 und seine Belege, Marker, Hashes und Commit-Bindungen bleiben erhalten.
+
+### 5.411 - 2026-09-28 — P1 dauerhafter CateringOS-Updateweg
+
+- Versionierter Operator-Einstieg mit getrennten Produkt-/Betriebswerkzeug-Gates, secret-freiem `linux/amd64`-Bundle und manifest-/digest-gebundener Phase für späteren Zielbetrieb ergänzt. Produkt- und Tool-Commit müssen jeweils in `origin/main` liegen und einen erfolgreichen exakten `CI`-Pushlauf auf `main` besitzen; historische passende Commits bleiben zulässig.
+- Read-only Release-State-Prüfung für die Release-Verzeichnisse sowie gebundener Rollback und zielseitig root-owned Transfers ergänzt. Der operationsgebundene Read-Smoke nutzt `/plans`; Preflight-Gatefehler stoppen explizit. Gezielt geprüft: 42/42 Vitest- und 21/21 Python-Tests; darin CI-Ereignisbindung, Checkout-/Commitgrenzen, Manifest-/Digestfehler, fehlende Artefakte, Legacy-Pfad-Sperre, Mac-Grenze, Receipt-Rollback, konkurrierender Releasewechsel, Read-Smoke-Transport, fehlende Smoke-Eingabe vor Zielkontakt und Postflight-Bundlefehler. Der vollständige P1-PR-/CI-Status wird separat am tatsächlichen Head ausgewiesen.
+- Keine Zielverbindung, Aktivierung, Deployment, manuelle CI-Ausführung oder Hub-Schreibwirkung im P1-Implementierungsschritt.

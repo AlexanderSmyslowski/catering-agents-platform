@@ -1,8 +1,8 @@
 # CateringOS – eigenständiger Zielserver-Updateweg
 
-**Stand:** 2026-09-22  
+**Stand:** 2026-09-28
 **Ziel:** `catering-prod-1`  
-**Status:** Implementiert und synthetisch/CI-geprüft. **Nicht gegen den echten Zielserver ausgeführt. Kein Deployment-GO.**
+**Status:** Versionierter Mac-Operator mit getrennten Commit- und Artefaktbindungen. **Der P1-Stand wurde nicht gegen den echten Zielserver ausgeführt. Kein Deployment-GO.**
 
 ## Zweck und Grenze
 
@@ -12,27 +12,76 @@ Der historische Workflow `Deploy production` und `platform-infra/scripts/deploy-
 
 Der erste echte Lauf gegen den Zielserver bleibt ein separater Betriebsauftrag und beginnt mit einer frischen read-only Zielprüfung.
 
-## Manueller Einstieg
+## Versionierter Operator-Einstieg
 
-Workflow: **Update Catering target**
+Der einzige neue Einstieg ist `platform-infra/scripts/catering-target-operator.py` auf dem autorisierten Operator-Mac. Produktquelle und Betriebswerkzeug werden aus getrennten, sauberen, detached Checkouts desselben Repositorys gelesen. Beide Commits werden als vollständige lowercase SHA übergeben.
 
-Datei: `.github/workflows/update-catering-target.yml`
+Voraussetzung sind macOS, Python 3.9 oder neuer, Git, die GitHub CLI `gh`, Docker mit `linux/amd64`-Buildunterstützung, `rsync` und OpenSSH. Der Operator wird aus dem Betriebswerkzeug-Checkout gestartet; `--product-source` zeigt auf den separaten Produktcheckout.
 
-Der Workflow besitzt ausschließlich `workflow_dispatch` und benötigt:
+Beispiel mit gesetzten Shellvariablen:
 
-- `commit_sha`: exakter 40-stelliger Git-Commit;
-- `confirmation`: exakt `UPDATE_CATERING_TARGET`.
+```bash
+operator=platform-infra/scripts/catering-target-operator.py
+product=0000000000000000000000000000000000000000
+operations=1111111111111111111111111111111111111111
+product_source=/path/to/detached-product-checkout
+bundle=/path/to/catering-target-bundle
+manifest_sha=PASTE_THE_64_CHARACTER_SHA_FROM_BUNDLE_OUTPUT
 
-Der Job läuft nur von `refs/heads/main`. Nach Checkout wird zusätzlich geprüft, dass:
+python3 "$operator" validate \
+  --product-commit "$product" \
+  --operations-commit "$operations" \
+  --product-source "$product_source"
 
-1. der ausgecheckte Commit exakt `commit_sha` entspricht;
-2. der aktuelle Remote-Head von `main` exakt derselbe Commit ist.
+python3 "$operator" bundle \
+  --product-commit "$product" \
+  --operations-commit "$operations" \
+  --product-source "$product_source" \
+  --output-dir "$bundle"
 
-Damit kann kein älterer oder inzwischen überholter `main`-Stand absichtlich oder versehentlich installiert werden.
+python3 "$operator" preflight \
+  --product-commit "$product" \
+  --operations-commit "$operations" \
+  --product-source "$product_source"
 
-## Eigene Zielserver-Zugangsdaten
+python3 "$operator" apply \
+  --product-commit "$product" \
+  --operations-commit "$operations" \
+  --product-source "$product_source" \
+  --bundle-dir "$bundle" \
+  --manifest-sha256 "$manifest_sha" \
+  --confirm UPDATE_CATERING_TARGET
+```
 
-Der Workflow verwendet ausschließlich die dedizierten `CATERING_TARGET_*`-Secrets. Schlüssel und known_hosts werden temporär unter `RUNNER_TEMP` angelegt und am Ende entfernt.
+`validate` prüft beide Commitbindungen ohne Zielkontakt. Jeder Commit muss in der aktualisierten `origin/main`-Historie liegen und einen abgeschlossenen, erfolgreichen Lauf **CI** mit exakt `event=push`, `head_branch=main` und `head_sha=<gebundener Commit>` besitzen. Ein `pull_request`-Lauf reicht nicht. Historische Commits sind zulässig; der Commit muss nicht dem aktuellen `main`-Head entsprechen.
+
+Die Betriebswerkzeug-Mindestannahme ist dieselbe überprüfbare Kombination: Integration in `origin/main` plus erfolgreiche CI genau auf diesem SHA. Die grüne CI enthält die vollständigen Repositorytests, die neuen Commit-/Manifest-Gates, den synthetischen Produktionskontrollfluss und die Remote-Befehlsgrenzen; ein zusätzlicher Zertifizierungsdienst oder ein separates Draft-PR-Merkmal ist nicht Teil des Gates. Die historischen E1-/E2-Läufe vom 25.09. waren an #712 und dessen damaligen Head gebundene Nachweise; sie werden nicht als Freigabe für spätere Tool-SHAs wiederverwendet.
+
+`bundle` baut Runtime- und Web-Image für `linux/amd64`, exportiert nur getrackte Dateien des exakten Produktcommits und schließt damit ignorierte lokale Dateien wie `.env` aus dem Docker-Buildkontext aus. Das Manifest bindet Repository, Ziel, Produktcommit, Betriebswerkzeug-Commit, Image-IDs, Anwendungsdienste und SHA-256-Werte von Images und Compose-Override. Sein SHA-256 wird ausgegeben und muss beim späteren `apply` explizit wieder übergeben werden.
+
+Die Phasen bleiben getrennt:
+
+1. `validate`: Commit-/CI-Gates und Checkoutzustand, ohne Zielkontakt.
+2. `bundle`: lokaler secret-freier Build und unveränderlich gebundene Artefakte, ohne Zielkontakt.
+3. `preflight`: read-only Zielprüfung.
+4. `apply`: frischer read-only Preflight, Lock und Bereitstellung des gebundenen Releases, danach gesonderte Aktivierung.
+5. Verifikation: Postflight, Health- und authentisierter Read-Smoke; Receipt erst nach Erfolg.
+
+Vor jeder zielverändernden Phase werden Commit-, CI- und Bundlebindungen erneut fail-closed geprüft. Der Rollback-Snapshot wird aus dem Preflight unter gehaltenem Update-Lock gebunden, damit er bei konkurrierenden Operatorläufen zum tatsächlich aktiven Vorgänger gehört. Rollback und Lockfreigabe sind ausschließlich interne Wiederherstellungs-/Aufräumpfade eines bereits validierten Laufs. Jeder fehlende oder abweichende Commit, Lauf, Manifestwert, Digest oder Artefakt stoppt vor der nächsten Phase.
+
+`apply` ist ein ausdrücklicher Produktionsbefehl. Er wurde in P1 nicht ausgeführt. Die zwei bestehenden GitHub-Workflows `update-catering-target.yml` und `catering-target-preflight.yml` bleiben unverändert; sie sind nicht der neue Einstieg und dürfen bis zur gesonderten Entscheidung nicht ausgelöst werden. Der historische `Deploy production`-Workflow, `deploy-hetzner.sh` und `deploy-web-listener-hetzner.sh` gehören ebenfalls nicht zum neuen Pfad.
+
+## Bestehende GitHub-Zielworkflows
+
+`.github/workflows/update-catering-target.yml` und `.github/workflows/catering-target-preflight.yml` bleiben vorhanden. Sie laufen manuell und erzwingen den aktuellen `main`-Head; sie sind nicht Teil des neuen Operatorwegs. Ihr Auslösen ist bis zu einer gesonderten Entscheidung organisatorisch untersagt. Der neue Operator ruft sie nicht auf.
+
+## Zugangsdaten der unveränderten GitHub-Zielworkflows
+
+Die vorhandenen GitHub-Zielworkflows verwenden ausschließlich dedizierte `CATERING_TARGET_*`-Secrets. Schlüssel und known_hosts werden temporär unter `RUNNER_TEMP` angelegt und am Ende entfernt. Der neue Mac-Operator verwendet diese Actions-Secrets nicht.
+
+## Lokale Zugangsdaten für den Mac-Operator
+
+Für die lokalen Phasen `preflight` und `apply` erwartet der Runner die Umgebungsvariablen `CATERING_TARGET_DEPLOY_HOST`, `CATERING_TARGET_DEPLOY_USER`, `CATERING_TARGET_SSH_KEY_FILE` und `CATERING_TARGET_SSH_KNOWN_HOSTS_FILE`. `apply` benötigt zusätzlich `CATERING_TARGET_SMOKE_BASIC_AUTH_USER`, `CATERING_TARGET_SMOKE_BASIC_AUTH_PASSWORD`, `CATERING_TARGET_SMOKE_LOGIN_CODE` und `CATERING_TARGET_SMOKE_PIN`. Werte werden nur zur Laufzeit lokal bereitgestellt; sie gehören weder in Shellargumente noch in Dateien, Logs oder Bundle-Artefakte.
 
 SSH erzwingt:
 
@@ -43,8 +92,9 @@ SSH erzwingt:
 - festen Port 22.
 
 Secretwerte werden weder in dieses Dokument noch in das Repository geschrieben.
+`apply` prüft, dass alle vier Smoke-Variablen vor einem Zielkontakt gesetzt und nicht leer sind; spätere Prüfungen kehren kontrolliert mit Fehler zurück, damit die vorhandene Rollback-Behandlung greifen kann.
 
-## Separater read-only Preflight
+## Read-only Preflight des unveränderten GitHub-Workflows
 
 Workflow: **Catering target preflight**
 
@@ -94,7 +144,7 @@ Jeder unbekannte oder nicht lesbare kritische Zustand führt zum Abbruch.
 
 Der isolierte Zielaufbau enthält absichtlich keinen vollständigen Repository-Quellbaum unter `/opt/catering-agents-platform`; dort wurden nur die Ziel-Plattformdefinition und servereigene Zustände installiert. Die Migrations- und DDL-Driftprüfung liest den installierten Quellstand deshalb read-only aus `/app` der laufenden immutable Runtime-Appcontainer `intake`, `offer`, `production` und `exports`. Alle vier Fingerprints müssen dem Kandidaten entsprechen; es wird nichts in die Container oder auf den Host geschrieben.
 
-Der Remote-Preflight transportiert den absichtlich leeren Lock-Owner im unlocked/read-only Lauf als festen nichtleeren Sentinel, weil OpenSSH leere Remote-Argumente beim Aufbau der Remote-Kommandozeile nicht zuverlässig als Positionsparameter erhält. Vor dem Lesen der 23 Remote-Argumente wird deren Anzahl fail-closed geprüft; eine Abweichung meldet `TARGET_PREFLIGHT_FAIL gate=remote_argument_count`.
+Der Remote-Preflight transportiert den absichtlich leeren Lock-Owner im unlocked/read-only Lauf als festen nichtleeren Sentinel, weil OpenSSH leere Remote-Argumente beim Aufbau der Remote-Kommandozeile nicht zuverlässig als Positionsparameter erhält. Vor dem Lesen der 30 Remote-Argumente wird deren Anzahl fail-closed geprüft; eine Abweichung meldet `TARGET_PREFLIGHT_FAIL gate=remote_argument_count`.
 
 Fehler im read-only Preflight müssen dabei einen nicht-sensitiven Gate-Namen auf stderr ausgeben:
 
@@ -140,13 +190,15 @@ Eine erforderliche Schemaänderung braucht zuerst einen eigenen geprüften Migra
 
 ## Kandidatenbau
 
-Nach erfolgreichem Preflight und ausdrücklicher Bestätigung:
+Der versionierte Operator baut das lokale Bundle getrennt von Zielprüfung und Aktivierung:
 
-1. werden lokal auf dem GitHub-Runner ein Runtime-Image und ein Web-Image aus dem exakten Commit gebaut;
-2. beide müssen als immutable `sha256:...`-IDs vorliegen;
+1. Runtime- und Web-Image entstehen für `linux/amd64` aus dem exakten Produktcommit auf dem Operator-Mac;
+2. beide müssen als immutable `sha256:...`-IDs vorliegen und ihre Docker-Archive müssen dieselbe Image-ID belegen;
 3. der Candidate-Override enthält ausschließlich die fünf Appdienste und jeweils nur das Feld `image`;
 4. PostgreSQL und Edge werden nicht als Kandidaten gebaut oder ersetzt;
-5. die Images werden als komprimierte Archive für den Zielserver vorbereitet.
+5. Manifest, Override und komprimierte Image-Archive werden gegenseitig über SHA-256 gebunden.
+
+Der spätere `apply` baut keine Images neu. Er prüft das Manifest und die Archive erneut, überträgt sie in den Releasepfad und prüft die Bindungen vor dem Laden und nochmals unmittelbar vor der Aktivierung.
 
 ## Geschützter Release-Sync
 
@@ -196,7 +248,7 @@ Danach läuft ein authentisierter Read-Smoke:
 1. Login über `/api/intake/v1/auth/login`;
 2. Session-Read über `/api/intake/v1/auth/session`;
 3. Prüfung auf Capability `production_read`;
-4. Read der Produktionsfälle über `/api/production/v1/production/cases`.
+4. Beim versionierten Mac-Operator ein Read der Produktionspläne über `/api/production/v1/production/plans` mit dem an den Betriebswerkzeug-Commit gebundenen Smoke-Skript. Der unveränderte GitHub-Legacypfad verwendet weiterhin sein bestehendes Produkt-Skript.
 
 Der Smoke erzeugt keinen Geschäftsvorgang.
 
@@ -244,12 +296,13 @@ Abschlussreview-Korrektur: Ein zusätzlicher RED→GREEN-Test deckt Runtime-DDL 
 
 ## Erster echter Zielserverlauf
 
-Vor einem ersten Dispatch sind erneut erforderlich:
+Vor dem ersten echten Zielzugriff sind erneut erforderlich:
 
-1. aktueller `main`-Commit und grüne CI;
-2. frischer read-only Zielzustand;
-3. Bestätigung, dass Backup-Observer und Rückweg weiterhin gesund sind;
-4. passende `catering-target-production`-Environment-Secrets;
-5. ausdrückliche Betriebsfreigabe für genau diesen Commit.
+1. ausgewählter Produktcommit in `origin/main` mit erfolgreicher `CI` auf exakt diesem SHA als `push` auf `main`;
+2. ausgewählter Betriebswerkzeug-Commit in `origin/main` mit erfolgreicher `CI` auf exakt diesem SHA als `push` auf `main`;
+3. frischer read-only Zielzustand;
+4. Bestätigung, dass Backup-Observer und Rückweg weiterhin gesund sind;
+5. lokal verfügbare, passende Zielzugangsdaten auf dem autorisierten Operator-Mac;
+6. ausdrückliche Betriebsfreigabe für genau diese Commit- und Bundlebindungen.
 
 Bis dahin gilt: **kein Dispatch, kein SSH-Live-Lauf, kein Deployment.**

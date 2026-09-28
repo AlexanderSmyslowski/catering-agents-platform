@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import re
 import sys
 
 state_root = Path(os.environ["CATERING_TARGET_FAKE_STATE"])
@@ -70,6 +71,33 @@ if command == "docker":
 
 if command == "rsync":
     destination = args[-1] if args else ""
+    if "--no-owner" not in args or "--no-group" not in args:
+        fail("synthetic rsync: privileged receiver must own transferred artifacts")
+    import shlex
+
+    try:
+        rsync_ssh = shlex.split(args[args.index("-e") + 1])
+    except (ValueError, IndexError):
+        fail("synthetic rsync: SSH transport is missing")
+    expected_ssh = [
+        "ssh",
+        "-i",
+        os.environ["CATERING_TARGET_SSH_KEY_FILE"],
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "IdentitiesOnly=yes",
+        "-o",
+        "StrictHostKeyChecking=yes",
+        "-o",
+        "UserKnownHostsFile=" + os.environ["CATERING_TARGET_SSH_KNOWN_HOSTS_FILE"],
+        "-o",
+        "ConnectTimeout=10",
+        "-p",
+        "22",
+    ]
+    if rsync_ssh != expected_ssh:
+        fail("synthetic rsync: SSH path arguments were not shell-quoted")
     if destination.endswith("/source/"):
         log("rsync source")
     else:
@@ -90,6 +118,12 @@ joined_args = " ".join(args)
 
 
 def classify_override() -> str:
+    if scenario.startswith("operator-"):
+        installed_file = state_root / "installed-release"
+        if installed_file.exists():
+            installed_sha = installed_file.read_text(encoding="ascii")
+            if f"/opt/catering-releases/{installed_sha}/candidate-images.json" in joined_args:
+                return "previous"
     if "candidate-images.json" in joined_args:
         return "candidate"
     if "previous-images.json" in joined_args:
@@ -102,6 +136,26 @@ if "docker exec -i" in joined_args and "catering-target-authenticated-smoke.mjs"
     log("ssh smoke")
     if scenario == "smoke-fails":
         raise SystemExit(1)
+    sys.stdout.write("authenticated_read_smoke_ok\n")
+    raise SystemExit(0)
+
+
+if "docker exec -i" in joined_args and "node -e" in joined_args:
+    import base64
+
+    match = re.search(r"printf '%s' '([A-Za-z0-9+/=]+)' \| base64 -d", joined_args)
+    if match is None:
+        fail("synthetic operator smoke: encoded source missing")
+    smoke_source = base64.b64decode(match.group(1), validate=True).decode("utf-8")
+    if "/api/production/v1/production/plans" not in smoke_source:
+        fail("synthetic operator smoke: plans read route missing")
+    if "/api/production/v1/production/cases" in smoke_source:
+        fail("synthetic operator smoke: forbidden cases route present")
+    if "synthetic-password" in joined_args or "synthetic-user" in joined_args:
+        fail("synthetic operator smoke: credentials leaked into remote command")
+    if "synthetic-password" not in stdin_text or "synthetic-user" not in stdin_text:
+        fail("synthetic operator smoke: credential payload was not delivered on stdin")
+    log("ssh smoke operator plans")
     sys.stdout.write("authenticated_read_smoke_ok\n")
     raise SystemExit(0)
 
@@ -189,7 +243,8 @@ if "TARGET_RUNTIME_DDL_HASHES" in stdin_text:
     raise SystemExit(0)
 
 if "TARGET_PREFLIGHT_OK target=" in stdin_text:
-    log("ssh preflight")
+    if scenario != "operator-rollback-snapshot-race":
+        log("ssh preflight")
     if "CATERING_WRITER_MODE" not in stdin_text or "catering_schema_migrations" not in stdin_text:
         fail("synthetic ssh: production preflight lost writer/schema guards")
     if scenario == "writer-disabled":
@@ -200,13 +255,39 @@ if "TARGET_PREFLIGHT_OK target=" in stdin_text:
     count = int(count_file.read_text(encoding="utf-8")) if count_file.exists() else 0
     count += 1
     count_file.write_text(str(count), encoding="utf-8")
+    runtime_state = ""
+    if scenario.startswith("operator-"):
+        release = "a" * 40 if scenario == "operator-rollback-snapshot-race" and count == 1 else "b" * 40
+        (state_root / "installed-release").write_text(release, encoding="ascii")
+        runtime_state = f"runtime_state=release:{release} "
+        log(f"ssh preflight release={release}")
     if scenario == "preflight-fails" and count == 1:
         raise SystemExit(1)
     sys.stdout.write(
         "TARGET_PREFLIGHT_OK target=catering-prod-1 backup=healthy "
-        "postgres_volume=platform-infra_postgres_data "
+        + runtime_state
+        + "postgres_volume=platform-infra_postgres_data "
         "edge_image=sha256:" + "e" * 64 + "\n"
     )
+    raise SystemExit(0)
+
+
+if "--rollback" in args:
+    rollback_sha = args[args.index("--rollback") + 1]
+    installed_sha = (state_root / "installed-release").read_text(encoding="ascii")
+    log(f"ssh verify rollback {rollback_sha}")
+    raise SystemExit(0 if rollback_sha == installed_sha else 1)
+
+
+if "manifest_path = regular(\"manifest.json\")" in stdin_text:
+    count_file = state_root / "bundle-verify-count"
+    count = int(count_file.read_text(encoding="utf-8")) if count_file.exists() else 0
+    count += 1
+    count_file.write_text(str(count), encoding="utf-8")
+    if scenario == "operator-postflight-bundle-fails" and count == 3:
+        log("ssh verify bundle failed")
+        raise SystemExit(1)
+    log("ssh verify bundle")
     raise SystemExit(0)
 
 
@@ -233,7 +314,7 @@ if "previous-images.json" in stdin_text and "docker load" in stdin_text:
 if "up -d --no-deps" in stdin_text:
     which = classify_override()
     log(f"ssh activate {which}")
-    if scenario == "activate-fails" and which == "candidate":
+    if scenario in {"activate-fails", "operator-rollback-snapshot-race"} and which == "candidate":
         raise SystemExit(1)
     if scenario == "rollback-fails":
         raise SystemExit(1)
