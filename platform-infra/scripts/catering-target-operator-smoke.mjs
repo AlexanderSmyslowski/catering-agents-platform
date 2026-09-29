@@ -23,7 +23,18 @@ async function request(path, init = {}) {
   const headers = new Headers(init.headers);
   headers.set("authorization", authorization);
   headers.set("origin", origin);
-  return fetch(base + path, { ...init, headers, redirect: "manual" });
+  const timeoutSignal = AbortSignal.timeout(20_000);
+  try {
+    return await fetch(base + path, {
+      ...init,
+      headers,
+      redirect: "manual",
+      signal: timeoutSignal
+    });
+  } catch (error) {
+    if (timeoutSignal.aborted) throw new Error("Authenticated smoke request timed out.");
+    throw error;
+  }
 }
 
 const login = await request("/api/intake/v1/auth/login", {

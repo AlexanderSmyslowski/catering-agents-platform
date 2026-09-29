@@ -1431,14 +1431,14 @@ run_production_apply() {
   fi
   parse_preflight_binding "${initial}"
   load_bound_image_ids
+  verify_remote_bundle
+  verify_remote_stage_receipt
   trap production_exit_trap EXIT
   acquire_remote_lock
   local locked
   locked="$(remote_preflight "${LOCK_OWNER}")"
   parse_preflight_binding "${locked}"
   PREVIOUS_RELEASE_SHA="${ACTIVE_RELEASE_SHA}"
-  verify_remote_bundle
-  verify_remote_stage_receipt
   if ! capture_previous_and_load_candidates; then
     printf '%s\n' "TARGET_UPDATE_RESULT candidate_rejected" >&2
     release_remote_lock

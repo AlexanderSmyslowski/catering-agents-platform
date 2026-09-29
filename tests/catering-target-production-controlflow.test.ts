@@ -175,6 +175,9 @@ describe("Catering target production control flow", () => {
     expect(commands).toContain("ssh stage receipt verify failed");
     expect(commands).not.toContain("ssh load");
     expect(commands).not.toContain("ssh activate candidate");
+    expect(commands).not.toContain("ssh lock");
+    expect(commands).not.toContain("ssh unlock");
+    expect(result.stdout + result.stderr).not.toContain("lock_retained=true");
   });
 
   it("rechecks bound stage artifacts in the same remote command before image loading", () => {
