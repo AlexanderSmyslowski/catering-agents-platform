@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
@@ -10,10 +10,17 @@ const productionRunner = path.join(root, "platform-infra/scripts/catering-target
 const fakeCommand = path.join(root, "tests/support/catering-target-production-command.py");
 const fakePythonCommand = path.join(root, "tests/support/catering-target-python-command.sh");
 
-function runProduction(scenario: string, mode: "preflight" | "update" | "stage" | "apply" | "verify" = "update", extraEnv: Record<string, string> = {}) {
+function runProduction(
+  scenario: string,
+  mode: "preflight" | "update" | "stage" | "apply" | "verify" = "update",
+  extraEnv: Record<string, string> = {},
+  persistentRemoteState?: string,
+) {
   expect(existsSync(fakeCommand), "production command fixture must exist").toBe(true);
 
   const state = mkdtempSync(path.join(tmpdir(), "catering-target-production-controlflow-"));
+  const remoteState = persistentRemoteState ?? state;
+  mkdirSync(remoteState, { recursive: true });
   const bin = path.join(state, "bin");
   const fs = require("node:fs") as typeof import("node:fs");
   fs.mkdirSync(bin);
@@ -118,7 +125,8 @@ function runProduction(scenario: string, mode: "preflight" | "update" | "stage" 
       CATERING_TARGET_SMOKE_BASIC_AUTH_PASSWORD: "synthetic-password",
       CATERING_TARGET_SMOKE_LOGIN_CODE: "SYNTHETIC",
       CATERING_TARGET_SMOKE_PIN: "123456",
-      CATERING_TARGET_FAKE_STATE: state,
+      CATERING_TARGET_FAKE_STATE: remoteState,
+      CATERING_TARGET_FAKE_LOG: path.join(state, "commands.log"),
       CATERING_TARGET_FAKE_SCENARIO: scenario,
       CATERING_TARGET_FAKE_MODE: mode,
       GITHUB_ACTIONS: compatibilityContext ? "true" : "",
@@ -134,7 +142,31 @@ function runProduction(scenario: string, mode: "preflight" | "update" | "stage" 
   });
 
   const commands = readFileSync(path.join(state, "commands.log"), "utf8");
-  return { state, result, commands };
+  return { state, result, commands, commit, manifestSha256 };
+}
+
+function createRetryFixture() {
+  const state = mkdtempSync(path.join(tmpdir(), "catering-target-retry-state-"));
+  const release = path.join(state, "release");
+  mkdirSync(release);
+  const previousImagesPath = path.join(release, "previous-images.json");
+  const stageReceiptPath = path.join(release, "stage-receipt");
+  const installReceiptPath = path.join(release, "install-receipt");
+  writeFileSync(stageReceiptPath, "bound-stage-receipt\n", { mode: 0o600 });
+  writeFileSync(previousImagesPath, JSON.stringify(imageSnapshot("e")) + "\n", { mode: 0o600 });
+  writeFileSync(path.join(state, "active-images.json"), JSON.stringify(imageSnapshot("b")) + "\n");
+  writeFileSync(path.join(state, "installed-release"), "b".repeat(40), { mode: 0o600 });
+  writeFileSync(path.join(state, "previous-release-sha"), "b".repeat(40), { mode: 0o600 });
+  return { state, previousImagesPath, stageReceiptPath, installReceiptPath };
+}
+
+function imageSnapshot(fill: string) {
+  const runtime = "sha256:" + fill.repeat(64);
+  const web = "sha256:" + (fill === "b" ? "c" : fill).repeat(64);
+  return { services: {
+    intake: { image: runtime }, offer: { image: runtime }, production: { image: runtime },
+    exports: { image: runtime }, web: { image: web },
+  } };
 }
 
 describe("Catering target production control flow", () => {
@@ -240,34 +272,94 @@ describe("Catering target production control flow", () => {
     expect(commands).not.toContain("ssh activate candidate");
   });
 
-  it.each([
-    ["candidate_rejected", "operator-apply-retry-candidate-rejected"],
-    ["clean rollback", "operator-apply-retry-after-rollback"],
-  ])("retries the identical bound stage after %s and refreshes previous images under lock", (_outcome, scenario) => {
-    const { result, commands } = runProduction(scenario, "apply");
-    expect(result.status, result.stderr + "\n" + commands).toBe(0);
-    expect(result.stdout).toContain("TARGET_UPDATE_RESULT activated");
-    expect(commands).toContain("ssh stage inspect reusable previous-images-present");
-    expect(commands).not.toContain("rsync source");
-    expect(commands).not.toContain("rsync artifacts");
-    const lock = commands.indexOf("ssh lock");
-    const refreshed = commands.indexOf(`ssh capture previous active-release=${"b".repeat(40)}`);
-    const load = commands.indexOf("ssh load");
-    const activate = commands.indexOf("ssh activate candidate");
-    expect(lock).toBeGreaterThan(-1);
-    expect(refreshed).toBeGreaterThan(lock);
-    expect(load).toBeGreaterThan(refreshed);
-    expect(activate).toBeGreaterThan(load);
+  it("retries an identical stage after candidate_rejected and rebinds rollback to the newly observed predecessor", () => {
+    const fixture = createRetryFixture();
+    const stageReceipt = readFileSync(fixture.stageReceiptPath);
+
+    const rejected = runProduction("operator-p2-retry-candidate-rejected-sequence", "apply", {}, fixture.state);
+    expect(rejected.result.status).not.toBe(0);
+    expect(rejected.result.stderr).toContain("TARGET_UPDATE_RESULT candidate_rejected");
+    expect(rejected.commands).toContain("ssh stage inspect reusable previous-images-present");
+    expect(rejected.commands).toContain("ssh candidate rejected before image load");
+    expect(rejected.commands).not.toContain("ssh load");
+    expect(rejected.commands).not.toContain("ssh activate candidate");
+    expect(readFileSync(fixture.stageReceiptPath)).toEqual(stageReceipt);
+    expect(existsSync(fixture.installReceiptPath)).toBe(false);
+    expect(JSON.parse(readFileSync(fixture.previousImagesPath, "utf8"))).toEqual(imageSnapshot("b"));
+    expect(statSync(fixture.previousImagesPath).mode & 0o777).toBe(0o600);
+
+    const predecessor = "c".repeat(40);
+    writeFileSync(path.join(fixture.state, "installed-release"), predecessor, { mode: 0o600 });
+    writeFileSync(path.join(fixture.state, "previous-release-sha"), predecessor, { mode: 0o600 });
+    writeFileSync(path.join(fixture.state, "active-images.json"), JSON.stringify(imageSnapshot("d")) + "\n");
+
+    const rolledBack = runProduction("operator-p2-retry-candidate-rejected-sequence", "apply", {}, fixture.state);
+    expect(rolledBack.result.status).not.toBe(0);
+    expect(rolledBack.result.stdout).toContain("TARGET_UPDATE_RESULT rolled_back");
+    expect(rolledBack.commands).toContain("ssh capture previous active-release=" + predecessor);
+    expect(rolledBack.commands).toContain("ssh verify rollback " + predecessor);
+    expect(rolledBack.commands).toContain("ssh activate previous");
+    expect(rolledBack.commands.indexOf("ssh capture previous active-release=" + predecessor)).toBeLessThan(
+      rolledBack.commands.indexOf("ssh load"),
+    );
+    expect(rolledBack.commands.indexOf("ssh load")).toBeLessThan(rolledBack.commands.indexOf("ssh activate candidate"));
+    expect(readFileSync(fixture.stageReceiptPath)).toEqual(stageReceipt);
+    expect(existsSync(fixture.installReceiptPath)).toBe(false);
+    expect(JSON.parse(readFileSync(fixture.previousImagesPath, "utf8"))).toEqual(imageSnapshot("d"));
+    expect(statSync(fixture.previousImagesPath).mode & 0o777).toBe(0o600);
+
+    const retried = runProduction("operator-p2-retry-candidate-rejected-sequence", "apply", {}, fixture.state);
+    expect(retried.result.status, retried.result.stderr + "\n" + retried.commands).toBe(0);
+    expect(retried.result.stdout).toContain("TARGET_UPDATE_RESULT activated");
+    expect(retried.commands).toContain("ssh stage inspect reusable previous-images-present");
+    expect(retried.commands).not.toContain("rsync source");
+    expect(retried.commands).not.toContain("rsync artifacts");
+    expect(readFileSync(fixture.stageReceiptPath)).toEqual(stageReceipt);
+    expect(existsSync(fixture.installReceiptPath)).toBe(true);
+    expect(retried.manifestSha256).toBe(rolledBack.manifestSha256);
+    expect(retried.commit).toBe(rolledBack.commit);
+  });
+
+  it("retries an identical stage after a postactivation smoke failure and clean rollback", () => {
+    const fixture = createRetryFixture();
+    const stageReceipt = readFileSync(fixture.stageReceiptPath);
+    const failed = runProduction("operator-p2-retry-after-rollback-sequence", "apply", {}, fixture.state);
+    expect(failed.result.status).not.toBe(0);
+    expect(failed.result.stdout).toContain("TARGET_UPDATE_RESULT rolled_back");
+    expect(failed.commands).toContain("ssh activate candidate");
+    expect(failed.commands).toContain("ssh smoke failed for retry fixture");
+    expect(failed.commands).toContain("ssh activate previous");
+    expect(failed.commands).toContain("ssh verify rollback " + "b".repeat(40));
+    expect(failed.commands.indexOf("ssh lock")).toBeLessThan(failed.commands.indexOf("ssh capture previous active-release=" + "b".repeat(40)));
+    expect(failed.commands.indexOf("ssh capture previous active-release=" + "b".repeat(40))).toBeLessThan(
+      failed.commands.indexOf("ssh load"),
+    );
+    expect(failed.commands.indexOf("ssh load")).toBeLessThan(failed.commands.indexOf("ssh activate candidate"));
+    expect(existsSync(fixture.installReceiptPath)).toBe(false);
+    expect(readFileSync(fixture.stageReceiptPath)).toEqual(stageReceipt);
+
+    const retried = runProduction("operator-p2-retry-after-rollback-sequence", "apply", {}, fixture.state);
+    expect(retried.result.status, retried.result.stderr + "\n" + retried.commands).toBe(0);
+    expect(retried.result.stdout).toContain("TARGET_UPDATE_RESULT activated");
+    expect(retried.commands).toContain("ssh stage inspect reusable previous-images-present");
+    expect(retried.commands).not.toContain("rsync source");
+    expect(retried.commands).not.toContain("rsync artifacts");
+    expect(readFileSync(fixture.stageReceiptPath)).toEqual(stageReceipt);
+    expect(existsSync(fixture.installReceiptPath)).toBe(true);
+    expect(JSON.parse(readFileSync(fixture.previousImagesPath, "utf8"))).toEqual(imageSnapshot("b"));
+    expect(statSync(fixture.previousImagesPath).mode & 0o777).toBe(0o600);
   });
 
   it.each([
     ["stage", "operator-stage-active-without-install-receipt"],
     ["apply", "operator-apply-active-without-install-receipt"],
-  ] as const)("rejects an active uninstalled candidate during %s", (mode, scenario) => {
+  ] as const)("fails closed during %s when preflight finds an active candidate without an install receipt", (mode, scenario) => {
     const { result, commands } = runProduction(scenario, mode);
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain("candidate release is active without a valid install receipt");
-    expect(commands).toContain("ssh stage inspect reusable active-without-receipt");
+    expect(result.stderr).toContain("TARGET_PREFLIGHT_FAIL gate=remote_target_invariants");
+    expect(commands).toContain("ssh preflight failed active candidate has no install receipt");
+    expect(commands).not.toContain("ssh stage inspect reusable active-without-receipt");
+    expect(commands).not.toContain("ssh stage inspect reusable");
     expect(commands).not.toContain("ssh stage receipt write");
     expect(commands).not.toContain("rsync source");
     expect(commands).not.toContain("rsync artifacts");
@@ -276,16 +368,14 @@ describe("Catering target production control flow", () => {
     expect(commands).not.toContain("ssh activate candidate");
   });
 
-  it("unlocks if a retry candidate becomes active without an install receipt during the locked recheck", () => {
+  it("retains the lock for manual recovery when locked preflight cannot bind an active candidate without an install receipt", () => {
     const { result, commands } = runProduction("operator-apply-raced-active-without-install-receipt", "apply");
-    const candidate = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain("candidate release is active without a valid install receipt");
+    expect(result.stderr).toContain("manual_recovery_required lock_retained=true");
     expect(commands).toContain("ssh stage inspect reusable");
-    expect(commands).toContain("ssh stage inspect reusable active-without-receipt");
-    expect(commands).toContain(`ssh preflight release=${candidate}`);
-    expect(commands).toContain("ssh unlock");
-    expect(result.stdout + result.stderr).not.toContain("lock_retained=true");
+    expect(commands).toContain("ssh preflight failed active candidate has no install receipt");
+    expect(commands).not.toContain("ssh stage inspect reusable active-without-receipt");
+    expect(commands).not.toContain("ssh unlock");
     expect(commands).not.toContain("ssh load");
     expect(commands).not.toContain("ssh activate candidate");
   });

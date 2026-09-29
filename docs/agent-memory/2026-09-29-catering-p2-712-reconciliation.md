@@ -44,6 +44,8 @@ Nach P2.1 darf ein solcher Releasepfad nur als Retry-Stage wiederverwendet werde
 
 Bei jedem neuen Apply bindet der Operator den tatsächlichen Vorgänger erneut aus dem unter Lock gelesenen aktiven Release. `previous-images.json` wird vor dem Image-Load atomar aus den zu diesem Zeitpunkt laufenden Containern neu geschrieben und ist für den gebundenen Operator keine Rollback-Autorität. Ein gültiges Install-Receipt bleibt ein eigener `already_installed`-Zustand; ein aktiver Kandidat ohne gültiges Install-Receipt wird abgewiesen.
 
+Scheitert der Remote-Preflight wegen eines aktiven Kandidaten ohne Install-Receipt erst nach Lock-Erwerb, bleibt der Lock zur manuellen Recovery erhalten.
+
 Mit dem funktional und dokumentarisch geschlossenen I-1 gilt die Reconciliation-Abschlussaussage für den dauerhaften Updateweg; #712 bleibt offen und wurde weder gemergt noch geschlossen. M-1 bis M-4 bleiben sichtbar für P3/Betriebsrehearsal. Kein Hostkontakt oder Deployment.
 
 Gezielte lokale Prüfung für P2.1: 46 Tests in `tests/catering_target_operator_test.py`, 97 Tests in 8 Catering-Target-Vitest-Dateien, Bash-Syntax, Python-AST und `git diff --check` erfolgreich. Keine reale SSH-, Docker-, Stage-, Apply-, Verify- oder Produktionsausführung.
