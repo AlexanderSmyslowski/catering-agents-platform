@@ -1,5 +1,4 @@
 process.stderr.write("TARGET_AUTH_SMOKE_STAGE stage=script_start status=success\n");
-process.stderr.write("TARGET_AUTH_SMOKE_STAGE stage=script_start status=success\n");
 const chunks = [];
 for await (const chunk of process.stdin) chunks.push(chunk);
 const raw = Buffer.concat(chunks).toString("utf8");

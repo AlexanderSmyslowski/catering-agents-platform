@@ -19,14 +19,15 @@ P1/main bleibt führende Architektur. #712 wurde nicht gemergt oder cherry-picke
 - Ein vorhandener Releasepfad wird nur read-only wiederverwendet, wenn Layout, vollständige Manifest-/Image-/Source-Bindungen und Stage-Receipt exakt passen. Teilstände, unbekannte Einträge, Modus-/Owner-Drift, abweichende Bundles sowie unvollständige Apply-Zustände enden fail-closed, ohne Löschen oder Überschreiben.
 - Install-Receipt und Stage-Receipt werden semantisch getrennt. Ein passendes installiertes Release wird vor Stage-Transfer beziehungsweise Apply-Lock als `already_installed` bestätigt.
 - `apply` klassifiziert den Releasezustand nach Lock-Erwerb erneut, bevor es `previous-images.json` schreibt oder Images lädt. Eine inzwischen identisch installierte Version ist nach Receipt-/Aktivmarkerprüfung ein No-op; ein Teil-/Driftzustand wird vor Aktivierung abgewiesen und der Lock freigegeben.
+- Ein fehlgeschlagener SSH-Unlock propagiert seinen Exitstatus und lässt `LOCK_HELD` gesetzt; der Prozess meldet manuelle Wiederherstellung und behauptet weder einen erfolgreichen No-op noch eine freigegebene Sperre.
 - Die rsync-SSH-Invocation enthält dieselben Keepalive-Optionen wie direkter SSH-Transport. Der dateibasierte Smoke behält den 20-Sekunden-Request-Timeout und wird als `node --input-type=module -e` ausgeführt. Das Runtime-Image deklariert `node:22-alpine`; es wurde kein Smoke in diesem Image ausgeführt.
 - Postflight, Gesamt-Health, Health je Service und Auth-Smoke liefern nicht-sensitive `TARGET_UPDATE_STAGE`- und `TARGET_AUTH_SMOKE_STAGE`-Marker. Der Exporttest prüft die Modusbits des exportierten Executables; ein gezielter Schema-v2-Installations-/Rollbacktest bewahrt die Receipt-Kompatibilität.
 
 ## Gezielte lokale Prüfung
 
 - `python3 tests/catering_target_operator_test.py`: 44 Tests erfolgreich.
-- `npx vitest run tests/catering-target-*.test.ts`: 8 Dateien, 89 Tests erfolgreich.
-- Bash-Syntax, beide Smoke-Skripte mit `node --check`, drei Python-Dateien mit `py_compile` und `git diff --check`: erfolgreich.
+- `npx vitest run tests/catering-target-*.test.ts`: 8 Dateien, 92 Tests erfolgreich.
+- `bash -n platform-infra/scripts/catering-target-production-update.sh`, `node --check platform-infra/scripts/catering-target-operator-smoke.mjs`, AST-Parse der drei Python-Operator-Skripte und `git diff --check`: erfolgreich.
 - Keine echte SSH-, Docker-, Stage-, Apply-, Verify- oder Produktionsausführung; kein Hostkontakt, kein Hub-Writeback, kein Merge und keine P3-Arbeit.
 
 ## Bewusste Grenzen

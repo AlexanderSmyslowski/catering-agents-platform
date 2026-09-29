@@ -262,6 +262,17 @@ describe("Catering target production control flow", () => {
     expect(commands).not.toContain("ssh activate candidate");
   });
 
+  it("does not report a raced installed release as successful when lock release fails", () => {
+    const { result, commands } = runProduction("operator-apply-raced-installed-unlock-fails", "apply");
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("installed release is valid but target lock could not be released");
+    expect(result.stderr).toContain("manual_recovery_required lock_retained=true");
+    expect(result.stdout).not.toContain("already_installed");
+    expect(commands).toContain("ssh unlock failed");
+    expect(commands).not.toContain("ssh load");
+    expect(commands).not.toContain("ssh activate candidate");
+  });
+
   it("releases the lock when the under-lock release recheck finds partial apply state", () => {
     const { result, commands } = runProduction("operator-apply-raced-partial", "apply");
     expect(result.status).not.toBe(0);
@@ -272,6 +283,17 @@ describe("Catering target production control flow", () => {
     expect(commands).not.toContain("ssh load");
     expect(commands).not.toContain("ssh activate candidate");
     expect(result.stdout + result.stderr).not.toContain("lock_retained=true");
+  });
+
+  it("retains and reports the lock when rejection of raced partial state cannot unlock", () => {
+    const { result, commands } = runProduction("operator-apply-raced-partial-unlock-fails", "apply");
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("staged release recheck failed and target lock could not be released");
+    expect(result.stderr).toContain("manual_recovery_required lock_retained=true");
+    expect(commands).toContain("ssh stage inspect rejected");
+    expect(commands).toContain("ssh unlock failed");
+    expect(commands).not.toContain("ssh load");
+    expect(commands).not.toContain("ssh activate candidate");
   });
 
   it("rejects a source-root Compose mismatch before contacting the target", () => {

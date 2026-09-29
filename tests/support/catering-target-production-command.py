@@ -129,10 +129,15 @@ except (ValueError, IndexError):
 joined_args = " ".join(remote_argv)
 
 if "inspect-existing" in joined_args:
-    if scenario in {"operator-apply-raced-installed", "operator-apply-raced-partial"}:
+    if scenario in {
+        "operator-apply-raced-installed",
+        "operator-apply-raced-partial",
+        "operator-apply-raced-installed-unlock-fails",
+        "operator-apply-raced-partial-unlock-fails",
+    }:
         command_history = log_path.read_text(encoding="utf-8")
         if "ssh lock" in command_history:
-            if scenario == "operator-apply-raced-installed":
+            if scenario in {"operator-apply-raced-installed", "operator-apply-raced-installed-unlock-fails"}:
                 log("ssh stage inspect installed")
                 sys.stdout.write("installed\n")
                 raise SystemExit(0)
@@ -348,7 +353,7 @@ if "TARGET_PREFLIGHT_OK target=" in stdin_text:
         if scenario == "operator-rollback-snapshot-race" and count == 1:
             release = "a" * 40
         elif scenario in {"operator-stage-installed", "operator-apply-installed"} or (
-            scenario == "operator-apply-raced-installed" and count >= 2
+            scenario in {"operator-apply-raced-installed", "operator-apply-raced-installed-unlock-fails"} and count >= 2
         ):
             release = os.environ["DEPLOY_COMMIT_SHA"]
         else:
@@ -423,6 +428,9 @@ if "target update lock already exists" in stdin_text and "owner.pending" in stdi
 
 
 if 'sudo -n unlink "$lock/owner"' in stdin_text and 'sudo -n rmdir "$lock"' in stdin_text:
+    if scenario.endswith("-unlock-fails"):
+        log("ssh unlock failed")
+        raise SystemExit(42)
     log("ssh unlock")
     raise SystemExit(0)
 

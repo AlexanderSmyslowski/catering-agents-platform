@@ -977,7 +977,7 @@ REMOTE_LOCK
 
 release_remote_lock() {
   [[ "${LOCK_HELD}" == true ]] || return 0
-  ssh_target bash -s -- "${TARGET_UPDATE_LOCK}" "${LOCK_OWNER}" <<'REMOTE_UNLOCK'
+  ssh_target bash -s -- "${TARGET_UPDATE_LOCK}" "${LOCK_OWNER}" <<'REMOTE_UNLOCK' || return $?
 set -euo pipefail
 lock="$1"; owner="$2"
 sudo -n test -d "$lock" || exit 1

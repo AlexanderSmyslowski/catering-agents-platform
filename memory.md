@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.416
+version: 5.417
 date: 2026-09-29
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -9,9 +9,9 @@ repo: AlexanderSmyslowski/catering-agents-platform
 
 - P2 startet auf dem bestätigten P1/main-Commit `6e3d5f798165fffa6125c605c40fe8e283444023`. Der tatsächliche offene Draft-Head von #712 wurde lesend als `f2546468c5bce0e8f2298ee1a92c6c6da3b2ae71` bestätigt. Die Reconciliation-Matrix in `docs/operations/CATERING_TARGET_UPDATE.md` ordnet alle geforderten Betriebskenntnisse einzeln P1 oder P2 zu; #712 wurde weder integriert noch geschlossen.
 - Manifest v3 bindet zusätzlich den vollständigen normalisierten Source-Baum. Release-Wiederverwendung ist read-only und akzeptiert nur identische Artefakte mit passendem Stage-Receipt, bekanntem Dateilayout sowie erwarteten Eigentümern und Modi. Install-Receipt, teilweise Apply-Zustände, abweichende Manifeste und unbekannte Dateien bleiben davon getrennt und enden fail-closed.
-- Der Operator exportiert Source-Verzeichnisse deterministisch mit Modus 0755 und Dateien mit Modus 0644 beziehungsweise dem getrackten ausführbaren Modus 0755. `apply` klassifiziert den Stage-Zustand vor und nach Lock-Erwerb neu; ein konkurrierend installiertes, identisches Release wird als No-op beendet, ein Teil-/Driftzustand fail-closed abgewiesen und der noch vor Aktivierung gehaltene Lock freigegeben.
+- Der Operator exportiert Source-Verzeichnisse deterministisch mit Modus 0755 und Dateien mit Modus 0644 beziehungsweise dem getrackten ausführbaren Modus 0755. `apply` klassifiziert den Stage-Zustand vor und nach Lock-Erwerb neu; ein konkurrierend installiertes, identisches Release wird als No-op beendet, ein Teil-/Driftzustand fail-closed abgewiesen und der noch vor Aktivierung gehaltene Lock freigegeben. Schlägt der SSH-Unlock fehl, bleibt `LOCK_HELD` gesetzt; der Prozess endet fehlerhaft und meldet `manual_recovery_required lock_retained=true` statt einen erfolgreichen No-op oder eine freie Sperre zu behaupten.
 - P2 übernimmt außerdem rsync-SSH-Keepalives, setzt den Smoke-Eval-Modus explizit auf ESM und gibt nicht-sensitive Postflight-, Per-Service-Health- und Auth-Smoke-Marker aus. Das Image deklariert Node 22; der lokale Test prüft die explizite Modul-Invocation, führt jedoch keinen Smoke im Node-22-Image aus.
-- Gezielte lokale Prüfung nach der Review-Korrektur: 44 Python-Tests und alle 90 Catering-Target-Vitest-Tests in acht Dateien bestanden; Syntaxprüfungen und Diffcheck erfolgreich. Keine SSH-, Docker- oder Zielausführung, kein Hub-Writeback, kein Merge und keine Schließung von #712.
+- Gezielte lokale Prüfung nach der Review-Korrektur: 44 Python-Tests und alle 92 Catering-Target-Vitest-Tests in acht Dateien bestanden; Syntaxprüfungen und Diffcheck erfolgreich. Keine SSH-, Docker- oder Zielausführung, kein Hub-Writeback, kein Merge und keine Schließung von #712.
 
 ## Aktueller Stand – P1 dauerhafter CateringOS-Updateweg (2026-09-28)
 
@@ -2325,3 +2325,9 @@ Quelle: `8de2e96c8604f12da2ec14c39b187db04dfb61cf`. Der folgende Betriebsbericht
 - rsync erhält dieselben SSH-Keepalive-Werte wie der direkte Transport. Smoke-Node-Aufruf deklariert ESM explizit; Postflight, Health pro Service und Auth-Smoke erhalten nicht-sensitive maschinenlesbare Fortschrittsmarker. Die #712-Matrix und die Smoke-Transportbeschreibung entsprechen dem tatsächlichen Code.
 - Der Exportmodus-Test prüft nun die exportierte Datei; ein gezielter Schema-v2-Installations-/Rollbacktest bewahrt die historische Receipt-Kompatibilität.
 - Verifiziert: 44 Python-Tests sowie alle 90 Catering-Target-Vitest-Tests in acht Dateien erfolgreich; Bash-/Node-/Python-Syntax und `git diff --check` erfolgreich. Keine Produktionsausführung, kein Hostkontakt und kein Hub-Writeback.
+
+### 5.417 - 2026-09-29 — P2 Lock-Freigabe fail-closed
+
+- `release_remote_lock` propagiert SSH-Fehler, bevor `LOCK_HELD` zurückgesetzt wird. Fehlgeschlagener Unlock endet fail-closed und löst die manuelle Wiederherstellungsdiagnose aus, statt einen installierten No-op als Erfolg auszugeben.
+- Regressionstests decken fehlgeschlagenen Unlock sowohl beim konkurrierend installierten Release als auch bei abgewiesenem Teilzustand ab. Der Smoke-Startmarker wird genau einmal ausgegeben; die Operationsdokumentation beschreibt die aktuellen Stage-Wiederverwendungs- und Lock-Fehlerregeln.
+- Verifiziert: 44 Python-Tests, 92 Catering-Target-Vitest-Tests in acht Dateien, Bash-/Node-/Python-Syntax und `git diff --check` erfolgreich. Keine Zielausführung oder Hostkontakt.

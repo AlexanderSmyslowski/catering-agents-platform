@@ -75,6 +75,7 @@ describe("Catering target operator smoke request timeout", () => {
     expect(result.error, result.stderr).toBeUndefined();
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toContain("authenticated_read_smoke_ok");
+    expect(result.stderr.match(/TARGET_AUTH_SMOKE_STAGE stage=script_start status=success/g)).toHaveLength(1);
     const markers = [
       "TARGET_AUTH_SMOKE_STAGE stage=script_start status=success",
       "TARGET_AUTH_SMOKE_STAGE stage=payload_valid status=success",
