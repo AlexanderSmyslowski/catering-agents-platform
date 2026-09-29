@@ -1021,6 +1021,8 @@ arguments = [
     "-o", "StrictHostKeyChecking=yes",
     "-o", "UserKnownHostsFile=" + known_hosts_file,
     "-o", "ConnectTimeout=10",
+    "-o", "ServerAliveInterval=15",
+    "-o", "ServerAliveCountMax=4",
     "-p", "22",
 ]
 print(" ".join(shlex.quote(argument) for argument in arguments))
@@ -1226,10 +1228,14 @@ check_health() {
   done
   return 1
 }
-check_health platform-infra-intake-1 http://127.0.0.1:3101/health
-check_health platform-infra-offer-1 http://127.0.0.1:3102/health
-check_health platform-infra-production-1 http://127.0.0.1:3103/health
-check_health platform-infra-exports-1 http://127.0.0.1:3104/health
+check_health platform-infra-intake-1 http://127.0.0.1:3101/health || { printf 'TARGET_UPDATE_STAGE stage=health service=intake status=failed\n' >&2; exit 1; }
+printf 'TARGET_UPDATE_STAGE stage=health service=intake status=success\n' >&2
+check_health platform-infra-offer-1 http://127.0.0.1:3102/health || { printf 'TARGET_UPDATE_STAGE stage=health service=offer status=failed\n' >&2; exit 1; }
+printf 'TARGET_UPDATE_STAGE stage=health service=offer status=success\n' >&2
+check_health platform-infra-production-1 http://127.0.0.1:3103/health || { printf 'TARGET_UPDATE_STAGE stage=health service=production status=failed\n' >&2; exit 1; }
+printf 'TARGET_UPDATE_STAGE stage=health service=production status=success\n' >&2
+check_health platform-infra-exports-1 http://127.0.0.1:3104/health || { printf 'TARGET_UPDATE_STAGE stage=health service=exports status=failed\n' >&2; exit 1; }
+printf 'TARGET_UPDATE_STAGE stage=health service=exports status=success\n' >&2
 REMOTE_VERIFY
 }
 
@@ -1260,7 +1266,7 @@ print(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"), end="")
 PY
 )" || return 1
     [[ -n "${smoke_source}" ]] || return 1
-    output="$(printf '%s' "${payload}" | ssh_target sudo -n docker exec -i platform-infra-intake-1 node -e "${smoke_source}")" || return 1
+    output="$(printf '%s' "${payload}" | ssh_target sudo -n docker exec -i platform-infra-intake-1 node --input-type=module -e "${smoke_source}")" || return 1
   else
     output="$(printf '%s' "${payload}" | ssh_target sudo -n docker exec -i platform-infra-intake-1 node /app/platform-infra/scripts/catering-target-authenticated-smoke.mjs)" || return 1
   fi
@@ -1394,19 +1400,25 @@ run_production_update() {
 
   local postflight
   printf '%s\n' "TARGET_UPDATE_STAGE stage=verify status=start"
+  printf 'TARGET_UPDATE_STAGE stage=postflight status=start\n' >&2
   if ! postflight="$(remote_preflight "${LOCK_OWNER}" "${DEPLOY_COMMIT_SHA}")"; then
     handle_production_failure
     return $?
   fi
   parse_preflight_binding "${postflight}"
+  printf 'TARGET_UPDATE_STAGE stage=postflight status=success\n' >&2
+  printf 'TARGET_UPDATE_STAGE stage=health status=start\n' >&2
   if ! verify_remote_override_and_health "${release_dir}/candidate-images.json"; then
     handle_production_failure
     return $?
   fi
+  printf 'TARGET_UPDATE_STAGE stage=health status=success\n' >&2
+  printf 'TARGET_UPDATE_STAGE stage=auth_smoke status=start\n' >&2
   if ! authenticated_read_smoke; then
     handle_production_failure
     return $?
   fi
+  printf 'TARGET_UPDATE_STAGE stage=auth_smoke status=success\n' >&2
 
   if ! write_install_receipt; then
     handle_production_failure
@@ -1451,6 +1463,7 @@ run_production_stage() {
       printf 'TARGET_UPDATE_RESULT staged_reused product=%s manifest_sha256=%s\n' "${DEPLOY_COMMIT_SHA}" "${CATERING_TARGET_MANIFEST_SHA256}"
       ;;
     installed)
+      [[ "${ACTIVE_RELEASE_SHA}" == "${DEPLOY_COMMIT_SHA}" ]] || fail "installed release is not the active target"
       verify_install_receipt || fail "installed release receipt is invalid"
       printf '%s\n' "TARGET_UPDATE_STAGE stage=stage status=already_installed"
       printf 'TARGET_UPDATE_RESULT already_installed product=%s manifest_sha256=%s\n' "${DEPLOY_COMMIT_SHA}" "${CATERING_TARGET_MANIFEST_SHA256}"
@@ -1487,6 +1500,7 @@ run_production_apply() {
     reusable)
       ;;
     installed)
+      [[ "${ACTIVE_RELEASE_SHA}" == "${DEPLOY_COMMIT_SHA}" ]] || fail "installed release is not the active target"
       verify_install_receipt || fail "installed release receipt is invalid"
       printf '%s\n' "TARGET_UPDATE_STAGE stage=apply status=already_installed"
       printf 'TARGET_UPDATE_RESULT already_installed product=%s manifest_sha256=%s\n' "${DEPLOY_COMMIT_SHA}" "${CATERING_TARGET_MANIFEST_SHA256}"
@@ -1502,6 +1516,29 @@ run_production_apply() {
   locked="$(remote_preflight "${LOCK_OWNER}")"
   parse_preflight_binding "${locked}"
   PREVIOUS_RELEASE_SHA="${ACTIVE_RELEASE_SHA}"
+  local locked_state
+  if ! locked_state="$(inspect_remote_stage_release)"; then
+    release_remote_lock || fail "staged release recheck failed and target lock could not be released"
+    fail "staged release state changed before apply"
+  fi
+  case "${locked_state}" in
+    reusable)
+      ;;
+    installed)
+      if [[ "${ACTIVE_RELEASE_SHA}" != "${DEPLOY_COMMIT_SHA}" ]] || ! verify_install_receipt; then
+        release_remote_lock || fail "installed release recheck failed and target lock could not be released"
+        fail "installed release binding changed before apply"
+      fi
+      release_remote_lock || fail "installed release is valid but target lock could not be released"
+      printf '%s\n' "TARGET_UPDATE_STAGE stage=apply status=already_installed"
+      printf 'TARGET_UPDATE_RESULT already_installed product=%s manifest_sha256=%s\n' "${DEPLOY_COMMIT_SHA}" "${CATERING_TARGET_MANIFEST_SHA256}"
+      return 0
+      ;;
+    *)
+      release_remote_lock || fail "staged release state changed before apply; target lock could not be released"
+      fail "staged release state changed before apply"
+      ;;
+  esac
   if ! capture_previous_and_load_candidates; then
     printf '%s\n' "TARGET_UPDATE_RESULT candidate_rejected" >&2
     release_remote_lock
@@ -1518,19 +1555,25 @@ run_production_apply() {
 
   local postflight
   printf '%s\n' "TARGET_UPDATE_STAGE stage=verify status=start"
+  printf 'TARGET_UPDATE_STAGE stage=postflight status=start\n' >&2
   if ! postflight="$(remote_preflight "${LOCK_OWNER}" "${DEPLOY_COMMIT_SHA}")"; then
     handle_production_failure
     return $?
   fi
   parse_preflight_binding "${postflight}"
+  printf 'TARGET_UPDATE_STAGE stage=postflight status=success\n' >&2
+  printf 'TARGET_UPDATE_STAGE stage=health status=start\n' >&2
   if ! verify_remote_override_and_health "${release_dir}/candidate-images.json"; then
     handle_production_failure
     return $?
   fi
+  printf 'TARGET_UPDATE_STAGE stage=health status=success\n' >&2
+  printf 'TARGET_UPDATE_STAGE stage=auth_smoke status=start\n' >&2
   if ! authenticated_read_smoke; then
     handle_production_failure
     return $?
   fi
+  printf 'TARGET_UPDATE_STAGE stage=auth_smoke status=success\n' >&2
   if ! write_install_receipt; then
     handle_production_failure
     return $?

@@ -95,6 +95,10 @@ if command == "rsync":
         "UserKnownHostsFile=" + os.environ["CATERING_TARGET_SSH_KNOWN_HOSTS_FILE"],
         "-o",
         "ConnectTimeout=10",
+        "-o",
+        "ServerAliveInterval=15",
+        "-o",
+        "ServerAliveCountMax=4",
         "-p",
         "22",
     ]
@@ -125,11 +129,23 @@ except (ValueError, IndexError):
 joined_args = " ".join(remote_argv)
 
 if "inspect-existing" in joined_args:
+    if scenario in {"operator-apply-raced-installed", "operator-apply-raced-partial"}:
+        command_history = log_path.read_text(encoding="utf-8")
+        if "ssh lock" in command_history:
+            if scenario == "operator-apply-raced-installed":
+                log("ssh stage inspect installed")
+                sys.stdout.write("installed\n")
+                raise SystemExit(0)
+            log("ssh stage inspect rejected")
+            raise SystemExit(1)
+        log("ssh stage inspect reusable")
+        sys.stdout.write("reusable\n")
+        raise SystemExit(0)
     if scenario == "operator-stage-reused":
         log("ssh stage inspect reusable")
         sys.stdout.write("reusable\n")
         raise SystemExit(0)
-    if scenario in {"operator-stage-installed", "operator-apply-installed"}:
+    if scenario in {"operator-stage-installed", "operator-apply-installed", "operator-apply-installed-inactive"}:
         log("ssh stage inspect installed")
         sys.stdout.write("installed\n")
         raise SystemExit(0)
@@ -192,10 +208,10 @@ if "docker exec -i" in joined_args and "catering-target-authenticated-smoke.mjs"
     raise SystemExit(0)
 
 
-if "docker exec -i" in joined_args and "node -e" in joined_args:
-    if len(remote_argv) < 9 or remote_argv[6:8] != ["node", "-e"]:
+if "docker exec -i" in joined_args and "node" in joined_args and "--input-type=module" in joined_args:
+    if len(remote_argv) < 10 or remote_argv[6:9] != ["node", "--input-type=module", "-e"]:
         fail("synthetic operator smoke: node source was not one remote argument")
-    smoke_source = remote_argv[8]
+    smoke_source = remote_argv[9]
     if "/api/production/v1/production/plans" not in smoke_source:
         fail("synthetic operator smoke: plans read route missing")
     if "/api/production/v1/production/cases" in smoke_source:
@@ -204,6 +220,29 @@ if "docker exec -i" in joined_args and "node -e" in joined_args:
         fail("synthetic operator smoke: credentials leaked into remote command")
     if "synthetic-password" not in stdin_text or "synthetic-user" not in stdin_text:
         fail("synthetic operator smoke: credential payload was not delivered on stdin")
+    smoke_markers = [
+        "TARGET_AUTH_SMOKE_STAGE stage=script_start status=success",
+        "TARGET_AUTH_SMOKE_STAGE stage=payload_valid status=success",
+        'TARGET_AUTH_SMOKE_STAGE stage=login_response status=" + String(login.status)',
+        "TARGET_AUTH_SMOKE_STAGE stage=login status=success",
+        'TARGET_AUTH_SMOKE_STAGE stage=session_response status=" + String(session.status)',
+        "TARGET_AUTH_SMOKE_STAGE stage=session status=success",
+        'TARGET_AUTH_SMOKE_STAGE stage=production_read_response status=" + String(plans.status)',
+        "TARGET_AUTH_SMOKE_STAGE stage=production_read status=success",
+    ]
+    if any(marker not in smoke_source for marker in smoke_markers):
+        fail("synthetic operator smoke: progress marker source is incomplete")
+    for marker in (
+        "TARGET_AUTH_SMOKE_STAGE stage=script_start status=success",
+        "TARGET_AUTH_SMOKE_STAGE stage=payload_valid status=success",
+        "TARGET_AUTH_SMOKE_STAGE stage=login_response status=200",
+        "TARGET_AUTH_SMOKE_STAGE stage=login status=success",
+        "TARGET_AUTH_SMOKE_STAGE stage=session_response status=200",
+        "TARGET_AUTH_SMOKE_STAGE stage=session status=success",
+        "TARGET_AUTH_SMOKE_STAGE stage=production_read_response status=200",
+        "TARGET_AUTH_SMOKE_STAGE stage=production_read status=success",
+    ):
+        print(marker, file=sys.stderr)
     log("ssh smoke operator plans")
     sys.stdout.write("authenticated_read_smoke_ok\n")
     raise SystemExit(0)
@@ -306,7 +345,14 @@ if "TARGET_PREFLIGHT_OK target=" in stdin_text:
     count_file.write_text(str(count), encoding="utf-8")
     runtime_state = ""
     if scenario.startswith("operator-"):
-        release = "a" * 40 if scenario == "operator-rollback-snapshot-race" and count == 1 else "b" * 40
+        if scenario == "operator-rollback-snapshot-race" and count == 1:
+            release = "a" * 40
+        elif scenario in {"operator-stage-installed", "operator-apply-installed"} or (
+            scenario == "operator-apply-raced-installed" and count >= 2
+        ):
+            release = os.environ["DEPLOY_COMMIT_SHA"]
+        else:
+            release = "b" * 40
         (state_root / "installed-release").write_text(release, encoding="ascii")
         runtime_state = f"runtime_state=release:{release} "
         log(f"ssh preflight release={release}")
@@ -402,6 +448,18 @@ if "up -d --no-deps" in stdin_text:
 
 
 if "check_health()" in stdin_text:
+    services = {
+        "intake": "platform-infra-intake-1 http://127.0.0.1:3101/health",
+        "offer": "platform-infra-offer-1 http://127.0.0.1:3102/health",
+        "production": "platform-infra-production-1 http://127.0.0.1:3103/health",
+        "exports": "platform-infra-exports-1 http://127.0.0.1:3104/health",
+    }
+    for service, invocation in services.items():
+        marker = f"TARGET_UPDATE_STAGE stage=health service={service} status=success"
+        failed_marker = f"TARGET_UPDATE_STAGE stage=health service={service} status=failed"
+        if invocation not in stdin_text or marker not in stdin_text or failed_marker not in stdin_text:
+            fail("synthetic health verify: per-service status markers missing")
+        print(marker, file=sys.stderr)
     which = classify_override()
     log(f"ssh verify {which}")
     raise SystemExit(0)

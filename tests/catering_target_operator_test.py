@@ -697,6 +697,36 @@ class CateringTargetOperatorTests(unittest.TestCase):
             )
             self.assertEqual(binding["commit"], PRODUCT_SHA)
 
+    def test_installed_schema_two_receipt_remains_available_for_rollback(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="catering-operator-release-state-v2-installed-") as temporary:
+            release_root, base_name, ops_name, _ = build_release_state_fixture(Path(temporary), current_bundle=True)
+            release = release_root / PRODUCT_SHA
+            manifest_path = release / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["schemaVersion"] = 2
+            manifest.pop("sourceTreeSha256")
+            manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            manifest_path.chmod(0o644)
+            manifest_sha = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+            receipt_path = release / "install-receipt"
+            receipt = receipt_path.read_text(encoding="ascii")
+            receipt_lines = [line for line in receipt.splitlines() if not line.startswith("manifest_sha256=")]
+            receipt_lines.append(f"manifest_sha256={manifest_sha}")
+            receipt_path.write_text("\n".join(receipt_lines) + "\n", encoding="ascii")
+            receipt_path.chmod(0o600)
+
+            binding = release_state.inspect_rollback_binding(
+                release_root,
+                PRODUCT_SHA,
+                base_name,
+                ops_name,
+                "3" * 40,
+                OPERATIONS_SHA,
+                expected_uid=os.getuid(),
+                expected_gid=os.getgid(),
+            )
+            self.assertEqual(binding["commit"], PRODUCT_SHA)
+
     def test_generated_v3_bundle_passes_candidate_installed_and_rollback_checks(self) -> None:
         with tempfile.TemporaryDirectory(prefix="catering-operator-release-state-v3-") as temporary:
             base = Path(temporary)
@@ -1058,7 +1088,7 @@ class CateringTargetOperatorTests(unittest.TestCase):
             self.assertEqual(destination.stat().st_mode & 0o777, 0o755)
             self.assertEqual((destination / "nested").stat().st_mode & 0o777, 0o755)
             self.assertEqual((destination / "Dockerfile").stat().st_mode & 0o777, 0o644)
-            self.assertEqual(executable.stat().st_mode & 0o777, 0o755)
+            self.assertEqual((destination / "nested/entry.sh").stat().st_mode & 0o777, 0o755)
 
 
 if __name__ == "__main__":

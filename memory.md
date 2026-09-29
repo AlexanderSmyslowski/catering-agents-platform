@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.415
+version: 5.416
 date: 2026-09-29
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -9,8 +9,9 @@ repo: AlexanderSmyslowski/catering-agents-platform
 
 - P2 startet auf dem bestätigten P1/main-Commit `6e3d5f798165fffa6125c605c40fe8e283444023`. Der tatsächliche offene Draft-Head von #712 wurde lesend als `f2546468c5bce0e8f2298ee1a92c6c6da3b2ae71` bestätigt. Die Reconciliation-Matrix in `docs/operations/CATERING_TARGET_UPDATE.md` ordnet alle geforderten Betriebskenntnisse einzeln P1 oder P2 zu; #712 wurde weder integriert noch geschlossen.
 - Manifest v3 bindet zusätzlich den vollständigen normalisierten Source-Baum. Release-Wiederverwendung ist read-only und akzeptiert nur identische Artefakte mit passendem Stage-Receipt, bekanntem Dateilayout sowie erwarteten Eigentümern und Modi. Install-Receipt, teilweise Apply-Zustände, abweichende Manifeste und unbekannte Dateien bleiben davon getrennt und enden fail-closed.
-- Der Operator exportiert Source-Verzeichnisse deterministisch mit Modus 0755 und Dateien mit Modus 0644 beziehungsweise dem getrackten ausführbaren Modus 0755. `stage` und `apply` können ein bereits identisch installiertes Release vor Transfer beziehungsweise Lock-Erwerb als `already_installed` bestätigen.
-- Gezielt lokal geprüft: 43 Python-Tests und 86 Catering-Target-Vitest-Tests; Bash-/Node-/Python-Syntax und `git diff --check` erfolgreich. Keine SSH-, Docker- oder Zielausführung, kein Hub-Writeback, kein Merge und keine Schließung von #712.
+- Der Operator exportiert Source-Verzeichnisse deterministisch mit Modus 0755 und Dateien mit Modus 0644 beziehungsweise dem getrackten ausführbaren Modus 0755. `apply` klassifiziert den Stage-Zustand vor und nach Lock-Erwerb neu; ein konkurrierend installiertes, identisches Release wird als No-op beendet, ein Teil-/Driftzustand fail-closed abgewiesen und der noch vor Aktivierung gehaltene Lock freigegeben.
+- P2 übernimmt außerdem rsync-SSH-Keepalives, setzt den Smoke-Eval-Modus explizit auf ESM und gibt nicht-sensitive Postflight-, Per-Service-Health- und Auth-Smoke-Marker aus. Das Image deklariert Node 22; der lokale Test prüft die explizite Modul-Invocation, führt jedoch keinen Smoke im Node-22-Image aus.
+- Gezielte lokale Prüfung nach der Review-Korrektur: 44 Python-Tests und alle 90 Catering-Target-Vitest-Tests in acht Dateien bestanden; Syntaxprüfungen und Diffcheck erfolgreich. Keine SSH-, Docker- oder Zielausführung, kein Hub-Writeback, kein Merge und keine Schließung von #712.
 
 ## Aktueller Stand – P1 dauerhafter CateringOS-Updateweg (2026-09-28)
 
@@ -2317,3 +2318,10 @@ Quelle: `8de2e96c8604f12da2ec14c39b187db04dfb61cf`. Der folgende Betriebsbericht
 - Die #712-Reconciliation-Matrix wurde gegen den gelesenen PR-Diff erstellt. P1 deckt Timeout-, Quoting-, Commit-, Runtime-, Kandidaten-, Override- und Rollbackbindungen ab; P2 ergänzt fail-closed Stage-Wiederverwendung, eindeutige Install-/Stage-Receipt-Zustände, Manifest-v3-Source-Tree-Bindung und umask-unabhängige Quellmodi.
 - Vollständiges identisches Stage ist ohne Transfer wiederverwendbar. Unvollständige oder abweichende Releases werden weder überschrieben noch gelöscht. Ein passendes bereits installiertes Release wird vor Lock/Activation bestätigt. #712 ist inhaltlich absorbiert und für den dauerhaften Updateweg nicht mehr als Codequelle erforderlich; der PR bleibt offen, bis seine separat freizugebende GitHub-Behandlung erfolgt.
 - Relevante lokale Prüfung: 43 Python-Tests, 86 Catering-Target-Vitest-Tests, Syntaxprüfungen und `git diff --check` erfolgreich. Keine reale Zielausführung oder Hostkontakt.
+
+### 5.416 - 2026-09-29 — P2 unabhängige Review-Korrekturen
+
+- `apply` klassifiziert Stage-/Install-Zustand erneut unter gehaltenem Lock. Ein inzwischen aktiviertes identisches Release endet nach Receipt-/Aktivmarkerprüfung als No-op; Teil-/Driftzustand stoppt vor Image-Laden und Aktivierung und gibt den Lock frei, solange keine Aktivierung begonnen hat.
+- rsync erhält dieselben SSH-Keepalive-Werte wie der direkte Transport. Smoke-Node-Aufruf deklariert ESM explizit; Postflight, Health pro Service und Auth-Smoke erhalten nicht-sensitive maschinenlesbare Fortschrittsmarker. Die #712-Matrix und die Smoke-Transportbeschreibung entsprechen dem tatsächlichen Code.
+- Der Exportmodus-Test prüft nun die exportierte Datei; ein gezielter Schema-v2-Installations-/Rollbacktest bewahrt die historische Receipt-Kompatibilität.
+- Verifiziert: 44 Python-Tests sowie alle 90 Catering-Target-Vitest-Tests in acht Dateien erfolgreich; Bash-/Node-/Python-Syntax und `git diff --check` erfolgreich. Keine Produktionsausführung, kein Hostkontakt und kein Hub-Writeback.

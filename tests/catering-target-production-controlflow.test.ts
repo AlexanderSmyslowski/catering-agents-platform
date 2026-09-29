@@ -240,6 +240,40 @@ describe("Catering target production control flow", () => {
     expect(commands).not.toContain("ssh activate candidate");
   });
 
+  it("does not treat an install receipt as active when the installed marker points elsewhere", () => {
+    const { result, commands } = runProduction("operator-apply-installed-inactive", "apply");
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("installed release is not the active target");
+    expect(commands).toContain("ssh stage inspect installed");
+    expect(commands).not.toContain("ssh lock");
+    expect(commands).not.toContain("ssh load");
+    expect(commands).not.toContain("ssh activate candidate");
+  });
+
+  it("reclassifies a release under lock when another apply installed it after the first inspection", () => {
+    const { result, commands } = runProduction("operator-apply-raced-installed", "apply");
+    expect(result.status, result.stderr + "\n" + commands).toBe(0);
+    expect(commands).toContain("ssh stage inspect reusable");
+    expect(commands).toContain("ssh stage inspect installed");
+    expect(result.stdout).toContain("TARGET_UPDATE_RESULT already_installed");
+    expect(commands).toContain("ssh verify install receipt");
+    expect(commands).toContain("ssh unlock");
+    expect(commands).not.toContain("ssh load");
+    expect(commands).not.toContain("ssh activate candidate");
+  });
+
+  it("releases the lock when the under-lock release recheck finds partial apply state", () => {
+    const { result, commands } = runProduction("operator-apply-raced-partial", "apply");
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("staged release state changed before apply");
+    expect(commands).toContain("ssh stage inspect reusable");
+    expect(commands).toContain("ssh stage inspect rejected");
+    expect(commands).toContain("ssh unlock");
+    expect(commands).not.toContain("ssh load");
+    expect(commands).not.toContain("ssh activate candidate");
+    expect(result.stdout + result.stderr).not.toContain("lock_retained=true");
+  });
+
   it("rejects a source-root Compose mismatch before contacting the target", () => {
     const { result, commands } = runProduction("operator-stage-source-root-mismatch", "stage");
     expect(result.status).not.toBe(0);
@@ -314,11 +348,18 @@ describe("Catering target production control flow", () => {
     expect(commands).toContain("ssh unlock");
   });
 
-  it("runs the operations-bound smoke through stdin without putting credentials in the remote command", () => {
+  it("runs the operations-bound smoke as ESM and sends credentials through stdin", () => {
     const { result, commands } = runProduction("operator-smoke", "apply");
     expect(result.status, result.stderr + "\n" + commands).toBe(0);
     expect(result.stdout).toContain("TARGET_UPDATE_RESULT activated");
     expect(commands).toContain("ssh smoke operator plans");
+    expect(result.stderr).toContain("TARGET_UPDATE_STAGE stage=postflight status=start");
+    expect(result.stderr).toContain("TARGET_UPDATE_STAGE stage=postflight status=success");
+    expect(result.stderr).toContain("TARGET_UPDATE_STAGE stage=health status=start");
+    expect(result.stderr).toContain("TARGET_UPDATE_STAGE stage=health service=intake status=success");
+    expect(result.stderr).toContain("TARGET_UPDATE_STAGE stage=health status=success");
+    expect(result.stderr).toContain("TARGET_UPDATE_STAGE stage=auth_smoke status=start");
+    expect(result.stderr).toContain("TARGET_UPDATE_STAGE stage=auth_smoke status=success");
     expect(commands).toContain("ssh receipt");
     expect(commands).toContain("ssh unlock");
     expect(commands).not.toContain("synthetic-password");
