@@ -33,6 +33,25 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Catering target operator acceptance gates
+        run: |
+          python3 -B tests/catering_target_operator_test.py
+          bash -n platform-infra/scripts/catering-target-production-update.sh
+          node --check platform-infra/scripts/catering-target-operator-smoke.mjs
+
+  catering-target-operator-macos:
+    runs-on: macos-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Verify operator on the system Bash and Python
+        run: |
+          /bin/bash --version | head -n 1
+          /bin/bash -n platform-infra/scripts/catering-target-production-update.sh
+          python3 -B tests/catering_target_operator_test.py
+
   browser-rehearsal:
     runs-on: ubuntu-latest
     timeout-minutes: 10

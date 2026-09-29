@@ -9,6 +9,7 @@ const runner = () => [
   readFileSync(path.join(root, "platform-infra/scripts/catering-target-production-update.sh"), "utf8")
 ].join("\n");
 const smoke = () => readFileSync(path.join(root, "platform-infra/scripts/catering-target-authenticated-smoke.mjs"), "utf8");
+const operatorSmoke = () => readFileSync(path.join(root, "platform-infra/scripts/catering-target-operator-smoke.mjs"), "utf8");
 
 describe("Catering target production command boundary", () => {
 
@@ -17,20 +18,40 @@ describe("Catering target production command boundary", () => {
       path.join(root, "platform-infra/scripts/catering-target-production-update.sh"),
       "utf8"
     );
-    const blocks = [...production.matchAll(/<<'(REMOTE_[A-Z0-9_]+)'\n([\s\S]*?)\n\1/g)];
-    expect(blocks.map((match) => match[1])).toEqual([
+    const blocks = [...production.matchAll(/<<'(REMOTE_[A-Z0-9_]+)'[^\n]*\n([\s\S]*?)\n\1/g)];
+    const pythonNames = new Set([
+      "REMOTE_BUNDLE_VERIFY",
+      "REMOTE_INSTALL_RECEIPT_VERIFY"
+    ]);
+    const bashBlocks = blocks.filter((match) => !pythonNames.has(match[1] ?? ""));
+    expect(bashBlocks.map((match) => match[1])).toEqual([
       "REMOTE_SCHEMA_SOURCE",
       "REMOTE_DDL_MANIFEST",
       "REMOTE_PREFLIGHT",
+      "REMOTE_STAGE_RECEIPT",
+      "REMOTE_STAGE_VERIFY",
       "REMOTE_LOCK",
       "REMOTE_UNLOCK",
       "REMOTE_RELEASE",
       "REMOTE_LOAD",
+      "REMOTE_ROLLBACK_RELEASE",
       "REMOTE_ACTIVATE",
       "REMOTE_VERIFY"
     ]);
-    for (const match of blocks) {
+    for (const match of bashBlocks) {
       const check = spawnSync("/bin/bash", ["-n"], {
+        input: match[2] ?? "",
+        encoding: "utf8"
+      });
+      expect(check.status, `${match[1]}: ${check.stderr}`).toBe(0);
+    }
+    const pythonBlocks = blocks.filter((match) => pythonNames.has(match[1] ?? ""));
+    expect(pythonBlocks.map((match) => match[1])).toEqual([
+      "REMOTE_BUNDLE_VERIFY",
+      "REMOTE_INSTALL_RECEIPT_VERIFY"
+    ]);
+    for (const match of pythonBlocks) {
+      const check = spawnSync("python3", ["-c", "import ast,sys; ast.parse(sys.stdin.read())"], {
         input: match[2] ?? "",
         encoding: "utf8"
       });
@@ -38,12 +59,58 @@ describe("Catering target production command boundary", () => {
     }
   });
 
+  it("keeps the remote bundle verification heredoc valid Python", () => {
+    const production = readFileSync(
+      path.join(root, "platform-infra/scripts/catering-target-production-update.sh"),
+      "utf8"
+    );
+    const match = production.match(/<<'REMOTE_BUNDLE_VERIFY'\n([\s\S]*?)\nREMOTE_BUNDLE_VERIFY/);
+    expect(match?.[1], "REMOTE_BUNDLE_VERIFY block missing").toBeTruthy();
+    const check = spawnSync("python3", ["-c", "import ast,sys; ast.parse(sys.stdin.read())"], {
+      input: match?.[1] ?? "",
+      encoding: "utf8"
+    });
+    expect(check.status, check.stderr).toBe(0);
+  });
+
+  it("streams the versioned operator release verifier to the read-only remote preflight", () => {
+    const production = readFileSync(
+      path.join(root, "platform-infra/scripts/catering-target-production-update.sh"),
+      "utf8"
+    );
+    expect(production).toContain("catering-target-release-state.py");
+    expect(production).toContain("preflight_fail operator_release_binding");
+    expect(production).toContain('[[ "$#" -eq 30 ]] || preflight_fail remote_argument_count');
+    expect(production).toContain('runtime_state=release:%s');
+  });
+
+  it("uses the bound lowercase release root under the strict remote Bash shell", () => {
+    const production = readFileSync(
+      path.join(root, "platform-infra/scripts/catering-target-production-update.sh"),
+      "utf8"
+    );
+    const match = production.match(/<<'REMOTE_PREFLIGHT'[^\n]*\n([\s\S]*?)\nREMOTE_PREFLIGHT/);
+    expect(match?.[1], "REMOTE_PREFLIGHT block missing").toBeTruthy();
+    const remotePreflight = match?.[1] ?? "";
+    const releaseRoot = remotePreflight.match(/^\s*release_root="\/opt\/catering-releases"$/m)?.[0];
+    const releasePath = remotePreflight.match(/^\s*release_dir="\$release_root\/\$active_release_sha"$/m)?.[0];
+    expect(releaseRoot).toBeTruthy();
+    expect(releasePath).toBeTruthy();
+    const check = spawnSync("/bin/bash", ["-euo", "pipefail", "-c", [
+      releaseRoot,
+      `active_release_sha="${"a".repeat(40)}"`,
+      releasePath,
+      '[[ "$release_dir" == "$release_root/$active_release_sha" ]]'
+    ].join("\n")], { encoding: "utf8" });
+    expect(check.status, check.stderr).toBe(0);
+  });
+
   it("disables psql startup files in the read-only remote preflight", () => {
     const production = readFileSync(
       path.join(root, "platform-infra/scripts/catering-target-production-update.sh"),
       "utf8"
     );
-    const match = production.match(/<<'REMOTE_PREFLIGHT'\n([\s\S]*?)\nREMOTE_PREFLIGHT/);
+    const match = production.match(/<<'REMOTE_PREFLIGHT'[^\n]*\n([\s\S]*?)\nREMOTE_PREFLIGHT/);
     expect(match?.[1], "REMOTE_PREFLIGHT block missing").toBeTruthy();
     const remotePreflight = match?.[1] ?? "";
     expect(remotePreflight).toMatch(/\bpsql\b[^\n]*--no-psqlrc\b/);
@@ -71,10 +138,10 @@ describe("Catering target production command boundary", () => {
     );
     expect(production).toContain('expected_lock_owner_arg="__CATERING_NO_LOCK_OWNER__"');
     expect(production).toContain('"${expected_lock_owner_arg}"');
-    const match = production.match(/<<'REMOTE_PREFLIGHT'\n([\s\S]*?)\nREMOTE_PREFLIGHT/);
+    const match = production.match(/<<'REMOTE_PREFLIGHT'[^\n]*\n([\s\S]*?)\nREMOTE_PREFLIGHT/);
     expect(match?.[1], "REMOTE_PREFLIGHT block missing").toBeTruthy();
     const remotePreflight = match?.[1] ?? "";
-    expect(remotePreflight).toContain('[[ "$#" -eq 23 ]] || preflight_fail remote_argument_count');
+    expect(remotePreflight).toContain('[[ "$#" -eq 30 ]] || preflight_fail remote_argument_count');
     expect(remotePreflight).toContain('expected_owner_arg="$7"');
     expect(remotePreflight).toContain('expected_owner=""');
   });
@@ -99,7 +166,7 @@ describe("Catering target production command boundary", () => {
       path.join(root, "platform-infra/scripts/catering-target-production-update.sh"),
       "utf8"
     );
-    const match = production.match(/<<'REMOTE_PREFLIGHT'\n([\s\S]*?)\nREMOTE_PREFLIGHT/);
+    const match = production.match(/<<'REMOTE_PREFLIGHT'[^\n]*\n([\s\S]*?)\nREMOTE_PREFLIGHT/);
     expect(match?.[1], "REMOTE_PREFLIGHT block missing").toBeTruthy();
     const remotePreflight = match?.[1] ?? "";
     expect(remotePreflight).toContain('sudo -n test -f "$runtime_env" || preflight_fail runtime_env_file');
@@ -113,7 +180,7 @@ describe("Catering target production command boundary", () => {
       path.join(root, "platform-infra/scripts/catering-target-production-update.sh"),
       "utf8"
     );
-    const match = production.match(/<<'REMOTE_PREFLIGHT'\n([\s\S]*?)\nREMOTE_PREFLIGHT/);
+    const match = production.match(/<<'REMOTE_PREFLIGHT'[^\n]*\n([\s\S]*?)\nREMOTE_PREFLIGHT/);
     expect(match?.[1], "REMOTE_PREFLIGHT block missing").toBeTruthy();
     const remotePreflight = match?.[1] ?? "";
     expect(remotePreflight).toContain('preflight_fail "${gate}_file"');
@@ -135,13 +202,19 @@ describe("Catering target production command boundary", () => {
       path.join(root, "platform-infra/scripts/catering-target-production-update.sh"),
       "utf8"
     );
-    const match = production.match(/<<'REMOTE_PREFLIGHT'\n([\s\S]*?)\nREMOTE_PREFLIGHT/);
+    const contractValidator = readFileSync(
+      path.join(root, "platform-infra/scripts/catering-target-contract.py"),
+      "utf8"
+    );
+    const match = production.match(/<<'REMOTE_PREFLIGHT'[^\n]*\n([\s\S]*?)\nREMOTE_PREFLIGHT/);
     expect(match?.[1], "REMOTE_PREFLIGHT block missing").toBeTruthy();
     const remotePreflight = match?.[1] ?? "";
     expect(production).toContain("repositorySourcePaths.platformBase");
     expect(production).toContain("installedRuntime.platform.baseCompose");
     expect(production).toContain("installedRuntime.edge.baseCompose");
-    expect(production).toContain("target runtime inventory binding mismatch");
+    expect(production).toContain("catering-target-contract.py");
+    expect(production).toContain('fail "target contract or inventory has invalid control values"');
+    expect(contractValidator).toContain('item.get("path") == remote_path and item.get("sourcePath") == source_path');
     expect(remotePreflight).toContain('platform_base="${10}"');
     expect(remotePreflight).toContain('edge_base="${14}"');
     expect(remotePreflight).toContain('target_site="${17}"');
@@ -157,7 +230,7 @@ describe("Catering target production command boundary", () => {
       path.join(root, "platform-infra/scripts/catering-target-production-update.sh"),
       "utf8"
     );
-    const match = production.match(/<<'REMOTE_PREFLIGHT'\n([\s\S]*?)\nREMOTE_PREFLIGHT/);
+    const match = production.match(/<<'REMOTE_PREFLIGHT'[^\n]*\n([\s\S]*?)\nREMOTE_PREFLIGHT/);
     expect(match?.[1], "REMOTE_PREFLIGHT block missing").toBeTruthy();
     const remotePreflight = match?.[1] ?? "";
     for (const gate of [
@@ -235,11 +308,107 @@ describe("Catering target production command boundary", () => {
     expect(smokeText).not.toContain("synthetic-password");
   });
 
+  it("uses the operations-bound read-only plans smoke in the versioned operator path", () => {
+    const production = readFileSync(
+      path.join(root, "platform-infra/scripts/catering-target-production-update.sh"),
+      "utf8"
+    );
+    const smokeText = operatorSmoke();
+    const start = production.indexOf("authenticated_read_smoke() {");
+    const end = production.indexOf("\n}\n", start);
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    expect(production.slice(start, end)).toContain("catering-target-operator-smoke.mjs");
+    expect(production.slice(start, end)).toContain("CATERING_TARGET_OPERATIONS_COMMIT");
+    expect(production.slice(start, end)).toMatch(/printf '%s' "\$\{payload\}" \| ssh_target sudo -n docker exec -i platform-infra-intake-1 node -e "\$\{smoke_source\}"/);
+    expect(production.slice(start, end)).not.toContain("base64");
+    expect(smokeText).toContain("/api/intake/v1/auth/login");
+    expect(smokeText).toContain("/api/intake/v1/auth/session");
+    expect(smokeText).toContain("/api/production/v1/production/plans");
+    expect(smokeText).not.toContain("/api/production/v1/production/cases");
+    expect(smokeText).toContain("process.stdin");
+  });
+
   it("protects the server-owned configuration in production sync", () => {
     const text = runner();
     for (const excluded of ["platform-infra/.env", "platform-infra/sites", "data"]) {
       expect(text).toContain("--exclude=" + excluded);
     }
     expect(text).toContain("/etc/catering-target/runtime.env");
+    expect(text).toContain("ServerAliveInterval=15");
+    expect(text).toContain("ServerAliveCountMax=4");
+  });
+
+  it("checks operator bindings at phase entry and rechecks staged artifacts before apply", () => {
+    const production = readFileSync(
+      path.join(root, "platform-infra/scripts/catering-target-production-update.sh"),
+      "utf8"
+    );
+    const inputValidation = production.slice(
+      production.indexOf("validate_production_inputs() {"),
+      production.indexOf("\n}\n", production.indexOf("validate_production_inputs() {"))
+    );
+    const apply = production.slice(
+      production.indexOf("run_production_apply() {"),
+      production.indexOf("\n}\n", production.indexOf("run_production_apply() {"))
+    );
+    expect(production).toContain('REPO_ROOT="${CATERING_TARGET_SOURCE_ROOT:-${OPERATIONS_ROOT}}"');
+    expect(production).toContain('"${OPERATIONS_ROOT}/platform-infra/scripts/catering-target-operator.py" _gate');
+    expect(inputValidation).toContain("operator_guard");
+    expect(inputValidation).toContain("checked out operations commit does not match its binding");
+    expect(apply).toContain("validate_production_inputs");
+    expect(apply).toContain("verify_remote_bundle");
+    expect(apply).toContain("verify_remote_stage_receipt");
+    expect(apply).toContain("capture_previous_and_load_candidates");
+    expect(apply).toContain('activate_remote_override "${release_dir}/candidate-images.json"');
+    expect(production).toContain("verify_remote_bundle || return 1");
+    expect(production).toContain("operations_commit={operations_commit}");
+    expect(production).toContain("manifest_sha256={manifest_sha}");
+  });
+
+  it("keeps remote preflight GitHub-free while carrying operator bindings to release-state verification", () => {
+    const production = readFileSync(
+      path.join(root, "platform-infra/scripts/catering-target-production-update.sh"),
+      "utf8"
+    );
+    const start = production.indexOf("remote_preflight() {");
+    const end = production.indexOf("\n}\n", start);
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    const remotePreflight = production.slice(start, end);
+    expect(remotePreflight).toContain('operations_commit_arg="${CATERING_TARGET_OPERATIONS_COMMIT}"');
+    expect(remotePreflight).toContain('manifest_sha_arg="${CATERING_TARGET_MANIFEST_SHA256:-__CATERING_LEGACY__}"');
+    expect(remotePreflight).toContain('"${operations_commit_arg}" "${manifest_sha_arg}"');
+    expect(remotePreflight).not.toContain("operator_guard");
+    expect(remotePreflight).not.toContain("gh ");
+  });
+
+  it("validates a previously installed release independently before rollback activation", () => {
+    const production = readFileSync(
+      path.join(root, "platform-infra/scripts/catering-target-production-update.sh"),
+      "utf8"
+    );
+    const start = production.indexOf("activate_remote_override() {");
+    const end = production.indexOf("\n}\n", start);
+    const activation = production.slice(start, end);
+    const rollbackBranch = activation.match(/elif \[\[ "\$\{PREVIOUS_RELEASE_SHA\}[\s\S]*?\n    else/);
+    expect(rollbackBranch?.[0]).toContain('verify_remote_previous_release "${PREVIOUS_RELEASE_SHA}"');
+    expect(rollbackBranch?.[0]).not.toContain("operator_guard");
+    expect(rollbackBranch?.[0]).not.toContain("verify_remote_bundle");
+    expect(production).toContain('<<\'REMOTE_ROLLBACK_RELEASE\' | ssh_target sudo -n /usr/bin/python3 -I -');
+  });
+
+  it("disables sender ownership preservation for both root-received rsync phases", () => {
+    const production = readFileSync(
+      path.join(root, "platform-infra/scripts/catering-target-production-update.sh"),
+      "utf8"
+    );
+    const sourceSync = production.match(/^\s*rsync -az ([^\n]*source_sync_root[^\n]*)$/m)?.[1] ?? "";
+    const bundleSync = production.match(/^\s*rsync -az ([^\n]*bundle_files[^\n]*)$/m)?.[1] ?? "";
+    for (const args of [sourceSync, bundleSync]) {
+      expect(args).toContain("--no-owner");
+      expect(args).toContain("--no-group");
+      expect(args).toContain('--rsync-path="sudo -n rsync"');
+    }
   });
 });

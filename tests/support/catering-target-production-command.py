@@ -8,6 +8,9 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import re
+import shlex
+import subprocess
 import sys
 
 state_root = Path(os.environ["CATERING_TARGET_FAKE_STATE"])
@@ -70,6 +73,33 @@ if command == "docker":
 
 if command == "rsync":
     destination = args[-1] if args else ""
+    if "--no-owner" not in args or "--no-group" not in args:
+        fail("synthetic rsync: privileged receiver must own transferred artifacts")
+    import shlex
+
+    try:
+        rsync_ssh = shlex.split(args[args.index("-e") + 1])
+    except (ValueError, IndexError):
+        fail("synthetic rsync: SSH transport is missing")
+    expected_ssh = [
+        "ssh",
+        "-i",
+        os.environ["CATERING_TARGET_SSH_KEY_FILE"],
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "IdentitiesOnly=yes",
+        "-o",
+        "StrictHostKeyChecking=yes",
+        "-o",
+        "UserKnownHostsFile=" + os.environ["CATERING_TARGET_SSH_KNOWN_HOSTS_FILE"],
+        "-o",
+        "ConnectTimeout=10",
+        "-p",
+        "22",
+    ]
+    if rsync_ssh != expected_ssh:
+        fail("synthetic rsync: SSH path arguments were not shell-quoted")
     if destination.endswith("/source/"):
         log("rsync source")
     else:
@@ -86,10 +116,46 @@ if not strict_ssh_options_present(args):
 
 stdin_bytes = sys.stdin.buffer.read()
 stdin_text = stdin_bytes.decode("utf-8", errors="replace")
-joined_args = " ".join(args)
+try:
+    separator = args.index("--")
+    remote_parts = args[separator + 2:]
+    remote_argv = shlex.split(" ".join(remote_parts))
+except (ValueError, IndexError):
+    fail("synthetic ssh: remote command was malformed")
+joined_args = " ".join(remote_argv)
+
+if scenario == "operator-smoke" and "node -e" in joined_args:
+    expected_prefix = [
+        "sudo", "-n", "docker", "exec", "-i", "platform-infra-intake-1", "node", "-e"
+    ]
+    if remote_argv[:len(expected_prefix)] != expected_prefix or len(remote_argv) != len(expected_prefix) + 1:
+        fail("synthetic operator smoke: command was not transported as a bound argument vector")
+
+if 'stage_tool_sha="${12}"' in stdin_text:
+    try:
+        # OpenSSH sends remote argv as one shell command string; empty values
+        # disappear unless the caller quotes each argument for that shell.
+        script_separator = remote_argv.index("--")
+        activation_parameters = remote_argv[script_separator + 1:]
+    except ValueError:
+        fail("synthetic ssh: remote activation command was malformed")
+    probe = subprocess.run(
+        ["bash", "-euo", "pipefail", "-c", 'stage_tool_sha="${12}"', "remote-activation", *activation_parameters],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if probe.returncode != 0:
+        fail("synthetic ssh: remote activation arguments were not preserved")
 
 
 def classify_override() -> str:
+    if scenario.startswith("operator-"):
+        installed_file = state_root / "installed-release"
+        if installed_file.exists():
+            installed_sha = installed_file.read_text(encoding="ascii")
+            if f"/opt/catering-releases/{installed_sha}/candidate-images.json" in joined_args:
+                return "previous"
     if "candidate-images.json" in joined_args:
         return "candidate"
     if "previous-images.json" in joined_args:
@@ -102,6 +168,23 @@ if "docker exec -i" in joined_args and "catering-target-authenticated-smoke.mjs"
     log("ssh smoke")
     if scenario == "smoke-fails":
         raise SystemExit(1)
+    sys.stdout.write("authenticated_read_smoke_ok\n")
+    raise SystemExit(0)
+
+
+if "docker exec -i" in joined_args and "node -e" in joined_args:
+    if len(remote_argv) < 9 or remote_argv[6:8] != ["node", "-e"]:
+        fail("synthetic operator smoke: node source was not one remote argument")
+    smoke_source = remote_argv[8]
+    if "/api/production/v1/production/plans" not in smoke_source:
+        fail("synthetic operator smoke: plans read route missing")
+    if "/api/production/v1/production/cases" in smoke_source:
+        fail("synthetic operator smoke: forbidden cases route present")
+    if "synthetic-password" in joined_args or "synthetic-user" in joined_args:
+        fail("synthetic operator smoke: credentials leaked into remote command")
+    if "synthetic-password" not in stdin_text or "synthetic-user" not in stdin_text:
+        fail("synthetic operator smoke: credential payload was not delivered on stdin")
+    log("ssh smoke operator plans")
     sys.stdout.write("authenticated_read_smoke_ok\n")
     raise SystemExit(0)
 
@@ -189,7 +272,8 @@ if "TARGET_RUNTIME_DDL_HASHES" in stdin_text:
     raise SystemExit(0)
 
 if "TARGET_PREFLIGHT_OK target=" in stdin_text:
-    log("ssh preflight")
+    if scenario != "operator-rollback-snapshot-race":
+        log("ssh preflight")
     if "CATERING_WRITER_MODE" not in stdin_text or "catering_schema_migrations" not in stdin_text:
         fail("synthetic ssh: production preflight lost writer/schema guards")
     if scenario == "writer-disabled":
@@ -200,13 +284,70 @@ if "TARGET_PREFLIGHT_OK target=" in stdin_text:
     count = int(count_file.read_text(encoding="utf-8")) if count_file.exists() else 0
     count += 1
     count_file.write_text(str(count), encoding="utf-8")
+    runtime_state = ""
+    if scenario.startswith("operator-"):
+        release = "a" * 40 if scenario == "operator-rollback-snapshot-race" and count == 1 else "b" * 40
+        (state_root / "installed-release").write_text(release, encoding="ascii")
+        runtime_state = f"runtime_state=release:{release} "
+        log(f"ssh preflight release={release}")
     if scenario == "preflight-fails" and count == 1:
         raise SystemExit(1)
     sys.stdout.write(
         "TARGET_PREFLIGHT_OK target=catering-prod-1 backup=healthy "
-        "postgres_volume=platform-infra_postgres_data "
+        + runtime_state
+        + "postgres_volume=platform-infra_postgres_data "
         "edge_image=sha256:" + "e" * 64 + "\n"
     )
+    raise SystemExit(0)
+
+
+if "--rollback" in remote_argv:
+    rollback_sha = remote_argv[remote_argv.index("--rollback") + 1]
+    installed_sha = (state_root / "installed-release").read_text(encoding="ascii")
+    log(f"ssh verify rollback {rollback_sha}")
+    raise SystemExit(0 if rollback_sha == installed_sha else 1)
+
+
+if "bundle manifest binding invalid" in stdin_text:
+    count_file = state_root / "bundle-verify-count"
+    count = int(count_file.read_text(encoding="utf-8")) if count_file.exists() else 0
+    count += 1
+    count_file.write_text(str(count), encoding="utf-8")
+    log("ssh verify bundle")
+    raise SystemExit(0)
+
+if 'python3 "$tool" write' in stdin_text:
+    log("ssh stage receipt write")
+    raise SystemExit(0)
+
+if 'python3 "$tool" verify' in stdin_text:
+    if scenario == "operator-stage-binding-drift":
+        log("ssh stage receipt verify failed")
+        raise SystemExit(1)
+    log("ssh stage receipt verify")
+    raise SystemExit(0)
+
+if "# TARGET_STAGE_BINDING_CAPTURE" in stdin_text and len(remote_argv) > 9 and remote_argv[9] == "true":
+    if scenario == "operator-stage-binding-drift-before-load":
+        log("ssh stage receipt verify capture failed")
+        raise SystemExit(1)
+    log("ssh stage receipt verify capture")
+    log("ssh load")
+    raise SystemExit(0)
+
+if "stage receipt binding mismatch" in stdin_text and "python3" in joined_args and "verify" in remote_argv:
+    if scenario == "operator-stage-binding-drift":
+        log("ssh stage receipt verify failed")
+        raise SystemExit(1)
+    log("ssh stage receipt verify")
+    raise SystemExit(0)
+
+if "stage receipt already exists" in stdin_text and "python3" in joined_args and "write" in remote_argv:
+    log("ssh stage receipt write")
+    raise SystemExit(0)
+
+if "install receipt binding mismatch" in stdin_text:
+    log("ssh verify install receipt")
     raise SystemExit(0)
 
 
@@ -233,7 +374,7 @@ if "previous-images.json" in stdin_text and "docker load" in stdin_text:
 if "up -d --no-deps" in stdin_text:
     which = classify_override()
     log(f"ssh activate {which}")
-    if scenario == "activate-fails" and which == "candidate":
+    if scenario in {"activate-fails", "operator-rollback-snapshot-race"} and which == "candidate":
         raise SystemExit(1)
     if scenario == "rollback-fails":
         raise SystemExit(1)

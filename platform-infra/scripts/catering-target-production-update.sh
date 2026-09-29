@@ -3,7 +3,8 @@ set -euo pipefail
 
 MODE="${1:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+OPERATIONS_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+REPO_ROOT="${CATERING_TARGET_SOURCE_ROOT:-${OPERATIONS_ROOT}}"
 CONTRACT_PATH="${REPO_ROOT}/platform-infra/catering-target-update-contract.json"
 RUNTIME_INVENTORY_PATH="${REPO_ROOT}/platform-infra/catering-target-runtime-inventory.json"
 EXPECTED_TARGET_ID="catering-prod-1"
@@ -11,6 +12,10 @@ TARGET_RUNTIME_ENV="/etc/catering-target/runtime.env"
 TARGET_UPDATE_LOCK="/opt/catering-target-update.lock"
 BACKUP_OBSERVER="/usr/local/libexec/catering-backup-observer.py"
 DEPLOY_COMMIT_SHA="${DEPLOY_COMMIT_SHA:-}"
+CATERING_TARGET_OPERATIONS_COMMIT="${CATERING_TARGET_OPERATIONS_COMMIT:-}"
+CATERING_TARGET_BUNDLE_DIR="${CATERING_TARGET_BUNDLE_DIR:-}"
+CATERING_TARGET_MANIFEST_SHA256="${CATERING_TARGET_MANIFEST_SHA256:-}"
+CATERING_TARGET_SOURCE_SYNC_ROOT="${CATERING_TARGET_SOURCE_SYNC_ROOT:-}"
 REMOTE=""
 SSH_OPTIONS=()
 TARGET_ID=""
@@ -40,10 +45,47 @@ RUNTIME_IMAGE=""
 WEB_IMAGE=""
 POSTGRES_VOLUME=""
 EDGE_IMAGE=""
+ACTIVE_RELEASE_SHA=""
+PREVIOUS_RELEASE_SHA=""
 
 fail() {
   printf '%s\n' "$*" >&2
   exit 1
+}
+
+operator_guard() {
+  [[ -n "${CATERING_TARGET_OPERATIONS_COMMIT}" ]] || return 0
+  [[ -f "${OPERATIONS_ROOT}/platform-infra/scripts/catering-target-operator.py" && ! -L "${OPERATIONS_ROOT}/platform-infra/scripts/catering-target-operator.py" ]] || fail "versioned Catering target operator is missing"
+  local command=(python3 "${OPERATIONS_ROOT}/platform-infra/scripts/catering-target-operator.py" _gate
+    --product-commit "${DEPLOY_COMMIT_SHA}"
+    --operations-commit "${CATERING_TARGET_OPERATIONS_COMMIT}"
+    --product-source "${REPO_ROOT}")
+  if [[ -n "${CATERING_TARGET_BUNDLE_DIR}" || -n "${CATERING_TARGET_MANIFEST_SHA256}" ]]; then
+    [[ -n "${CATERING_TARGET_BUNDLE_DIR}" && "${CATERING_TARGET_MANIFEST_SHA256}" =~ ^[0-9a-f]{64}$ ]] || fail "bound bundle inputs are incomplete"
+    command+=(--bundle-dir "${CATERING_TARGET_BUNDLE_DIR}" --manifest-sha256 "${CATERING_TARGET_MANIFEST_SHA256}")
+  fi
+  "${command[@]}" >/dev/null
+}
+
+legacy_github_update_allowed() {
+  [[ "${GITHUB_ACTIONS:-}" == "true" \
+    && "${GITHUB_REPOSITORY:-}" == "AlexanderSmyslowski/catering-agents-platform" \
+    && "${GITHUB_WORKFLOW:-}" == "Update Catering target" \
+    && "${GITHUB_EVENT_NAME:-}" == "workflow_dispatch" \
+    && "${GITHUB_REF:-}" == "refs/heads/main" \
+    && "${GITHUB_WORKFLOW_REF:-}" == "AlexanderSmyslowski/catering-agents-platform/.github/workflows/update-catering-target.yml@refs/heads/main" \
+    && "${GITHUB_WORKFLOW_SHA:-}" == "${DEPLOY_COMMIT_SHA}" ]] || return 1
+  [[ -n "${GITHUB_EVENT_PATH:-}" && -f "${GITHUB_EVENT_PATH}" && ! -L "${GITHUB_EVENT_PATH}" ]] || return 1
+  python3 - "${GITHUB_EVENT_PATH}" "${DEPLOY_COMMIT_SHA}" <<'PY'
+import json, sys
+try:
+    event = json.load(open(sys.argv[1], encoding="utf-8"))
+except (OSError, ValueError):
+    raise SystemExit(1)
+inputs = event.get("inputs")
+if not isinstance(inputs, dict) or inputs.get("confirmation") != "UPDATE_CATERING_TARGET" or inputs.get("commit_sha") != sys.argv[2]:
+    raise SystemExit(1)
+PY
 }
 
 contract_value() {
@@ -63,43 +105,9 @@ PY
 load_production_contract() {
   [[ -f "${CONTRACT_PATH}" && ! -L "${CONTRACT_PATH}" ]] || fail "target update contract missing"
   [[ -f "${RUNTIME_INVENTORY_PATH}" && ! -L "${RUNTIME_INVENTORY_PATH}" ]] || fail "target runtime inventory missing"
-  python3 - "${CONTRACT_PATH}" "${RUNTIME_INVENTORY_PATH}" <<'PY'
-import json, sys
-contract = json.load(open(sys.argv[1], encoding="utf-8"))
-inventory = json.load(open(sys.argv[2], encoding="utf-8"))
-if contract.get("schemaVersion") != 2:
-    raise SystemExit("unsupported target update contract")
-if contract.get("targetId") != "catering-prod-1" or inventory.get("targetId") != contract.get("targetId"):
-    raise SystemExit("unexpected target id")
-if contract.get("migrationPolicy") != {"mode": "explicit-only", "supportedCommand": None}:
-    raise SystemExit("unsupported migration policy")
-sources = contract.get("repositorySourcePaths")
-runtime = contract.get("installedRuntime")
-if set(sources or {}) != {"platformBase", "platformOperations", "edgeBase", "edgeOperations", "edgeCaddy", "targetSite"}:
-    raise SystemExit("unexpected repository source paths")
-if set(runtime or {}) != {"platform", "edge"}:
-    raise SystemExit("unexpected installed runtime")
-platform_files = {item["role"]: item for item in inventory["platform"]["runtimeFiles"]}
-edge_files = {item["role"]: item for item in inventory["edge"]["runtimeFiles"]}
-expected = {
-    ("platform", "base_compose"): (runtime["platform"]["baseCompose"], sources["platformBase"]),
-    ("platform", "operations_compose"): (runtime["platform"]["operationsCompose"], sources["platformOperations"]),
-    ("platform", "target_site"): (runtime["platform"]["targetSite"], sources["targetSite"]),
-    ("edge", "base_compose"): (runtime["edge"]["baseCompose"], sources["edgeBase"]),
-    ("edge", "operations_compose"): (runtime["edge"]["operationsCompose"], sources["edgeOperations"]),
-    ("edge", "caddyfile"): (runtime["edge"]["caddyfile"], sources["edgeCaddy"]),
-}
-for (scope, role), (runtime_path, source_path) in expected.items():
-    item = (platform_files if scope == "platform" else edge_files).get(role)
-    if not item or item.get("path") != runtime_path or item.get("sourcePath") != source_path:
-        raise SystemExit("target runtime inventory binding mismatch")
-    if item.get("status") != "regular_file" or item.get("owner") != "root" or item.get("group") != "root" or item.get("mode") != "0644" or item.get("sourceMatch") is not True:
-        raise SystemExit("target runtime inventory is not fully confirmed")
-if inventory["platform"].get("composeProject") != runtime["platform"]["composeProject"] or inventory["platform"].get("workingDirectory") != runtime["platform"]["workingDirectory"]:
-    raise SystemExit("platform compose identity mismatch")
-if inventory["edge"].get("composeProject") != runtime["edge"]["composeProject"] or inventory["edge"].get("workingDirectory") != runtime["edge"]["workingDirectory"]:
-    raise SystemExit("edge compose identity mismatch")
-PY
+  [[ -f "${OPERATIONS_ROOT}/platform-infra/scripts/catering-target-contract.py" && ! -L "${OPERATIONS_ROOT}/platform-infra/scripts/catering-target-contract.py" ]] || fail "target contract validator missing"
+  python3 "${OPERATIONS_ROOT}/platform-infra/scripts/catering-target-contract.py" "${CONTRACT_PATH}" "${RUNTIME_INVENTORY_PATH}" >/dev/null \
+    || fail "target contract or inventory has invalid control values"
   TARGET_ID="$(contract_value targetId)"
   DEPLOY_PATH="$(contract_value deployPath)"
   EDGE_PATH="$(contract_value edgePath)"
@@ -131,6 +139,42 @@ validate_production_inputs() {
   local checked_out
   checked_out="$(git -C "${REPO_ROOT}" rev-parse HEAD)"
   [[ "${checked_out}" == "${DEPLOY_COMMIT_SHA}" ]] || fail "checked out commit does not match DEPLOY_COMMIT_SHA"
+  if [[ "${MODE}" == "--update" || "${MODE}" == "--apply" ]]; then
+    [[ -n "${CATERING_TARGET_SMOKE_BASIC_AUTH_USER:-}" ]] || fail "CATERING_TARGET_SMOKE_BASIC_AUTH_USER is required"
+    [[ -n "${CATERING_TARGET_SMOKE_BASIC_AUTH_PASSWORD:-}" ]] || fail "CATERING_TARGET_SMOKE_BASIC_AUTH_PASSWORD is required"
+    [[ -n "${CATERING_TARGET_SMOKE_LOGIN_CODE:-}" ]] || fail "CATERING_TARGET_SMOKE_LOGIN_CODE is required"
+    [[ -n "${CATERING_TARGET_SMOKE_PIN:-}" ]] || fail "CATERING_TARGET_SMOKE_PIN is required"
+  fi
+  if [[ "${MODE}" == "--update" ]]; then
+    if [[ -n "${CATERING_TARGET_OPERATIONS_COMMIT}" ]] || ! legacy_github_update_allowed; then
+      fail "direct target mutation requires an approved operator binding"
+    fi
+  fi
+  if [[ "${MODE}" == "--stage" || "${MODE}" == "--apply" || "${MODE}" == "--verify" ]]; then
+    [[ -n "${CATERING_TARGET_OPERATIONS_COMMIT}" ]] || fail "operator commit binding is required for this phase"
+    [[ -n "${CATERING_TARGET_BUNDLE_DIR}" && "${CATERING_TARGET_MANIFEST_SHA256}" =~ ^[0-9a-f]{64}$ ]] || fail "an explicitly bound bundle is required for this phase"
+    if [[ "${MODE}" == "--stage" ]]; then
+      [[ -n "${CATERING_TARGET_SOURCE_SYNC_ROOT}" && -d "${CATERING_TARGET_SOURCE_SYNC_ROOT}" && ! -L "${CATERING_TARGET_SOURCE_SYNC_ROOT}" ]] || fail "tracked product source export is required for staging"
+    fi
+  fi
+  if [[ -n "${CATERING_TARGET_OPERATIONS_COMMIT}" ]]; then
+    [[ "${CATERING_TARGET_OPERATIONS_COMMIT}" =~ ^[0-9a-f]{40}$ ]] || fail "operations commit must be an exact lowercase 40-character Git commit SHA"
+    local operations_checkout
+    operations_checkout="$(git -C "${OPERATIONS_ROOT}" rev-parse HEAD)"
+    [[ "${operations_checkout}" == "${CATERING_TARGET_OPERATIONS_COMMIT}" ]] || fail "checked out operations commit does not match its binding"
+    if [[ "${MODE}" != "--verify" ]]; then
+      operator_guard
+    fi
+    if [[ "${MODE}" == "--stage" ]]; then
+      python3 "${OPERATIONS_ROOT}/platform-infra/scripts/catering-target-stage-binding.py" verify-source \
+        "${CATERING_TARGET_SOURCE_SYNC_ROOT}" "${CATERING_TARGET_BUNDLE_DIR}/manifest.json" "${CATERING_TARGET_MANIFEST_SHA256}" >/dev/null \
+        || fail "staged product Compose bindings are invalid"
+    fi
+  fi
+  if [[ "${MODE}" == "--apply" || "${MODE}" == "--verify" ]]; then
+    CATERING_TARGET_STAGE_REQUIRED=1
+    export CATERING_TARGET_STAGE_REQUIRED
+  fi
 
   : "${CATERING_TARGET_DEPLOY_HOST:?CATERING_TARGET_DEPLOY_HOST is required}"
   : "${CATERING_TARGET_DEPLOY_USER:?CATERING_TARGET_DEPLOY_USER is required}"
@@ -143,23 +187,38 @@ validate_production_inputs() {
   [[ -f "${CATERING_TARGET_SSH_KNOWN_HOSTS_FILE}" && ! -L "${CATERING_TARGET_SSH_KNOWN_HOSTS_FILE}" ]] || fail "target known-hosts file invalid"
 
   REMOTE="${CATERING_TARGET_DEPLOY_USER}@${CATERING_TARGET_DEPLOY_HOST}"
-  SSH_OPTIONS=(
+SSH_OPTIONS=(
     -i "${CATERING_TARGET_SSH_KEY_FILE}"
     -o BatchMode=yes
     -o IdentitiesOnly=yes
     -o StrictHostKeyChecking=yes
     -o "UserKnownHostsFile=${CATERING_TARGET_SSH_KNOWN_HOSTS_FILE}"
     -o ConnectTimeout=10
+    -o ServerAliveInterval=15
+    -o ServerAliveCountMax=4
     -p 22
   )
 }
 
 ssh_target() {
-  ssh "${SSH_OPTIONS[@]}" -- "${REMOTE}" "$@"
+  local remote_command
+  remote_command="$(python3 - "$@" <<'PY'
+import shlex
+import sys
+print(" ".join(shlex.quote(value) for value in sys.argv[1:]))
+PY
+)" || fail "could not safely encode the remote command"
+  ssh "${SSH_OPTIONS[@]}" -- "${REMOTE}" "${remote_command}"
 }
 
 local_sha256() {
-  sha256sum "$1" | awk '{print $1}'
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | awk '{print $1}'
+  else
+    fail "a SHA-256 utility is required"
+  fi
 }
 
 runtime_schema_migration_hash() {
@@ -370,12 +429,26 @@ verify_runtime_ddl_unchanged() {
 
 remote_preflight() {
   local expected_lock_owner="${1:-}"
+  local expected_release_sha="${2:-}"
   local expected_lock_owner_arg
+  local operator_mode_arg="__CATERING_LEGACY__"
+  local layout_release_arg="__CATERING_DISCOVER_INSTALLED__"
+  local operations_commit_arg="__CATERING_LEGACY__"
+  local manifest_sha_arg="__CATERING_LEGACY__"
   if [[ -z "${expected_lock_owner}" ]]; then
     expected_lock_owner_arg="__CATERING_NO_LOCK_OWNER__"
   else
     [[ "${expected_lock_owner}" != "__CATERING_NO_LOCK_OWNER__" ]] || fail "reserved target lock owner token"
     expected_lock_owner_arg="${expected_lock_owner}"
+  fi
+  if [[ -n "${CATERING_TARGET_OPERATIONS_COMMIT}" ]]; then
+    operator_mode_arg="__CATERING_OPERATOR__"
+    operations_commit_arg="${CATERING_TARGET_OPERATIONS_COMMIT}"
+    manifest_sha_arg="${CATERING_TARGET_MANIFEST_SHA256:-__CATERING_LEGACY__}"
+    if [[ -n "${expected_release_sha}" ]]; then
+      [[ "${expected_release_sha}" =~ ^[0-9a-f]{40}$ ]] || fail "expected release binding is invalid"
+      layout_release_arg="${expected_release_sha}"
+    fi
   fi
   local platform_base_hash platform_ops_hash edge_base_hash edge_ops_hash edge_caddy_hash target_site_hash
   platform_base_hash="$(local_sha256 "${REPO_ROOT}/${SOURCE_PLATFORM_BASE}")"
@@ -385,24 +458,39 @@ remote_preflight() {
   edge_caddy_hash="$(local_sha256 "${REPO_ROOT}/${SOURCE_EDGE_CADDY}")"
   target_site_hash="$(local_sha256 "${REPO_ROOT}/${SOURCE_TARGET_SITE}")"
 
-  ssh_target bash -s -- \
+  local remote_args=(
     "${TARGET_ID}" "${DEPLOY_PATH}" "${EDGE_PATH}" "${TARGET_RUNTIME_ENV}" \
     "${TARGET_UPDATE_LOCK}" "${BACKUP_OBSERVER}" "${expected_lock_owner_arg}" \
     "${PLATFORM_COMPOSE_PROJECT}" "${PLATFORM_WORKING_DIR}" "${RUNTIME_PLATFORM_BASE}" "${RUNTIME_PLATFORM_OPS}" \
     "${EDGE_COMPOSE_PROJECT}" "${EDGE_WORKING_DIR}" "${RUNTIME_EDGE_BASE}" "${RUNTIME_EDGE_OPS}" \
     "${RUNTIME_EDGE_CADDY}" "${RUNTIME_TARGET_SITE}" \
     "${platform_base_hash}" "${platform_ops_hash}" "${edge_base_hash}" "${edge_ops_hash}" \
-    "${edge_caddy_hash}" "${target_site_hash}" <<'REMOTE_PREFLIGHT'
+    "${edge_caddy_hash}" "${target_site_hash}" \
+    "${operator_mode_arg}" "${layout_release_arg}" "${operations_commit_arg}" "${manifest_sha_arg}" \
+    "${SOURCE_PLATFORM_BASE}" "${SOURCE_PLATFORM_OPS}" "${DEPLOY_COMMIT_SHA}"
+  )
+  python3 -c 'from pathlib import Path; import sys
+template = sys.stdin.read()
+marker = "__RELEASE_STATE_PYTHON__"
+helper = Path(sys.argv[1]).read_text(encoding="utf-8")
+if template.count(marker) != 1:
+    raise SystemExit(1)
+sys.stdout.write(template.replace(marker, helper))' \
+    "${OPERATIONS_ROOT}/platform-infra/scripts/catering-target-release-state.py" <<'REMOTE_PREFLIGHT' | ssh_target bash -s -- "${remote_args[@]}"
 set -euo pipefail
 preflight_fail() {
   printf 'TARGET_PREFLIGHT_FAIL gate=%s\n' "$1" >&2
   exit 1
 }
-[[ "$#" -eq 23 ]] || preflight_fail remote_argument_count
+[[ "$#" -eq 30 ]] || preflight_fail remote_argument_count
 target_id="$1"; deploy_path="$2"; edge_path="$3"; runtime_env="$4"; update_lock="$5"; observer="$6"; expected_owner_arg="$7"
 platform_project="$8"; platform_working_dir="$9"; platform_base="${10}"; platform_ops="${11}"
 edge_project="${12}"; edge_working_dir="${13}"; edge_base="${14}"; edge_ops="${15}"; edge_caddy="${16}"; target_site="${17}"
 platform_base_hash="${18}"; platform_ops_hash="${19}"; edge_base_hash="${20}"; edge_ops_hash="${21}"; edge_caddy_hash="${22}"; target_site_hash="${23}"
+operator_mode="${24}"; requested_release_sha="${25}"; operations_commit="${26}"; manifest_sha="${27}"
+source_platform_base="${28}"; source_platform_ops="${29}"; bound_product_sha="${30}"
+release_root="/opt/catering-releases"
+[[ "$operator_mode" == "__CATERING_LEGACY__" || "$operator_mode" == "__CATERING_OPERATOR__" ]] || preflight_fail operator_mode
 if [[ "$expected_owner_arg" == "__CATERING_NO_LOCK_OWNER__" ]]; then
   expected_owner=""
 else
@@ -485,9 +573,36 @@ else:
   esac
 }
 platform_config_files="$platform_base,$platform_ops"
-for service in postgres intake offer production exports web; do
-  check_compose_labels "platform-infra-${service}-1" "$platform_project" "$platform_working_dir" "$platform_config_files" "$service" "platform_${service}"
-done
+if [[ "$operator_mode" == "__CATERING_OPERATOR__" ]]; then
+  [[ "$source_platform_base" == platform-infra/* && "$source_platform_base" != *".."* ]] || preflight_fail operator_source_path
+  [[ "$source_platform_ops" == platform-infra/* && "$source_platform_ops" != *".."* ]] || preflight_fail operator_source_path
+  release_binding="$(sudo -n /usr/bin/python3 -I - \
+    "$release_root" "$requested_release_sha" "$source_platform_base" "$source_platform_ops" \
+    "$platform_base_hash" "$platform_ops_hash" "$bound_product_sha" "$operations_commit" "$manifest_sha" <<'REMOTE_OPERATOR_RELEASE'
+__RELEASE_STATE_PYTHON__
+REMOTE_OPERATOR_RELEASE
+  )" || preflight_fail operator_release_binding
+  IFS=$'\t' read -r active_release_sha active_runtime_image active_web_image <<< "$release_binding"
+  [[ "$active_release_sha" =~ ^[0-9a-f]{40}$ && "$active_runtime_image" =~ ^sha256:[0-9a-f]{64}$ && "$active_web_image" =~ ^sha256:[0-9a-f]{64}$ ]] || preflight_fail operator_release_binding
+  release_dir="$release_root/$active_release_sha"
+  app_working_dir="$release_dir/source/platform-infra"
+  app_platform_base="$release_dir/source/$source_platform_base"
+  app_platform_ops="$release_dir/source/$source_platform_ops"
+  app_override="$release_dir/candidate-images.json"
+  app_config_files="$app_platform_base,$app_platform_ops,$app_override"
+  check_compose_labels "platform-infra-postgres-1" "$platform_project" "$platform_working_dir" "$platform_config_files" postgres "platform_postgres"
+  for service in intake offer production exports web; do
+    check_compose_labels "platform-infra-${service}-1" "$platform_project" "$app_working_dir" "$app_config_files" "$service" "platform_${service}"
+  done
+  for service in intake offer production exports; do
+    [[ "$(sudo -n docker inspect --format '{{.Image}}' "platform-infra-${service}-1")" == "$active_runtime_image" ]] || preflight_fail "operator_runtime_image_${service}"
+  done
+  [[ "$(sudo -n docker inspect --format '{{.Image}}' platform-infra-web-1)" == "$active_web_image" ]] || preflight_fail operator_web_image
+else
+  for service in postgres intake offer production exports web; do
+    check_compose_labels "platform-infra-${service}-1" "$platform_project" "$platform_working_dir" "$platform_config_files" "$service" "platform_${service}"
+  done
+fi
 edge_config_files="$edge_base,$edge_ops"
 check_compose_labels "catering-edge-edge-1" "$edge_project" "$edge_working_dir" "$edge_config_files" edge edge
 
@@ -502,7 +617,11 @@ if value.get("observer_run") != "completed" or value.get("backup_health") != "he
     raise SystemExit(1)
 PY
 
-sudo -n docker compose --env-file "$runtime_env" -f "$platform_base" -f "$platform_ops" config --format json >/dev/null || preflight_fail platform_compose_render
+if [[ "$operator_mode" == "__CATERING_OPERATOR__" ]]; then
+  sudo -n docker compose --env-file "$runtime_env" -f "$app_platform_base" -f "$app_platform_ops" -f "$app_override" config --format json >/dev/null || preflight_fail platform_compose_render
+else
+  sudo -n docker compose --env-file "$runtime_env" -f "$platform_base" -f "$platform_ops" config --format json >/dev/null || preflight_fail platform_compose_render
+fi
 sudo -n docker compose --env-file "$runtime_env" -f "$edge_base" -f "$edge_ops" config --format json >/dev/null || preflight_fail edge_compose_render
 
 if ! network_names="$(sudo -n docker network ls --format '{{.Name}}' | sort)"; then
@@ -564,7 +683,11 @@ if ! edge_image="$(image_of catering-edge-edge-1)"; then
 fi
 [[ "$edge_image" =~ ^sha256:[0-9a-f]{64}$ ]] || preflight_fail edge_image
 
-printf 'TARGET_PREFLIGHT_OK target=%s backup=healthy writer=enabled schema_version=3 postgres_volume=%s edge_image=%s\n' "$target_id" "$postgres_volume" "$edge_image"
+if [[ "$operator_mode" == "__CATERING_OPERATOR__" ]]; then
+  printf 'TARGET_PREFLIGHT_OK target=%s backup=healthy writer=enabled schema_version=3 runtime_state=release:%s postgres_volume=%s edge_image=%s\n' "$target_id" "$active_release_sha" "$postgres_volume" "$edge_image"
+else
+  printf 'TARGET_PREFLIGHT_OK target=%s backup=healthy writer=enabled schema_version=3 postgres_volume=%s edge_image=%s\n' "$target_id" "$postgres_volume" "$edge_image"
+fi
 REMOTE_PREFLIGHT
 }
 
@@ -573,6 +696,10 @@ parse_preflight_binding() {
   POSTGRES_VOLUME="$(printf '%s\n' "$output" | sed -n 's/.* postgres_volume=\([^ ]*\).*/\1/p' | tail -n 1)"
   EDGE_IMAGE="$(printf '%s\n' "$output" | sed -n 's/.* edge_image=\([^ ]*\).*/\1/p' | tail -n 1)"
   [[ -n "${POSTGRES_VOLUME}" && "${EDGE_IMAGE}" =~ ^sha256:[0-9a-f]{64}$ ]] || fail "preflight binding output invalid"
+  if [[ -n "${CATERING_TARGET_OPERATIONS_COMMIT}" ]]; then
+    ACTIVE_RELEASE_SHA="$(printf '%s\n' "${output}" | sed -n 's/.* runtime_state=release:\([0-9a-f]\{40\}\).*/\1/p' | tail -n 1)"
+    [[ "${ACTIVE_RELEASE_SHA}" =~ ^[0-9a-f]{40}$ ]] || fail "operator release state output invalid"
+  fi
 }
 
 run_production_preflight() {
@@ -588,6 +715,134 @@ run_production_preflight() {
   printf '%s\n' "${output}"
 }
 
+verify_remote_bundle() {
+  [[ -n "${CATERING_TARGET_OPERATIONS_COMMIT}" ]] || return 0
+  local release_dir="${RELEASE_ROOT}/${DEPLOY_COMMIT_SHA}"
+  ssh_target python3 - "${release_dir}" "${CATERING_TARGET_MANIFEST_SHA256}" "${DEPLOY_COMMIT_SHA}" "${CATERING_TARGET_OPERATIONS_COMMIT}" "${RUNTIME_IMAGE}" "${WEB_IMAGE}" <<'REMOTE_BUNDLE_VERIFY'
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import stat
+import sys
+
+release_dir, manifest_sha, product_commit, operations_commit, runtime_image, web_image = sys.argv[1:]
+root = Path(release_dir)
+if not re.fullmatch(r"/opt/catering-releases/[0-9a-f]{40}", release_dir):
+    raise SystemExit("bundle release path invalid")
+if not re.fullmatch(r"[0-9a-f]{64}", manifest_sha):
+    raise SystemExit("bundle manifest binding invalid")
+def regular(name):
+    path = root / name
+    info = path.lstat()
+    if not stat.S_ISREG(info.st_mode) or stat.S_ISLNK(info.st_mode):
+        raise SystemExit("bundle artifact type invalid")
+    return path
+def digest(path):
+    value = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            value.update(chunk)
+    return value.hexdigest()
+manifest_path = regular("manifest.json")
+if digest(manifest_path) != manifest_sha:
+    raise SystemExit("bundle manifest digest mismatch")
+manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+if not isinstance(manifest, dict):
+    raise SystemExit("bundle manifest binding invalid")
+if (manifest.get("schemaVersion") != 2 or
+        manifest.get("repository") != "AlexanderSmyslowski/catering-agents-platform" or
+        manifest.get("targetId") != "catering-prod-1" or
+        manifest.get("platform") != "linux/amd64" or
+        manifest.get("productCommit") != product_commit or
+        manifest.get("operationsCommit") != operations_commit):
+    raise SystemExit("bundle commit or target binding mismatch")
+images = manifest.get("images")
+artifacts = manifest.get("artifacts")
+if not isinstance(images, dict) or set(images) != {"runtime", "web"}:
+    raise SystemExit("bundle image set invalid")
+if not isinstance(artifacts, dict) or set(artifacts) != {"candidate-images.json", "runtime-image.tar.gz", "web-image.tar.gz"}:
+    raise SystemExit("bundle artifact set invalid")
+source_files = manifest.get("sourceFiles")
+expected_source_files = {
+    "platform-infra/docker-compose.catering-target.json",
+    "platform-infra/docker-compose.catering-target.operations.json",
+}
+if not isinstance(source_files, dict) or set(source_files) != expected_source_files:
+    raise SystemExit("bundle source binding invalid")
+if any(not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value) for value in source_files.values()):
+    raise SystemExit("bundle source binding invalid")
+expected_images = {"runtime": runtime_image, "web": web_image}
+expected_archives = {"runtime": "runtime-image.tar.gz", "web": "web-image.tar.gz"}
+expected_services = {"runtime": ["intake", "offer", "production", "exports"], "web": ["web"]}
+for name, image_id in expected_images.items():
+    if not re.fullmatch(r"sha256:[0-9a-f]{64}", image_id):
+        raise SystemExit("bundle image identity invalid")
+    item = images[name]
+    if item != {"imageId": image_id, "archive": expected_archives[name], "services": expected_services[name]}:
+        raise SystemExit("bundle image binding mismatch")
+    archive_path = regular(expected_archives[name])
+    if artifacts.get(expected_archives[name]) != digest(archive_path):
+        raise SystemExit("bundle image archive digest mismatch")
+candidate_path = regular("candidate-images.json")
+if artifacts.get("candidate-images.json") != digest(candidate_path):
+    raise SystemExit("bundle override digest mismatch")
+candidate = json.loads(candidate_path.read_text(encoding="utf-8"))
+expected_candidate = {"services": {
+    "intake": {"image": runtime_image},
+    "offer": {"image": runtime_image},
+    "production": {"image": runtime_image},
+    "exports": {"image": runtime_image},
+    "web": {"image": web_image},
+}}
+if candidate != expected_candidate:
+    raise SystemExit("bundle override image mismatch")
+REMOTE_BUNDLE_VERIFY
+}
+
+stage_binding_tool_sha256() {
+  local tool="${OPERATIONS_ROOT}/platform-infra/scripts/catering-target-stage-binding.py"
+  [[ -f "${tool}" && ! -L "${tool}" ]] || fail "versioned stage binding tool is missing"
+  local digest
+  digest="$(local_sha256 "${tool}")"
+  [[ "${digest}" =~ ^[0-9a-f]{64}$ ]] || fail "stage binding tool digest is invalid"
+  printf '%s' "${digest}"
+}
+
+write_remote_stage_receipt() {
+  local release_dir="${RELEASE_ROOT}/${DEPLOY_COMMIT_SHA}"
+  local tool_sha256
+  tool_sha256="$(stage_binding_tool_sha256)"
+  ssh_target bash -s -- "${release_dir}" "${tool_sha256}" "${CATERING_TARGET_MANIFEST_SHA256}" \
+    "${DEPLOY_COMMIT_SHA}" "${CATERING_TARGET_OPERATIONS_COMMIT}" "${RUNTIME_IMAGE}" "${WEB_IMAGE}" <<'REMOTE_STAGE_RECEIPT'
+set -euo pipefail
+release="$1"; tool_sha="$2"; manifest_sha="$3"; product="$4"; operations="$5"; runtime="$6"; web="$7"
+tool="$release/stage-binding.py"
+[[ "$release" =~ ^/opt/catering-releases/[0-9a-f]{40}$ && "${release##*/}" == "$product" ]] || exit 1
+[[ "$tool_sha" =~ ^[0-9a-f]{64}$ && "$manifest_sha" =~ ^[0-9a-f]{64}$ ]] || exit 1
+[[ -f "$tool" && ! -L "$tool" && "$(stat -c '%u:%g:%a' "$tool")" == "0:0:644" ]] || exit 1
+[[ "$(sha256sum "$tool" | awk '{print $1}')" == "$tool_sha" ]] || exit 1
+sudo -n python3 "$tool" write "$release" "$manifest_sha" "$product" "$operations" "$runtime" "$web" "$tool_sha"
+REMOTE_STAGE_RECEIPT
+}
+
+verify_remote_stage_receipt() {
+  local release_dir="${RELEASE_ROOT}/${DEPLOY_COMMIT_SHA}"
+  local tool_sha256
+  tool_sha256="$(stage_binding_tool_sha256)"
+  ssh_target bash -s -- "${release_dir}" "${tool_sha256}" "${CATERING_TARGET_MANIFEST_SHA256}" \
+    "${DEPLOY_COMMIT_SHA}" "${CATERING_TARGET_OPERATIONS_COMMIT}" "${RUNTIME_IMAGE}" "${WEB_IMAGE}" <<'REMOTE_STAGE_VERIFY'
+set -euo pipefail
+release="$1"; tool_sha="$2"; manifest_sha="$3"; product="$4"; operations="$5"; runtime="$6"; web="$7"
+tool="$release/stage-binding.py"
+[[ "$release" =~ ^/opt/catering-releases/[0-9a-f]{40}$ && "${release##*/}" == "$product" ]] || exit 1
+[[ "$tool_sha" =~ ^[0-9a-f]{64}$ && "$manifest_sha" =~ ^[0-9a-f]{64}$ ]] || exit 1
+[[ -f "$tool" && ! -L "$tool" && "$(stat -c '%u:%g:%a' "$tool")" == "0:0:644" ]] || exit 1
+[[ "$(sha256sum "$tool" | awk '{print $1}')" == "$tool_sha" ]] || exit 1
+sudo -n python3 "$tool" verify "$release" "$manifest_sha" "$product" "$operations" "$runtime" "$web" "$tool_sha"
+REMOTE_STAGE_VERIFY
+}
 
 cleanup_local_candidate() {
   if [[ -n "${LOCAL_RELEASE_DIR}" && -d "${LOCAL_RELEASE_DIR}" ]]; then
@@ -600,14 +855,30 @@ migration_declaration_present() {
 }
 
 prepare_local_candidate() {
-  command -v docker >/dev/null || fail "docker is required on the workflow runner"
-  command -v rsync >/dev/null || fail "rsync is required on the workflow runner"
-  command -v gzip >/dev/null || fail "gzip is required on the workflow runner"
+  if [[ -n "${CATERING_TARGET_OPERATIONS_COMMIT}" ]]; then
+    command -v rsync >/dev/null || fail "rsync is required for target staging"
+  else
+    command -v docker >/dev/null || fail "docker is required on the workflow runner"
+    command -v rsync >/dev/null || fail "rsync is required on the workflow runner"
+    command -v gzip >/dev/null || fail "gzip is required on the workflow runner"
+  fi
   if migration_declaration_present; then
     fail "manual_migration_approval_required"
   fi
 
   LOCAL_RELEASE_DIR="$(mktemp -d "${RUNNER_TEMP:-/tmp}/catering-target-release.XXXXXX")"
+  if [[ -n "${CATERING_TARGET_OPERATIONS_COMMIT}" ]]; then
+    load_bound_image_ids
+    for artifact in candidate-images.json manifest.json runtime-image.tar.gz web-image.tar.gz; do
+      [[ -f "${CATERING_TARGET_BUNDLE_DIR}/${artifact}" && ! -L "${CATERING_TARGET_BUNDLE_DIR}/${artifact}" ]] || fail "bound release artifact is missing"
+      cp "${CATERING_TARGET_BUNDLE_DIR}/${artifact}" "${LOCAL_RELEASE_DIR}/${artifact}"
+    done
+    local binding_tool="${OPERATIONS_ROOT}/platform-infra/scripts/catering-target-stage-binding.py"
+    [[ -f "${binding_tool}" && ! -L "${binding_tool}" ]] || fail "versioned stage binding tool is missing"
+    cp "${binding_tool}" "${LOCAL_RELEASE_DIR}/stage-binding.py"
+    return 0
+  fi
+
   local runtime_tag="catering-target-runtime:${DEPLOY_COMMIT_SHA}"
   local web_tag="catering-target-web:${DEPLOY_COMMIT_SHA}"
 
@@ -631,6 +902,7 @@ value = {
         "web": {"image": web_image},
     }
 }
+
 with open(path, "w", encoding="utf-8") as handle:
     json.dump(value, handle, indent=2, sort_keys=True)
     handle.write("\n")
@@ -640,7 +912,22 @@ PY
   docker save "${WEB_IMAGE}" | gzip -1 > "${LOCAL_RELEASE_DIR}/web-image.tar.gz"
 }
 
+load_bound_image_ids() {
+  [[ -n "${CATERING_TARGET_OPERATIONS_COMMIT}" ]] || fail "operations commit binding is required"
+  local binding_command="${1:-_bundle-bindings}"
+  local image_bindings
+  image_bindings="$(python3 "${OPERATIONS_ROOT}/platform-infra/scripts/catering-target-operator.py" "${binding_command}" \
+    --product-commit "${DEPLOY_COMMIT_SHA}" \
+    --operations-commit "${CATERING_TARGET_OPERATIONS_COMMIT}" \
+    --product-source "${REPO_ROOT}" \
+    --bundle-dir "${CATERING_TARGET_BUNDLE_DIR}" \
+    --manifest-sha256 "${CATERING_TARGET_MANIFEST_SHA256}")" || fail "bound release bundle is invalid"
+  IFS=$'\t' read -r RUNTIME_IMAGE WEB_IMAGE <<< "${image_bindings}"
+  [[ "${RUNTIME_IMAGE}" =~ ^sha256:[0-9a-f]{64}$ && "${WEB_IMAGE}" =~ ^sha256:[0-9a-f]{64}$ ]] || fail "bound release image identities are invalid"
+}
+
 acquire_remote_lock() {
+  operator_guard
   LOCK_OWNER="target-update-${GITHUB_RUN_ID:-manual}-${DEPLOY_COMMIT_SHA}"
   [[ "${LOCK_OWNER}" =~ ^[A-Za-z0-9._:-]+$ ]] || fail "invalid target lock owner"
   ssh_target bash -s -- "${TARGET_UPDATE_LOCK}" "${LOCK_OWNER}" <<'REMOTE_LOCK'
@@ -683,6 +970,7 @@ REMOTE_UNLOCK
 
 prepare_remote_release() {
   local release_dir="${RELEASE_ROOT}/${DEPLOY_COMMIT_SHA}"
+  local source_sync_root="${CATERING_TARGET_SOURCE_SYNC_ROOT:-${REPO_ROOT}}"
   ssh_target bash -s -- "${RELEASE_ROOT}" "${release_dir}" <<'REMOTE_RELEASE'
 set -euo pipefail
 release_root="$1"; release_dir="$2"
@@ -697,22 +985,66 @@ sudo -n mkdir -m 0755 -- "$release_dir" "$release_dir/source"
 REMOTE_RELEASE
 
   local rsync_rsh
-  rsync_rsh="ssh -i ${CATERING_TARGET_SSH_KEY_FILE} -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=${CATERING_TARGET_SSH_KNOWN_HOSTS_FILE} -o ConnectTimeout=10 -p 22"
+  rsync_rsh="$(python3 - "${CATERING_TARGET_SSH_KEY_FILE}" "${CATERING_TARGET_SSH_KNOWN_HOSTS_FILE}" <<'PY'
+import shlex, sys
+key_file, known_hosts_file = sys.argv[1:]
+arguments = [
+    "ssh", "-i", key_file,
+    "-o", "BatchMode=yes",
+    "-o", "IdentitiesOnly=yes",
+    "-o", "StrictHostKeyChecking=yes",
+    "-o", "UserKnownHostsFile=" + known_hosts_file,
+    "-o", "ConnectTimeout=10",
+    "-p", "22",
+]
+print(" ".join(shlex.quote(argument) for argument in arguments))
+PY
+)" || fail "could not prepare the strict rsync SSH transport"
 
-  rsync -az --delete     --rsync-path="sudo -n rsync"     -e "${rsync_rsh}"     --exclude=.git     --exclude=node_modules     --exclude=backoffice-ui/dist     --exclude=platform-infra/.env     --exclude=platform-infra/sites     --exclude=data     "${REPO_ROOT}/" "${REMOTE}:${release_dir}/source/"
+  rsync -az --no-owner --no-group --delete     --rsync-path="sudo -n rsync"     -e "${rsync_rsh}"     --exclude=.git     --exclude=node_modules     --exclude=backoffice-ui/dist     --exclude=platform-infra/.env     --exclude=platform-infra/sites     --exclude=data     "${source_sync_root}/" "${REMOTE}:${release_dir}/source/"
 
-  rsync -az     --rsync-path="sudo -n rsync"     -e "${rsync_rsh}"     "${LOCAL_RELEASE_DIR}/candidate-images.json"     "${LOCAL_RELEASE_DIR}/runtime-image.tar.gz"     "${LOCAL_RELEASE_DIR}/web-image.tar.gz"     "${REMOTE}:${release_dir}/"
+  local bundle_files=("${LOCAL_RELEASE_DIR}/candidate-images.json" "${LOCAL_RELEASE_DIR}/runtime-image.tar.gz" "${LOCAL_RELEASE_DIR}/web-image.tar.gz")
+  if [[ -n "${CATERING_TARGET_OPERATIONS_COMMIT}" ]]; then
+    bundle_files+=("${LOCAL_RELEASE_DIR}/manifest.json" "${LOCAL_RELEASE_DIR}/stage-binding.py")
+  fi
+  rsync -az --no-owner --no-group     --rsync-path="sudo -n rsync"     -e "${rsync_rsh}"     "${bundle_files[@]}"     "${REMOTE}:${release_dir}/"
 
   ssh_target sudo -n chmod 0644     "${release_dir}/candidate-images.json"     "${release_dir}/runtime-image.tar.gz"     "${release_dir}/web-image.tar.gz"
+  if [[ -n "${CATERING_TARGET_OPERATIONS_COMMIT}" ]]; then
+    ssh_target sudo -n chmod 0644 "${release_dir}/manifest.json" "${release_dir}/stage-binding.py"
+  fi
 }
 
 capture_previous_and_load_candidates() {
   local release_dir="${RELEASE_ROOT}/${DEPLOY_COMMIT_SHA}"
-  ssh_target bash -s -- "${release_dir}" "${TARGET_RUNTIME_ENV}" "${RUNTIME_IMAGE}" "${WEB_IMAGE}" "${SOURCE_PLATFORM_BASE}" "${SOURCE_PLATFORM_OPS}" <<'REMOTE_LOAD'
+  local stage_binding_required=false
+  local manifest_sha_arg="__CATERING_LEGACY__"
+  local operations_commit_arg="__CATERING_LEGACY__"
+  local stage_tool_sha="__CATERING_LEGACY__"
+  if [[ -n "${CATERING_TARGET_OPERATIONS_COMMIT}" ]]; then
+    stage_binding_required=true
+    manifest_sha_arg="${CATERING_TARGET_MANIFEST_SHA256}"
+    operations_commit_arg="${CATERING_TARGET_OPERATIONS_COMMIT}"
+    stage_tool_sha="$(stage_binding_tool_sha256)"
+    verify_remote_bundle || return 1
+  fi
+  ssh_target bash -s -- "${release_dir}" "${TARGET_RUNTIME_ENV}" "${RUNTIME_IMAGE}" "${WEB_IMAGE}" "${SOURCE_PLATFORM_BASE}" "${SOURCE_PLATFORM_OPS}" \
+    "${stage_binding_required}" "${manifest_sha_arg}" "${DEPLOY_COMMIT_SHA}" "${operations_commit_arg}" "${stage_tool_sha}" <<'REMOTE_LOAD'
 set -euo pipefail
 release_dir="$1"; runtime_env="$2"; runtime_image="$3"; web_image="$4"; source_platform_base="$5"; source_platform_ops="$6"
+stage_binding_required="$7"; manifest_sha="$8"; product_commit="$9"; operations_commit="${10}"; stage_tool_sha="${11}"
 [[ "$release_dir" =~ ^/opt/catering-releases/[0-9a-fA-F]{40}$ ]] || exit 1
 for value in "$runtime_image" "$web_image"; do [[ "$value" =~ ^sha256:[0-9a-f]{64}$ ]] || exit 1; done
+if [[ "$stage_binding_required" == true ]]; then
+  stage_tool="$release_dir/stage-binding.py"
+  [[ "$manifest_sha" =~ ^[0-9a-f]{64}$ && "$product_commit" =~ ^[0-9a-f]{40}$ && "$operations_commit" =~ ^[0-9a-f]{40}$ && "$stage_tool_sha" =~ ^[0-9a-f]{64}$ ]] || exit 1
+  [[ -f "$stage_tool" && ! -L "$stage_tool" && "$(stat -c '%u:%g:%a' "$stage_tool")" == "0:0:644" ]] || exit 1
+  [[ "$(sha256sum "$stage_tool" | awk '{print $1}')" == "$stage_tool_sha" ]] || exit 1
+  # TARGET_STAGE_BINDING_CAPTURE
+  sudo -n python3 "$stage_tool" verify "$release_dir" "$manifest_sha" "$product_commit" "$operations_commit" "$runtime_image" "$web_image" "$stage_tool_sha"
+elif [[ "$stage_binding_required" != false ]]; then
+  exit 1
+fi
 
 image_of() { sudo -n docker inspect --format '{{.Image}}' "$1"; }
 intake_image="$(image_of platform-infra-intake-1)"
@@ -758,17 +1090,53 @@ sudo -n docker image inspect "$web_image" >/dev/null
 [[ "$source_platform_ops" == platform-infra/* && "$source_platform_ops" != *".."* ]] || exit 1
 platform_base="$release_dir/source/$source_platform_base"
 platform_ops="$release_dir/source/$source_platform_ops"
-sudo -n docker compose --env-file "$runtime_env"   -f "$platform_base" -f "$platform_ops" -f "$release_dir/candidate-images.json"   config --format json >/dev/null
+sudo -n docker compose --env-file "$runtime_env" -f "$platform_base" -f "$platform_ops" -f "$release_dir/candidate-images.json" config --format json >/dev/null
 REMOTE_LOAD
 }
 
 
+verify_remote_previous_release() {
+  local release_sha="$1"
+  [[ "${release_sha}" =~ ^[0-9a-f]{40}$ && "${release_sha}" == "${PREVIOUS_RELEASE_SHA}" && "${release_sha}" != "${DEPLOY_COMMIT_SHA}" ]] || return 1
+  python3 -c 'from pathlib import Path; import sys
+template = sys.stdin.read()
+marker = "__RELEASE_STATE_PYTHON__"
+helper = Path(sys.argv[1]).read_text(encoding="utf-8")
+if template.count(marker) != 1:
+    raise SystemExit(1)
+sys.stdout.write(template.replace(marker, helper))' \
+    "${OPERATIONS_ROOT}/platform-infra/scripts/catering-target-release-state.py" <<'REMOTE_ROLLBACK_RELEASE' | ssh_target sudo -n /usr/bin/python3 -I - \
+    "${RELEASE_ROOT}" --rollback "${release_sha}" "${SOURCE_PLATFORM_BASE}" "${SOURCE_PLATFORM_OPS}" \
+    "${DEPLOY_COMMIT_SHA}" "${CATERING_TARGET_OPERATIONS_COMMIT}"
+__RELEASE_STATE_PYTHON__
+REMOTE_ROLLBACK_RELEASE
+}
+
 activate_remote_override() {
   local override_path="$1"
-  local release_dir="${RELEASE_ROOT}/${DEPLOY_COMMIT_SHA}"
-  ssh_target bash -s -- "${release_dir}" "${TARGET_RUNTIME_ENV}" "${override_path}" "${SOURCE_PLATFORM_BASE}" "${SOURCE_PLATFORM_OPS}" <<'REMOTE_ACTIVATE'
+  local release_dir="${override_path%/*}"
+  local staged_candidate=false
+  local stage_tool_sha256=""
+  if [[ -n "${CATERING_TARGET_OPERATIONS_COMMIT}" ]]; then
+    if [[ "${override_path}" == "${RELEASE_ROOT}/${DEPLOY_COMMIT_SHA}/candidate-images.json" ]]; then
+      staged_candidate=true
+      stage_tool_sha256="$(stage_binding_tool_sha256)"
+      verify_remote_bundle || return 1
+      verify_remote_stage_receipt || return 1
+    elif [[ "${PREVIOUS_RELEASE_SHA}" =~ ^[0-9a-f]{40}$ && "${override_path}" == "${RELEASE_ROOT}/${PREVIOUS_RELEASE_SHA}/candidate-images.json" ]]; then
+      verify_remote_previous_release "${PREVIOUS_RELEASE_SHA}" || return 1
+    else
+      return 1
+    fi
+  elif [[ "${override_path}" != "${release_dir}/candidate-images.json" && "${override_path}" != "${release_dir}/previous-images.json" ]]; then
+    return 1
+  fi
+  ssh_target bash -s -- "${release_dir}" "${TARGET_RUNTIME_ENV}" "${override_path}" "${SOURCE_PLATFORM_BASE}" "${SOURCE_PLATFORM_OPS}" \
+    "${staged_candidate}" "${CATERING_TARGET_MANIFEST_SHA256}" "${DEPLOY_COMMIT_SHA}" "${CATERING_TARGET_OPERATIONS_COMMIT}" \
+    "${RUNTIME_IMAGE}" "${WEB_IMAGE}" "${stage_tool_sha256}" <<'REMOTE_ACTIVATE'
 set -euo pipefail
 release_dir="$1"; runtime_env="$2"; override="$3"; source_platform_base="$4"; source_platform_ops="$5"
+staged_candidate="$6"; manifest_sha="$7"; product_commit="$8"; operations_commit="$9"; runtime_image="${10}"; web_image="${11}"; stage_tool_sha="${12}"
 [[ "$release_dir" =~ ^/opt/catering-releases/[0-9a-fA-F]{40}$ ]] || exit 1
 [[ "$override" == "$release_dir/candidate-images.json" || "$override" == "$release_dir/previous-images.json" ]] || exit 1
 [[ -f "$override" && ! -L "$override" ]] || exit 1
@@ -776,13 +1144,21 @@ release_dir="$1"; runtime_env="$2"; override="$3"; source_platform_base="$4"; so
 [[ "$source_platform_ops" == platform-infra/* && "$source_platform_ops" != *".."* ]] || exit 1
 platform_base="$release_dir/source/$source_platform_base"
 platform_ops="$release_dir/source/$source_platform_ops"
-sudo -n docker compose --env-file "$runtime_env"   -f "$platform_base" -f "$platform_ops" -f "$override"   up -d --no-deps intake offer production exports web
+if [[ "$staged_candidate" == true ]]; then
+  stage_tool="$release_dir/stage-binding.py"
+  [[ "$stage_tool_sha" =~ ^[0-9a-f]{64}$ ]] || exit 1
+  [[ -f "$stage_tool" && ! -L "$stage_tool" && "$(stat -c '%u:%g:%a' "$stage_tool")" == "0:0:644" ]] || exit 1
+  [[ "$(sha256sum "$stage_tool" | awk '{print $1}')" == "$stage_tool_sha" ]] || exit 1
+  sudo -n python3 "$stage_tool" verify "$release_dir" "$manifest_sha" "$product_commit" "$operations_commit" "$runtime_image" "$web_image" "$stage_tool_sha"
+fi
+sudo -n docker compose --env-file "$runtime_env" -f "$platform_base" -f "$platform_ops" -f "$override" config --format json >/dev/null
+sudo -n docker compose --env-file "$runtime_env" -f "$platform_base" -f "$platform_ops" -f "$override" up -d --no-deps intake offer production exports web
 REMOTE_ACTIVATE
 }
 
 verify_remote_override_and_health() {
   local override_path="$1"
-  local release_dir="${RELEASE_ROOT}/${DEPLOY_COMMIT_SHA}"
+  local release_dir="${override_path%/*}"
   ssh_target bash -s -- "${release_dir}" "${override_path}" "${POSTGRES_VOLUME}" "${EDGE_IMAGE}" <<'REMOTE_VERIFY'
 set -euo pipefail
 release_dir="$1"; override="$2"; expected_postgres_volume="$3"; expected_edge_image="$4"
@@ -832,10 +1208,10 @@ REMOTE_VERIFY
 }
 
 authenticated_read_smoke() {
-  : "${CATERING_TARGET_SMOKE_BASIC_AUTH_USER:?CATERING_TARGET_SMOKE_BASIC_AUTH_USER is required}"
-  : "${CATERING_TARGET_SMOKE_BASIC_AUTH_PASSWORD:?CATERING_TARGET_SMOKE_BASIC_AUTH_PASSWORD is required}"
-  : "${CATERING_TARGET_SMOKE_LOGIN_CODE:?CATERING_TARGET_SMOKE_LOGIN_CODE is required}"
-  : "${CATERING_TARGET_SMOKE_PIN:?CATERING_TARGET_SMOKE_PIN is required}"
+  [[ -n "${CATERING_TARGET_SMOKE_BASIC_AUTH_USER:-}" ]] || return 1
+  [[ -n "${CATERING_TARGET_SMOKE_BASIC_AUTH_PASSWORD:-}" ]] || return 1
+  [[ -n "${CATERING_TARGET_SMOKE_LOGIN_CODE:-}" ]] || return 1
+  [[ -n "${CATERING_TARGET_SMOKE_PIN:-}" ]] || return 1
 
   local payload output
   payload="$(python3 - <<'PY'
@@ -848,16 +1224,34 @@ print(json.dumps({
 }, separators=(",", ":")))
 PY
 )"
-  output="$(printf '%s' "${payload}" | ssh_target sudo -n docker exec -i     platform-infra-intake-1 node /app/platform-infra/scripts/catering-target-authenticated-smoke.mjs)"
+  if [[ -n "${CATERING_TARGET_OPERATIONS_COMMIT}" ]]; then
+    local smoke_script="${OPERATIONS_ROOT}/platform-infra/scripts/catering-target-operator-smoke.mjs"
+    [[ -f "${smoke_script}" && ! -L "${smoke_script}" ]] || return 1
+    local smoke_source
+    smoke_source="$(python3 - "${smoke_script}" <<'PY'
+import pathlib, sys
+print(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"), end="")
+PY
+)" || return 1
+    [[ -n "${smoke_source}" ]] || return 1
+    output="$(printf '%s' "${payload}" | ssh_target sudo -n docker exec -i platform-infra-intake-1 node -e "${smoke_source}")" || return 1
+  else
+    output="$(printf '%s' "${payload}" | ssh_target sudo -n docker exec -i platform-infra-intake-1 node /app/platform-infra/scripts/catering-target-authenticated-smoke.mjs)" || return 1
+  fi
   [[ "${output}" == "authenticated_read_smoke_ok" ]] || return 1
 }
 
 write_install_receipt() {
   local release_dir="${RELEASE_ROOT}/${DEPLOY_COMMIT_SHA}"
-  ssh_target sudo -n python3 - "${release_dir}" "${RELEASE_ROOT}/installed" "${DEPLOY_COMMIT_SHA}" "${RUNTIME_IMAGE}" "${WEB_IMAGE}" <<'PY'
+  local operations_arg="${CATERING_TARGET_OPERATIONS_COMMIT:-__CATERING_LEGACY__}"
+  local manifest_arg="${CATERING_TARGET_MANIFEST_SHA256:-__CATERING_LEGACY__}"
+  ssh_target sudo -n python3 - "${release_dir}" "${RELEASE_ROOT}/installed" "${DEPLOY_COMMIT_SHA}" "${RUNTIME_IMAGE}" "${WEB_IMAGE}" "${operations_arg}" "${manifest_arg}" <<'PY'
 import datetime, os, sys, tempfile
-release_dir, installed_path, commit, runtime_image, web_image = sys.argv[1:]
+release_dir, installed_path, commit, runtime_image, web_image, operations_commit, manifest_sha = sys.argv[1:]
 if not release_dir.startswith("/opt/catering-releases/") or len(commit) != 40:
+    raise SystemExit(1)
+legacy_receipt = operations_commit == "__CATERING_LEGACY__" and manifest_sha == "__CATERING_LEGACY__"
+if not legacy_receipt and (len(operations_commit) != 40 or len(manifest_sha) != 64):
     raise SystemExit(1)
 receipt_path = os.path.join(release_dir, "install-receipt")
 payload = (
@@ -865,8 +1259,10 @@ payload = (
     f"commit={commit}\n"
     f"runtime_image={runtime_image}\n"
     f"web_image={web_image}\n"
-    f"installed_at={datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}\n"
 )
+if not legacy_receipt:
+    payload += f"operations_commit={operations_commit}\nmanifest_sha256={manifest_sha}\n"
+payload += f"installed_at={datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}\n"
 def atomic(path, data, mode):
     directory = os.path.dirname(path)
     fd, temp = tempfile.mkstemp(prefix=".target-update.", dir=directory)
@@ -886,16 +1282,24 @@ PY
 }
 
 rollback_remote_application() {
-  local release_dir="${RELEASE_ROOT}/${DEPLOY_COMMIT_SHA}"
-  if ! activate_remote_override "${release_dir}/previous-images.json"; then
+  local release_sha="${DEPLOY_COMMIT_SHA}"
+  local override_path
+  if [[ -n "${CATERING_TARGET_OPERATIONS_COMMIT}" ]]; then
+    [[ "${PREVIOUS_RELEASE_SHA}" =~ ^[0-9a-f]{40}$ ]] || return 1
+    release_sha="${PREVIOUS_RELEASE_SHA}"
+    override_path="${RELEASE_ROOT}/${release_sha}/candidate-images.json"
+  else
+    override_path="${RELEASE_ROOT}/${release_sha}/previous-images.json"
+  fi
+  if ! activate_remote_override "${override_path}"; then
     return 1
   fi
   local rebound
-  if ! rebound="$(remote_preflight "${LOCK_OWNER}")"; then
+  if ! rebound="$(remote_preflight "${LOCK_OWNER}" "${release_sha}")"; then
     return 1
   fi
   parse_preflight_binding "${rebound}"
-  verify_remote_override_and_health "${release_dir}/previous-images.json"
+  verify_remote_override_and_health "${override_path}"
 }
 
 handle_production_failure() {
@@ -942,6 +1346,9 @@ run_production_update() {
   local locked
   locked="$(remote_preflight "${LOCK_OWNER}")"
   parse_preflight_binding "${locked}"
+  if [[ -n "${CATERING_TARGET_OPERATIONS_COMMIT}" ]]; then
+    PREVIOUS_RELEASE_SHA="${ACTIVE_RELEASE_SHA}"
+  fi
 
   prepare_remote_release
   if ! capture_previous_and_load_candidates; then
@@ -951,13 +1358,17 @@ run_production_update() {
   fi
 
   local release_dir="${RELEASE_ROOT}/${DEPLOY_COMMIT_SHA}"
+  printf '%s\n' "TARGET_UPDATE_STAGE stage=target_provision status=success"
+  printf '%s\n' "TARGET_UPDATE_STAGE stage=activate status=start"
   if ! activate_remote_override "${release_dir}/candidate-images.json"; then
     handle_production_failure
     return $?
   fi
+  printf '%s\n' "TARGET_UPDATE_STAGE stage=activate status=success"
 
   local postflight
-  if ! postflight="$(remote_preflight "${LOCK_OWNER}")"; then
+  printf '%s\n' "TARGET_UPDATE_STAGE stage=verify status=start"
+  if ! postflight="$(remote_preflight "${LOCK_OWNER}" "${DEPLOY_COMMIT_SHA}")"; then
     handle_production_failure
     return $?
   fi
@@ -971,9 +1382,142 @@ run_production_update() {
     return $?
   fi
 
-  write_install_receipt
+  if ! write_install_receipt; then
+    handle_production_failure
+    return $?
+  fi
+  printf '%s\n' "TARGET_UPDATE_STAGE stage=verify status=success"
   release_remote_lock
   printf 'TARGET_UPDATE_RESULT updated commit=%s runtime_image=%s web_image=%s\n'     "${DEPLOY_COMMIT_SHA}" "${RUNTIME_IMAGE}" "${WEB_IMAGE}"
+}
+
+run_production_stage() {
+  load_production_contract
+  validate_production_inputs
+  [[ "${CATERING_TARGET_CONFIRMATION:-}" == "STAGE_CATERING_TARGET" ]] || fail "explicit target staging confirmation required"
+  if migration_declaration_present; then
+    fail "manual_migration_approval_required"
+  fi
+  verify_runtime_schema_migration_unchanged
+  verify_runtime_ddl_unchanged
+
+  local initial
+  if ! initial="$(remote_preflight "")"; then
+    fail "TARGET_PREFLIGHT_FAIL gate=remote_target_invariants"
+  fi
+  parse_preflight_binding "${initial}"
+  prepare_local_candidate
+  trap production_exit_trap EXIT
+  prepare_remote_release
+  verify_remote_bundle
+  write_remote_stage_receipt
+  printf '%s\n' "TARGET_UPDATE_STAGE stage=stage status=success"
+  printf 'TARGET_UPDATE_RESULT staged product=%s manifest_sha256=%s\n' "${DEPLOY_COMMIT_SHA}" "${CATERING_TARGET_MANIFEST_SHA256}"
+}
+
+run_production_apply() {
+  load_production_contract
+  validate_production_inputs
+  [[ "${CATERING_TARGET_CONFIRMATION:-}" == "ACTIVATE_CATERING_TARGET" ]] || fail "explicit target activation confirmation required"
+  if migration_declaration_present; then
+    fail "manual_migration_approval_required"
+  fi
+  verify_runtime_schema_migration_unchanged
+  verify_runtime_ddl_unchanged
+
+  local initial
+  if ! initial="$(remote_preflight "")"; then
+    fail "TARGET_PREFLIGHT_FAIL gate=remote_target_invariants"
+  fi
+  parse_preflight_binding "${initial}"
+  load_bound_image_ids
+  verify_remote_bundle
+  verify_remote_stage_receipt
+  trap production_exit_trap EXIT
+  acquire_remote_lock
+  local locked
+  locked="$(remote_preflight "${LOCK_OWNER}")"
+  parse_preflight_binding "${locked}"
+  PREVIOUS_RELEASE_SHA="${ACTIVE_RELEASE_SHA}"
+  if ! capture_previous_and_load_candidates; then
+    printf '%s\n' "TARGET_UPDATE_RESULT candidate_rejected" >&2
+    release_remote_lock
+    return 1
+  fi
+
+  local release_dir="${RELEASE_ROOT}/${DEPLOY_COMMIT_SHA}"
+  printf '%s\n' "TARGET_UPDATE_STAGE stage=activate status=start"
+  if ! activate_remote_override "${release_dir}/candidate-images.json"; then
+    handle_production_failure
+    return $?
+  fi
+  printf '%s\n' "TARGET_UPDATE_STAGE stage=activate status=success"
+
+  local postflight
+  printf '%s\n' "TARGET_UPDATE_STAGE stage=verify status=start"
+  if ! postflight="$(remote_preflight "${LOCK_OWNER}" "${DEPLOY_COMMIT_SHA}")"; then
+    handle_production_failure
+    return $?
+  fi
+  parse_preflight_binding "${postflight}"
+  if ! verify_remote_override_and_health "${release_dir}/candidate-images.json"; then
+    handle_production_failure
+    return $?
+  fi
+  if ! authenticated_read_smoke; then
+    handle_production_failure
+    return $?
+  fi
+  if ! write_install_receipt; then
+    handle_production_failure
+    return $?
+  fi
+  printf '%s\n' "TARGET_UPDATE_STAGE stage=verify status=success"
+  release_remote_lock
+  printf 'TARGET_UPDATE_RESULT activated commit=%s runtime_image=%s web_image=%s\n' "${DEPLOY_COMMIT_SHA}" "${RUNTIME_IMAGE}" "${WEB_IMAGE}"
+}
+
+verify_install_receipt() {
+  local release_dir="${RELEASE_ROOT}/${DEPLOY_COMMIT_SHA}"
+  ssh_target sudo -n python3 - "${release_dir}" "${RELEASE_ROOT}/installed" "${DEPLOY_COMMIT_SHA}" \
+    "${CATERING_TARGET_OPERATIONS_COMMIT}" "${CATERING_TARGET_MANIFEST_SHA256}" "${RUNTIME_IMAGE}" "${WEB_IMAGE}" <<'REMOTE_INSTALL_RECEIPT_VERIFY'
+from pathlib import Path
+import re, stat, sys
+release, installed_path, product, operations, manifest, runtime, web = sys.argv[1:]
+root = Path(release)
+receipt = root / "install-receipt"
+info = receipt.lstat()
+if not stat.S_ISREG(info.st_mode) or stat.S_ISLNK(info.st_mode) or stat.S_IMODE(info.st_mode) != 0o600 or info.st_uid != 0 or info.st_gid != 0:
+    raise SystemExit("install receipt metadata invalid")
+lines = receipt.read_text(encoding="ascii").splitlines()
+observed = dict(line.split("=", 1) for line in lines if "=" in line)
+if len(observed) != len(lines) or set(observed) != {"status", "commit", "runtime_image", "web_image", "operations_commit", "manifest_sha256", "installed_at"}:
+    raise SystemExit("install receipt shape invalid")
+if (observed["status"], observed["commit"], observed["runtime_image"], observed["web_image"], observed["operations_commit"], observed["manifest_sha256"]) != ("installed", product, runtime, web, operations, manifest):
+    raise SystemExit("install receipt binding mismatch")
+if not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", observed["installed_at"]):
+    raise SystemExit("install receipt timestamp invalid")
+marker = Path(installed_path)
+marker_info = marker.lstat()
+if not stat.S_ISREG(marker_info.st_mode) or stat.S_ISLNK(marker_info.st_mode) or marker.read_text(encoding="ascii") != product + "\n":
+    raise SystemExit("installed commit marker mismatch")
+REMOTE_INSTALL_RECEIPT_VERIFY
+}
+
+run_production_verify() {
+  load_production_contract
+  validate_production_inputs
+  load_bound_image_ids _bundle-bindings-local
+  local output
+  if ! output="$(remote_preflight "" "${DEPLOY_COMMIT_SHA}")"; then
+    fail "TARGET_PREFLIGHT_FAIL gate=remote_target_invariants"
+  fi
+  parse_preflight_binding "${output}"
+  verify_remote_bundle
+  verify_remote_stage_receipt
+  verify_remote_override_and_health "${RELEASE_ROOT}/${DEPLOY_COMMIT_SHA}/candidate-images.json"
+  verify_install_receipt
+  printf '%s\n' "TARGET_UPDATE_VERIFY status=success"
 }
 
 case "${MODE}" in
@@ -983,7 +1527,16 @@ case "${MODE}" in
   --update)
     run_production_update
     ;;
+  --stage)
+    run_production_stage
+    ;;
+  --apply)
+    run_production_apply
+    ;;
+  --verify)
+    run_production_verify
+    ;;
   *)
-    fail "usage: catering-target-production-update.sh --preflight | --update"
+    fail "usage: catering-target-production-update.sh --preflight | --stage | --apply | --verify | --update"
     ;;
 esac
