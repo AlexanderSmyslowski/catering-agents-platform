@@ -1095,6 +1095,10 @@ value = {"services": {
     "web": {"image": web},
 }}
 directory = os.path.dirname(path)
+# A prior rejected or rolled-back attempt may leave this file behind. Under
+# the held update lock, replace it with the currently running images before
+# loading or activating the candidate; the bound operator rolls back by the
+# release observed under lock, not by this compatibility snapshot.
 fd, temporary = tempfile.mkstemp(prefix=".previous-images.", dir=directory)
 try:
     with os.fdopen(fd, "w", encoding="utf-8") as handle:
@@ -1459,6 +1463,7 @@ run_production_stage() {
       printf 'TARGET_UPDATE_RESULT staged product=%s manifest_sha256=%s\n' "${DEPLOY_COMMIT_SHA}" "${CATERING_TARGET_MANIFEST_SHA256}"
       ;;
     reusable)
+      [[ "${ACTIVE_RELEASE_SHA}" != "${DEPLOY_COMMIT_SHA}" ]] || fail "candidate release is active without a valid install receipt"
       printf '%s\n' "TARGET_UPDATE_STAGE stage=stage status=reused"
       printf 'TARGET_UPDATE_RESULT staged_reused product=%s manifest_sha256=%s\n' "${DEPLOY_COMMIT_SHA}" "${CATERING_TARGET_MANIFEST_SHA256}"
       ;;
@@ -1498,6 +1503,7 @@ run_production_apply() {
   fi
   case "${existing_state}" in
     reusable)
+      [[ "${ACTIVE_RELEASE_SHA}" != "${DEPLOY_COMMIT_SHA}" ]] || fail "candidate release is active without a valid install receipt"
       ;;
     installed)
       [[ "${ACTIVE_RELEASE_SHA}" == "${DEPLOY_COMMIT_SHA}" ]] || fail "installed release is not the active target"
@@ -1523,6 +1529,10 @@ run_production_apply() {
   fi
   case "${locked_state}" in
     reusable)
+      if [[ "${ACTIVE_RELEASE_SHA}" == "${DEPLOY_COMMIT_SHA}" ]]; then
+        release_remote_lock || fail "active candidate recheck failed and target lock could not be released"
+        fail "candidate release is active without a valid install receipt"
+      fi
       ;;
     installed)
       if [[ "${ACTIVE_RELEASE_SHA}" != "${DEPLOY_COMMIT_SHA}" ]] || ! verify_install_receipt; then

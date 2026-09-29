@@ -292,6 +292,95 @@ class CateringTargetOperatorTests(unittest.TestCase):
             )
             self.assertEqual((release / "stage-receipt").read_bytes(), receipt_before)
 
+    def test_previous_images_without_install_receipt_allow_exact_stage_retry(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="catering-operator-stage-retry-") as temporary:
+            release, manifest_sha, runtime_image, web_image, checker_sha = self._stage_fixture(Path(temporary))
+            uid, gid = os.getuid(), os.getgid()
+            arguments = {
+                "manifest_sha256": manifest_sha,
+                "product_commit": PRODUCT_SHA,
+                "operations_commit": OPERATIONS_SHA,
+                "runtime_image": runtime_image,
+                "web_image": web_image,
+                "stage_binding_sha256": checker_sha,
+                "expected_uid": uid,
+                "expected_gid": gid,
+                "require_production_release_root": False,
+            }
+            values = stage_binding.stage_values(release, **arguments)
+            stage_binding.write_receipt(release, values, expected_uid=uid, expected_gid=gid)
+            previous_images = {
+                "services": {
+                    name: {"image": "sha256:" + "d" * 64}
+                    for name in ("intake", "offer", "production", "exports", "web")
+                }
+            }
+            previous_path = release / "previous-images.json"
+            previous_path.write_text(json.dumps(previous_images) + "\n", encoding="utf-8")
+            previous_path.chmod(0o600)
+
+            self.assertEqual(stage_binding.inspect_existing_release(release, **arguments), "reusable")
+
+    def test_previous_images_do_not_weaken_bundle_layout_or_receipt_bindings(self) -> None:
+        mutations = (
+            ("manifest", "stage manifest digest mismatch"),
+            ("image", "stage manifest image binding mismatch"),
+            ("source", "stage source artifact digest mismatch"),
+            ("receipt", "stage receipt binding mismatch"),
+            ("previous_mode", "stage artifact ownership or mode is invalid"),
+            ("previous_shape", "stage rollback binding is invalid"),
+            ("unknown_file", "stage release layout is invalid"),
+        )
+        for mutation, expected_error in mutations:
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory(
+                prefix="catering-operator-stage-retry-drift-"
+            ) as temporary:
+                release, manifest_sha, runtime_image, web_image, checker_sha = self._stage_fixture(Path(temporary))
+                uid, gid = os.getuid(), os.getgid()
+                arguments = {
+                    "manifest_sha256": manifest_sha,
+                    "product_commit": PRODUCT_SHA,
+                    "operations_commit": OPERATIONS_SHA,
+                    "runtime_image": runtime_image,
+                    "web_image": web_image,
+                    "stage_binding_sha256": checker_sha,
+                    "expected_uid": uid,
+                    "expected_gid": gid,
+                    "require_production_release_root": False,
+                }
+                values = stage_binding.stage_values(release, **arguments)
+                stage_binding.write_receipt(release, values, expected_uid=uid, expected_gid=gid)
+                previous_path = release / "previous-images.json"
+                previous_path.write_text(
+                    json.dumps({"services": {
+                        name: {"image": "sha256:" + "d" * 64}
+                        for name in ("intake", "offer", "production", "exports", "web")
+                    }}) + "\n",
+                    encoding="utf-8",
+                )
+                previous_path.chmod(0o600)
+                if mutation == "manifest":
+                    (release / "manifest.json").write_text("{}\n", encoding="utf-8")
+                elif mutation == "image":
+                    arguments["runtime_image"] = "sha256:" + "c" * 64
+                elif mutation == "source":
+                    source_file = release / "source/platform-infra/docker-compose.catering-target.json"
+                    source_file.write_text("drift\n", encoding="utf-8")
+                elif mutation == "receipt":
+                    receipt = release / "stage-receipt"
+                    receipt.write_text(receipt.read_text(encoding="ascii") + "unexpected=value\n", encoding="ascii")
+                    receipt.chmod(0o600)
+                elif mutation == "previous_mode":
+                    previous_path.chmod(0o644)
+                elif mutation == "previous_shape":
+                    previous_path.write_text("{}\n", encoding="utf-8")
+                    previous_path.chmod(0o600)
+                else:
+                    (release / "unexpected.txt").write_text("unbound\n", encoding="ascii")
+
+                with self.assertRaisesRegex(stage_binding.StageBindingError, expected_error):
+                    stage_binding.inspect_existing_release(release, **arguments)
+
     def test_existing_partial_or_unknown_stage_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory(prefix="catering-operator-stage-partial-") as temporary:
             release, manifest_sha, runtime_image, web_image, checker_sha = self._stage_fixture(Path(temporary))

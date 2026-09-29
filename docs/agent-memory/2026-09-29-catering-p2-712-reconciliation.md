@@ -35,3 +35,15 @@ P1/main bleibt führende Architektur. #712 wurde nicht gemergt oder cherry-picke
 - Installierte Manifest-v1-/v2-Releases bleiben für bestehende Receipt-/Rollbackprüfungen lesbar; neue Stage-Kandidaten verlangen Manifest v3.
 - O-1 bis O-8 wurden nicht als separate Nebenbaustellen umgesetzt oder als erledigt erklärt.
 - #712 bleibt offen, bis seine GitHub-Behandlung separat freigegeben ist.
+
+## P2.1 – Abschluss des Retry-Befunds I-1
+
+Der unabhängige Review von P2-Head `ca287f09b7e584bc928ffe3c827dbd71410a86cf` fand, dass ein nach `candidate_rejected` oder sauberem Rollback zurückgebliebenes `previous-images.json` ohne Install-Receipt zuvor pauschal als unvollständiger Apply-Zustand abgelehnt wurde. Damit war die damalige allgemeine Wiederverwendungsformulierung zu weit.
+
+Nach P2.1 darf ein solcher Releasepfad nur als Retry-Stage wiederverwendet werden, wenn Install-Receipt fehlt, der Kandidat nicht aktiv ist und Stage-Receipt, Manifest, beide Commits, Image-/Archiv-/Override-/Compose-/Tool-/Source-Tree-Bindungen, erwartetes Layout, `previous-images.json`-Form, Ownership und Modi exakt passen. Unbekannte oder widersprüchliche Zustände bleiben fail-closed; nichts wird automatisch gelöscht.
+
+Bei jedem neuen Apply bindet der Operator den tatsächlichen Vorgänger erneut aus dem unter Lock gelesenen aktiven Release. `previous-images.json` wird vor dem Image-Load atomar aus den zu diesem Zeitpunkt laufenden Containern neu geschrieben und ist für den gebundenen Operator keine Rollback-Autorität. Ein gültiges Install-Receipt bleibt ein eigener `already_installed`-Zustand; ein aktiver Kandidat ohne gültiges Install-Receipt wird abgewiesen.
+
+Mit dem funktional und dokumentarisch geschlossenen I-1 gilt die Reconciliation-Abschlussaussage für den dauerhaften Updateweg; #712 bleibt offen und wurde weder gemergt noch geschlossen. M-1 bis M-4 bleiben sichtbar für P3/Betriebsrehearsal. Kein Hostkontakt oder Deployment.
+
+Gezielte lokale Prüfung für P2.1: 46 Tests in `tests/catering_target_operator_test.py`, 97 Tests in 8 Catering-Target-Vitest-Dateien, Bash-Syntax, Python-AST und `git diff --check` erfolgreich. Keine reale SSH-, Docker-, Stage-, Apply-, Verify- oder Produktionsausführung.

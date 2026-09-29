@@ -225,8 +225,9 @@ def inspect_existing_release(
     )
     if installed:
         return "installed"
-    if (release_dir / "previous-images.json").exists():
-        raise StageBindingError("release has incomplete apply state")
+    # A rejected or rolled-back attempt leaves this validated compatibility
+    # snapshot behind. The bound operator refreshes it under lock; it is not
+    # evidence that the candidate was installed or a rollback authority.
     return "reusable"
 
 

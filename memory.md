@@ -1,9 +1,15 @@
 # memory.md
 
-version: 5.418
+version: 5.419
 date: 2026-09-29
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
+
+## Aktueller Stand – P2.1 Retry nach Rollback / `candidate_rejected` (2026-09-29)
+
+- I-1 aus dem Review von #715 wurde im dauerhaften P1-Operatorweg geschlossen. Ein vollständiges, unverändertes Stage mit validiertem `previous-images.json` ohne Install-Receipt kann erneut benutzt werden, wenn der Kandidat nicht aktiv ist und Stage-/Bundle-/Receipt-/Layout-/Ownership-/Modusprüfungen passen. Drift, unbekannte Dateien, widersprüchliche Receipts und ein aktiver Kandidat ohne gültigen Install-Receipt bleiben fail-closed.
+- `apply` bindet den realen Vorgänger erneut anhand des aktiven Releases unter gehaltenem Lock. `previous-images.json` wird vor Image-Load atomar aus den tatsächlich laufenden Images erneuert; sein Inhalt aus einem früheren Versuch ist keine Rollback-Autorität. Ein gültiger Install-Receipt bleibt ein separater `already_installed`-Zustand.
+- Keine Host-, SSH-, Docker- oder Produktionsausführung. #712 wurde nicht integriert oder geschlossen; M-1 bis M-4 bleiben für P3/Betriebsrehearsal offen.
 
 ## Aktueller Stand – P2 #712-Reconciliation (2026-09-29)
 
@@ -2335,3 +2341,9 @@ Quelle: `8de2e96c8604f12da2ec14c39b187db04dfb61cf`. Der folgende Betriebsbericht
 ### 5.418 - 2026-09-29 — P2 Stage-/Install-Statusdokumentation präzisiert
 
 - Operationsdokumentation unterscheidet ausdrücklich die sichere `already_installed`-Behandlung eines vollständig passenden installierten Releases von abweichenden installierten oder unbekannten Zuständen, die fail-closed enden.
+
+### 5.419 - 2026-09-29 — P2.1 Retry nach Rollback / `candidate_rejected`
+
+- I-1 aus dem Review von #715 ist geschlossen: ein valides `previous-images.json` ohne Install-Receipt blockiert die Wiederverwendung eines vollständig unveränderten, gebundenen Stage nicht mehr. Die Wiederverwendung verlangt weiterhin gültiges Stage-Receipt, unveränderte Manifest-/Commit-/Image-/Archiv-/Source-/Compose-/Override-/Toolbindungen, erwartetes Layout, bekannte Dateien sowie gültige Ownership und Modi. Ein aktiver Kandidat ohne gültigen Install-Receipt wird bei Stage und Apply abgewiesen; unter Lock wird der Status erneut geprüft und der Lock bei Drift freigegeben.
+- `previous-images.json` ist bei einem Retry nur ein validierter Restzustand. Vor dem Image-Load ersetzt Apply es unter Lock atomar mit den tatsächlich laufenden Container-Images; der Rollback-Vorgänger wird unabhängig davon aus dem unter Lock beobachteten aktiven Release neu gebunden. Install-Receipt bleibt ein eigener `already_installed`-Zustand.
+- Gezielte Prüfung: 46 Tests in `tests/catering_target_operator_test.py`, 97 Tests in 8 Catering-Target-Vitest-Dateien, Bash-Syntax, Python-AST und `git diff --check` erfolgreich. Keine echte SSH-, Docker-, Host- oder Produktionsausführung; #712 bleibt offen und unintegriert, M-1 bis M-4 bleiben für P3/Betriebsrehearsal sichtbar.

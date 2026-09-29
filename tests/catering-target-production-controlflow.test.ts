@@ -240,6 +240,56 @@ describe("Catering target production control flow", () => {
     expect(commands).not.toContain("ssh activate candidate");
   });
 
+  it.each([
+    ["candidate_rejected", "operator-apply-retry-candidate-rejected"],
+    ["clean rollback", "operator-apply-retry-after-rollback"],
+  ])("retries the identical bound stage after %s and refreshes previous images under lock", (_outcome, scenario) => {
+    const { result, commands } = runProduction(scenario, "apply");
+    expect(result.status, result.stderr + "\n" + commands).toBe(0);
+    expect(result.stdout).toContain("TARGET_UPDATE_RESULT activated");
+    expect(commands).toContain("ssh stage inspect reusable previous-images-present");
+    expect(commands).not.toContain("rsync source");
+    expect(commands).not.toContain("rsync artifacts");
+    const lock = commands.indexOf("ssh lock");
+    const refreshed = commands.indexOf(`ssh capture previous active-release=${"b".repeat(40)}`);
+    const load = commands.indexOf("ssh load");
+    const activate = commands.indexOf("ssh activate candidate");
+    expect(lock).toBeGreaterThan(-1);
+    expect(refreshed).toBeGreaterThan(lock);
+    expect(load).toBeGreaterThan(refreshed);
+    expect(activate).toBeGreaterThan(load);
+  });
+
+  it.each([
+    ["stage", "operator-stage-active-without-install-receipt"],
+    ["apply", "operator-apply-active-without-install-receipt"],
+  ] as const)("rejects an active uninstalled candidate during %s", (mode, scenario) => {
+    const { result, commands } = runProduction(scenario, mode);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("candidate release is active without a valid install receipt");
+    expect(commands).toContain("ssh stage inspect reusable active-without-receipt");
+    expect(commands).not.toContain("ssh stage receipt write");
+    expect(commands).not.toContain("rsync source");
+    expect(commands).not.toContain("rsync artifacts");
+    expect(commands).not.toContain("ssh lock");
+    expect(commands).not.toContain("ssh load");
+    expect(commands).not.toContain("ssh activate candidate");
+  });
+
+  it("unlocks if a retry candidate becomes active without an install receipt during the locked recheck", () => {
+    const { result, commands } = runProduction("operator-apply-raced-active-without-install-receipt", "apply");
+    const candidate = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("candidate release is active without a valid install receipt");
+    expect(commands).toContain("ssh stage inspect reusable");
+    expect(commands).toContain("ssh stage inspect reusable active-without-receipt");
+    expect(commands).toContain(`ssh preflight release=${candidate}`);
+    expect(commands).toContain("ssh unlock");
+    expect(result.stdout + result.stderr).not.toContain("lock_retained=true");
+    expect(commands).not.toContain("ssh load");
+    expect(commands).not.toContain("ssh activate candidate");
+  });
+
   it("does not treat an install receipt as active when the installed marker points elsewhere", () => {
     const { result, commands } = runProduction("operator-apply-installed-inactive", "apply");
     expect(result.status).not.toBe(0);
@@ -356,14 +406,16 @@ describe("Catering target production control flow", () => {
     expect(commands).toContain("ssh unlock");
   });
 
-  it("uses the release observed under the acquired lock when another update wins the race", () => {
-    const { result, commands } = runProduction("operator-rollback-snapshot-race", "apply");
+  it("rebinds rollback to the active release observed under lock, not the retry's stale previous-images", () => {
+    const { result, commands } = runProduction("operator-apply-retry-rollback-snapshot-race", "apply");
     const releaseA = "a".repeat(40);
     const releaseB = "b".repeat(40);
     expect(result.status).not.toBe(0);
     expect(result.stdout, result.stderr + "\n" + commands).toContain("TARGET_UPDATE_RESULT rolled_back");
+    expect(commands).toContain("ssh stage inspect reusable previous-images-present");
     expect(commands).toContain(`ssh preflight release=${releaseA}`);
     expect(commands).toContain(`ssh preflight release=${releaseB}`);
+    expect(commands).toContain(`ssh capture previous active-release=${releaseB}`);
     expect(commands).toContain(`ssh verify rollback ${releaseB}`);
     expect(commands).not.toContain(`ssh verify rollback ${releaseA}`);
     expect(commands).toContain("ssh activate previous");

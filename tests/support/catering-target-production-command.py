@@ -130,13 +130,33 @@ joined_args = " ".join(remote_argv)
 
 if "inspect-existing" in joined_args:
     if scenario in {
+        "operator-apply-retry-candidate-rejected",
+        "operator-apply-retry-after-rollback",
+        "operator-apply-retry-rollback-snapshot-race",
+    }:
+        log("ssh stage inspect reusable previous-images-present")
+        sys.stdout.write("reusable\n")
+        raise SystemExit(0)
+    if scenario in {
+        "operator-stage-active-without-install-receipt",
+        "operator-apply-active-without-install-receipt",
+    }:
+        log("ssh stage inspect reusable active-without-receipt")
+        sys.stdout.write("reusable\n")
+        raise SystemExit(0)
+    if scenario in {
         "operator-apply-raced-installed",
         "operator-apply-raced-partial",
         "operator-apply-raced-installed-unlock-fails",
         "operator-apply-raced-partial-unlock-fails",
+        "operator-apply-raced-active-without-install-receipt",
     }:
         command_history = log_path.read_text(encoding="utf-8")
         if "ssh lock" in command_history:
+            if scenario == "operator-apply-raced-active-without-install-receipt":
+                log("ssh stage inspect reusable active-without-receipt")
+                sys.stdout.write("reusable\n")
+                raise SystemExit(0)
             if scenario in {"operator-apply-raced-installed", "operator-apply-raced-installed-unlock-fails"}:
                 log("ssh stage inspect installed")
                 sys.stdout.write("installed\n")
@@ -350,10 +370,15 @@ if "TARGET_PREFLIGHT_OK target=" in stdin_text:
     count_file.write_text(str(count), encoding="utf-8")
     runtime_state = ""
     if scenario.startswith("operator-"):
-        if scenario == "operator-rollback-snapshot-race" and count == 1:
+        if scenario in {"operator-rollback-snapshot-race", "operator-apply-retry-rollback-snapshot-race"} and count == 1:
             release = "a" * 40
-        elif scenario in {"operator-stage-installed", "operator-apply-installed"} or (
+        elif scenario in {
+            "operator-stage-installed", "operator-apply-installed",
+            "operator-stage-active-without-install-receipt", "operator-apply-active-without-install-receipt",
+        } or (
             scenario in {"operator-apply-raced-installed", "operator-apply-raced-installed-unlock-fails"} and count >= 2
+        ) or (
+            scenario == "operator-apply-raced-active-without-install-receipt" and count >= 2
         ):
             release = os.environ["DEPLOY_COMMIT_SHA"]
         else:
@@ -402,7 +427,9 @@ if "# TARGET_STAGE_BINDING_CAPTURE" in stdin_text and len(remote_argv) > 9 and r
     if scenario == "operator-stage-binding-drift-before-load":
         log("ssh stage receipt verify capture failed")
         raise SystemExit(1)
+    active_release = (state_root / "installed-release").read_text(encoding="ascii")
     log("ssh stage receipt verify capture")
+    log(f"ssh capture previous active-release={active_release}")
     log("ssh load")
     raise SystemExit(0)
 
@@ -448,7 +475,9 @@ if "previous-images.json" in stdin_text and "docker load" in stdin_text:
 if "up -d --no-deps" in stdin_text:
     which = classify_override()
     log(f"ssh activate {which}")
-    if scenario in {"activate-fails", "operator-rollback-snapshot-race"} and which == "candidate":
+    if scenario in {
+        "activate-fails", "operator-rollback-snapshot-race", "operator-apply-retry-rollback-snapshot-race",
+    } and which == "candidate":
         raise SystemExit(1)
     if scenario == "rollback-fails":
         raise SystemExit(1)
