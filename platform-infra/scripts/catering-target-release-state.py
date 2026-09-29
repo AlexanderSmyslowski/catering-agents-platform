@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import stat
 import sys
@@ -37,7 +38,8 @@ LEGACY_MANIFEST_KEYS = {
     "images",
     "artifacts",
 }
-CURRENT_MANIFEST_KEYS = LEGACY_MANIFEST_KEYS | {"sourceFiles"}
+CURRENT_MANIFEST_V2_KEYS = LEGACY_MANIFEST_KEYS | {"sourceFiles"}
+CURRENT_MANIFEST_V3_KEYS = CURRENT_MANIFEST_V2_KEYS | {"sourceTreeSha256"}
 
 
 class ReleaseBindingError(Exception):
@@ -80,6 +82,46 @@ def _digest(path: Path) -> str:
     except OSError as exc:
         raise ReleaseBindingError("release artifact could not be read") from exc
     return value.hexdigest()
+
+
+def _source_tree_sha256(source_root: Path, expected_uid: int, expected_gid: int) -> str:
+    records: list[list[str]] = []
+    root_info = source_root.lstat()
+    _require(
+        stat.S_ISDIR(root_info.st_mode)
+        and not stat.S_ISLNK(root_info.st_mode)
+        and stat.S_IMODE(root_info.st_mode) == 0o755
+        and root_info.st_uid == expected_uid
+        and root_info.st_gid == expected_gid
+    )
+    for current, directories, files in os.walk(source_root, topdown=True, followlinks=False):
+        current_path = Path(current)
+        directories.sort()
+        files.sort()
+        for name in directories:
+            path = current_path / name
+            info = path.lstat()
+            _require(
+                stat.S_ISDIR(info.st_mode)
+                and not stat.S_ISLNK(info.st_mode)
+                and stat.S_IMODE(info.st_mode) == 0o755
+                and info.st_uid == expected_uid
+                and info.st_gid == expected_gid
+            )
+            records.append(["directory", path.relative_to(source_root).as_posix(), "0755"])
+        for name in files:
+            path = current_path / name
+            info = path.lstat()
+            mode = stat.S_IMODE(info.st_mode)
+            _require(
+                stat.S_ISREG(info.st_mode)
+                and not stat.S_ISLNK(info.st_mode)
+                and mode in {0o644, 0o755}
+                and info.st_uid == expected_uid
+                and info.st_gid == expected_gid
+            )
+            records.append(["file", path.relative_to(source_root).as_posix(), f"{mode:04o}", _digest(path)])
+    return hashlib.sha256(json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("ascii")).hexdigest()
 
 
 def _image_ids(candidate_path: Path, expected_uid: int, expected_gid: int) -> tuple[str, str]:
@@ -125,7 +167,7 @@ def _verify_manifest(
         # Schema 1 is retained only so an existing installed release can be verified or rolled back.
         _require(allow_legacy_schema and set(manifest) == LEGACY_MANIFEST_KEYS)
     elif type(schema_version) is int and schema_version == 2:
-        _require(set(manifest) == CURRENT_MANIFEST_KEYS)
+        _require(set(manifest) == CURRENT_MANIFEST_V2_KEYS)
         source_files = manifest.get("sourceFiles")
         _require(
             isinstance(source_files, dict)
@@ -137,6 +179,25 @@ def _verify_manifest(
         for relative, expected_sha256 in source_files.items():
             source_path = _regular_file(source / relative, 0o644, expected_uid, expected_gid)
             _require(_digest(source_path) == expected_sha256)
+    elif type(schema_version) is int and schema_version == 3:
+        _require(set(manifest) == CURRENT_MANIFEST_V3_KEYS)
+        source_files = manifest.get("sourceFiles")
+        _require(
+            isinstance(source_files, dict)
+            and set(source_files) == SOURCE_COMPOSE_FILES
+            and all(isinstance(value, str) and SHA256_RE.fullmatch(value) is not None for value in source_files.values())
+        )
+        source = _directory(release / "source")
+        _directory(source / "platform-infra")
+        for relative, expected_sha256 in source_files.items():
+            source_path = _regular_file(source / relative, 0o644, expected_uid, expected_gid)
+            _require(_digest(source_path) == expected_sha256)
+        tree_sha256 = manifest.get("sourceTreeSha256")
+        _require(
+            isinstance(tree_sha256, str)
+            and SHA256_RE.fullmatch(tree_sha256) is not None
+            and _source_tree_sha256(source, expected_uid, expected_gid) == tree_sha256
+        )
     else:
         raise ReleaseBindingError("release state is not bound to the expected commit and artifacts")
     _require(

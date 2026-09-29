@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import json
 import re
 import shlex
 import subprocess
@@ -15,7 +16,11 @@ import sys
 
 state_root = Path(os.environ["CATERING_TARGET_FAKE_STATE"])
 scenario = os.environ.get("CATERING_TARGET_FAKE_SCENARIO", "healthy")
-log_path = state_root / "commands.log"
+log_path = Path(os.environ.get("CATERING_TARGET_FAKE_LOG", state_root / "commands.log"))
+RETRY_SCENARIOS = {
+    "operator-p2-retry-candidate-rejected-sequence",
+    "operator-p2-retry-after-rollback-sequence",
+}
 command = Path(sys.argv[0]).name
 args = sys.argv[1:]
 
@@ -95,6 +100,10 @@ if command == "rsync":
         "UserKnownHostsFile=" + os.environ["CATERING_TARGET_SSH_KNOWN_HOSTS_FILE"],
         "-o",
         "ConnectTimeout=10",
+        "-o",
+        "ServerAliveInterval=15",
+        "-o",
+        "ServerAliveCountMax=4",
         "-p",
         "22",
     ]
@@ -124,6 +133,75 @@ except (ValueError, IndexError):
     fail("synthetic ssh: remote command was malformed")
 joined_args = " ".join(remote_argv)
 
+if "inspect-existing" in joined_args:
+    if scenario in RETRY_SCENARIOS:
+        release_fixture = state_root / "release"
+        if (
+            not (release_fixture / "stage-receipt").is_file()
+            or not (release_fixture / "previous-images.json").is_file()
+            or (release_fixture / "install-receipt").exists()
+        ):
+            log("ssh stage inspect rejected retry fixture")
+            raise SystemExit(1)
+        log("ssh stage inspect reusable previous-images-present")
+        sys.stdout.write("reusable\n")
+        raise SystemExit(0)
+    if scenario in {
+        "operator-apply-retry-candidate-rejected",
+        "operator-apply-retry-after-rollback",
+        "operator-apply-retry-rollback-snapshot-race",
+    }:
+        log("ssh stage inspect reusable previous-images-present")
+        sys.stdout.write("reusable\n")
+        raise SystemExit(0)
+    if scenario in {
+        "operator-stage-active-without-install-receipt",
+        "operator-apply-active-without-install-receipt",
+    }:
+        log("ssh stage inspect reusable active-without-receipt")
+        sys.stdout.write("reusable\n")
+        raise SystemExit(0)
+    if scenario in {
+        "operator-apply-raced-installed",
+        "operator-apply-raced-partial",
+        "operator-apply-raced-installed-unlock-fails",
+        "operator-apply-raced-partial-unlock-fails",
+        "operator-apply-raced-active-without-install-receipt",
+    }:
+        command_history = log_path.read_text(encoding="utf-8")
+        if "ssh lock" in command_history:
+            if scenario == "operator-apply-raced-active-without-install-receipt":
+                log("ssh stage inspect reusable active-without-receipt")
+                sys.stdout.write("reusable\n")
+                raise SystemExit(0)
+            if scenario in {"operator-apply-raced-installed", "operator-apply-raced-installed-unlock-fails"}:
+                log("ssh stage inspect installed")
+                sys.stdout.write("installed\n")
+                raise SystemExit(0)
+            log("ssh stage inspect rejected")
+            raise SystemExit(1)
+        log("ssh stage inspect reusable")
+        sys.stdout.write("reusable\n")
+        raise SystemExit(0)
+    if scenario == "operator-stage-reused":
+        log("ssh stage inspect reusable")
+        sys.stdout.write("reusable\n")
+        raise SystemExit(0)
+    if scenario in {"operator-stage-installed", "operator-apply-installed", "operator-apply-installed-inactive"}:
+        log("ssh stage inspect installed")
+        sys.stdout.write("installed\n")
+        raise SystemExit(0)
+    if scenario == "operator-stage-partial":
+        log("ssh stage inspect rejected")
+        raise SystemExit(1)
+    if os.environ.get("CATERING_TARGET_FAKE_MODE") == "apply":
+        log("ssh stage inspect reusable")
+        sys.stdout.write("reusable\n")
+        raise SystemExit(0)
+    log("ssh stage inspect absent")
+    sys.stdout.write("absent\n")
+    raise SystemExit(0)
+
 if scenario == "operator-smoke" and "node -e" in joined_args:
     expected_prefix = [
         "sudo", "-n", "docker", "exec", "-i", "platform-infra-intake-1", "node", "-e"
@@ -150,6 +228,11 @@ if 'stage_tool_sha="${12}"' in stdin_text:
 
 
 def classify_override() -> str:
+    if scenario in RETRY_SCENARIOS:
+        release_match = re.search(r"/opt/catering-releases/([0-9a-f]{40})/candidate-images\.json", joined_args)
+        if release_match is None:
+            fail("synthetic retry: override release path was not bound")
+        return "candidate" if release_match.group(1) == os.environ["DEPLOY_COMMIT_SHA"] else "previous"
     if scenario.startswith("operator-"):
         installed_file = state_root / "installed-release"
         if installed_file.exists():
@@ -172,10 +255,10 @@ if "docker exec -i" in joined_args and "catering-target-authenticated-smoke.mjs"
     raise SystemExit(0)
 
 
-if "docker exec -i" in joined_args and "node -e" in joined_args:
-    if len(remote_argv) < 9 or remote_argv[6:8] != ["node", "-e"]:
+if "docker exec -i" in joined_args and "node" in joined_args and "--input-type=module" in joined_args:
+    if len(remote_argv) < 10 or remote_argv[6:9] != ["node", "--input-type=module", "-e"]:
         fail("synthetic operator smoke: node source was not one remote argument")
-    smoke_source = remote_argv[8]
+    smoke_source = remote_argv[9]
     if "/api/production/v1/production/plans" not in smoke_source:
         fail("synthetic operator smoke: plans read route missing")
     if "/api/production/v1/production/cases" in smoke_source:
@@ -184,7 +267,43 @@ if "docker exec -i" in joined_args and "node -e" in joined_args:
         fail("synthetic operator smoke: credentials leaked into remote command")
     if "synthetic-password" not in stdin_text or "synthetic-user" not in stdin_text:
         fail("synthetic operator smoke: credential payload was not delivered on stdin")
+    smoke_markers = [
+        "TARGET_AUTH_SMOKE_STAGE stage=script_start status=success",
+        "TARGET_AUTH_SMOKE_STAGE stage=payload_valid status=success",
+        'TARGET_AUTH_SMOKE_STAGE stage=login_response status=" + String(login.status)',
+        "TARGET_AUTH_SMOKE_STAGE stage=login status=success",
+        'TARGET_AUTH_SMOKE_STAGE stage=session_response status=" + String(session.status)',
+        "TARGET_AUTH_SMOKE_STAGE stage=session status=success",
+        'TARGET_AUTH_SMOKE_STAGE stage=production_read_response status=" + String(plans.status)',
+        "TARGET_AUTH_SMOKE_STAGE stage=production_read status=success",
+    ]
+    if any(marker not in smoke_source for marker in smoke_markers):
+        fail("synthetic operator smoke: progress marker source is incomplete")
+    for marker in (
+        "TARGET_AUTH_SMOKE_STAGE stage=script_start status=success",
+        "TARGET_AUTH_SMOKE_STAGE stage=payload_valid status=success",
+        "TARGET_AUTH_SMOKE_STAGE stage=login_response status=200",
+        "TARGET_AUTH_SMOKE_STAGE stage=login status=success",
+        "TARGET_AUTH_SMOKE_STAGE stage=session_response status=200",
+        "TARGET_AUTH_SMOKE_STAGE stage=session status=success",
+        "TARGET_AUTH_SMOKE_STAGE stage=production_read_response status=200",
+        "TARGET_AUTH_SMOKE_STAGE stage=production_read status=success",
+    ):
+        print(marker, file=sys.stderr)
     log("ssh smoke operator plans")
+    if scenario in RETRY_SCENARIOS:
+        smoke_count_path = state_root / "smoke-count"
+        smoke_count = int(smoke_count_path.read_text(encoding="ascii")) if smoke_count_path.exists() else 0
+        smoke_count += 1
+        smoke_count_path.write_text(str(smoke_count), encoding="ascii")
+        capture_count = int((state_root / "capture-count").read_text(encoding="ascii"))
+        if (
+            scenario == "operator-p2-retry-after-rollback-sequence" and smoke_count == 1
+        ) or (
+            scenario == "operator-p2-retry-candidate-rejected-sequence" and capture_count == 2 and smoke_count == 1
+        ):
+            log("ssh smoke failed for retry fixture")
+            raise SystemExit(1)
     sys.stdout.write("authenticated_read_smoke_ok\n")
     raise SystemExit(0)
 
@@ -286,10 +405,33 @@ if "TARGET_PREFLIGHT_OK target=" in stdin_text:
     count_file.write_text(str(count), encoding="utf-8")
     runtime_state = ""
     if scenario.startswith("operator-"):
-        release = "a" * 40 if scenario == "operator-rollback-snapshot-race" and count == 1 else "b" * 40
+        if scenario in RETRY_SCENARIOS:
+            active_release = state_root / "installed-release"
+            release = active_release.read_text(encoding="ascii").strip() if active_release.exists() else "b" * 40
+        elif scenario in {"operator-rollback-snapshot-race", "operator-apply-retry-rollback-snapshot-race"} and count == 1:
+            release = "a" * 40
+        elif scenario in {
+            "operator-stage-installed", "operator-apply-installed",
+            "operator-stage-active-without-install-receipt", "operator-apply-active-without-install-receipt",
+        } or (
+            scenario in {"operator-apply-raced-installed", "operator-apply-raced-installed-unlock-fails"} and count >= 2
+        ) or (
+            scenario == "operator-apply-raced-active-without-install-receipt" and count >= 2
+        ):
+            release = os.environ["DEPLOY_COMMIT_SHA"]
+        else:
+            release = "b" * 40
         (state_root / "installed-release").write_text(release, encoding="ascii")
         runtime_state = f"runtime_state=release:{release} "
         log(f"ssh preflight release={release}")
+        if scenario in {
+            "operator-stage-active-without-install-receipt",
+            "operator-apply-active-without-install-receipt",
+        } or (
+            scenario == "operator-apply-raced-active-without-install-receipt" and count >= 2
+        ):
+            log("ssh preflight failed active candidate has no install receipt")
+            raise SystemExit(1)
     if scenario == "preflight-fails" and count == 1:
         raise SystemExit(1)
     sys.stdout.write(
@@ -305,6 +447,9 @@ if "--rollback" in remote_argv:
     rollback_sha = remote_argv[remote_argv.index("--rollback") + 1]
     installed_sha = (state_root / "installed-release").read_text(encoding="ascii")
     log(f"ssh verify rollback {rollback_sha}")
+    if scenario in RETRY_SCENARIOS:
+        expected_sha = (state_root / "previous-release-sha").read_text(encoding="ascii").strip()
+        raise SystemExit(0 if rollback_sha == expected_sha else 1)
     raise SystemExit(0 if rollback_sha == installed_sha else 1)
 
 
@@ -331,7 +476,44 @@ if "# TARGET_STAGE_BINDING_CAPTURE" in stdin_text and len(remote_argv) > 9 and r
     if scenario == "operator-stage-binding-drift-before-load":
         log("ssh stage receipt verify capture failed")
         raise SystemExit(1)
+    active_release = (state_root / "installed-release").read_text(encoding="ascii")
     log("ssh stage receipt verify capture")
+    log(f"ssh capture previous active-release={active_release}")
+    if scenario in RETRY_SCENARIOS:
+        capture_match = re.search(
+            r"sudo -n python3 - \"\$release_dir/previous-images\.json\"[^\n]*<<'PY'\n(.*?)\nPY",
+            stdin_text,
+            re.DOTALL,
+        )
+        if capture_match is None:
+            fail("synthetic retry: production previous-image writer was not found")
+        images = json.loads((state_root / "active-images.json").read_text(encoding="utf-8"))["services"]
+        previous_path = state_root / "release" / "previous-images.json"
+        writer = subprocess.run(
+            [
+                os.environ["CATERING_TARGET_REAL_PYTHON3"],
+                "-c",
+                capture_match.group(1),
+                str(previous_path),
+                images["intake"]["image"],
+                images["offer"]["image"],
+                images["production"]["image"],
+                images["exports"]["image"],
+                images["web"]["image"],
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if writer.returncode != 0:
+            fail("synthetic retry: production previous-image writer failed")
+        capture_count_path = state_root / "capture-count"
+        capture_count = int(capture_count_path.read_text(encoding="ascii")) if capture_count_path.exists() else 0
+        capture_count += 1
+        capture_count_path.write_text(str(capture_count), encoding="ascii")
+        if scenario == "operator-p2-retry-candidate-rejected-sequence" and capture_count == 1:
+            log("ssh candidate rejected before image load")
+            raise SystemExit(1)
     log("ssh load")
     raise SystemExit(0)
 
@@ -357,6 +539,9 @@ if "target update lock already exists" in stdin_text and "owner.pending" in stdi
 
 
 if 'sudo -n unlink "$lock/owner"' in stdin_text and 'sudo -n rmdir "$lock"' in stdin_text:
+    if scenario.endswith("-unlock-fails"):
+        log("ssh unlock failed")
+        raise SystemExit(42)
     log("ssh unlock")
     raise SystemExit(0)
 
@@ -374,7 +559,21 @@ if "previous-images.json" in stdin_text and "docker load" in stdin_text:
 if "up -d --no-deps" in stdin_text:
     which = classify_override()
     log(f"ssh activate {which}")
-    if scenario in {"activate-fails", "operator-rollback-snapshot-race"} and which == "candidate":
+    if scenario in RETRY_SCENARIOS:
+        release_match = re.search(r"/opt/catering-releases/([0-9a-f]{40})/candidate-images\.json", joined_args)
+        if release_match is None:
+            fail("synthetic retry: activated release path was not bound")
+        if which == "candidate":
+            (state_root / "installed-release").write_text(os.environ["DEPLOY_COMMIT_SHA"], encoding="ascii")
+        else:
+            rollback_sha = release_match.group(1)
+            (state_root / "installed-release").write_text(rollback_sha, encoding="ascii")
+            previous = json.loads((state_root / "release" / "previous-images.json").read_text(encoding="utf-8"))
+            (state_root / "active-images.json").write_text(json.dumps(previous) + "\n", encoding="utf-8")
+        raise SystemExit(0)
+    if scenario in {
+        "activate-fails", "operator-rollback-snapshot-race", "operator-apply-retry-rollback-snapshot-race",
+    } and which == "candidate":
         raise SystemExit(1)
     if scenario == "rollback-fails":
         raise SystemExit(1)
@@ -382,6 +581,18 @@ if "up -d --no-deps" in stdin_text:
 
 
 if "check_health()" in stdin_text:
+    services = {
+        "intake": "platform-infra-intake-1 http://127.0.0.1:3101/health",
+        "offer": "platform-infra-offer-1 http://127.0.0.1:3102/health",
+        "production": "platform-infra-production-1 http://127.0.0.1:3103/health",
+        "exports": "platform-infra-exports-1 http://127.0.0.1:3104/health",
+    }
+    for service, invocation in services.items():
+        marker = f"TARGET_UPDATE_STAGE stage=health service={service} status=success"
+        failed_marker = f"TARGET_UPDATE_STAGE stage=health service={service} status=failed"
+        if invocation not in stdin_text or marker not in stdin_text or failed_marker not in stdin_text:
+            fail("synthetic health verify: per-service status markers missing")
+        print(marker, file=sys.stderr)
     which = classify_override()
     log(f"ssh verify {which}")
     raise SystemExit(0)
@@ -389,6 +600,10 @@ if "check_health()" in stdin_text:
 
 if "install-receipt" in stdin_text and "installed_at=" in stdin_text:
     log("ssh receipt")
+    if scenario in RETRY_SCENARIOS:
+        release_fixture = state_root / "release"
+        (release_fixture / "install-receipt").write_text("synthetic successful install\n", encoding="ascii")
+        (state_root / "installed-release").write_text(os.environ["DEPLOY_COMMIT_SHA"], encoding="ascii")
     raise SystemExit(0)
 
 

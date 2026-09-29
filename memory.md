@@ -1,9 +1,23 @@
 # memory.md
 
-version: 5.414
-date: 2026-09-28
+version: 5.420
+date: 2026-09-29
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
+
+## Aktueller Stand – P2.1 Retry nach Rollback / `candidate_rejected` (2026-09-29)
+
+- I-1 aus dem Review von #715 wurde im dauerhaften P1-Operatorweg geschlossen. Ein vollständiges, unverändertes Stage mit validiertem `previous-images.json` ohne Install-Receipt kann erneut benutzt werden, wenn der Kandidat nicht aktiv ist und Stage-/Bundle-/Receipt-/Layout-/Ownership-/Modusprüfungen passen. Drift, unbekannte Dateien, widersprüchliche Receipts und ein aktiver Kandidat ohne gültigen Install-Receipt bleiben fail-closed. Kann der Remote-Preflight einen aktiven Kandidaten ohne Install-Receipt erst nach Lock-Erwerb nicht binden, bleibt der Lock zur manuellen Recovery erhalten.
+- `apply` bindet den realen Vorgänger erneut anhand des aktiven Releases unter gehaltenem Lock. `previous-images.json` wird vor Image-Load atomar aus den tatsächlich laufenden Images erneuert; sein Inhalt aus einem früheren Versuch ist keine Rollback-Autorität. Ein gültiger Install-Receipt bleibt ein separater `already_installed`-Zustand.
+- Keine Host-, SSH-, Docker- oder Produktionsausführung. #712 wurde nicht integriert oder geschlossen; M-1 bis M-4 bleiben für P3/Betriebsrehearsal offen.
+
+## Aktueller Stand – P2 #712-Reconciliation (2026-09-29)
+
+- P2 startet auf dem bestätigten P1/main-Commit `6e3d5f798165fffa6125c605c40fe8e283444023`. Der tatsächliche offene Draft-Head von #712 wurde lesend als `f2546468c5bce0e8f2298ee1a92c6c6da3b2ae71` bestätigt. Die Reconciliation-Matrix in `docs/operations/CATERING_TARGET_UPDATE.md` ordnet alle geforderten Betriebskenntnisse einzeln P1 oder P2 zu; #712 wurde weder integriert noch geschlossen.
+- Manifest v3 bindet zusätzlich den vollständigen normalisierten Source-Baum. Release-Wiederverwendung ist read-only und akzeptiert nur identische Artefakte mit passendem Stage-Receipt, bekanntem Dateilayout sowie erwarteten Eigentümern und Modi. Install-Receipt, teilweise Apply-Zustände, abweichende Manifeste und unbekannte Dateien bleiben davon getrennt und enden fail-closed.
+- Der Operator exportiert Source-Verzeichnisse deterministisch mit Modus 0755 und Dateien mit Modus 0644 beziehungsweise dem getrackten ausführbaren Modus 0755. `apply` klassifiziert den Stage-Zustand vor und nach Lock-Erwerb neu; ein konkurrierend installiertes, identisches Release wird als No-op beendet, ein Teil-/Driftzustand fail-closed abgewiesen und der noch vor Aktivierung gehaltene Lock freigegeben. Schlägt der SSH-Unlock fehl, bleibt `LOCK_HELD` gesetzt; der Prozess endet fehlerhaft und meldet `manual_recovery_required lock_retained=true` statt einen erfolgreichen No-op oder eine freie Sperre zu behaupten.
+- P2 übernimmt außerdem rsync-SSH-Keepalives, setzt den Smoke-Eval-Modus explizit auf ESM und gibt nicht-sensitive Postflight-, Per-Service-Health- und Auth-Smoke-Marker aus. Das Image deklariert Node 22; der lokale Test prüft die explizite Modul-Invocation, führt jedoch keinen Smoke im Node-22-Image aus.
+- Gezielte lokale Prüfung nach der Review-Korrektur: 44 Python-Tests und alle 92 Catering-Target-Vitest-Tests in acht Dateien bestanden; Syntaxprüfungen und Diffcheck erfolgreich. Keine SSH-, Docker- oder Zielausführung, kein Hub-Writeback, kein Merge und keine Schließung von #712.
 
 ## Aktueller Stand – P1 dauerhafter CateringOS-Updateweg (2026-09-28)
 
@@ -2304,3 +2318,38 @@ Quelle: `8de2e96c8604f12da2ec14c39b187db04dfb61cf`. Der folgende Betriebsbericht
 - P1.2 abgeschlossen. N-1 prüft Stage-/Bundle-Drift vor dem Lock; die Re-Verifikation vor Aktivierung bleibt erhalten. N-2 setzt einen Smoke-Request-Timeout von 20 Sekunden. N-3 ergänzt die #712-Reconciliation-Checkliste um Stage-Abbruch, Retry und sichere Wiederverwendung sowie vorhandene Install-Receipt-Fälle.
 - P1.2-Code-Head vor diesem reinen Memory-Commit: `83f5c853123d4582cd20d6b814d10f53fd27d30c`. Finaler Delta-Review: READY, keine P0/P1.
 - Kein Deployment oder Hostkontakt; #712 ist weiterhin nicht integriert.
+
+### 5.415 - 2026-09-29 — P2 Reconciliation PR #712 gegen P1
+
+- Die #712-Reconciliation-Matrix wurde gegen den gelesenen PR-Diff erstellt. P1 deckt Timeout-, Quoting-, Commit-, Runtime-, Kandidaten-, Override- und Rollbackbindungen ab; P2 ergänzt fail-closed Stage-Wiederverwendung, eindeutige Install-/Stage-Receipt-Zustände, Manifest-v3-Source-Tree-Bindung und umask-unabhängige Quellmodi.
+- Vollständiges identisches Stage ist ohne Transfer wiederverwendbar. Unvollständige oder abweichende Releases werden weder überschrieben noch gelöscht. Ein passendes bereits installiertes Release wird vor Lock/Activation bestätigt. #712 ist inhaltlich absorbiert und für den dauerhaften Updateweg nicht mehr als Codequelle erforderlich; der PR bleibt offen, bis seine separat freizugebende GitHub-Behandlung erfolgt.
+- Relevante lokale Prüfung: 43 Python-Tests, 86 Catering-Target-Vitest-Tests, Syntaxprüfungen und `git diff --check` erfolgreich. Keine reale Zielausführung oder Hostkontakt.
+
+### 5.416 - 2026-09-29 — P2 unabhängige Review-Korrekturen
+
+- `apply` klassifiziert Stage-/Install-Zustand erneut unter gehaltenem Lock. Ein inzwischen aktiviertes identisches Release endet nach Receipt-/Aktivmarkerprüfung als No-op; Teil-/Driftzustand stoppt vor Image-Laden und Aktivierung und gibt den Lock frei, solange keine Aktivierung begonnen hat.
+- rsync erhält dieselben SSH-Keepalive-Werte wie der direkte Transport. Smoke-Node-Aufruf deklariert ESM explizit; Postflight, Health pro Service und Auth-Smoke erhalten nicht-sensitive maschinenlesbare Fortschrittsmarker. Die #712-Matrix und die Smoke-Transportbeschreibung entsprechen dem tatsächlichen Code.
+- Der Exportmodus-Test prüft nun die exportierte Datei; ein gezielter Schema-v2-Installations-/Rollbacktest bewahrt die historische Receipt-Kompatibilität.
+- Verifiziert: 44 Python-Tests sowie alle 90 Catering-Target-Vitest-Tests in acht Dateien erfolgreich; Bash-/Node-/Python-Syntax und `git diff --check` erfolgreich. Keine Produktionsausführung, kein Hostkontakt und kein Hub-Writeback.
+
+### 5.417 - 2026-09-29 — P2 Lock-Freigabe fail-closed
+
+- `release_remote_lock` propagiert SSH-Fehler, bevor `LOCK_HELD` zurückgesetzt wird. Fehlgeschlagener Unlock endet fail-closed und löst die manuelle Wiederherstellungsdiagnose aus, statt einen installierten No-op als Erfolg auszugeben.
+- Regressionstests decken fehlgeschlagenen Unlock sowohl beim konkurrierend installierten Release als auch bei abgewiesenem Teilzustand ab. Der Smoke-Startmarker wird genau einmal ausgegeben; die Operationsdokumentation beschreibt die aktuellen Stage-Wiederverwendungs- und Lock-Fehlerregeln.
+- Verifiziert: 44 Python-Tests, 92 Catering-Target-Vitest-Tests in acht Dateien, Bash-/Node-/Python-Syntax und `git diff --check` erfolgreich. Keine Zielausführung oder Hostkontakt.
+
+### 5.418 - 2026-09-29 — P2 Stage-/Install-Statusdokumentation präzisiert
+
+- Operationsdokumentation unterscheidet ausdrücklich die sichere `already_installed`-Behandlung eines vollständig passenden installierten Releases von abweichenden installierten oder unbekannten Zuständen, die fail-closed enden.
+
+### 5.419 - 2026-09-29 — P2.1 Retry nach Rollback / `candidate_rejected`
+
+- I-1 aus dem Review von #715 ist geschlossen: ein valides `previous-images.json` ohne Install-Receipt blockiert die Wiederverwendung eines vollständig unveränderten, gebundenen Stage nicht mehr. Die Wiederverwendung verlangt weiterhin gültiges Stage-Receipt, unveränderte Manifest-/Commit-/Image-/Archiv-/Source-/Compose-/Override-/Toolbindungen, erwartetes Layout, bekannte Dateien sowie gültige Ownership und Modi. Ein aktiver Kandidat ohne gültigen Install-Receipt wird bei Stage und Apply abgewiesen; unter Lock wird der Status erneut geprüft und der Lock bei Drift freigegeben.
+- `previous-images.json` ist bei einem Retry nur ein validierter Restzustand. Vor dem Image-Load ersetzt Apply es unter Lock atomar mit den tatsächlich laufenden Container-Images; der Rollback-Vorgänger wird unabhängig davon aus dem unter Lock beobachteten aktiven Release neu gebunden. Install-Receipt bleibt ein eigener `already_installed`-Zustand.
+- Gezielte Prüfung: 46 Tests in `tests/catering_target_operator_test.py`, 97 Tests in 8 Catering-Target-Vitest-Dateien, Bash-Syntax, Python-AST und `git diff --check` erfolgreich. Keine echte SSH-, Docker-, Host- oder Produktionsausführung; #712 bleibt offen und unintegriert, M-1 bis M-4 bleiben für P3/Betriebsrehearsal sichtbar.
+
+### 5.420 - 2026-09-29 — P2.1 Retry-Prüfpfad präzisiert
+
+- Die Retry-Kontrollfluss-Tests verwenden jetzt einen über mehrere Apply-Versuche beständigen Stage-Zustand und führen den produktiven atomaren previous-images.json-Schreibblock lokal auf temporären Dateien aus. Sie prüfen candidate_rejected, Postactivation-Smoke-Fehler mit sauberem Rollback, identisches Manifest/Produktcommit, unverändertes Stage-Receipt, Snapshot-Modus 0600 und frische Vorgängerbindung.
+- Der echte Remote-Preflight bindet einen aktiven Kandidaten ohne Install-Receipt nicht. Scheitert dieser Preflight erst nach Lock-Erwerb, bleibt der Lock fail-closed für manuelle Recovery erhalten; die Dokumentation und Tests spiegeln diesen Pfad.
+- Verifiziert: 46 Operator-Python-Tests, 97 Tests in 8 Catering-Target-Vitest-Dateien, Bash-Syntax, Python-AST und git diff --check erfolgreich. Kein Hostkontakt, Deployment oder #712-Eingriff.

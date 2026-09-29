@@ -241,6 +241,46 @@ def _source_compose_digests(source_root: Path) -> dict[str, str]:
     return {relative: _file_sha256(_regular_file(source_root, relative)) for relative in SOURCE_COMPOSE_FILES}
 
 
+def _source_tree_digest(source_root: Path) -> str:
+    records: list[list[str]] = []
+    if source_root.is_symlink() or not source_root.is_dir():
+        raise OperatorError("product source tree is not a real directory")
+    try:
+        if source_root.stat().st_mode & 0o777 != 0o755:
+            raise OperatorError("product source tree permissions are not normalized")
+        for current, directories, files in os.walk(source_root, topdown=True, followlinks=False):
+            current_path = Path(current)
+            directories.sort()
+            files.sort()
+            for name in directories:
+                path = current_path / name
+                info = path.lstat()
+                if path.is_symlink() or not path.is_dir() or info.st_mode & 0o777 != 0o755:
+                    raise OperatorError("product source tree permissions are not normalized")
+                records.append(["directory", path.relative_to(source_root).as_posix(), "0755"])
+            for name in files:
+                path = current_path / name
+                info = path.lstat()
+                mode = info.st_mode & 0o777
+                if path.is_symlink() or not path.is_file() or mode not in {0o644, 0o755}:
+                    raise OperatorError("product source tree permissions are not normalized")
+                records.append(["file", path.relative_to(source_root).as_posix(), f"{mode:04o}", _file_sha256(path)])
+    except OSError as exc:
+        raise OperatorError("product source tree is unavailable") from exc
+    payload = json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("ascii")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _bound_product_source_tree_digest(source_root: Path, product_commit: str) -> str:
+    git_metadata = source_root / ".git"
+    if git_metadata.exists():
+        with tempfile.TemporaryDirectory(prefix="catering-target-source-check-") as temporary:
+            export = Path(temporary) / "source"
+            export_product_context(source_root, product_commit, export)
+            return _source_tree_digest(export)
+    return _source_tree_digest(source_root)
+
+
 def _regular_file(root: Path, name: str) -> Path:
     relative = PurePosixPath(name)
     if relative.is_absolute() or not relative.parts or any(part in {".", ".."} for part in relative.parts):
@@ -330,10 +370,11 @@ def verify_bundle(
         "images",
         "artifacts",
         "sourceFiles",
+        "sourceTreeSha256",
     }:
         raise OperatorError("bundle manifest shape is unsupported")
     if (
-        manifest.get("schemaVersion") != 2
+        manifest.get("schemaVersion") != 3
         or manifest.get("repository") != REPOSITORY
         or manifest.get("targetId") != TARGET_ID
         or manifest.get("platform") != "linux/amd64"
@@ -352,6 +393,13 @@ def verify_bundle(
         or source_files != _source_compose_digests(product_source_root)
     ):
         raise OperatorError("bundle Compose source binding does not match the product checkout")
+    source_tree_sha256 = manifest.get("sourceTreeSha256")
+    if (
+        not isinstance(source_tree_sha256, str)
+        or not SHA256_RE.fullmatch(source_tree_sha256)
+        or source_tree_sha256 != _bound_product_source_tree_digest(product_source_root, product_commit)
+    ):
+        raise OperatorError("bundle product source tree binding does not match the product commit")
     if not isinstance(images, dict) or set(images) != {"runtime", "web"}:
         raise OperatorError("bundle image set is incomplete or unexpected")
     if not isinstance(artifacts, dict) or set(artifacts) != {
@@ -432,7 +480,13 @@ def export_product_context(source: Path, product_commit: str, destination: Path)
         raise OperatorError("exact product source archive could not be created") from exc
     if result.returncode != 0:
         raise OperatorError("exact product source archive could not be created")
-    destination.mkdir(parents=True, exist_ok=False)
+    destination.mkdir(parents=True, exist_ok=False, mode=0o755)
+    os.chmod(destination, 0o755)
+
+    def ensure_directory(path: Path) -> None:
+        path.mkdir(parents=True, exist_ok=True, mode=0o755)
+        os.chmod(path, 0o755)
+
     try:
         with tarfile.open(archive_path, mode="r:") as archive:
             for member in archive.getmembers():
@@ -450,16 +504,16 @@ def export_product_context(source: Path, product_commit: str, destination: Path)
                     raise OperatorError("product source contains a credential-shaped build input")
                 path = destination.joinpath(*relative.parts)
                 if member.isdir():
-                    path.mkdir(parents=True, exist_ok=True)
+                    ensure_directory(path)
                     continue
                 if not member.isfile():
                     raise OperatorError("product source archive contains a non-regular entry")
                 source_file = archive.extractfile(member)
                 if source_file is None:
                     raise OperatorError("product source archive is incomplete")
-                path.parent.mkdir(parents=True, exist_ok=True)
+                ensure_directory(path.parent)
                 path.write_bytes(source_file.read())
-                os.chmod(path, member.mode & 0o755)
+                os.chmod(path, 0o755 if member.mode & 0o111 else 0o644)
     except (OSError, tarfile.TarError) as exc:
         raise OperatorError("exact product source archive is invalid") from exc
 
@@ -566,8 +620,9 @@ def create_bundle(
         "web-image.tar.gz": _file_sha256(staging / "web-image.tar.gz"),
     }
     source_files = _source_compose_digests(source_context)
+    source_tree_sha256 = _source_tree_digest(source_context)
     manifest = {
-        "schemaVersion": 2,
+        "schemaVersion": 3,
         "repository": REPOSITORY,
         "targetId": TARGET_ID,
         "platform": "linux/amd64",
@@ -587,6 +642,7 @@ def create_bundle(
         },
         "artifacts": artifacts,
         "sourceFiles": source_files,
+        "sourceTreeSha256": source_tree_sha256,
     }
     manifest_path = staging / "manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")

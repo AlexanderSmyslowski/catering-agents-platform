@@ -751,7 +751,11 @@ if digest(manifest_path) != manifest_sha:
 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 if not isinstance(manifest, dict):
     raise SystemExit("bundle manifest binding invalid")
-if (manifest.get("schemaVersion") != 2 or
+if set(manifest) != {
+        "schemaVersion", "repository", "targetId", "platform", "productCommit", "operationsCommit",
+        "images", "artifacts", "sourceFiles", "sourceTreeSha256"}:
+    raise SystemExit("bundle manifest shape invalid")
+if (manifest.get("schemaVersion") != 3 or
         manifest.get("repository") != "AlexanderSmyslowski/catering-agents-platform" or
         manifest.get("targetId") != "catering-prod-1" or
         manifest.get("platform") != "linux/amd64" or
@@ -773,6 +777,8 @@ if not isinstance(source_files, dict) or set(source_files) != expected_source_fi
     raise SystemExit("bundle source binding invalid")
 if any(not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value) for value in source_files.values()):
     raise SystemExit("bundle source binding invalid")
+if not isinstance(manifest.get("sourceTreeSha256"), str) or not re.fullmatch(r"[0-9a-f]{64}", manifest["sourceTreeSha256"]):
+    raise SystemExit("bundle source tree binding invalid")
 expected_images = {"runtime": runtime_image, "web": web_image}
 expected_archives = {"runtime": "runtime-image.tar.gz", "web": "web-image.tar.gz"}
 expected_services = {"runtime": ["intake", "offer", "production", "exports"], "web": ["web"]}
@@ -808,6 +814,25 @@ stage_binding_tool_sha256() {
   digest="$(local_sha256 "${tool}")"
   [[ "${digest}" =~ ^[0-9a-f]{64}$ ]] || fail "stage binding tool digest is invalid"
   printf '%s' "${digest}"
+}
+
+inspect_remote_stage_release() {
+  local release_dir="${RELEASE_ROOT}/${DEPLOY_COMMIT_SHA}"
+  local tool="${OPERATIONS_ROOT}/platform-infra/scripts/catering-target-stage-binding.py"
+  local tool_sha256
+  tool_sha256="$(stage_binding_tool_sha256)"
+  python3 -c 'from pathlib import Path; import sys
+template = sys.stdin.read()
+marker = "__STAGE_BINDING_PYTHON__"
+helper = Path(sys.argv[1]).read_text(encoding="utf-8")
+if template.count(marker) != 1:
+    raise SystemExit(1)
+sys.stdout.write(template.replace(marker, helper))' "${tool}" <<'REMOTE_STAGE_INSPECT' |
+__STAGE_BINDING_PYTHON__
+REMOTE_STAGE_INSPECT
+    ssh_target sudo -n /usr/bin/python3 -I - inspect-existing \
+      "${release_dir}" "${CATERING_TARGET_MANIFEST_SHA256}" "${DEPLOY_COMMIT_SHA}" \
+      "${CATERING_TARGET_OPERATIONS_COMMIT}" "${RUNTIME_IMAGE}" "${WEB_IMAGE}" "${tool_sha256}"
 }
 
 write_remote_stage_receipt() {
@@ -952,7 +977,7 @@ REMOTE_LOCK
 
 release_remote_lock() {
   [[ "${LOCK_HELD}" == true ]] || return 0
-  ssh_target bash -s -- "${TARGET_UPDATE_LOCK}" "${LOCK_OWNER}" <<'REMOTE_UNLOCK'
+  ssh_target bash -s -- "${TARGET_UPDATE_LOCK}" "${LOCK_OWNER}" <<'REMOTE_UNLOCK' || return $?
 set -euo pipefail
 lock="$1"; owner="$2"
 sudo -n test -d "$lock" || exit 1
@@ -980,6 +1005,7 @@ if [[ ! -e "$release_root" ]]; then
   sudo -n mkdir -m 0755 -- "$release_root"
 fi
 [[ -d "$release_root" && ! -L "$release_root" && "$(realpath -e "$release_root")" == "$release_root" ]] || exit 1
+[[ "$(sudo -n stat -c '%u:%g:%a' "$release_root")" == "0:0:755" ]] || exit 1
 [[ ! -e "$release_dir" && ! -L "$release_dir" ]] || { echo "release directory already exists" >&2; exit 1; }
 sudo -n mkdir -m 0755 -- "$release_dir" "$release_dir/source"
 REMOTE_RELEASE
@@ -995,6 +1021,8 @@ arguments = [
     "-o", "StrictHostKeyChecking=yes",
     "-o", "UserKnownHostsFile=" + known_hosts_file,
     "-o", "ConnectTimeout=10",
+    "-o", "ServerAliveInterval=15",
+    "-o", "ServerAliveCountMax=4",
     "-p", "22",
 ]
 print(" ".join(shlex.quote(argument) for argument in arguments))
@@ -1067,6 +1095,10 @@ value = {"services": {
     "web": {"image": web},
 }}
 directory = os.path.dirname(path)
+# A prior rejected or rolled-back attempt may leave this file behind. Under
+# the held update lock, replace it with the currently running images before
+# loading or activating the candidate; the bound operator rolls back by the
+# release observed under lock, not by this compatibility snapshot.
 fd, temporary = tempfile.mkstemp(prefix=".previous-images.", dir=directory)
 try:
     with os.fdopen(fd, "w", encoding="utf-8") as handle:
@@ -1200,10 +1232,14 @@ check_health() {
   done
   return 1
 }
-check_health platform-infra-intake-1 http://127.0.0.1:3101/health
-check_health platform-infra-offer-1 http://127.0.0.1:3102/health
-check_health platform-infra-production-1 http://127.0.0.1:3103/health
-check_health platform-infra-exports-1 http://127.0.0.1:3104/health
+check_health platform-infra-intake-1 http://127.0.0.1:3101/health || { printf 'TARGET_UPDATE_STAGE stage=health service=intake status=failed\n' >&2; exit 1; }
+printf 'TARGET_UPDATE_STAGE stage=health service=intake status=success\n' >&2
+check_health platform-infra-offer-1 http://127.0.0.1:3102/health || { printf 'TARGET_UPDATE_STAGE stage=health service=offer status=failed\n' >&2; exit 1; }
+printf 'TARGET_UPDATE_STAGE stage=health service=offer status=success\n' >&2
+check_health platform-infra-production-1 http://127.0.0.1:3103/health || { printf 'TARGET_UPDATE_STAGE stage=health service=production status=failed\n' >&2; exit 1; }
+printf 'TARGET_UPDATE_STAGE stage=health service=production status=success\n' >&2
+check_health platform-infra-exports-1 http://127.0.0.1:3104/health || { printf 'TARGET_UPDATE_STAGE stage=health service=exports status=failed\n' >&2; exit 1; }
+printf 'TARGET_UPDATE_STAGE stage=health service=exports status=success\n' >&2
 REMOTE_VERIFY
 }
 
@@ -1234,7 +1270,7 @@ print(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"), end="")
 PY
 )" || return 1
     [[ -n "${smoke_source}" ]] || return 1
-    output="$(printf '%s' "${payload}" | ssh_target sudo -n docker exec -i platform-infra-intake-1 node -e "${smoke_source}")" || return 1
+    output="$(printf '%s' "${payload}" | ssh_target sudo -n docker exec -i platform-infra-intake-1 node --input-type=module -e "${smoke_source}")" || return 1
   else
     output="$(printf '%s' "${payload}" | ssh_target sudo -n docker exec -i platform-infra-intake-1 node /app/platform-infra/scripts/catering-target-authenticated-smoke.mjs)" || return 1
   fi
@@ -1368,19 +1404,25 @@ run_production_update() {
 
   local postflight
   printf '%s\n' "TARGET_UPDATE_STAGE stage=verify status=start"
+  printf 'TARGET_UPDATE_STAGE stage=postflight status=start\n' >&2
   if ! postflight="$(remote_preflight "${LOCK_OWNER}" "${DEPLOY_COMMIT_SHA}")"; then
     handle_production_failure
     return $?
   fi
   parse_preflight_binding "${postflight}"
+  printf 'TARGET_UPDATE_STAGE stage=postflight status=success\n' >&2
+  printf 'TARGET_UPDATE_STAGE stage=health status=start\n' >&2
   if ! verify_remote_override_and_health "${release_dir}/candidate-images.json"; then
     handle_production_failure
     return $?
   fi
+  printf 'TARGET_UPDATE_STAGE stage=health status=success\n' >&2
+  printf 'TARGET_UPDATE_STAGE stage=auth_smoke status=start\n' >&2
   if ! authenticated_read_smoke; then
     handle_production_failure
     return $?
   fi
+  printf 'TARGET_UPDATE_STAGE stage=auth_smoke status=success\n' >&2
 
   if ! write_install_receipt; then
     handle_production_failure
@@ -1408,11 +1450,33 @@ run_production_stage() {
   parse_preflight_binding "${initial}"
   prepare_local_candidate
   trap production_exit_trap EXIT
-  prepare_remote_release
-  verify_remote_bundle
-  write_remote_stage_receipt
-  printf '%s\n' "TARGET_UPDATE_STAGE stage=stage status=success"
-  printf 'TARGET_UPDATE_RESULT staged product=%s manifest_sha256=%s\n' "${DEPLOY_COMMIT_SHA}" "${CATERING_TARGET_MANIFEST_SHA256}"
+  local existing_state
+  if ! existing_state="$(inspect_remote_stage_release)"; then
+    fail "existing release is not a safely reusable stage"
+  fi
+  case "${existing_state}" in
+    absent)
+      prepare_remote_release
+      verify_remote_bundle
+      write_remote_stage_receipt
+      printf '%s\n' "TARGET_UPDATE_STAGE stage=stage status=success"
+      printf 'TARGET_UPDATE_RESULT staged product=%s manifest_sha256=%s\n' "${DEPLOY_COMMIT_SHA}" "${CATERING_TARGET_MANIFEST_SHA256}"
+      ;;
+    reusable)
+      [[ "${ACTIVE_RELEASE_SHA}" != "${DEPLOY_COMMIT_SHA}" ]] || fail "candidate release is active without a valid install receipt"
+      printf '%s\n' "TARGET_UPDATE_STAGE stage=stage status=reused"
+      printf 'TARGET_UPDATE_RESULT staged_reused product=%s manifest_sha256=%s\n' "${DEPLOY_COMMIT_SHA}" "${CATERING_TARGET_MANIFEST_SHA256}"
+      ;;
+    installed)
+      [[ "${ACTIVE_RELEASE_SHA}" == "${DEPLOY_COMMIT_SHA}" ]] || fail "installed release is not the active target"
+      verify_install_receipt || fail "installed release receipt is invalid"
+      printf '%s\n' "TARGET_UPDATE_STAGE stage=stage status=already_installed"
+      printf 'TARGET_UPDATE_RESULT already_installed product=%s manifest_sha256=%s\n' "${DEPLOY_COMMIT_SHA}" "${CATERING_TARGET_MANIFEST_SHA256}"
+      ;;
+    *)
+      fail "existing release state is not recognized"
+      ;;
+  esac
 }
 
 run_production_apply() {
@@ -1433,12 +1497,58 @@ run_production_apply() {
   load_bound_image_ids
   verify_remote_bundle
   verify_remote_stage_receipt
+  local existing_state
+  if ! existing_state="$(inspect_remote_stage_release)"; then
+    fail "existing release is not a safely reusable stage"
+  fi
+  case "${existing_state}" in
+    reusable)
+      [[ "${ACTIVE_RELEASE_SHA}" != "${DEPLOY_COMMIT_SHA}" ]] || fail "candidate release is active without a valid install receipt"
+      ;;
+    installed)
+      [[ "${ACTIVE_RELEASE_SHA}" == "${DEPLOY_COMMIT_SHA}" ]] || fail "installed release is not the active target"
+      verify_install_receipt || fail "installed release receipt is invalid"
+      printf '%s\n' "TARGET_UPDATE_STAGE stage=apply status=already_installed"
+      printf 'TARGET_UPDATE_RESULT already_installed product=%s manifest_sha256=%s\n' "${DEPLOY_COMMIT_SHA}" "${CATERING_TARGET_MANIFEST_SHA256}"
+      return 0
+      ;;
+    *)
+      fail "staged release state is not recognized"
+      ;;
+  esac
   trap production_exit_trap EXIT
   acquire_remote_lock
   local locked
   locked="$(remote_preflight "${LOCK_OWNER}")"
   parse_preflight_binding "${locked}"
   PREVIOUS_RELEASE_SHA="${ACTIVE_RELEASE_SHA}"
+  local locked_state
+  if ! locked_state="$(inspect_remote_stage_release)"; then
+    release_remote_lock || fail "staged release recheck failed and target lock could not be released"
+    fail "staged release state changed before apply"
+  fi
+  case "${locked_state}" in
+    reusable)
+      if [[ "${ACTIVE_RELEASE_SHA}" == "${DEPLOY_COMMIT_SHA}" ]]; then
+        release_remote_lock || fail "active candidate recheck failed and target lock could not be released"
+        fail "candidate release is active without a valid install receipt"
+      fi
+      ;;
+    installed)
+      if [[ "${ACTIVE_RELEASE_SHA}" != "${DEPLOY_COMMIT_SHA}" ]] || ! verify_install_receipt; then
+        release_remote_lock || fail "installed release recheck failed and target lock could not be released"
+        fail "installed release binding changed before apply"
+      fi
+      release_remote_lock || fail "installed release is valid but target lock could not be released"
+      printf '%s\n' "TARGET_UPDATE_STAGE stage=apply status=already_installed"
+      printf 'TARGET_UPDATE_RESULT already_installed product=%s manifest_sha256=%s\n' "${DEPLOY_COMMIT_SHA}" "${CATERING_TARGET_MANIFEST_SHA256}"
+      return 0
+      ;;
+    *)
+      release_remote_lock || fail "staged release state changed before apply; target lock could not be released"
+      fail "staged release state changed before apply"
+      ;;
+  esac
   if ! capture_previous_and_load_candidates; then
     printf '%s\n' "TARGET_UPDATE_RESULT candidate_rejected" >&2
     release_remote_lock
@@ -1455,19 +1565,25 @@ run_production_apply() {
 
   local postflight
   printf '%s\n' "TARGET_UPDATE_STAGE stage=verify status=start"
+  printf 'TARGET_UPDATE_STAGE stage=postflight status=start\n' >&2
   if ! postflight="$(remote_preflight "${LOCK_OWNER}" "${DEPLOY_COMMIT_SHA}")"; then
     handle_production_failure
     return $?
   fi
   parse_preflight_binding "${postflight}"
+  printf 'TARGET_UPDATE_STAGE stage=postflight status=success\n' >&2
+  printf 'TARGET_UPDATE_STAGE stage=health status=start\n' >&2
   if ! verify_remote_override_and_health "${release_dir}/candidate-images.json"; then
     handle_production_failure
     return $?
   fi
+  printf 'TARGET_UPDATE_STAGE stage=health status=success\n' >&2
+  printf 'TARGET_UPDATE_STAGE stage=auth_smoke status=start\n' >&2
   if ! authenticated_read_smoke; then
     handle_production_failure
     return $?
   fi
+  printf 'TARGET_UPDATE_STAGE stage=auth_smoke status=success\n' >&2
   if ! write_install_receipt; then
     handle_production_failure
     return $?

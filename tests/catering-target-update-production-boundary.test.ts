@@ -28,6 +28,7 @@ describe("Catering target production command boundary", () => {
       "REMOTE_SCHEMA_SOURCE",
       "REMOTE_DDL_MANIFEST",
       "REMOTE_PREFLIGHT",
+      "REMOTE_STAGE_INSPECT",
       "REMOTE_STAGE_RECEIPT",
       "REMOTE_STAGE_VERIFY",
       "REMOTE_LOCK",
@@ -320,7 +321,7 @@ describe("Catering target production command boundary", () => {
     expect(end).toBeGreaterThan(start);
     expect(production.slice(start, end)).toContain("catering-target-operator-smoke.mjs");
     expect(production.slice(start, end)).toContain("CATERING_TARGET_OPERATIONS_COMMIT");
-    expect(production.slice(start, end)).toMatch(/printf '%s' "\$\{payload\}" \| ssh_target sudo -n docker exec -i platform-infra-intake-1 node -e "\$\{smoke_source\}"/);
+    expect(production.slice(start, end)).toMatch(/printf '%s' "\$\{payload\}" \| ssh_target sudo -n docker exec -i platform-infra-intake-1 node --input-type=module -e "\$\{smoke_source\}"/);
     expect(production.slice(start, end)).not.toContain("base64");
     expect(smokeText).toContain("/api/intake/v1/auth/login");
     expect(smokeText).toContain("/api/intake/v1/auth/session");
