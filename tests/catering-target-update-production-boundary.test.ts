@@ -28,6 +28,7 @@ describe("Catering target production command boundary", () => {
       "REMOTE_SCHEMA_SOURCE",
       "REMOTE_DDL_MANIFEST",
       "REMOTE_PREFLIGHT",
+      "REMOTE_STAGE_INSPECT",
       "REMOTE_STAGE_RECEIPT",
       "REMOTE_STAGE_VERIFY",
       "REMOTE_LOCK",

@@ -1,9 +1,16 @@
 # memory.md
 
-version: 5.414
-date: 2026-09-28
+version: 5.415
+date: 2026-09-29
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
+
+## Aktueller Stand – P2 #712-Reconciliation (2026-09-29)
+
+- P2 startet auf dem bestätigten P1/main-Commit `6e3d5f798165fffa6125c605c40fe8e283444023`. Der tatsächliche offene Draft-Head von #712 wurde lesend als `f2546468c5bce0e8f2298ee1a92c6c6da3b2ae71` bestätigt. Die Reconciliation-Matrix in `docs/operations/CATERING_TARGET_UPDATE.md` ordnet alle geforderten Betriebskenntnisse einzeln P1 oder P2 zu; #712 wurde weder integriert noch geschlossen.
+- Manifest v3 bindet zusätzlich den vollständigen normalisierten Source-Baum. Release-Wiederverwendung ist read-only und akzeptiert nur identische Artefakte mit passendem Stage-Receipt, bekanntem Dateilayout sowie erwarteten Eigentümern und Modi. Install-Receipt, teilweise Apply-Zustände, abweichende Manifeste und unbekannte Dateien bleiben davon getrennt und enden fail-closed.
+- Der Operator exportiert Source-Verzeichnisse deterministisch mit Modus 0755 und Dateien mit Modus 0644 beziehungsweise dem getrackten ausführbaren Modus 0755. `stage` und `apply` können ein bereits identisch installiertes Release vor Transfer beziehungsweise Lock-Erwerb als `already_installed` bestätigen.
+- Gezielt lokal geprüft: 43 Python-Tests und 86 Catering-Target-Vitest-Tests; Bash-/Node-/Python-Syntax und `git diff --check` erfolgreich. Keine SSH-, Docker- oder Zielausführung, kein Hub-Writeback, kein Merge und keine Schließung von #712.
 
 ## Aktueller Stand – P1 dauerhafter CateringOS-Updateweg (2026-09-28)
 
@@ -2304,3 +2311,9 @@ Quelle: `8de2e96c8604f12da2ec14c39b187db04dfb61cf`. Der folgende Betriebsbericht
 - P1.2 abgeschlossen. N-1 prüft Stage-/Bundle-Drift vor dem Lock; die Re-Verifikation vor Aktivierung bleibt erhalten. N-2 setzt einen Smoke-Request-Timeout von 20 Sekunden. N-3 ergänzt die #712-Reconciliation-Checkliste um Stage-Abbruch, Retry und sichere Wiederverwendung sowie vorhandene Install-Receipt-Fälle.
 - P1.2-Code-Head vor diesem reinen Memory-Commit: `83f5c853123d4582cd20d6b814d10f53fd27d30c`. Finaler Delta-Review: READY, keine P0/P1.
 - Kein Deployment oder Hostkontakt; #712 ist weiterhin nicht integriert.
+
+### 5.415 - 2026-09-29 — P2 Reconciliation PR #712 gegen P1
+
+- Die #712-Reconciliation-Matrix wurde gegen den gelesenen PR-Diff erstellt. P1 deckt Timeout-, Quoting-, Commit-, Runtime-, Kandidaten-, Override- und Rollbackbindungen ab; P2 ergänzt fail-closed Stage-Wiederverwendung, eindeutige Install-/Stage-Receipt-Zustände, Manifest-v3-Source-Tree-Bindung und umask-unabhängige Quellmodi.
+- Vollständiges identisches Stage ist ohne Transfer wiederverwendbar. Unvollständige oder abweichende Releases werden weder überschrieben noch gelöscht. Ein passendes bereits installiertes Release wird vor Lock/Activation bestätigt. #712 ist inhaltlich absorbiert und für den dauerhaften Updateweg nicht mehr als Codequelle erforderlich; der PR bleibt offen, bis seine separat freizugebende GitHub-Behandlung erfolgt.
+- Relevante lokale Prüfung: 43 Python-Tests, 86 Catering-Target-Vitest-Tests, Syntaxprüfungen und `git diff --check` erfolgreich. Keine reale Zielausführung oder Hostkontakt.

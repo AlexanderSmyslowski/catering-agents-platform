@@ -124,6 +124,26 @@ except (ValueError, IndexError):
     fail("synthetic ssh: remote command was malformed")
 joined_args = " ".join(remote_argv)
 
+if "inspect-existing" in joined_args:
+    if scenario == "operator-stage-reused":
+        log("ssh stage inspect reusable")
+        sys.stdout.write("reusable\n")
+        raise SystemExit(0)
+    if scenario in {"operator-stage-installed", "operator-apply-installed"}:
+        log("ssh stage inspect installed")
+        sys.stdout.write("installed\n")
+        raise SystemExit(0)
+    if scenario == "operator-stage-partial":
+        log("ssh stage inspect rejected")
+        raise SystemExit(1)
+    if os.environ.get("CATERING_TARGET_FAKE_MODE") == "apply":
+        log("ssh stage inspect reusable")
+        sys.stdout.write("reusable\n")
+        raise SystemExit(0)
+    log("ssh stage inspect absent")
+    sys.stdout.write("absent\n")
+    raise SystemExit(0)
+
 if scenario == "operator-smoke" and "node -e" in joined_args:
     expected_prefix = [
         "sudo", "-n", "docker", "exec", "-i", "platform-infra-intake-1", "node", "-e"

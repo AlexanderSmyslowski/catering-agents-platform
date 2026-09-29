@@ -751,7 +751,11 @@ if digest(manifest_path) != manifest_sha:
 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 if not isinstance(manifest, dict):
     raise SystemExit("bundle manifest binding invalid")
-if (manifest.get("schemaVersion") != 2 or
+if set(manifest) != {
+        "schemaVersion", "repository", "targetId", "platform", "productCommit", "operationsCommit",
+        "images", "artifacts", "sourceFiles", "sourceTreeSha256"}:
+    raise SystemExit("bundle manifest shape invalid")
+if (manifest.get("schemaVersion") != 3 or
         manifest.get("repository") != "AlexanderSmyslowski/catering-agents-platform" or
         manifest.get("targetId") != "catering-prod-1" or
         manifest.get("platform") != "linux/amd64" or
@@ -773,6 +777,8 @@ if not isinstance(source_files, dict) or set(source_files) != expected_source_fi
     raise SystemExit("bundle source binding invalid")
 if any(not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value) for value in source_files.values()):
     raise SystemExit("bundle source binding invalid")
+if not isinstance(manifest.get("sourceTreeSha256"), str) or not re.fullmatch(r"[0-9a-f]{64}", manifest["sourceTreeSha256"]):
+    raise SystemExit("bundle source tree binding invalid")
 expected_images = {"runtime": runtime_image, "web": web_image}
 expected_archives = {"runtime": "runtime-image.tar.gz", "web": "web-image.tar.gz"}
 expected_services = {"runtime": ["intake", "offer", "production", "exports"], "web": ["web"]}
@@ -808,6 +814,25 @@ stage_binding_tool_sha256() {
   digest="$(local_sha256 "${tool}")"
   [[ "${digest}" =~ ^[0-9a-f]{64}$ ]] || fail "stage binding tool digest is invalid"
   printf '%s' "${digest}"
+}
+
+inspect_remote_stage_release() {
+  local release_dir="${RELEASE_ROOT}/${DEPLOY_COMMIT_SHA}"
+  local tool="${OPERATIONS_ROOT}/platform-infra/scripts/catering-target-stage-binding.py"
+  local tool_sha256
+  tool_sha256="$(stage_binding_tool_sha256)"
+  python3 -c 'from pathlib import Path; import sys
+template = sys.stdin.read()
+marker = "__STAGE_BINDING_PYTHON__"
+helper = Path(sys.argv[1]).read_text(encoding="utf-8")
+if template.count(marker) != 1:
+    raise SystemExit(1)
+sys.stdout.write(template.replace(marker, helper))' "${tool}" <<'REMOTE_STAGE_INSPECT' |
+__STAGE_BINDING_PYTHON__
+REMOTE_STAGE_INSPECT
+    ssh_target sudo -n /usr/bin/python3 -I - inspect-existing \
+      "${release_dir}" "${CATERING_TARGET_MANIFEST_SHA256}" "${DEPLOY_COMMIT_SHA}" \
+      "${CATERING_TARGET_OPERATIONS_COMMIT}" "${RUNTIME_IMAGE}" "${WEB_IMAGE}" "${tool_sha256}"
 }
 
 write_remote_stage_receipt() {
@@ -980,6 +1005,7 @@ if [[ ! -e "$release_root" ]]; then
   sudo -n mkdir -m 0755 -- "$release_root"
 fi
 [[ -d "$release_root" && ! -L "$release_root" && "$(realpath -e "$release_root")" == "$release_root" ]] || exit 1
+[[ "$(sudo -n stat -c '%u:%g:%a' "$release_root")" == "0:0:755" ]] || exit 1
 [[ ! -e "$release_dir" && ! -L "$release_dir" ]] || { echo "release directory already exists" >&2; exit 1; }
 sudo -n mkdir -m 0755 -- "$release_dir" "$release_dir/source"
 REMOTE_RELEASE
@@ -1408,11 +1434,31 @@ run_production_stage() {
   parse_preflight_binding "${initial}"
   prepare_local_candidate
   trap production_exit_trap EXIT
-  prepare_remote_release
-  verify_remote_bundle
-  write_remote_stage_receipt
-  printf '%s\n' "TARGET_UPDATE_STAGE stage=stage status=success"
-  printf 'TARGET_UPDATE_RESULT staged product=%s manifest_sha256=%s\n' "${DEPLOY_COMMIT_SHA}" "${CATERING_TARGET_MANIFEST_SHA256}"
+  local existing_state
+  if ! existing_state="$(inspect_remote_stage_release)"; then
+    fail "existing release is not a safely reusable stage"
+  fi
+  case "${existing_state}" in
+    absent)
+      prepare_remote_release
+      verify_remote_bundle
+      write_remote_stage_receipt
+      printf '%s\n' "TARGET_UPDATE_STAGE stage=stage status=success"
+      printf 'TARGET_UPDATE_RESULT staged product=%s manifest_sha256=%s\n' "${DEPLOY_COMMIT_SHA}" "${CATERING_TARGET_MANIFEST_SHA256}"
+      ;;
+    reusable)
+      printf '%s\n' "TARGET_UPDATE_STAGE stage=stage status=reused"
+      printf 'TARGET_UPDATE_RESULT staged_reused product=%s manifest_sha256=%s\n' "${DEPLOY_COMMIT_SHA}" "${CATERING_TARGET_MANIFEST_SHA256}"
+      ;;
+    installed)
+      verify_install_receipt || fail "installed release receipt is invalid"
+      printf '%s\n' "TARGET_UPDATE_STAGE stage=stage status=already_installed"
+      printf 'TARGET_UPDATE_RESULT already_installed product=%s manifest_sha256=%s\n' "${DEPLOY_COMMIT_SHA}" "${CATERING_TARGET_MANIFEST_SHA256}"
+      ;;
+    *)
+      fail "existing release state is not recognized"
+      ;;
+  esac
 }
 
 run_production_apply() {
@@ -1433,6 +1479,23 @@ run_production_apply() {
   load_bound_image_ids
   verify_remote_bundle
   verify_remote_stage_receipt
+  local existing_state
+  if ! existing_state="$(inspect_remote_stage_release)"; then
+    fail "existing release is not a safely reusable stage"
+  fi
+  case "${existing_state}" in
+    reusable)
+      ;;
+    installed)
+      verify_install_receipt || fail "installed release receipt is invalid"
+      printf '%s\n' "TARGET_UPDATE_STAGE stage=apply status=already_installed"
+      printf 'TARGET_UPDATE_RESULT already_installed product=%s manifest_sha256=%s\n' "${DEPLOY_COMMIT_SHA}" "${CATERING_TARGET_MANIFEST_SHA256}"
+      return 0
+      ;;
+    *)
+      fail "staged release state is not recognized"
+      ;;
+  esac
   trap production_exit_trap EXIT
   acquire_remote_lock
   local locked

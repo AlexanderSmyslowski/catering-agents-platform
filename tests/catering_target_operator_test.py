@@ -165,7 +165,7 @@ def build_release_state_fixture(base: Path, *, current_bundle: bool) -> tuple[Pa
         for name in ("runtime-image.tar.gz", "web-image.tar.gz"):
             (release / name).chmod(0o644)
         manifest = {
-            "schemaVersion": 2,
+            "schemaVersion": 3,
             "repository": "AlexanderSmyslowski/catering-agents-platform",
             "targetId": "catering-prod-1",
             "platform": "linux/amd64",
@@ -184,6 +184,9 @@ def build_release_state_fixture(base: Path, *, current_bundle: bool) -> tuple[Pa
                 base_name: hashlib.sha256(base_file.read_bytes()).hexdigest(),
                 ops_name: hashlib.sha256(ops_file.read_bytes()).hexdigest(),
             },
+            "sourceTreeSha256": release_state._source_tree_sha256(
+                release / "source", os.getuid(), os.getgid()
+            ),
         }
         manifest_path = release / "manifest.json"
         manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -206,6 +209,8 @@ class CateringTargetOperatorTests(unittest.TestCase):
         release.mkdir()
         source_platform = release / "source/platform-infra"
         source_platform.mkdir(parents=True)
+        (release / "source").chmod(0o755)
+        source_platform.chmod(0o755)
         source_files = {
             "platform-infra/docker-compose.catering-target.json": source_platform / "docker-compose.catering-target.json",
             "platform-infra/docker-compose.catering-target.operations.json": source_platform / "docker-compose.catering-target.operations.json",
@@ -231,8 +236,11 @@ class CateringTargetOperatorTests(unittest.TestCase):
         for name in ("candidate-images.json", "runtime-image.tar.gz", "web-image.tar.gz", "stage-binding.py"):
             (release / name).chmod(0o644)
         artifacts = {name: hashlib.sha256((release / name).read_bytes()).hexdigest() for name in ("candidate-images.json", "runtime-image.tar.gz", "web-image.tar.gz")}
+        source_tree_sha256 = stage_binding.source_tree_sha256(
+            release / "source", expected_uid=os.getuid(), expected_gid=os.getgid()
+        )
         manifest = {
-            "schemaVersion": 2,
+            "schemaVersion": 3,
             "repository": operator.REPOSITORY,
             "targetId": operator.TARGET_ID,
             "platform": "linux/amd64",
@@ -244,6 +252,7 @@ class CateringTargetOperatorTests(unittest.TestCase):
             },
             "artifacts": artifacts,
             "sourceFiles": source_files_sha256,
+            "sourceTreeSha256": source_tree_sha256,
         }
         (release / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         (release / "manifest.json").chmod(0o644)
@@ -260,6 +269,148 @@ class CateringTargetOperatorTests(unittest.TestCase):
             )
             stage_binding.write_receipt(release, values, expected_uid=uid, expected_gid=gid)
             stage_binding.verify_receipt(release, values, expected_uid=uid, expected_gid=gid)
+
+    def test_identical_complete_stage_is_reusable_without_rewriting_receipts(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="catering-operator-stage-reuse-") as temporary:
+            release, manifest_sha, runtime_image, web_image, checker_sha = self._stage_fixture(Path(temporary))
+            uid, gid = os.getuid(), os.getgid()
+            values = stage_binding.stage_values(
+                release, manifest_sha256=manifest_sha, product_commit=PRODUCT_SHA, operations_commit=OPERATIONS_SHA,
+                runtime_image=runtime_image, web_image=web_image, stage_binding_sha256=checker_sha,
+                expected_uid=uid, expected_gid=gid, require_production_release_root=False,
+            )
+            stage_binding.write_receipt(release, values, expected_uid=uid, expected_gid=gid)
+            receipt_before = (release / "stage-receipt").read_bytes()
+            self.assertEqual(
+                stage_binding.inspect_existing_release(
+                    release, manifest_sha256=manifest_sha, product_commit=PRODUCT_SHA,
+                    operations_commit=OPERATIONS_SHA, runtime_image=runtime_image, web_image=web_image,
+                    stage_binding_sha256=checker_sha, expected_uid=uid, expected_gid=gid,
+                    require_production_release_root=False,
+                ),
+                "reusable",
+            )
+            self.assertEqual((release / "stage-receipt").read_bytes(), receipt_before)
+
+    def test_existing_partial_or_unknown_stage_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="catering-operator-stage-partial-") as temporary:
+            release, manifest_sha, runtime_image, web_image, checker_sha = self._stage_fixture(Path(temporary))
+            arguments = {
+                "manifest_sha256": manifest_sha,
+                "product_commit": PRODUCT_SHA,
+                "operations_commit": OPERATIONS_SHA,
+                "runtime_image": runtime_image,
+                "web_image": web_image,
+                "stage_binding_sha256": checker_sha,
+                "expected_uid": os.getuid(),
+                "expected_gid": os.getgid(),
+                "require_production_release_root": False,
+            }
+            with self.assertRaises(stage_binding.StageBindingError):
+                stage_binding.inspect_existing_release(release, **arguments)
+            values = stage_binding.stage_values(release, **arguments)
+            stage_binding.write_receipt(release, values, expected_uid=os.getuid(), expected_gid=os.getgid())
+            (release / "unexpected.txt").write_text("unbound\n", encoding="ascii")
+            with self.assertRaises(stage_binding.StageBindingError):
+                stage_binding.inspect_existing_release(release, **arguments)
+
+    def test_extra_source_file_and_wrong_owner_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="catering-operator-stage-source-extra-") as temporary:
+            release, manifest_sha, runtime_image, web_image, checker_sha = self._stage_fixture(Path(temporary))
+            uid, gid = os.getuid(), os.getgid()
+            arguments = {
+                "manifest_sha256": manifest_sha,
+                "product_commit": PRODUCT_SHA,
+                "operations_commit": OPERATIONS_SHA,
+                "runtime_image": runtime_image,
+                "web_image": web_image,
+                "stage_binding_sha256": checker_sha,
+                "expected_uid": uid,
+                "expected_gid": gid,
+                "require_production_release_root": False,
+            }
+            values = stage_binding.stage_values(release, **arguments)
+            stage_binding.write_receipt(release, values, expected_uid=uid, expected_gid=gid)
+            extra = release / "source/platform-infra/untracked.txt"
+            extra.write_text("unbound\n", encoding="ascii")
+            extra.chmod(0o644)
+            with self.assertRaises(stage_binding.StageBindingError):
+                stage_binding.inspect_existing_release(release, **arguments)
+            extra.unlink()
+            with self.assertRaises(stage_binding.StageBindingError):
+                stage_binding.inspect_existing_release(release, **{**arguments, "expected_uid": uid + 1})
+
+    def test_same_product_commit_with_different_manifest_binding_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="catering-operator-stage-rebind-") as temporary:
+            release, manifest_sha, runtime_image, web_image, checker_sha = self._stage_fixture(Path(temporary))
+            uid, gid = os.getuid(), os.getgid()
+            values = stage_binding.stage_values(
+                release, manifest_sha256=manifest_sha, product_commit=PRODUCT_SHA, operations_commit=OPERATIONS_SHA,
+                runtime_image=runtime_image, web_image=web_image, stage_binding_sha256=checker_sha,
+                expected_uid=uid, expected_gid=gid, require_production_release_root=False,
+            )
+            stage_binding.write_receipt(release, values, expected_uid=uid, expected_gid=gid)
+            with self.assertRaises(stage_binding.StageBindingError):
+                stage_binding.inspect_existing_release(
+                    release, manifest_sha256="f" * 64, product_commit=PRODUCT_SHA,
+                    operations_commit=OPERATIONS_SHA, runtime_image="sha256:" + "c" * 64,
+                    web_image=web_image, stage_binding_sha256=checker_sha, expected_uid=uid, expected_gid=gid,
+                    require_production_release_root=False,
+                )
+
+    def test_installed_receipt_is_distinct_from_reusable_stage(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="catering-operator-stage-installed-") as temporary:
+            release, manifest_sha, runtime_image, web_image, checker_sha = self._stage_fixture(Path(temporary))
+            uid, gid = os.getuid(), os.getgid()
+            arguments = {
+                "manifest_sha256": manifest_sha,
+                "product_commit": PRODUCT_SHA,
+                "operations_commit": OPERATIONS_SHA,
+                "runtime_image": runtime_image,
+                "web_image": web_image,
+                "stage_binding_sha256": checker_sha,
+                "expected_uid": uid,
+                "expected_gid": gid,
+                "require_production_release_root": False,
+            }
+            values = stage_binding.stage_values(release, **arguments)
+            stage_binding.write_receipt(release, values, expected_uid=uid, expected_gid=gid)
+            previous_images = {"services": {name: {"image": "sha256:" + "d" * 64} for name in ("intake", "offer", "production", "exports", "web")}}
+            (release / "previous-images.json").write_text(json.dumps(previous_images) + "\n", encoding="utf-8")
+            (release / "previous-images.json").chmod(0o600)
+            install_receipt = {
+                "status": "installed", "commit": PRODUCT_SHA, "runtime_image": runtime_image,
+                "web_image": web_image, "operations_commit": OPERATIONS_SHA,
+                "manifest_sha256": manifest_sha, "installed_at": "2026-09-28T19:00:00Z",
+            }
+            (release / "install-receipt").write_text(
+                "".join(f"{key}={value}\n" for key, value in install_receipt.items()), encoding="ascii"
+            )
+            (release / "install-receipt").chmod(0o600)
+            self.assertEqual(stage_binding.inspect_existing_release(release, **arguments), "installed")
+            (release / "install-receipt").write_text("status=installed\ncommit=" + "9" * 40 + "\n", encoding="ascii")
+            (release / "install-receipt").chmod(0o600)
+            with self.assertRaises(stage_binding.StageBindingError):
+                stage_binding.inspect_existing_release(release, **arguments)
+
+    def test_stage_source_modes_and_recursive_digest_are_deterministic(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="catering-operator-stage-source-mode-") as temporary:
+            release, manifest_sha, runtime_image, web_image, checker_sha = self._stage_fixture(Path(temporary))
+            uid, gid = os.getuid(), os.getgid()
+            values = stage_binding.stage_values(
+                release, manifest_sha256=manifest_sha, product_commit=PRODUCT_SHA, operations_commit=OPERATIONS_SHA,
+                runtime_image=runtime_image, web_image=web_image, stage_binding_sha256=checker_sha,
+                expected_uid=uid, expected_gid=gid, require_production_release_root=False,
+            )
+            stage_binding.write_receipt(release, values, expected_uid=uid, expected_gid=gid)
+            (release / "source/platform-infra").chmod(0o700)
+            with self.assertRaises(stage_binding.StageBindingError):
+                stage_binding.inspect_existing_release(
+                    release, manifest_sha256=manifest_sha, product_commit=PRODUCT_SHA,
+                    operations_commit=OPERATIONS_SHA, runtime_image=runtime_image, web_image=web_image,
+                    stage_binding_sha256=checker_sha, expected_uid=uid, expected_gid=gid,
+                    require_production_release_root=False,
+                )
 
     def test_apply_stage_binding_rejects_changed_artifact_or_commit(self) -> None:
         with tempfile.TemporaryDirectory(prefix="catering-operator-stage-drift-") as temporary:
@@ -497,6 +648,7 @@ class CateringTargetOperatorTests(unittest.TestCase):
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             manifest["schemaVersion"] = 1
             manifest.pop("sourceFiles")
+            manifest.pop("sourceTreeSha256")
             manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
             manifest_path.chmod(0o644)
             with self.assertRaises(release_state.ReleaseBindingError):
@@ -522,6 +674,7 @@ class CateringTargetOperatorTests(unittest.TestCase):
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             manifest["schemaVersion"] = 1
             manifest.pop("sourceFiles")
+            manifest.pop("sourceTreeSha256")
             manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
             manifest_path.chmod(0o644)
             manifest_sha = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
@@ -544,8 +697,8 @@ class CateringTargetOperatorTests(unittest.TestCase):
             )
             self.assertEqual(binding["commit"], PRODUCT_SHA)
 
-    def test_generated_v2_bundle_passes_candidate_installed_and_rollback_checks(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="catering-operator-release-state-v2-") as temporary:
+    def test_generated_v3_bundle_passes_candidate_installed_and_rollback_checks(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="catering-operator-release-state-v3-") as temporary:
             base = Path(temporary)
             bundle, manifest_sha, images, _, product_source = build_fixture_bundle(base)
             release_root = base / "releases"
@@ -627,8 +780,8 @@ class CateringTargetOperatorTests(unittest.TestCase):
             )
             self.assertEqual(rollback["commit"], PRODUCT_SHA)
 
-    def test_installed_v2_release_rejects_changed_compose_source(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="catering-operator-release-state-v2-drift-") as temporary:
+    def test_installed_v3_release_rejects_changed_compose_source(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="catering-operator-release-state-v3-drift-") as temporary:
             base = Path(temporary)
             bundle, manifest_sha, images, _, product_source = build_fixture_bundle(base)
             release_root = base / "releases"
@@ -665,6 +818,28 @@ class CateringTargetOperatorTests(unittest.TestCase):
                     PRODUCT_SHA,
                     OPERATIONS_SHA,
                     "0" * 64,
+                    expected_uid=os.getuid(),
+                    expected_gid=os.getgid(),
+                )
+
+    def test_v3_candidate_release_rejects_unbound_source_tree_file(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="catering-operator-release-state-v3-tree-drift-") as temporary:
+            release_root, base_name, ops_name, manifest_sha = build_release_state_fixture(Path(temporary), current_bundle=True)
+            release = release_root / PRODUCT_SHA
+            source = release / "source"
+            (source / "unexpected.txt").write_text("unbound\n", encoding="ascii")
+            (source / "unexpected.txt").chmod(0o644)
+            with self.assertRaises(release_state.ReleaseBindingError):
+                release_state.inspect_release_binding(
+                    release_root,
+                    PRODUCT_SHA,
+                    base_name,
+                    ops_name,
+                    hashlib.sha256((source / base_name).read_bytes()).hexdigest(),
+                    hashlib.sha256((source / ops_name).read_bytes()).hexdigest(),
+                    PRODUCT_SHA,
+                    OPERATIONS_SHA,
+                    manifest_sha,
                     expected_uid=os.getuid(),
                     expected_gid=os.getgid(),
                 )
@@ -858,7 +1033,12 @@ class CateringTargetOperatorTests(unittest.TestCase):
             subprocess.run(["git", "-C", str(source), "config", "user.email", "operator-test@example.invalid"], check=True)
             (source / ".gitignore").write_text(".env\n", encoding="utf-8")
             (source / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
-            subprocess.run(["git", "-C", str(source), "add", ".gitignore", "Dockerfile"], check=True)
+            nested = source / "nested"
+            nested.mkdir()
+            executable = nested / "entry.sh"
+            executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            executable.chmod(0o755)
+            subprocess.run(["git", "-C", str(source), "add", ".gitignore", "Dockerfile", "nested/entry.sh"], check=True)
             subprocess.run(["git", "-C", str(source), "commit", "-m", "fixture"], capture_output=True, check=True)
             commit = subprocess.run(
                 ["git", "-C", str(source), "rev-parse", "HEAD"],
@@ -868,9 +1048,17 @@ class CateringTargetOperatorTests(unittest.TestCase):
             ).stdout.strip()
             (source / ".env").write_text("SYNTHETIC_LOCAL_VALUE=not-for-build\n", encoding="utf-8")
             destination = Path(temporary) / "context"
-            operator.export_product_context(source, commit, destination)
+            previous_umask = os.umask(0o077)
+            try:
+                operator.export_product_context(source, commit, destination)
+            finally:
+                os.umask(previous_umask)
             self.assertTrue((destination / "Dockerfile").is_file())
             self.assertFalse((destination / ".env").exists())
+            self.assertEqual(destination.stat().st_mode & 0o777, 0o755)
+            self.assertEqual((destination / "nested").stat().st_mode & 0o777, 0o755)
+            self.assertEqual((destination / "Dockerfile").stat().st_mode & 0o777, 0o644)
+            self.assertEqual(executable.stat().st_mode & 0o777, 0o755)
 
 
 if __name__ == "__main__":

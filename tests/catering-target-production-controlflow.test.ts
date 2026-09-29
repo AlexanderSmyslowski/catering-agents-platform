@@ -27,6 +27,8 @@ function runProduction(scenario: string, mode: "preflight" | "update" | "stage" 
   const sourceSyncRoot = path.join(state, "source");
   const sourcePlatform = path.join(sourceSyncRoot, "platform-infra");
   fs.mkdirSync(sourcePlatform, { recursive: true });
+  chmodSync(sourceSyncRoot, 0o755);
+  chmodSync(sourcePlatform, 0o755);
   const composeFiles = [
     "docker-compose.catering-target.json",
     "docker-compose.catering-target.operations.json",
@@ -35,10 +37,44 @@ function runProduction(scenario: string, mode: "preflight" | "update" | "stage" 
     const relative = `platform-infra/${name}`;
     const content = JSON.stringify({ source: index }) + "\n";
     writeFileSync(path.join(sourcePlatform, name), content, { mode: 0o644 });
+    chmodSync(path.join(sourcePlatform, name), 0o644);
     return [relative, createHash("sha256").update(content).digest("hex")];
   }));
-  const manifestText = JSON.stringify({ schemaVersion: 2, sourceFiles });
-  writeFileSync(path.join(bundle, "manifest.json"), manifestText);
+  const runtimeImage = "sha256:" + "0".repeat(63) + "1";
+  const webImage = "sha256:" + "0".repeat(63) + "2";
+  const candidate = { services: {
+    intake: { image: runtimeImage }, offer: { image: runtimeImage }, production: { image: runtimeImage },
+    exports: { image: runtimeImage }, web: { image: webImage },
+  } };
+  const candidateText = JSON.stringify(candidate) + "\n";
+  writeFileSync(path.join(bundle, "candidate-images.json"), candidateText, { mode: 0o644 });
+  const sourceTreeRecords = [
+    ["directory", "platform-infra", "0755"],
+    ...Object.keys(sourceFiles).sort().map((relative) => ["file", relative, "0644", sourceFiles[relative]]),
+  ];
+  const sourceTreeSha256 = createHash("sha256").update(JSON.stringify(sourceTreeRecords)).digest("hex");
+  const artifacts = Object.fromEntries(
+    ["candidate-images.json", "runtime-image.tar.gz", "web-image.tar.gz"].map((name) => [
+      name, createHash("sha256").update(readFileSync(path.join(bundle, name))).digest("hex"),
+    ]),
+  );
+  const commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
+  const manifestText = JSON.stringify({
+    schemaVersion: 3,
+    repository: "AlexanderSmyslowski/catering-agents-platform",
+    targetId: "catering-prod-1",
+    platform: "linux/amd64",
+    productCommit: commit,
+    operationsCommit: commit,
+    images: {
+      runtime: { imageId: runtimeImage, archive: "runtime-image.tar.gz", services: ["intake", "offer", "production", "exports"] },
+      web: { imageId: webImage, archive: "web-image.tar.gz", services: ["web"] },
+    },
+    artifacts,
+    sourceFiles,
+    sourceTreeSha256,
+  });
+  writeFileSync(path.join(bundle, "manifest.json"), manifestText, { mode: 0o644 });
   const manifestSha256 = createHash("sha256").update(manifestText).digest("hex");
   if (scenario === "operator-stage-source-root-mismatch") {
     writeFileSync(path.join(sourcePlatform, composeFiles[0]), '{"services":{"web":{"privileged":true}}}\n');
@@ -55,7 +91,6 @@ function runProduction(scenario: string, mode: "preflight" | "update" | "stage" 
   writeFileSync(key, "synthetic-key\n", { mode: 0o600 });
   writeFileSync(knownHosts, "target.invalid ssh-ed25519 synthetic\n", { mode: 0o600 });
 
-  const commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
   const eventPath = path.join(state, "event.json");
   writeFileSync(eventPath, JSON.stringify({ inputs: { commit_sha: commit, confirmation: "UPDATE_CATERING_TARGET" } }));
   const compatibilityContext = mode === "update" && scenario !== "direct-unbound";
@@ -85,6 +120,7 @@ function runProduction(scenario: string, mode: "preflight" | "update" | "stage" 
       CATERING_TARGET_SMOKE_PIN: "123456",
       CATERING_TARGET_FAKE_STATE: state,
       CATERING_TARGET_FAKE_SCENARIO: scenario,
+      CATERING_TARGET_FAKE_MODE: mode,
       GITHUB_ACTIONS: compatibilityContext ? "true" : "",
       GITHUB_REPOSITORY: compatibilityContext ? "AlexanderSmyslowski/catering-agents-platform" : "",
       GITHUB_WORKFLOW: compatibilityContext ? "Update Catering target" : "",
@@ -159,6 +195,49 @@ describe("Catering target production control flow", () => {
     expect(commands).not.toContain("local_docker build");
     expect(commands).not.toContain("ssh load");
     expect(commands).not.toContain("ssh activate");
+  });
+
+  it("reuses an identical completed stage without transferring or rewriting artifacts", () => {
+    const { result, commands } = runProduction("operator-stage-reused", "stage");
+    expect(result.status, result.stderr + "\n" + commands).toBe(0);
+    expect(result.stdout).toContain("TARGET_UPDATE_RESULT staged_reused");
+    expect(commands).toContain("ssh stage inspect reusable");
+    expect(commands).not.toContain("rsync source");
+    expect(commands).not.toContain("rsync artifacts");
+    expect(commands).not.toContain("ssh stage receipt write");
+    expect(commands).not.toContain("ssh load");
+    expect(commands).not.toContain("ssh activate");
+  });
+
+  it("fails closed on a partial existing stage without overwriting or deleting it", () => {
+    const { result, commands } = runProduction("operator-stage-partial", "stage");
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("existing release is not a safely reusable stage");
+    expect(commands).toContain("ssh stage inspect rejected");
+    expect(commands).not.toContain("rsync source");
+    expect(commands).not.toContain("rsync artifacts");
+    expect(commands).not.toContain("ssh stage receipt write");
+  });
+
+  it("distinguishes an already installed matching release from a reusable stage", () => {
+    const { result, commands } = runProduction("operator-stage-installed", "stage");
+    expect(result.status, result.stderr + "\n" + commands).toBe(0);
+    expect(result.stdout).toContain("TARGET_UPDATE_RESULT already_installed");
+    expect(commands).toContain("ssh stage inspect installed");
+    expect(commands).not.toContain("rsync source");
+    expect(commands).not.toContain("rsync artifacts");
+    expect(commands).not.toContain("ssh stage receipt write");
+  });
+
+  it("does not reacquire the lock or activate a matching installed release", () => {
+    const { result, commands } = runProduction("operator-apply-installed", "apply");
+    expect(result.status, result.stderr + "\n" + commands).toBe(0);
+    expect(result.stdout).toContain("TARGET_UPDATE_RESULT already_installed");
+    expect(commands).toContain("ssh stage inspect installed");
+    expect(commands).toContain("ssh verify install receipt");
+    expect(commands).not.toContain("ssh lock");
+    expect(commands).not.toContain("ssh load");
+    expect(commands).not.toContain("ssh activate candidate");
   });
 
   it("rejects a source-root Compose mismatch before contacting the target", () => {
