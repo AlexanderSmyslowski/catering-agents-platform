@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.411
+version: 5.414
 date: 2026-09-28
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -2298,3 +2298,9 @@ Quelle: `8de2e96c8604f12da2ec14c39b187db04dfb61cf`. Der folgende Betriebsbericht
 
 - Release-State validiert Manifest v2 einschließlich beider Produkt-Compose-Digests für Kandidat, installierten Release und Rollback. Manifest v1 bleibt ausschließlich für bereits installierte historische Releases mit Install-Receipt lesbar; Kandidaten mit v1 werden abgewiesen.
 - Der operationsgebundene Node-Smoke wird als einzeln sicher gequoteter SSH-Argumentvektor ausgeführt; die Zugangsdaten bleiben auf stdin. Gezielte Tests decken den echten Release-State-Verbraucher und die transportierte Kommandoform ab.
+
+### 5.414 - 2026-09-29 — P1.2 finaler Hardening-Pass PR #714
+
+- P1.2 abgeschlossen. N-1 prüft Stage-/Bundle-Drift vor dem Lock; die Re-Verifikation vor Aktivierung bleibt erhalten. N-2 setzt einen Smoke-Request-Timeout von 20 Sekunden. N-3 ergänzt die #712-Reconciliation-Checkliste um Stage-Abbruch, Retry und sichere Wiederverwendung sowie vorhandene Install-Receipt-Fälle.
+- P1.2-Code-Head vor diesem reinen Memory-Commit: `83f5c853123d4582cd20d6b814d10f53fd27d30c`. Finaler Delta-Review: READY, keine P0/P1.
+- Kein Deployment oder Hostkontakt; #712 ist weiterhin nicht integriert.
