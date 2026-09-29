@@ -274,7 +274,7 @@ Zusätzlich bleiben die im Contract geschützten Zielzustände wie `/etc/caterin
 
 ## Lock und vorheriger Stand
 
-`stage` schreibt nur in einen noch nicht vorhandenen, durch den Produktcommit benannten Releasepfad. Existiert der Pfad bereits, wird er ausschließlich read-only klassifiziert: Nur ein vollständig identisches Stage mit gültigem Stage-Receipt und exakt erwartetem Layout darf ohne Transfer wiederverwendet werden. Installierte, teilweise, abweichende oder unbekannte Zustände werden nicht überschrieben oder gelöscht und enden fail-closed. Vor der Aktivierung in `apply` wird `/opt/catering-target-update.lock` exklusiv angelegt; Owner-Datei und Modi werden fail-closed geprüft.
+`stage` schreibt nur in einen noch nicht vorhandenen, durch den Produktcommit benannten Releasepfad. Existiert der Pfad bereits, wird er ausschließlich read-only klassifiziert: Nur ein vollständig identisches Stage mit gültigem Stage-Receipt und exakt erwartetem Layout darf ohne Transfer wiederverwendet werden. Ein vollständig passendes installiertes Release wird separat als `already_installed` bestätigt. Teilstände, abweichende installierte Zustände, abweichende Bindungen und unbekannte Zustände werden nicht überschrieben oder gelöscht und enden fail-closed. Vor der Aktivierung in `apply` wird `/opt/catering-target-update.lock` exklusiv angelegt; Owner-Datei und Modi werden fail-closed geprüft.
 
 Vor Aktivierung werden die aktuell laufenden Image-IDs von Intake, Offer, Production, Exports und Web als `previous-images.json` im Release gebunden. Die unveränderten PostgreSQL-Volume- und Edge-Image-Bindungen stammen aus dem Preflight. Der Stage-Receipt bindet Produktcommit, Betriebswerkzeug-Commit, Manifest-Digest, Override-Digest, beide Archiv-Digests und Image-IDs.
 

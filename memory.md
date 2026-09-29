@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.417
+version: 5.418
 date: 2026-09-29
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -2331,3 +2331,7 @@ Quelle: `8de2e96c8604f12da2ec14c39b187db04dfb61cf`. Der folgende Betriebsbericht
 - `release_remote_lock` propagiert SSH-Fehler, bevor `LOCK_HELD` zurückgesetzt wird. Fehlgeschlagener Unlock endet fail-closed und löst die manuelle Wiederherstellungsdiagnose aus, statt einen installierten No-op als Erfolg auszugeben.
 - Regressionstests decken fehlgeschlagenen Unlock sowohl beim konkurrierend installierten Release als auch bei abgewiesenem Teilzustand ab. Der Smoke-Startmarker wird genau einmal ausgegeben; die Operationsdokumentation beschreibt die aktuellen Stage-Wiederverwendungs- und Lock-Fehlerregeln.
 - Verifiziert: 44 Python-Tests, 92 Catering-Target-Vitest-Tests in acht Dateien, Bash-/Node-/Python-Syntax und `git diff --check` erfolgreich. Keine Zielausführung oder Hostkontakt.
+
+### 5.418 - 2026-09-29 — P2 Stage-/Install-Statusdokumentation präzisiert
+
+- Operationsdokumentation unterscheidet ausdrücklich die sichere `already_installed`-Behandlung eines vollständig passenden installierten Releases von abweichenden installierten oder unbekannten Zuständen, die fail-closed enden.
