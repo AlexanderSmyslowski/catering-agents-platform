@@ -72,6 +72,75 @@ def docker_archive(config: dict[str, str]) -> tuple[str, bytes]:
     return image_id, archive.getvalue()
 
 
+def oci_docker_archive(kind: str, identity: str, mutation: str | None = None) -> tuple[str, bytes, str]:
+    """Mirror Docker's OCI export, including its separate Docker Config reference."""
+    blobs: dict[str, bytes] = {}
+
+    def blob(payload: dict | bytes, media_type: str) -> dict:
+        data = payload if isinstance(payload, bytes) else json.dumps(payload, sort_keys=True).encode()
+        digest = "sha256:" + hashlib.sha256(data).hexdigest()
+        blobs["blobs/sha256/" + digest.split(":")[1]] = data
+        return {"mediaType": media_type, "digest": digest, "size": len(data)}
+
+    index_type = "application/vnd.oci.image.index.v1+json"
+    manifest_type = "application/vnd.oci.image.manifest.v1+json"
+    config_type = "application/vnd.oci.image.config.v1+json"
+    config = blob({"os": "linux", "architecture": "arm64" if mutation == "wrong-config-platform" else "amd64",
+                   "config": {"Labels": {"fixture": kind}}, "rootfs": {"type": "layers", "diff_ids": []}}, config_type)
+    layer = blob(b"synthetic layer", "application/vnd.oci.image.layer.v1.tar")
+    manifest_config = dict(config)
+    if mutation == "wrong-config-size":
+        manifest_config["size"] += 1
+    if mutation == "wrong-config-type":
+        manifest_config["mediaType"] = manifest_type
+    platform_manifest = blob({"schemaVersion": 2, "mediaType": manifest_type,
+                              "config": manifest_config, "layers": [layer]}, manifest_type)
+    selected = {**platform_manifest, "platform": {"architecture": "amd64", "os": "linux"}}
+    if mutation == "wrong-descriptor-platform":
+        selected["platform"]["architecture"] = "arm64"
+    if mutation == "wrong-manifest-size":
+        selected["size"] += 1
+    if mutation == "wrong-manifest-type":
+        selected["mediaType"] = index_type
+    attestation = blob({"schemaVersion": 2, "mediaType": manifest_type,
+                        "config": config, "layers": []}, manifest_type)
+    entries = [selected, {**attestation, "platform": {"os": "unknown", "architecture": "unknown"},
+                         "annotations": {"vnd.docker.reference.type": "attestation-manifest"}}]
+    if mutation == "ambiguous-platform":
+        entries.append(dict(selected))
+    index = blob({"schemaVersion": 2, "mediaType": index_type, "manifests": entries}, index_type)
+    root = platform_manifest if identity == "manifest" else index
+    build_iid = root["digest"]
+    config_path = "blobs/sha256/" + config["digest"].split(":")[1]
+    if mutation == "different-docker-config":
+        other = blob({"os": "linux", "architecture": "amd64", "config": {"Labels": {"fixture": "other"}}}, config_type)
+        config_path = "blobs/sha256/" + other["digest"].split(":")[1]
+    if mutation in {"tampered-index", "tampered-manifest", "tampered-config", "missing-manifest"}:
+        target = {"tampered-index": index, "tampered-manifest": platform_manifest,
+                  "tampered-config": config, "missing-manifest": platform_manifest}[mutation]
+        path = "blobs/sha256/" + target["digest"].split(":")[1]
+        if mutation == "missing-manifest":
+            del blobs[path]
+        else:
+            blobs[path] += b" "
+    if mutation == "unrelated-iid":
+        build_iid = "sha256:" + "f" * 64
+    files = {"oci-layout": b'{"imageLayoutVersion":"1.0.0"}',
+             "index.json": json.dumps({"schemaVersion": 2, "mediaType": index_type, "manifests": [root]}).encode(),
+             "manifest.json": json.dumps([{"Config": config_path, "RepoTags": None,
+                                            "Layers": ["blobs/sha256/" + layer["digest"].split(":")[1]]}]).encode(),
+             **blobs}
+    archive = io.BytesIO()
+    with tarfile.open(fileobj=archive, mode="w") as handle:
+        for name, data in files.items():
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            handle.addfile(info, io.BytesIO(data))
+            if mutation == "duplicate-config" and name == config_path:
+                handle.addfile(info, io.BytesIO(data))
+    return config["digest"], archive.getvalue(), build_iid
+
+
 def successful_main_push(commit: str) -> dict[str, str]:
     return {
         "event": "push",
@@ -82,7 +151,7 @@ def successful_main_push(commit: str) -> dict[str, str]:
     }
 
 
-def build_fixture_bundle(base: Path) -> tuple[Path, str, dict[str, tuple[str, bytes]], list[list[str]], Path]:
+def build_fixture_bundle(base: Path, *, identity: str = "config", mutation: str | None = None) -> tuple[Path, str, dict[str, tuple[str, bytes]], list[list[str]], Path]:
     source = base / "source"
     (source / "platform-infra/docker").mkdir(parents=True)
     (source / "platform-infra/docker/Dockerfile.runtime").write_text("FROM scratch\n", encoding="utf-8")
@@ -94,6 +163,12 @@ def build_fixture_bundle(base: Path) -> tuple[Path, str, dict[str, tuple[str, by
         "runtime": docker_archive({"architecture": "amd64", "os": "linux", "rootfs": {"type": "layers", "diff_ids": []}}),
         "web": docker_archive({"architecture": "amd64", "os": "linux", "rootfs": {"type": "layers", "diff_ids": []}}),
     }
+    build_iids = {kind: value[0] for kind, value in images.items()}
+    if identity != "config":
+        for kind in images:
+            config_id, archive, build_iid = oci_docker_archive(kind, identity, mutation)
+            images[kind] = (config_id, archive)
+            build_iids[kind] = build_iid
     commands: list[list[str]] = []
 
     def docker(command: list[str], **kwargs: object) -> CompletedProcess[bytes]:
@@ -101,7 +176,7 @@ def build_fixture_bundle(base: Path) -> tuple[Path, str, dict[str, tuple[str, by
         if command[1] == "build":
             iidfile = Path(command[command.index("--iidfile") + 1])
             kind = "runtime" if command[command.index("--file") + 1].endswith("Dockerfile.runtime") else "web"
-            iidfile.write_text(images[kind][0] + "\n", encoding="utf-8")
+            iidfile.write_text(build_iids[kind] + "\n", encoding="utf-8")
             return CompletedProcess(command, 0, b"", b"")
         if command[1] == "save":
             for image_id, archive in images.values():
@@ -111,7 +186,7 @@ def build_fixture_bundle(base: Path) -> tuple[Path, str, dict[str, tuple[str, by
 
     def save(image_id: str, destination: Path) -> None:
         commands.append(["docker", "save", image_id])
-        archive = next(archive for bound_id, archive in images.values() if bound_id == image_id)
+        archive = next(images[kind][1] for kind, bound_id in build_iids.items() if bound_id == image_id)
         destination.write_bytes(gzip.compress(archive, compresslevel=1, mtime=0))
 
     def export_context(source_root: Path, product_commit: str, destination: Path) -> None:
@@ -1064,6 +1139,36 @@ class CateringTargetOperatorTests(unittest.TestCase):
             self.assertEqual(manifest["images"]["web"]["imageId"], images["web"][0])
             self.assertEqual([command[1] for command in commands], ["build", "save", "build", "save"])
             self.assertTrue(all(command[0] == "docker" for command in commands))
+
+    def test_oci_build_iid_resolves_to_config_identity_in_v3_bundle(self) -> None:
+        for identity in ("index", "manifest"):
+            with self.subTest(identity=identity), tempfile.TemporaryDirectory(prefix="catering-operator-oci-") as temporary:
+                try:
+                    output, manifest_sha, images, commands, source = build_fixture_bundle(Path(temporary), identity=identity)
+                except operator.OperatorError as exc:
+                    self.fail(f"valid OCI {identity} build must bind its Config digest: {exc}")
+                manifest = operator.verify_bundle(output, PRODUCT_SHA, OPERATIONS_SHA, manifest_sha, source)
+                self.assertEqual(manifest["schemaVersion"], 3)
+                candidate = json.loads((output / "candidate-images.json").read_text())
+                for kind, services in (("runtime", ("intake", "offer", "production", "exports")), ("web", ("web",))):
+                    config_id, _, build_iid = oci_docker_archive(kind, identity)
+                    self.assertNotEqual(build_iid, config_id)
+                    self.assertEqual(manifest["images"][kind]["imageId"], config_id)
+                    for service in services:
+                        self.assertEqual(candidate["services"][service]["image"], config_id)
+                    self.assertIn(["docker", "save", build_iid], commands)
+                    with self.assertRaisesRegex(operator.OperatorError, "config does not match"):
+                        operator._verify_docker_archive(output / f"{kind}-image.tar.gz", build_iid)
+
+    def test_oci_bundle_rejects_unbound_or_invalid_identity_chain(self) -> None:
+        for mutation in ("unrelated-iid", "tampered-index", "tampered-manifest", "tampered-config",
+                         "missing-manifest", "ambiguous-platform", "wrong-descriptor-platform",
+                         "wrong-config-platform", "wrong-manifest-size", "wrong-config-size",
+                         "wrong-manifest-type", "wrong-config-type", "different-docker-config", "duplicate-config"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory(prefix="catering-operator-oci-invalid-") as temporary:
+                with self.assertRaises(operator.OperatorError):
+                    build_fixture_bundle(Path(temporary), identity="index", mutation=mutation)
+                self.assertFalse((Path(temporary) / "bundle").exists())
 
     def test_manifest_sha_mismatch_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory(prefix="catering-operator-manifest-") as temporary:

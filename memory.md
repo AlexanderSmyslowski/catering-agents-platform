@@ -1,9 +1,14 @@
 # memory.md
 
-version: 5.420
-date: 2026-09-29
+version: 5.421
+date: 2026-09-30
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
+
+## Aktueller Entwicklungsstand – P3.1B OCI-Build-Identität (2026-09-30)
+
+- Der echte linux/amd64-Build auf der akzeptierten Basis `9ce4fbc96a5dd877f2cd2f00588a22be861306b9` lieferte eine OCI-Index-IID. Die unveränderte v3-Archivprüfung verlangt dagegen den Config-Digest; der Basis-Bundlebau stoppte vor Manifest-Erzeugung. Der lokale Producer-Fix löst Index-/Manifest-IIDs über die hashgeprüfte exportierte Blobkette auf diesen Config-Digest auf. Docker save verwendet weiterhin die ursprüngliche unveränderliche Build-IID; Manifest und Consumer-Vertrag bleiben unverändert.
+- Die übergebene Teständerung wurde anhand des privaten Evidenzpakets byte-identisch zugeordnet. Frisches RED: beide OCI-IID-Varianten scheitern auf der Basis. GREEN: 48 Operator-Python-Tests und 78 Tests in drei betroffenen Catering-Target-Vitest-Dateien bestanden. Dieser Entwicklungsstand besitzt noch keinen push/main-Annahmenachweis; unabhängiger Review, Integration und erneute Annahme bleiben erforderlich. Der echte Bundle-/Runtime-Nachweis wird separat im privaten P3.1B-Evidenzpaket geführt; kein Produkt-/Betriebs-GO.
 
 ## Aktueller Stand – P2.1 Retry nach Rollback / `candidate_rejected` (2026-09-29)
 
@@ -2353,3 +2358,8 @@ Quelle: `8de2e96c8604f12da2ec14c39b187db04dfb61cf`. Der folgende Betriebsbericht
 - Die Retry-Kontrollfluss-Tests verwenden jetzt einen über mehrere Apply-Versuche beständigen Stage-Zustand und führen den produktiven atomaren previous-images.json-Schreibblock lokal auf temporären Dateien aus. Sie prüfen candidate_rejected, Postactivation-Smoke-Fehler mit sauberem Rollback, identisches Manifest/Produktcommit, unverändertes Stage-Receipt, Snapshot-Modus 0600 und frische Vorgängerbindung.
 - Der echte Remote-Preflight bindet einen aktiven Kandidaten ohne Install-Receipt nicht. Scheitert dieser Preflight erst nach Lock-Erwerb, bleibt der Lock fail-closed für manuelle Recovery erhalten; die Dokumentation und Tests spiegeln diesen Pfad.
 - Verifiziert: 46 Operator-Python-Tests, 97 Tests in 8 Catering-Target-Vitest-Dateien, Bash-Syntax, Python-AST und git diff --check erfolgreich. Kein Hostkontakt, Deployment oder #712-Eingriff.
+
+### 5.421 - 2026-09-30 — P3.1B Producer-Kanonisierung (Entwicklungsstand)
+
+- OCI-Index bzw. OCI-Manifest aus `--iidfile` wird deterministisch aus dem tatsächlich exportierten Docker-Archiv in den bestehenden v3-Config-Digest überführt. Root-, Manifest-, Config- und Layer-Hashes sowie relevante Descriptor-Größen, Plattform und Docker-Archivzuordnung werden geprüft. Ungebundene oder manipulierte Artefakte bleiben fail-closed; Tags sind keine Identitätsquelle. Die bisherige strikte Archivprüfung bleibt unverändert.
+- Gezielte Regression mit zwei positiven IID-Varianten und 14 Ablehnungsvarianten: RED auf der Basis, GREEN mit dem lokalen Producer-Fix. Alle 48 betroffenen Python-Tests, 78 Vitest-Tests in drei direkt betroffenen Dateien, Syntax und Diffcheck erfolgreich. Der lokale Operations-Fix ist noch nicht regulär angenommen; Bundle-/Runtime-Ergebnis und spätere unabhängige Review werden nicht vorweggenommen. Kein Produktionskontakt, Hub-Writeback oder Workflow-Dispatch.
