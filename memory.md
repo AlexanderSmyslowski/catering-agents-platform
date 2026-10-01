@@ -1,9 +1,15 @@
 # memory.md
 
-version: 5.421
-date: 2026-09-30
+version: 5.422
+date: 2026-10-01
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
+
+## Aktueller Entwicklungsstand – P3.1C containerd-Adressierung (2026-10-01)
+
+- Der unveränderte P3.1B-Bundlestand mit Produkt `9ce4fbc96a5dd877f2cd2f00588a22be861306b9` und noch nicht regulär angenommenem Operationsstand `0cad37b840af516e165267df240a3196a8147a02` wurde in derselben isolierten VM real geladen. Beide gebundenen Config-Digests bleiben byte-identisch im containerd-Content und im erneuten lokalen Docker-save erhalten. Direkte Docker-CLI-Lookups nach Config-Digest scheitern; Inspect einer gültigen Index-Referenz liefert als `.Id` den Index beziehungsweise mit expliziter Plattform das Manifest, nicht den Config-Digest.
+- Der aktuelle Vertrag setzt Config-Bindung, Compose-Referenz und Container-Imagevergleich gleich. Ein absichtlich Index-adressierter, ansonsten hashgebundener Diagnose-Override wird vom unveränderten Operator abgewiesen. Ein Lookup-Teilfix schließt Compose, Verify und Rollback deshalb nicht. P3.1C stoppt an der ausdrücklich gesetzten Vertragsgrenze; kein Betriebsfix, kein neuer Bundlebau und kein Runtime-Rehearsal. Der kleinste nächste Entscheid betrifft die explizite Relation zwischen kanonischer Config-Identität und aus dem Archiv abgeleiteter unveränderlicher Docker-Referenz.
+- Snapshot: `docs/agent-memory/2026-10-01-p3-1c-containerd-identity.md`. Reale Rohbelege liegen ausschließlich im separaten privaten P3.1C-Paket. Keine Store-Umstellung, Produktionsverbindung, Credential-/Push-Reparatur oder Hub-Schreibwirkung; unabhängiger Review und reguläre Annahme bleiben offen.
 
 ## Aktueller Entwicklungsstand – P3.1B OCI-Build-Identität (2026-09-30)
 
@@ -2363,3 +2369,9 @@ Quelle: `8de2e96c8604f12da2ec14c39b187db04dfb61cf`. Der folgende Betriebsbericht
 
 - OCI-Index bzw. OCI-Manifest aus `--iidfile` wird deterministisch aus dem tatsächlich exportierten Docker-Archiv in den bestehenden v3-Config-Digest überführt. Root-, Manifest-, Config- und Layer-Hashes sowie relevante Descriptor-Größen, Plattform und Docker-Archivzuordnung werden geprüft. Ungebundene oder manipulierte Artefakte bleiben fail-closed; Tags sind keine Identitätsquelle. Die bisherige strikte Archivprüfung bleibt unverändert.
 - Gezielte Regression mit zwei positiven IID-Varianten und 14 Ablehnungsvarianten: RED auf der Basis, GREEN mit dem lokalen Producer-Fix. Alle 48 betroffenen Python-Tests, 78 Vitest-Tests in drei direkt betroffenen Dateien, Syntax und Diffcheck erfolgreich. Der lokale Operations-Fix ist noch nicht regulär angenommen; Bundle-/Runtime-Ergebnis und spätere unabhängige Review werden nicht vorweggenommen. Kein Produktionskontakt, Hub-Writeback oder Workflow-Dispatch.
+
+### 5.422 - 2026-10-01 — P3.1C Image-Identität / Docker-Referenz getrennt diagnostiziert
+
+- Der unveränderte P3.1B-Bundlestand mit Produkt `9ce4fbc96a5dd877f2cd2f00588a22be861306b9` und noch nicht regulär angenommenem Operationsstand `0cad37b840af516e165267df240a3196a8147a02` wurde in derselben isolierten VM real geladen. Beide gebundenen Config-Digests bleiben byte-identisch im containerd-Content und im erneuten lokalen Docker-save erhalten. Direkte Docker-CLI-Lookups nach Config-Digest scheitern; Inspect einer gültigen Index-Referenz liefert als `.Id` den Index beziehungsweise mit expliziter Plattform das Manifest, nicht den Config-Digest.
+- Der aktuelle Vertrag setzt Config-Bindung, Compose-Referenz und Container-Imagevergleich gleich. Ein absichtlich Index-adressierter, ansonsten hashgebundener Diagnose-Override wird vom unveränderten Operator abgewiesen. Ein Lookup-Teilfix schließt Compose, Verify und Rollback deshalb nicht. P3.1C stoppt an der ausdrücklich gesetzten Vertragsgrenze; kein Betriebsfix, kein neuer Bundlebau und kein Runtime-Rehearsal. Der kleinste nächste Entscheid betrifft die explizite Relation zwischen kanonischer Config-Identität und aus dem Archiv abgeleiteter unveränderlicher Docker-Referenz.
+- Snapshot: `docs/agent-memory/2026-10-01-p3-1c-containerd-identity.md`. Reale Rohbelege liegen ausschließlich im separaten privaten P3.1C-Paket. Keine Store-Umstellung, Produktionsverbindung, Credential-/Push-Reparatur oder Hub-Schreibwirkung; unabhängiger Review und reguläre Annahme bleiben offen.
