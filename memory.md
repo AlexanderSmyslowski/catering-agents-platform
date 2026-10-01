@@ -1,15 +1,16 @@
 # memory.md
 
-version: 5.423
+version: 5.424
 date: 2026-10-01
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
 
-## Entwicklungsstand – P3.2 OCI-v4-Vertrag (2026-10-01)
+## Entwicklungsstand – P3.2 OCI-v4-Vertrag / Runtime-Blocker (2026-10-01)
 
-- Der neue Kandidatenvertrag trennt Archiv A, exportierten Index R, Linux/amd64-Manifest M und Config C. Manifest v4 und Stage-Receipt v4 binden diese Rollen; nur M wird als Runtime-Referenz benutzt. Archiv-/Descriptor-/Layer-/Source-/Tool-/Rechteprüfungen bleiben fail-closed. Legacy v1/v2/v3 bleiben ausschließlich für installierte Vorgänger und Rollback lesbar.
-- Der Producer legt Provenance/SBOM ausdrücklich fest; der reale Load-/Runtime-Nachweis wird in einem zuvor leeren, eigenen containerd-Zielstore derselben isolierten Lima-VM durchgeführt. Laufende Kandidaten müssen `.Image=M` und bei vorhandenem Descriptor dessen Digest M zeigen.
-- Snapshot: `docs/agent-memory/2026-10-01-p3-2-oci-v4.md`. Dieser lokale Operationsstand ist noch nicht regulär angenommen. Rehearsalergebnis wird erst anhand frischer privater Evidenz ergänzt; kein Produktionskontakt, Merge oder Hub-Writeback.
+- Manifest v4 und Stage-Receipt v4 trennen Archiv A, exportierten Index R, Linux/amd64-Manifest M und Config C. Nur M dient als Runtime-Referenz; Descriptor-/Layer-/Source-/Tool-/Rechteprüfungen bleiben fail-closed. Legacy-Versionen bleiben auf installierte Vorgänger und Rollback begrenzt.
+- Implementierungsstand `decca590787e8888cb4fe0efd444e9c195389cfc`: 57 gezielte Python- und 88 Vitest-Tests bestanden. Zwei echte linux/amd64-Images und ein v4-Bundle wurden erzeugt; A/R/M/C unabhängig aus den Archivbytes gegengeprüft. Der zuvor leere eigene Docker/containerd-Zielstore derselben Lima-VM lädt beide Images. M ist adressierbar; beide Identitäts-Testcontainer zeigen `.Image=M` und `ImageManifestDescriptor.digest=M`. Der Web-Testcontainer führt nur eine Shell aus und belegt keinen funktionierenden Caddy-Dienst.
+- Neuer Runtime-Blocker: Das tatsächliche amd64-Caddy-Binary des gebundenen Webimages endet unter QEMU 10.2.3 bereits bei `hash-password` mit `fatal error: taggedPointerPack`, Container-Exit 2, `OOMKilled=false`. Keine weitere Emulator- oder Produktkorrektur in diesem Lauf. Preflight, Stage, Apply, Verify, Rollback, Retry und M-4-Runtime-Ergänzung wurden nicht gestartet. Klassifikation: P3.2 BLOCKED.
+- Snapshot: `docs/agent-memory/2026-10-01-p3-2-oci-v4.md`. Produkt bleibt `9ce4fbc96a5dd877f2cd2f00588a22be861306b9`; der gebundene Operationsstand bleibt ein nicht regulär angenommener Entwicklungsstand. Unabhängiger Delta-Review, Integration, exakter push/main-Annahmenachweis und Betriebsfreigabe bleiben getrennt. Kein Produktionskontakt, Merge oder Hub-Writeback.
 
 ## Aktueller Entwicklungsstand – P3.1C containerd-Adressierung (2026-10-01)
 
@@ -2385,3 +2386,10 @@ Quelle: `8de2e96c8604f12da2ec14c39b187db04dfb61cf`. Der folgende Betriebsbericht
 ### 5.423 - 2026-10-01 — P3.2 expliziter OCI-v4-Vertrag (Entwicklungsstand)
 
 - A/R/M/C werden durchgängig getrennt; M ist die Runtime-Referenz. Neue Kandidaten und Stage-Receipts verlangen v4; Legacy bleibt auf installierte-/Rollbackpfade begrenzt. Der aktuelle Snapshot beschreibt den zu prüfenden Vertrag und nimmt weder reale Runtime-Evidenz noch unabhängigen Review oder reguläre Operationsannahme vorweg.
+
+### 5.424 - 2026-10-01 — P3.2 v4-Bundle/Load nachgewiesen, Caddy-Runtime blockiert
+
+- Die vorhandene Implementierung ist lokal reviewbar: `47c19f5` führt den durchgängigen v4-Vertrag ein; `decca590` ergänzt ausschließlich die im realen Docker-save beobachtete, M-gebundene BuildKit-Attestationsstruktur. Der Producer deaktiviert neue Provenance-/SBOM-Erzeugung ausdrücklich; vorhandene exportierte Referrer bleiben vollständig hashgebunden.
+- 57 Python- und 88 Vitest-Tests, Syntax-/Diffprüfung erfolgreich. Echter v4-Bundlebau und unabhängige A/R/M/C-Prüfung bestanden. Im separaten anfangs leeren containerd-Store sind beide M adressierbar und als laufende Container-Image-/Manifest-Descriptorwerte belegt; Node läuft tatsächlich als Linux/x64 v22.23.3. Kein Nachweis für einen laufenden Webdienst aus dem Shell-Identitätscontainer ableiten.
+- Der anschließende echte Caddy-Aufruf scheitert in der ARM64/QEMU-Umgebung mit Go `taggedPointerPack` (Container-Exit 2, kein OOM). Der eigentliche Phasen-Rehearsalpfad ist deshalb nicht gestartet; P3.2 BLOCKED. Die genaue Ursache dieses neuen Runtime-Abbruchs ist noch nicht eingegrenzt. Ein gesonderter kleiner Diagnoseentscheid innerhalb der vorhandenen VM ist nötig; keine automatische Store-/Architekturänderung oder Produktumgehung.
+- VM, eigene Zielengine, Bundle und Fehlerbelege bleiben erhalten; eigene kurzlebige Container wurden beendet. Kein Produktions-/Althostkontakt, keine Änderung historischer Worktrees, kein Hub-Writeback und kein Merge.
