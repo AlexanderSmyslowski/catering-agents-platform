@@ -461,11 +461,11 @@ if "bundle manifest binding invalid" in stdin_text:
     log("ssh verify bundle")
     raise SystemExit(0)
 
-if 'python3 "$tool" write' in stdin_text:
+if 'python3 -B -I "$tool" write' in stdin_text:
     log("ssh stage receipt write")
     raise SystemExit(0)
 
-if 'python3 "$tool" verify' in stdin_text:
+if 'python3 -B -I "$tool" verify' in stdin_text:
     if scenario == "operator-stage-binding-drift":
         log("ssh stage receipt verify failed")
         raise SystemExit(1)

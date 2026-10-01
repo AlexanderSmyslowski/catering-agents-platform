@@ -1,9 +1,15 @@
 # memory.md
 
-version: 5.422
+version: 5.423
 date: 2026-10-01
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
+
+## Entwicklungsstand – P3.2 OCI-v4-Vertrag (2026-10-01)
+
+- Der neue Kandidatenvertrag trennt Archiv A, exportierten Index R, Linux/amd64-Manifest M und Config C. Manifest v4 und Stage-Receipt v4 binden diese Rollen; nur M wird als Runtime-Referenz benutzt. Archiv-/Descriptor-/Layer-/Source-/Tool-/Rechteprüfungen bleiben fail-closed. Legacy v1/v2/v3 bleiben ausschließlich für installierte Vorgänger und Rollback lesbar.
+- Der Producer legt Provenance/SBOM ausdrücklich fest; der reale Load-/Runtime-Nachweis wird in einem zuvor leeren, eigenen containerd-Zielstore derselben isolierten Lima-VM durchgeführt. Laufende Kandidaten müssen `.Image=M` und bei vorhandenem Descriptor dessen Digest M zeigen.
+- Snapshot: `docs/agent-memory/2026-10-01-p3-2-oci-v4.md`. Dieser lokale Operationsstand ist noch nicht regulär angenommen. Rehearsalergebnis wird erst anhand frischer privater Evidenz ergänzt; kein Produktionskontakt, Merge oder Hub-Writeback.
 
 ## Aktueller Entwicklungsstand – P3.1C containerd-Adressierung (2026-10-01)
 
@@ -2375,3 +2381,7 @@ Quelle: `8de2e96c8604f12da2ec14c39b187db04dfb61cf`. Der folgende Betriebsbericht
 - Der unveränderte P3.1B-Bundlestand mit Produkt `9ce4fbc96a5dd877f2cd2f00588a22be861306b9` und noch nicht regulär angenommenem Operationsstand `0cad37b840af516e165267df240a3196a8147a02` wurde in derselben isolierten VM real geladen. Beide gebundenen Config-Digests bleiben byte-identisch im containerd-Content und im erneuten lokalen Docker-save erhalten. Direkte Docker-CLI-Lookups nach Config-Digest scheitern; Inspect einer gültigen Index-Referenz liefert als `.Id` den Index beziehungsweise mit expliziter Plattform das Manifest, nicht den Config-Digest.
 - Der aktuelle Vertrag setzt Config-Bindung, Compose-Referenz und Container-Imagevergleich gleich. Ein absichtlich Index-adressierter, ansonsten hashgebundener Diagnose-Override wird vom unveränderten Operator abgewiesen. Ein Lookup-Teilfix schließt Compose, Verify und Rollback deshalb nicht. P3.1C stoppt an der ausdrücklich gesetzten Vertragsgrenze; kein Betriebsfix, kein neuer Bundlebau und kein Runtime-Rehearsal. Der kleinste nächste Entscheid betrifft die explizite Relation zwischen kanonischer Config-Identität und aus dem Archiv abgeleiteter unveränderlicher Docker-Referenz.
 - Snapshot: `docs/agent-memory/2026-10-01-p3-1c-containerd-identity.md`. Reale Rohbelege liegen ausschließlich im separaten privaten P3.1C-Paket. Keine Store-Umstellung, Produktionsverbindung, Credential-/Push-Reparatur oder Hub-Schreibwirkung; unabhängiger Review und reguläre Annahme bleiben offen.
+
+### 5.423 - 2026-10-01 — P3.2 expliziter OCI-v4-Vertrag (Entwicklungsstand)
+
+- A/R/M/C werden durchgängig getrennt; M ist die Runtime-Referenz. Neue Kandidaten und Stage-Receipts verlangen v4; Legacy bleibt auf installierte-/Rollbackpfade begrenzt. Der aktuelle Snapshot beschreibt den zu prüfenden Vertrag und nimmt weder reale Runtime-Evidenz noch unabhängigen Review oder reguläre Operationsannahme vorweg.

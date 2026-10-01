@@ -1,8 +1,8 @@
 # CateringOS – eigenständiger Zielserver-Updateweg
 
-**Stand:** 2026-09-29
+**Stand:** 2026-10-01 (P3.2-Entwicklungsstand)
 **Ziel:** `catering-prod-1`  
-**Status:** Versionierter Mac-Operator mit getrennten Commit- und Artefaktbindungen. **P2-Reconciliation gegen #712 abgeschlossen; kein echter Zielserverlauf, kein Deployment-GO.**
+**Status:** Manifest-v4-Entwicklungsstand mit getrennten OCI-Identitäten. Unabhängiger Delta-Review, Integration und push/main-Annahmenachweis bleiben erforderlich; kein Betriebs-GO.
 
 ## Zweck und Grenze
 
@@ -72,9 +72,15 @@ python3 "$operator" verify \
 
 Die Betriebswerkzeug-Mindestannahme ist dieselbe überprüfbare Kombination: Integration in `origin/main` plus erfolgreicher `CI`-Pushlauf genau auf diesem SHA. Das belegt Herkunft und den erfolgreichen Push-CI-Nachweis. Es belegt weder menschliches Review noch eine reale Produktionsausführung dieses Betriebswerkzeug-Commits. Ein zusätzlicher Zertifizierungsdienst oder ein separates Draft-PR-Merkmal ist nicht Teil des Gates. Die historischen E1-/E2-Läufe vom 25.09. waren an #712 und dessen damaligen Head gebundene Nachweise; sie werden nicht als Freigabe für spätere Tool-SHAs wiederverwendet.
 
-`bundle` baut Runtime- und Web-Image für `linux/amd64`, exportiert nur getrackte Dateien des exakten Produktcommits und schließt damit ignorierte lokale Dateien wie `.env` aus dem Docker-Buildkontext aus. Manifest v3 bindet Repository, Ziel, Produktcommit, Betriebswerkzeug-Commit, Image-IDs, Anwendungsdienste, SHA-256-Werte von Images und Compose-Override, die beiden vom Ziel-Compose-Aufruf tatsächlich verwendeten Produkt-Compose-Dateien und einen kanonischen SHA-256 des vollständigen exportierten Source-Baums. Exportierte Verzeichnisse erhalten deterministisch Modus 0755; Dateien erhalten 0644 oder bei im Git-Tree ausführbaren Dateien 0755. `stage` prüft dieselben Bindungen vor Zielkontakt und hält sie im Stage-Receipt fest.
+`bundle` baut Runtime- und Web-Image für `linux/amd64`, exportiert nur getrackte Dateien des exakten Produktcommits und schließt damit ignorierte lokale Dateien wie `.env` aus dem Docker-Buildkontext aus. Manifest v4 bindet Repository, Ziel, Produktcommit, Betriebswerkzeug-Commit, die getrennten OCI-Identitäten R/M/C, Anwendungsdienste, Archiv-SHA-256 A und Compose-Override, die beiden vom Ziel-Compose-Aufruf tatsächlich verwendeten Produkt-Compose-Dateien und einen kanonischen SHA-256 des vollständigen exportierten Source-Baums. Exportierte Verzeichnisse erhalten deterministisch Modus 0755; Dateien erhalten 0644 oder bei im Git-Tree ausführbaren Dateien 0755. `stage` prüft dieselben Bindungen vor Zielkontakt und hält sie im Stage-Receipt fest.
 
-Der neue Operator verlangt Manifest v3 für Stage und Apply. Der Ziel-Release-Validator vergleicht die `sourceFiles`-Digests und beim v3-Stand zusätzlich den vollständigen Source-Tree-Digest, einschließlich Dateitypen, relativen Pfaden und normalisierten Modi. Bereits installierte v1-/v2-Releases bleiben für die bisherige Receipt-/Rollbackprüfung lesbar; das macht sie nicht zu zulässigen neuen Stage-Kandidaten.
+Neue Kandidaten verlangen Manifest v4. Pro Image gilt A (Archiv-SHA-256) → R (`indexDigest`, SHA-256 der exportierten `index.json`) → genau ein Linux/amd64-Manifest M (`platformManifestDigest`) → C (`configDigest`). Auch etwaige verschachtelte Index-, Config- und Layer-Descriptoren werden aus ihren tatsächlichen Bytes geprüft. M ist die einzige Runtime-Referenz in Overrides und laufenden Containerbindungen. Weder C, R noch Tags ersetzen M.
+
+Der Producer setzt `--provenance=false --sbom=false` ausdrücklich, damit der reale Build einen ausführbaren Manifest-Root exportiert. Der Archivprüfer unterstützt zusätzlich die eng geprüfte BuildKit-Attestation-Struktur, ohne deren Index zur Runtime-Referenz zu machen. Path-Traversal, doppelte/zusätzliche Dateien, Plattform-/Variant-Abweichungen und eine widersprüchliche Docker-`manifest.json`-Sicht werden abgewiesen.
+
+Stage-Receipt v4 bindet R/M/C, den SHA-256 des OCI-Prüfwerkzeugs und die bestehenden Source-/Compose-/Layout-/Rechtebindungen. Nach Load muss M lokal adressierbar sein; der Runner prüft dessen Plattform und die erneut aus Docker-save abgeleitete M/C-Relation. Laufende Kandidaten müssen `.Image=M` zeigen. Ein vorhandener `ImageManifestDescriptor.digest` muss ebenfalls M sein. Alle Imageoperationen bleiben lokal und ohne Registry-Pull.
+
+Der Ziel-Release-Validator prüft weiterhin `sourceFiles` und den vollständigen Source-Baum einschließlich Dateitypen, Pfaden und normalisierten Modi. Bereits installierte v1/v2/v3-Releases bleiben ausschließlich für Install-/Rollbackprüfungen lesbar. Ihre beobachtete unveränderliche Runtime-Referenz wird unter Lock gebunden; ein fehlender v4-Nachweis wird nicht rückwirkend als Config-Bindung ausgegeben. Alte Stage-Receipts werden nicht zu v4 umgedeutet.
 
 Die freigebbaren Phasen bleiben getrennt:
 

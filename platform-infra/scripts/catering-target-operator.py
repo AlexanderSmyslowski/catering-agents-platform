@@ -295,140 +295,20 @@ def _regular_file(root: Path, name: str) -> Path:
     return path
 
 
-def _canonical_build_image_id(path: Path, build_iid: str) -> str:
-    """Resolve an exported build reference without changing v3's Config identity."""
-    if not IMAGE_ID_RE.fullmatch(build_iid):
-        raise OperatorError("Docker returned an invalid immutable build identity")
-    index_type = "application/vnd.oci.image.index.v1+json"
-    manifest_type = "application/vnd.oci.image.manifest.v1+json"
-    config_type = "application/vnd.oci.image.config.v1+json"
+def _inspect_archive(path: Path, build_iid: str | None = None) -> dict[str, str]:
     try:
-        with tarfile.open(path, mode="r:gz") as archive:
-            members = archive.getmembers()
-
-            def read_member(name: str) -> bytes:
-                relative = PurePosixPath(name)
-                if relative.is_absolute() or not relative.parts or any(part in {".", ".."} for part in relative.parts):
-                    raise OperatorError("Docker build archive contains an invalid path")
-                matches = [member for member in members if member.name == name]
-                if len(matches) != 1 or not matches[0].isfile():
-                    raise OperatorError("Docker build archive entry is missing or ambiguous")
-                stream = archive.extractfile(matches[0])
-                if stream is None:
-                    raise OperatorError("Docker build archive entry is unreadable")
-                return stream.read()
-
-            def read_blob(descriptor: dict[str, Any]) -> bytes:
-                if not isinstance(descriptor, dict):
-                    raise OperatorError("Docker build descriptor is invalid")
-                digest = descriptor.get("digest")
-                size = descriptor.get("size")
-                if not isinstance(digest, str) or not IMAGE_ID_RE.fullmatch(digest) or type(size) is not int or size < 0:
-                    raise OperatorError("Docker build descriptor identity is invalid")
-                data = read_member("blobs/sha256/" + digest.split(":", 1)[1])
-                if len(data) != size or "sha256:" + hashlib.sha256(data).hexdigest() != digest:
-                    raise OperatorError("Docker build blob digest or size mismatch")
-                return data
-
-            entries = json.loads(read_member("manifest.json"))
-            if not isinstance(entries, list) or len(entries) != 1 or not isinstance(entries[0], dict):
-                raise OperatorError("Docker build archive manifest is ambiguous")
-            entry = entries[0]
-            config_name = entry.get("Config")
-            if not isinstance(config_name, str):
-                raise OperatorError("Docker build archive Config reference is invalid")
-            config_bytes = read_member(config_name)
-            config_id = "sha256:" + hashlib.sha256(config_bytes).hexdigest()
-            if build_iid == config_id:
-                return config_id
-
-            # OCI exporters return an index/manifest IID. Bind its actual blob chain,
-            # rather than trusting a tag or accepting that IID as a Config hash.
-            root_bytes = read_member("blobs/sha256/" + build_iid.split(":", 1)[1])
-            if "sha256:" + hashlib.sha256(root_bytes).hexdigest() != build_iid:
-                raise OperatorError("Docker build root digest mismatch")
-            root = json.loads(root_bytes)
-            if not isinstance(root, dict) or type(root.get("schemaVersion")) is not int or root["schemaVersion"] != 2:
-                raise OperatorError("Docker build root is unsupported")
-            if root.get("mediaType") == index_type:
-                descriptors = root.get("manifests")
-                if not isinstance(descriptors, list) or not all(isinstance(item, dict) for item in descriptors):
-                    raise OperatorError("Docker build index is invalid")
-                selected = [item for item in descriptors if item.get("platform") == {"os": "linux", "architecture": "amd64"}]
-                if len(selected) != 1 or selected[0].get("mediaType") != manifest_type:
-                    raise OperatorError("Docker build linux/amd64 manifest is missing or ambiguous")
-                root = json.loads(read_blob(selected[0]))
-            if (
-                not isinstance(root, dict)
-                or type(root.get("schemaVersion")) is not int
-                or root["schemaVersion"] != 2
-                or root.get("mediaType") != manifest_type
-            ):
-                raise OperatorError("Docker build image manifest is unsupported")
-            descriptor = root.get("config")
-            if not isinstance(descriptor, dict) or descriptor.get("mediaType") != config_type:
-                raise OperatorError("Docker build Config descriptor is invalid")
-            if descriptor.get("digest") != config_id or read_blob(descriptor) != config_bytes:
-                raise OperatorError("Docker build Config does not match its exported image")
-            config = json.loads(config_bytes)
-            if not isinstance(config, dict) or config.get("os") != "linux" or config.get("architecture") != "amd64":
-                raise OperatorError("Docker build Config platform does not match linux/amd64")
-            layers = root.get("layers")
-            if not isinstance(layers, list) or not all(isinstance(layer, dict) for layer in layers):
-                raise OperatorError("Docker build layer descriptors are invalid")
-            for layer in layers:
-                read_blob(layer)
-            if entry.get("Layers") != ["blobs/sha256/" + layer["digest"].split(":", 1)[1] for layer in layers]:
-                raise OperatorError("Docker build layers do not match its exported image")
-            return config_id
-    except OperatorError:
-        raise
-    except (OSError, EOFError, tarfile.TarError, json.JSONDecodeError, KeyError, TypeError, UnicodeError) as exc:
-        raise OperatorError("Docker build archive identity is invalid or unreadable") from exc
+        return _oci().inspect_archive(path, build_iid)
+    except ValueError as exc:
+        raise OperatorError("bundle OCI archive identity is invalid") from exc
 
 
-def _verify_docker_archive(path: Path, expected_image_id: str) -> None:
-    if not IMAGE_ID_RE.fullmatch(expected_image_id):
-        raise OperatorError("bundle image identity is not an immutable sha256 image ID")
-    try:
-        with tarfile.open(path, mode="r:gz") as archive:
-            manifest_file = archive.extractfile("manifest.json")
-            if manifest_file is None:
-                raise OperatorError("Docker archive has no manifest")
-            entries = json.loads(manifest_file.read())
-            if not isinstance(entries, list) or len(entries) != 1 or not isinstance(entries[0], dict):
-                raise OperatorError("Docker archive manifest is ambiguous")
-            entry = entries[0]
-            config_name = entry.get("Config")
-            layers = entry.get("Layers")
-            if not isinstance(config_name, str) or not isinstance(layers, list):
-                raise OperatorError("Docker archive manifest shape is invalid")
-            config_relative = PurePosixPath(config_name)
-            if config_relative.is_absolute() or any(part in {".", ".."} for part in config_relative.parts):
-                raise OperatorError("Docker archive config path is invalid")
-            config_file = archive.extractfile(config_name)
-            if config_file is None:
-                raise OperatorError("Docker archive config is missing")
-            config_bytes = config_file.read()
-            actual_image_id = "sha256:" + hashlib.sha256(config_bytes).hexdigest()
-            if actual_image_id != expected_image_id:
-                raise OperatorError("Docker archive config does not match its bound image ID")
-            config = json.loads(config_bytes)
-            if config.get("os") != "linux" or config.get("architecture") != "amd64":
-                raise OperatorError("Docker archive platform does not match linux/amd64")
-            for layer in layers:
-                if not isinstance(layer, str):
-                    raise OperatorError("Docker archive layer path is invalid")
-                relative = PurePosixPath(layer)
-                if relative.is_absolute() or any(part in {".", ".."} for part in relative.parts):
-                    raise OperatorError("Docker archive layer path is invalid")
-                member = archive.getmember(layer)
-                if not member.isfile():
-                    raise OperatorError("Docker archive layer is not a regular file")
-    except OperatorError:
-        raise
-    except (OSError, EOFError, tarfile.TarError, json.JSONDecodeError, KeyError, TypeError) as exc:
-        raise OperatorError("Docker archive is missing, invalid, or unreadable") from exc
+def _oci():
+    # Resolve only the versioned sibling, never a module from the working directory.
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("catering_target_oci", Path(__file__).with_name("catering_target_oci.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def verify_bundle(
@@ -466,7 +346,7 @@ def verify_bundle(
     }:
         raise OperatorError("bundle manifest shape is unsupported")
     if (
-        manifest.get("schemaVersion") != 3
+        manifest.get("schemaVersion") != 4
         or manifest.get("repository") != REPOSITORY
         or manifest.get("targetId") != TARGET_ID
         or manifest.get("platform") != "linux/amd64"
@@ -507,11 +387,11 @@ def verify_bundle(
     }
     for name, archive_name in (("runtime", "runtime-image.tar.gz"), ("web", "web-image.tar.gz")):
         image = images[name]
-        if not isinstance(image, dict) or set(image) != {"imageId", "archive", "services"}:
+        if not isinstance(image, dict) or set(image) != {"indexDigest", "platformManifestDigest", "configDigest", "archive", "services"}:
             raise OperatorError("bundle image binding shape is invalid")
         if image.get("archive") != archive_name or image.get("services") != expected_services[name]:
             raise OperatorError("bundle image is bound to the wrong application services")
-        image_id = image.get("imageId")
+        image_id = image.get("platformManifestDigest")
         if not isinstance(image_id, str) or not IMAGE_ID_RE.fullmatch(image_id):
             raise OperatorError("bundle image identity is not immutable")
         archive_path = _regular_file(bundle, archive_name)
@@ -520,7 +400,8 @@ def verify_bundle(
             raise OperatorError("bundle image archive digest is invalid")
         if _file_sha256(archive_path) != declared_sha:
             raise OperatorError("bundle image archive digest mismatch")
-        _verify_docker_archive(archive_path, image_id)
+        if _inspect_archive(archive_path) != {key: image[key] for key in ("indexDigest", "platformManifestDigest", "configDigest")}:
+            raise OperatorError("bundle OCI archive binding mismatch")
 
     candidate_path = _regular_file(bundle, "candidate-images.json")
     candidate_digest = artifacts.get("candidate-images.json")
@@ -532,8 +413,8 @@ def verify_bundle(
         candidate = json.loads(candidate_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise OperatorError("candidate image override is invalid") from exc
-    runtime_id = images["runtime"]["imageId"]
-    web_id = images["web"]["imageId"]
+    runtime_id = images["runtime"]["platformManifestDigest"]
+    web_id = images["web"]["platformManifestDigest"]
     expected_candidate = {
         "services": {
             service: {"image": runtime_id}
@@ -664,7 +545,7 @@ def create_bundle(
     build_state = Path(tempfile.mkdtemp(prefix=".catering-target-build-", dir=output.parent))
     source_context = build_state / "source"
     context_exporter(source, product_commit, source_context)
-    built_images: dict[str, str] = {}
+    built_images: dict[str, dict[str, str]] = {}
 
     for name, dockerfile in (
         ("runtime", "platform-infra/docker/Dockerfile.runtime"),
@@ -674,6 +555,8 @@ def create_bundle(
         command = [
             "docker",
             "build",
+            "--provenance=false",
+            "--sbom=false",
             "--platform",
             "linux/amd64",
             "--iidfile",
@@ -693,12 +576,10 @@ def create_bundle(
             raise OperatorError("Docker returned an invalid immutable image identity")
         archive_path = staging / f"{name}-image.tar.gz"
         docker_saver(image_id, archive_path)
-        built_images[name] = _canonical_build_image_id(archive_path, image_id)
+        built_images[name] = _inspect_archive(archive_path, image_id)
 
-    runtime_id = built_images["runtime"]
-    web_id = built_images["web"]
-    _verify_docker_archive(staging / "runtime-image.tar.gz", runtime_id)
-    _verify_docker_archive(staging / "web-image.tar.gz", web_id)
+    runtime_id = built_images["runtime"]["platformManifestDigest"]
+    web_id = built_images["web"]["platformManifestDigest"]
     candidate = {
         "services": {
             **{service: {"image": runtime_id} for service in ("intake", "offer", "production", "exports")},
@@ -715,7 +596,7 @@ def create_bundle(
     source_files = _source_compose_digests(source_context)
     source_tree_sha256 = _source_tree_digest(source_context)
     manifest = {
-        "schemaVersion": 3,
+        "schemaVersion": 4,
         "repository": REPOSITORY,
         "targetId": TARGET_ID,
         "platform": "linux/amd64",
@@ -723,12 +604,12 @@ def create_bundle(
         "operationsCommit": operations_commit,
         "images": {
             "runtime": {
-                "imageId": runtime_id,
+                **built_images["runtime"],
                 "archive": "runtime-image.tar.gz",
                 "services": ["intake", "offer", "production", "exports"],
             },
             "web": {
-                "imageId": web_id,
+                **built_images["web"],
                 "archive": "web-image.tar.gz",
                 "services": ["web"],
             },
@@ -888,7 +769,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
         if args.phase in {"_bundle-bindings", "_bundle-bindings-local"}:
             manifest = verify_bundle(args.bundle_dir, product_sha, operations_sha, args.manifest_sha256, product)
-            print(f"{manifest['images']['runtime']['imageId']}\t{manifest['images']['web']['imageId']}")
+            print(f"{manifest['images']['runtime']['platformManifestDigest']}\t{manifest['images']['web']['platformManifestDigest']}")
             return 0
 
         environment = _runner_environment(product_sha, operations_sha, product)
