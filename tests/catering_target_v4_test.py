@@ -71,6 +71,62 @@ def archive_fixture(kind='runtime', identity='index', mutation=None):
     return bindings, output.getvalue(), iid
 
 
+def referrer_fixture(mutation=None):
+    """Docker 29 exports a cached provenance referrer beside a manifest-root IID."""
+    bindings, data, iid = archive_fixture(identity='manifest')
+    with tarfile.open(fileobj=io.BytesIO(data)) as tar:
+        files = {item.name: tar.extractfile(item).read() for item in tar.getmembers()}
+    index = json.loads(files['index.json'])
+    executable = index['manifests'][0]
+    executable.pop('platform')
+    executable['annotations'] = {'config.digest': bindings['configDigest']}
+    if mutation == 'wrong-config-annotation': executable['annotations']['config.digest'] = 'sha256:' + 'f'*64
+    def blob(value, media):
+        payload = value if isinstance(value, bytes) else json.dumps(value, sort_keys=True).encode()
+        digest = 'sha256:' + hashlib.sha256(payload).hexdigest()
+        files['blobs/sha256/' + digest[7:]] = payload
+        return {'mediaType': media, 'digest': digest, 'size': len(payload)}
+    config = {**blob(b'{}', 'application/vnd.oci.empty.v1+json'), 'data': 'e30='}
+    if mutation == 'wrong-inline-config': config['data'] = 'W10='
+    if mutation == 'wrong-config-size': config['size'] += 1
+    subject = {key: executable[key] for key in ('mediaType','digest','size')}
+    if mutation == 'wrong-subject-digest': subject['digest'] = 'sha256:' + 'e'*64
+    if mutation == 'wrong-subject-size': subject['size'] += 1
+    if mutation == 'wrong-subject-type': subject['mediaType'] = 'application/vnd.oci.image.index.v1+json'
+    statement = {'_type': 'https://in-toto.io/Statement/v1', 'predicateType': 'https://slsa.dev/provenance/v1',
+                 'subject': [{'name': 'pkg:docker/fixture', 'digest': {'sha256': iid[7:]}}], 'predicate': {}}
+    if mutation == 'wrong-statement-subject': statement['subject'][0]['digest']['sha256'] = 'f'*64
+    if mutation == 'wrong-statement-type': statement['_type'] = 'https://in-toto.io/Statement/v0.1'
+    layer = {**blob(statement, 'application/vnd.in-toto+json'), 'annotations': {'in-toto.io/predicate-type': 'https://slsa.dev/provenance/v1'}}
+    if mutation == 'wrong-predicate-annotation': layer['annotations']['in-toto.io/predicate-type'] = 'unexpected'
+    if mutation == 'wrong-layer-size': layer['size'] += 1
+    artifact_type = 'application/vnd.docker.attestation.manifest.v1+json'
+    manifest = {'schemaVersion': 2, 'mediaType': executable['mediaType'], 'artifactType': artifact_type, 'config': config, 'layers': [layer], 'subject': subject}
+    if mutation == 'wrong-manifest-artifact': manifest['artifactType'] = 'application/unknown'
+    referrer = {**blob(manifest, executable['mediaType']), 'artifactType': artifact_type,
+                'annotations': {'io.containerd.manifest.subject': iid}}
+    if mutation == 'wrong-index-subject': referrer['annotations']['io.containerd.manifest.subject'] = 'sha256:' + 'f'*64
+    if mutation == 'wrong-descriptor-artifact': referrer['artifactType'] = 'application/unknown'
+    if mutation == 'referrer-platform': referrer['platform'] = {'os': 'unknown', 'architecture': 'unknown', 'variant': 'v1'}
+    if mutation == 'referrer-iid': iid = referrer['digest']
+    if mutation == 'wrong-referrer-size': referrer['size'] += 1
+    if mutation == 'unexpected-referrer-key': referrer['urls'] = ['https://invalid.example/']
+    if mutation == 'tampered-referrer': files['blobs/sha256/' + referrer['digest'][7:]] += b' '
+    if mutation == 'missing-empty-config': del files['blobs/sha256/' + config['digest'][7:]]
+    index['manifests'].append(referrer)
+    if mutation == 'referrer-first': index['manifests'].reverse()
+    if mutation == 'two-executables': index['manifests'].append(dict(executable))
+    if mutation == 'tampered-layer': files['blobs/sha256/' + layer['digest'][7:]] += b' '
+    if mutation == 'tampered-empty-config': files['blobs/sha256/' + config['digest'][7:]] = b'[]'
+    files['index.json'] = json.dumps(index).encode()
+    bindings['indexDigest'] = 'sha256:' + hashlib.sha256(files['index.json']).hexdigest()
+    result = io.BytesIO()
+    with tarfile.open(fileobj=result, mode='w') as tar:
+        for name, payload in files.items():
+            info = tarfile.TarInfo(name); info.size = len(payload); tar.addfile(info, io.BytesIO(payload))
+    return bindings, result.getvalue(), iid
+
+
 class V4ContractTests(unittest.TestCase):
     def test_new_bundle_uses_three_distinct_identities_and_manifest_override(self):
         from catering_target_operator_test import build_fixture_bundle, operator, PRODUCT_SHA, OPERATIONS_SHA
@@ -190,3 +246,29 @@ class V4ContractTests(unittest.TestCase):
             with self.assertRaises(ValueError): helper.check_loaded_image(observation, reference)
         for observation in invalid_running:
             with self.assertRaises(ValueError): helper.check_running_container(observation, reference)
+
+
+    def test_exported_manifest_accepts_only_known_bound_buildkit_referrers(self):
+        from catering_target_operator_test import operator
+        for mutation in (None, 'referrer-first'):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as tmp:
+                bindings, data, iid = referrer_fixture(mutation)
+                path = Path(tmp) / 'image.tar.gz'; path.write_bytes(gzip.compress(data))
+                try:
+                    actual = operator._inspect_archive(path, iid)
+                except operator.OperatorError as exc:
+                    self.fail('known exported BuildKit referrer must preserve R/M/C: ' + str(exc))
+                self.assertEqual(actual, bindings)
+
+    def test_exported_referrer_rejects_every_unbound_relation(self):
+        from catering_target_operator_test import operator
+        for mutation in ('wrong-config-annotation', 'wrong-inline-config', 'wrong-config-size', 'wrong-subject-digest',
+                         'wrong-subject-size', 'wrong-subject-type', 'wrong-statement-subject', 'wrong-statement-type',
+                         'wrong-predicate-annotation', 'wrong-layer-size', 'wrong-manifest-artifact', 'wrong-index-subject',
+                         'wrong-descriptor-artifact', 'referrer-platform', 'referrer-iid', 'two-executables',
+                         'tampered-layer', 'tampered-empty-config', 'wrong-referrer-size', 'unexpected-referrer-key',
+                         'tampered-referrer', 'missing-empty-config'):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as tmp:
+                _, data, iid = referrer_fixture(mutation)
+                path = Path(tmp) / 'image.tar.gz'; path.write_bytes(gzip.compress(data))
+                with self.assertRaises(operator.OperatorError): operator._inspect_archive(path, iid)

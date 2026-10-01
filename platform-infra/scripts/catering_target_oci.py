@@ -11,6 +11,8 @@ DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
 INDEX = "application/vnd.oci.image.index.v1+json"
 MANIFEST = "application/vnd.oci.image.manifest.v1+json"
 CONFIG = "application/vnd.oci.image.config.v1+json"
+ATTESTATION = "application/vnd.docker.attestation.manifest.v1+json"
+PROVENANCE = "https://slsa.dev/provenance/v1"
 PLATFORM = {"os": "linux", "architecture": "amd64"}
 UNKNOWN = {"os": "unknown", "architecture": "unknown"}
 IMAGE_KEYS = {"archive", "indexDigest", "platformManifestDigest", "configDigest", "services"}
@@ -58,8 +60,8 @@ def inspect_archive(path: Path, build_iid: str | None = None) -> dict[str, str]:
                 with archive.extractfile(members[name]) as stream:
                     return stream.read()
 
-            def blob(descriptor, *, payload=True):
-                require(isinstance(descriptor, dict) and set(descriptor) <= {"mediaType", "digest", "size", "platform", "annotations"})
+            def blob(descriptor, *, payload=True, extra_keys=frozenset()):
+                require(isinstance(descriptor, dict) and set(descriptor) <= {"mediaType", "digest", "size", "platform", "annotations"} | extra_keys)
                 digest, size = descriptor.get("digest"), descriptor.get("size")
                 require(isinstance(digest, str) and DIGEST.fullmatch(digest) and type(size) is int and size >= 0)
                 require(isinstance(descriptor.get("mediaType"), str))
@@ -82,11 +84,51 @@ def inspect_archive(path: Path, build_iid: str | None = None) -> dict[str, str]:
             roots = []
             selected = []
             attestations = []
+            referrer_subjects = []
+
+            def referrer(descriptor, data):
+                # Docker may export a previously attached BuildKit provenance
+                # artifact even when this build disables provenance generation.
+                require(set(descriptor) == {"mediaType", "digest", "size", "annotations", "artifactType"})
+                require(descriptor["artifactType"] == ATTESTATION)
+                require(set(descriptor["annotations"]) == {"io.containerd.manifest.subject"})
+                require(set(data) == {"schemaVersion", "mediaType", "artifactType", "config", "layers", "subject"})
+                require(data["artifactType"] == ATTESTATION)
+                subject = data["subject"]
+                require(isinstance(subject, dict) and set(subject) == {"mediaType", "digest", "size"})
+                require(subject["mediaType"] == MANIFEST)
+                blob(subject)
+                require(descriptor["annotations"]["io.containerd.manifest.subject"] == subject["digest"])
+                config = data["config"]
+                require(isinstance(config, dict) and set(config) == {"mediaType", "digest", "size", "data"})
+                require(config["mediaType"] == "application/vnd.oci.empty.v1+json" and config["data"] == "e30=")
+                require(blob(config, extra_keys={"data"}) == b"{}")
+                layers = data["layers"]
+                require(isinstance(layers, list) and len(layers) == 1)
+                layer = layers[0]
+                require(isinstance(layer, dict) and set(layer) == {"mediaType", "digest", "size", "annotations"})
+                require(layer["mediaType"] == "application/vnd.in-toto+json")
+                require(layer["annotations"] == {"in-toto.io/predicate-type": PROVENANCE})
+                statement = decode(blob(layer))
+                require(isinstance(statement, dict) and set(statement) == {"_type", "predicateType", "subject", "predicate"})
+                require(statement["_type"] == "https://in-toto.io/Statement/v1" and statement["predicateType"] == PROVENANCE)
+                require(isinstance(statement["predicate"], dict))
+                subjects = statement["subject"]
+                require(isinstance(subjects, list) and len(subjects) == 1 and isinstance(subjects[0], dict))
+                require(set(subjects[0]) == {"name", "digest"} and isinstance(subjects[0]["name"], str))
+                require(subjects[0]["digest"] == {"sha256": subject["digest"][7:]})
+                referrer_subjects.append(subject["digest"])
 
             def image(descriptor, *, root=False):
-                data = decode(blob(descriptor))
+                is_referrer = "artifactType" in descriptor
+                if is_referrer:
+                    require(root and descriptor["artifactType"] == ATTESTATION and descriptor.get("mediaType") == MANIFEST)
+                data = decode(blob(descriptor, extra_keys={"artifactType"} if is_referrer else frozenset()))
                 require(isinstance(data, dict) and type(data.get("schemaVersion")) is int and data["schemaVersion"] == 2)
                 require(data.get("mediaType") == descriptor["mediaType"])
+                if is_referrer:
+                    referrer(descriptor, data)
+                    return
                 if descriptor["mediaType"] == INDEX:
                     require(root and "platform" not in descriptor)
                     index(data, nested=True)
@@ -95,6 +137,7 @@ def inspect_archive(path: Path, build_iid: str | None = None) -> dict[str, str]:
                 require(set(data) == {"schemaVersion", "mediaType", "config", "layers"})
                 is_attestation = descriptor.get("platform") == UNKNOWN
                 if is_attestation:
+                    require(not root)
                     require(set(descriptor.get("annotations", {})) == {"vnd.docker.reference.type", "vnd.docker.reference.digest"})
                     require(descriptor["annotations"]["vnd.docker.reference.type"] == "attestation-manifest")
                     attestations.append(descriptor)
@@ -114,6 +157,8 @@ def inspect_archive(path: Path, build_iid: str | None = None) -> dict[str, str]:
                     require(layer.get("mediaType") in ({"application/vnd.in-toto+json"} if is_attestation else {"application/vnd.oci.image.layer.v1.tar", "application/vnd.oci.image.layer.v1.tar+gzip", "application/vnd.oci.image.layer.v1.tar+zstd"}))
                     blob(layer, payload=False)
                 if not is_attestation:
+                    annotation = descriptor.get("annotations", {}).get("config.digest")
+                    require(annotation is None or annotation == config["digest"])
                     selected.append((descriptor["digest"], config["digest"], ["blobs/sha256/" + layer["digest"][7:] for layer in layers]))
 
             def index(data, *, nested=False):
@@ -121,15 +166,19 @@ def inspect_archive(path: Path, build_iid: str | None = None) -> dict[str, str]:
                 require(type(data.get("schemaVersion")) is int and data["schemaVersion"] == 2 and data.get("mediaType") == INDEX)
                 descriptors = data.get("manifests")
                 require(isinstance(descriptors, list) and len(descriptors) > 0)
-                if not nested: require(len(descriptors) == 1)
+                require(all(isinstance(descriptor, dict) for descriptor in descriptors))
+                require(len({descriptor.get("digest") for descriptor in descriptors}) == len(descriptors))
+                if not nested:
+                    require(sum("artifactType" not in descriptor for descriptor in descriptors) == 1)
                 for descriptor in descriptors:
-                    require(isinstance(descriptor, dict))
-                    if not nested: roots.append(descriptor.get("digest"))
+                    if not nested and "artifactType" not in descriptor:
+                        roots.append(descriptor.get("digest"))
                     image(descriptor, root=not nested)
 
             index(decode(index_bytes))
             require(len(selected) == 1)
             m, c, layers = selected[0]
+            require(all(subject == m for subject in referrer_subjects))
             for descriptor in attestations:
                 require(descriptor["annotations"]["vnd.docker.reference.digest"] == m)
             if build_iid is not None:
