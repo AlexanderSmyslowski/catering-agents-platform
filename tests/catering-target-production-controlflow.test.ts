@@ -170,6 +170,62 @@ function imageSnapshot(fill: string) {
 }
 
 describe("Catering target production control flow", () => {
+  it.each(["volume", "edge", "both"])("rejects %s preservation drift in apply postflight and rolls back the original release", (field) => {
+    const { result, commands } = runProduction(`operator-p41-postflight-${field}-drift`, "apply");
+    expect(result.status, result.stdout + result.stderr + commands).not.toBe(0);
+    expect(result.stdout).toContain("TARGET_UPDATE_RESULT rolled_back");
+    expect(commands).toContain("ssh verify rollback " + "b".repeat(40));
+    expect(commands).toContain("ssh activate previous");
+    expect(commands).toContain("ssh verify previous");
+    expect(commands).toContain("ssh unlock");
+    expect(commands).not.toContain("ssh receipt");
+  });
+
+  it.each(["volume", "edge", "both"])("retains the lock when rollback changes the original %s binding", (field) => {
+    const { result, commands } = runProduction(`operator-p41-rollback-${field}-drift`, "apply");
+    expect(result.status).not.toBe(0);
+    expect(result.stderr, commands).toContain("manual_recovery_required lock_retained=true");
+    expect(result.stdout).not.toContain("TARGET_UPDATE_RESULT rolled_back");
+    expect(commands).toContain("ssh activate previous");
+    expect(commands).not.toContain("ssh unlock");
+    expect(commands).not.toContain("ssh receipt");
+  });
+
+  it("binds both preserved values from the last observation under lock before activation", () => {
+    const { result, commands } = runProduction("operator-p41-under-lock-binding", "apply");
+    expect(result.status, result.stdout + result.stderr + commands).toBe(0);
+    expect(commands).toContain("expected_volume=locked_volume expected_edge=sha256:" + "e".repeat(64));
+    expect(commands).not.toContain("expected_volume=initial_volume");
+    expect(result.stdout).toContain("TARGET_UPDATE_RESULT activated");
+  });
+
+  it("rejects preservation drift first observed in real candidate verify after a matching postflight", () => {
+    const { result, commands } = runProduction("operator-p41-verify-both-drift", "apply");
+    expect(result.status).not.toBe(0);
+    expect(commands).toContain("ssh preservation candidate expected_volume=platform-infra_postgres_data");
+    expect(commands).toContain("observed_volume=wrong_verify_volume observed_edge=sha256:" + "f".repeat(64) + " exit=1");
+    expect(commands).toContain("ssh verify rollback " + "b".repeat(40));
+    expect(result.stdout).toContain("TARGET_UPDATE_RESULT rolled_back");
+    expect(commands).not.toContain("ssh receipt");
+  });
+
+  it("retains the lock on drift first observed in real rollback verify after a matching rollback preflight", () => {
+    const { result, commands } = runProduction("operator-p41-rollback-verify-both-drift", "apply");
+    expect(result.status).not.toBe(0);
+    expect(commands).toContain("ssh preservation previous expected_volume=platform-infra_postgres_data");
+    expect(commands).toContain("observed_volume=wrong_verify_volume observed_edge=sha256:" + "f".repeat(64) + " exit=1");
+    expect(result.stderr).toContain("manual_recovery_required lock_retained=true");
+    expect(commands).not.toContain("ssh unlock");
+    expect(commands).not.toContain("ssh receipt");
+  });
+
+  it("rejects legacy update postflight drift with the same original preservation binding", () => {
+    const { result, commands } = runProduction("legacy-p41-postflight-both-drift");
+    expect(result.status, result.stdout + result.stderr + commands).not.toBe(0);
+    expect(result.stdout).toContain("TARGET_UPDATE_RESULT rolled_back");
+    expect(commands).toContain("ssh activate previous");
+    expect(commands).not.toContain("ssh receipt");
+  });
   it("rejects an unbound direct mutating update before contacting the target", () => {
     const { result, commands } = runProduction("direct-unbound", "update");
     expect(result.status).not.toBe(0);

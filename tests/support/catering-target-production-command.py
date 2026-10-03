@@ -23,6 +23,32 @@ RETRY_SCENARIOS = {
 }
 command = Path(sys.argv[0]).name
 args = sys.argv[1:]
+PRESERVATION_SCENARIO = '-p41-' in scenario
+
+
+def preservation_observation(at_verify=False):
+    phase_path = state_root / 'preservation-phase'
+    phase = phase_path.read_text() if phase_path.exists() else 'initial'
+    volume, edge = 'platform-infra_postgres_data', 'sha256:' + 'e' * 64
+    if scenario.endswith('under-lock-binding'):
+        volume = 'initial_volume' if not (state_root / 'lock-observed').exists() else 'locked_volume'
+        edge = 'sha256:' + ('a' if volume == 'initial_volume' else 'e') * 64
+    if phase == 'candidate' and 'postflight-' in scenario:
+        if 'volume' in scenario or 'both' in scenario:
+            volume = 'wrong_candidate_volume'
+        if 'edge' in scenario or 'both' in scenario:
+            edge = 'sha256:' + 'd' * 64
+    if phase == 'previous' and 'rollback-' in scenario:
+        if 'volume' in scenario or ('both' in scenario and 'verify-' not in scenario):
+            volume = 'wrong_rollback_volume'
+        if 'edge' in scenario or ('both' in scenario and 'verify-' not in scenario):
+            edge = 'sha256:' + 'c' * 64
+    if at_verify and '-verify-both-' in scenario and (
+        (phase == 'candidate' and 'rollback-' not in scenario) or
+        (phase == 'previous' and 'rollback-' in scenario)
+    ):
+        volume, edge = 'wrong_verify_volume', 'sha256:' + 'f' * 64
+    return volume, edge
 
 
 def log(line: str) -> None:
@@ -291,6 +317,8 @@ if "docker exec -i" in joined_args and "node" in joined_args and "--input-type=m
     ):
         print(marker, file=sys.stderr)
     log("ssh smoke operator plans")
+    if PRESERVATION_SCENARIO and 'rollback-' in scenario:
+        raise SystemExit(1)
     if scenario in RETRY_SCENARIOS:
         smoke_count_path = state_root / "smoke-count"
         smoke_count = int(smoke_count_path.read_text(encoding="ascii")) if smoke_count_path.exists() else 0
@@ -434,6 +462,15 @@ if "TARGET_PREFLIGHT_OK target=" in stdin_text:
             raise SystemExit(1)
     if scenario == "preflight-fails" and count == 1:
         raise SystemExit(1)
+    if PRESERVATION_SCENARIO:
+        phase_path = state_root / 'preservation-phase'
+        phase = phase_path.read_text() if phase_path.exists() else 'initial'
+        if scenario.startswith('operator-') and phase == 'candidate':
+            runtime_state = 'runtime_state=release:' + os.environ['DEPLOY_COMMIT_SHA'] + ' '
+        volume, edge = preservation_observation()
+        sys.stdout.write('TARGET_PREFLIGHT_OK target=catering-prod-1 backup=healthy ' + runtime_state
+                         + 'postgres_volume=' + volume + ' edge_image=' + edge + '\n')
+        raise SystemExit(0)
     sys.stdout.write(
         "TARGET_PREFLIGHT_OK target=catering-prod-1 backup=healthy "
         + runtime_state
@@ -535,6 +572,8 @@ if "install receipt binding mismatch" in stdin_text:
 
 if "target update lock already exists" in stdin_text and "owner.pending" in stdin_text:
     log("ssh lock")
+    if PRESERVATION_SCENARIO:
+        (state_root / 'lock-observed').write_text('held')
     raise SystemExit(0)
 
 
@@ -559,6 +598,8 @@ if "previous-images.json" in stdin_text and "docker load" in stdin_text:
 if "up -d --no-deps" in stdin_text:
     which = classify_override()
     log(f"ssh activate {which}")
+    if PRESERVATION_SCENARIO:
+        (state_root / 'preservation-phase').write_text(which)
     if scenario in RETRY_SCENARIOS:
         release_match = re.search(r"/opt/catering-releases/([0-9a-f]{40})/candidate-images\.json", joined_args)
         if release_match is None:
@@ -595,6 +636,40 @@ if "check_health()" in stdin_text:
         print(marker, file=sys.stderr)
     which = classify_override()
     log(f"ssh verify {which}")
+    if PRESERVATION_SCENARIO:
+        # Execute the shipped preservation checks; only Docker inspection is synthetic.
+        # This catches rebinding in the real caller instead of trusting a canned verify result.
+        marker = 'actual_postgres_volume="'
+        start = stdin_text.index(marker)
+        end = stdin_text.index('\ncheck_health() {', start)
+        parameters = remote_argv[remote_argv.index('--') + 1:]
+        if len(parameters) != 4:
+            fail('synthetic preservation: verify argument binding invalid')
+        expected_volume, expected_edge = parameters[2:]
+        volume, edge = preservation_observation(at_verify=True)
+        docker_observation = json.dumps([{'Mounts': [{'Type': 'volume',
+            'Destination': '/var/lib/postgresql/data', 'Name': volume}]}])
+        fixture_shell = '''
+sudo() {
+  [[ "$1" == -n && "$2" == docker && "$3" == inspect ]] || return 86
+  if [[ "$4" == platform-infra-postgres-1 ]]; then
+    printf '%s\\n' "$P41_DOCKER_POSTGRES"
+  elif [[ "$4" == --format && "$5" == '{{.Image}}' && "$6" == catering-edge-edge-1 ]]; then
+    printf '%s\\n' "$P41_DOCKER_EDGE"
+  else
+    return 86
+  fi
+}
+expected_postgres_volume="$1"; expected_edge_image="$2"
+'''
+        probe = subprocess.run(['/bin/bash', '-euo', 'pipefail', '-c',
+            fixture_shell + stdin_text[start:end], 'preservation', expected_volume, expected_edge],
+            env=dict(os.environ, P41_DOCKER_POSTGRES=docker_observation, P41_DOCKER_EDGE=edge),
+            capture_output=True, text=True, check=False)
+        log(f'ssh preservation {which} expected_volume={expected_volume} expected_edge={expected_edge} '
+            f'observed_volume={volume} observed_edge={edge} exit={probe.returncode}')
+        sys.stderr.write(probe.stderr)
+        raise SystemExit(probe.returncode)
     raise SystemExit(0)
 
 

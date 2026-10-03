@@ -51,7 +51,10 @@ for mutation in (None, 'indexDigest', 'platformManifestDigest', 'configDigest'):
     const production = readFileSync(path.join(root, "platform-infra/scripts/catering-target-production-update.sh"), "utf8");
     const renderer = production.match(/render_trusted_template\(\) \{[\s\S]*?\n\}/)?.[0];
     expect(renderer).toBeTruthy();
-    const blocks = [...production.matchAll(/<<'PY_RUNNING_IDENTITY'\n([\s\S]*?)\nPY_RUNNING_IDENTITY/g)];
+    const preflight = production.match(/running_identity_source\+='\n([\s\S]*?)\n'/)?.[1];
+    expect(preflight).toBeTruthy();
+    const blocks = ["__OCI_HELPER_PYTHON__\n" + preflight,
+      ...[...production.matchAll(/<<'PY_RUNNING_IDENTITY'\n([\s\S]*?)\nPY_RUNNING_IDENTITY/g)].map((block) => block[1])];
     expect(blocks).toHaveLength(2);
     const directory = mkdtempSync(path.join(tmpdir(), "catering-v4-observed-"));
     const manifest = path.join(directory, "manifest.json");
@@ -60,7 +63,7 @@ for mutation in (None, 'indexDigest', 'platformManifestDigest', 'configDigest'):
     const c = "sha256:" + "b".repeat(64);
     for (const block of blocks) {
       const rendered = spawnSync("/bin/bash", ["-c", renderer + "\nrender_trusted_template __OCI_HELPER_PYTHON__"], {
-        input: block[1], encoding: "utf8", env: { ...process.env, OPERATIONS_ROOT: root },
+        input: block, encoding: "utf8", env: { ...process.env, OPERATIONS_ROOT: root },
       });
       expect(rendered.status, rendered.stderr).toBe(0);
       for (const [observation, success] of [

@@ -6,8 +6,12 @@ import io
 import json
 import os
 from pathlib import Path
+import re
+import shutil
 import socket
+import sys
 import tempfile
+import subprocess
 import unittest
 from unittest import mock
 from datetime import datetime, timezone
@@ -152,6 +156,319 @@ class ObserverContracts(unittest.TestCase):
         self.assertEqual(outcome['backup_health'], 'healthy')
         self.assertFalse(outcome['delivery_accepted'])
         self.assertEqual(outcome['data_epoch'], self.created)
+
+    def monitor_snapshot(self):
+        return {str(p): (p.read_bytes(), self.module.generation(p.stat()))
+                for p in self.base.rglob('*') if p.is_file()}
+
+    def test_check_with_held_observer_lock_is_healthy_and_changes_no_records(self):
+        before = self.monitor_snapshot()
+        with (self.state / 'lock').open('rb') as lock:
+            self.module.fcntl.flock(lock, self.module.fcntl.LOCK_EX)
+            with mock.patch.object(self.module, 'transmit', side_effect=AssertionError('check must not send')):
+                outcome = self.check()
+        self.assertEqual(outcome['backup_health'], 'healthy')
+        self.assertEqual(outcome['observer_run'], 'completed')
+        self.assertFalse(outcome['delivery_accepted'])
+        self.assertEqual(self.monitor_snapshot(), before)
+
+    def test_check_does_not_acquire_any_flock(self):
+        flock = self.module.fcntl.flock
+        with mock.patch.object(self.module.fcntl, 'flock', wraps=flock) as calls:
+            outcome = self.check()
+        self.assertEqual(outcome['backup_health'], 'healthy')
+        self.assertEqual(calls.call_args_list, [], 'read-only check acquired an advisory lock')
+
+    def test_check_detects_lock_replacement_during_observation(self):
+        def changed_units():
+            (self.state / 'lock').rename(self.state / 'prior-lock')
+            self.write(self.state / 'lock', b'')
+            return self.units
+        with mock.patch.object(self.module, 'get_units', side_effect=changed_units):
+            outcome = self.check()
+        self.assertEqual(outcome['backup_health'], 'unknown')
+        self.assertEqual(outcome['reason'], 'GENERATION_CHANGED')
+
+    def test_check_detects_state_replacement_during_observation(self):
+        def changed_units():
+            self.write_record(self.state / 'state', dict(status='observer', last_seen_epoch=str(NOW),
+                              failure_epoch=str(NOW - 10), delivery_accepted='false', backup_health='critical'))
+            return self.units
+        with mock.patch.object(self.module, 'get_units', side_effect=changed_units):
+            outcome = self.check()
+        self.assertEqual(outcome['backup_health'], 'unknown')
+        self.assertEqual(outcome['reason'], 'GENERATION_CHANGED')
+
+    def test_check_rejects_restore_proof_older_than_backup_even_with_rebound_checksum(self):
+        self.receipt['verified_at'] = stamp(self.created - 1)
+        self.evidence['receipt_checksum'] = self.write_record(self.receipt_path, self.receipt)
+        self.write_record(self.root / 'catering-backup-evidence', self.evidence)
+        outcome = self.check()
+        self.assertEqual(outcome['backup_health'], 'critical')
+        self.assertEqual(outcome['reason'], 'EVIDENCE_AGE_INVALID')
+
+    def test_check_rejects_missing_restore_dispatch_despite_fresh_evidence(self):
+        self.units['restore'].update(ExecMainStartTimestamp=system_stamp(NOW - 1200),
+                                    ExecMainExitTimestamp=system_stamp(NOW - 1100))
+        outcome = self.check()
+        self.assertEqual(outcome['backup_health'], 'critical')
+        self.assertEqual(outcome['reason'], 'RESTORE_DISPATCH_MISSING')
+
+    def test_mutating_observer_holds_exclusive_lock_through_send(self):
+        def transmitted(*args):
+            with (self.state / 'lock').open('rb') as competing:
+                with self.assertRaises(BlockingIOError):
+                    self.module.fcntl.flock(competing, self.module.fcntl.LOCK_EX | self.module.fcntl.LOCK_NB)
+            self.assertIn('last_seen_epoch=' + str(NOW), (self.state / 'state').read_text())
+            return True
+        with mock.patch.object(self.module, 'transmit', side_effect=transmitted):
+            outcome = self.check(send=True)
+        self.assertEqual(outcome['backup_health'], 'healthy')
+        self.assertTrue(outcome['delivery_accepted'])
+
+    def rendered_preflight(self):
+        runner = (ROOT / 'platform-infra/scripts/catering-target-production-update.sh').read_text()
+        definitions = runner[:runner.index('\ncase "${MODE}" in')]
+        definitions_path = self.base / 'runner-functions.sh'
+        self.write(definitions_path, definitions.encode())
+        rendered = subprocess.run(['/bin/bash', '-euo', 'pipefail', '-c', '''
+source "$1"
+OPERATIONS_ROOT="$2"; REPO_ROOT="$2"
+CONTRACT_PATH="$2/platform-infra/catering-target-update-contract.json"
+RUNTIME_INVENTORY_PATH="$2/platform-infra/catering-target-runtime-inventory.json"
+load_production_contract
+ssh_target() { cat; }
+remote_preflight ""
+''', 'render-check', str(definitions_path), str(ROOT)], capture_output=True, text=True,
+            env=dict(os.environ, CATERING_TARGET_OPERATIONS_COMMIT='b' * 40), check=False)
+        self.assertEqual(rendered.returncode, 0, rendered.stderr)
+        return rendered.stdout
+
+    def source_input_probe(self):
+        probe = self.base / 'input-probe.py'
+        self.write(probe, b'''import ast, json, os, stat, subprocess, sys
+info = os.fstat(0)
+print('INPUT_FD ' + json.dumps({'boundary': sys.argv[2], 'regular': stat.S_ISREG(info.st_mode),
+      'size': info.st_size, 'nlink': info.st_nlink}), file=sys.stderr)
+if sys.argv[1] == 'inspect':
+    raise SystemExit(0)
+if sys.argv[1] == 'python':
+    raise SystemExit(subprocess.run([sys.executable, *sys.argv[3:]]).returncode)
+source = sys.stdin.read()
+ast.parse(source)
+if sys.argv[2] == 'observer':
+    print(json.dumps({'observer_run': 'completed', 'backup_health': 'healthy'}))
+elif sys.argv[2] == 'release':
+    print('b' * 40 + '\\tsha256:' + 'e' * 64 + '\\tsha256:' + 'f' * 64)
+''')
+        return probe
+
+    def input_fd_observations(self, result):
+        return [json.loads(line.removeprefix('INPUT_FD ')) for line in result.stderr.splitlines()
+                if line.startswith('INPUT_FD ')]
+
+    def readonly_shell(self, command, **kwargs):
+        if not sys.platform.startswith('linux'):
+            return subprocess.run(command, **kwargs)
+        tracer = shutil.which('strace')
+        self.assertIsNotNone(tracer, 'Linux read-only gate requires strace; CI installs it explicitly')
+        with tempfile.TemporaryDirectory(prefix='catering-observer-trace-') as directory:
+            trace = Path(directory) / 'syscalls.log'
+            result = subprocess.run([tracer, '-f', '-yy', '-s', '256', '-o', str(trace), '-e',
+                'trace=%file,write,writev,pwrite64,pwritev,pwritev2,ftruncate,fallocate,fchmod,fchown,flock,fcntl',
+                *command], **kwargs)
+            denied = self.forbidden_syscalls(trace.read_text())
+            self.assertFalse(denied, '\n'.join(denied[:20]))
+        return result
+
+    @staticmethod
+    def forbidden_syscalls(trace):
+        forbidden = []
+        mutations = {'creat', 'truncate', 'ftruncate', 'fallocate', 'chmod', 'fchmod', 'fchmodat',
+                     'chown', 'fchown', 'lchown', 'fchownat', 'utime', 'utimes', 'futimesat',
+                     'utimensat', 'mkdir', 'mkdirat', 'rmdir', 'unlink', 'unlinkat', 'rename',
+                     'renameat', 'renameat2', 'link', 'linkat', 'symlink', 'symlinkat', 'mknod', 'mknodat'}
+        for line in trace.splitlines():
+            call = re.search(r'\b([a-z0-9_]+)\((.*)', line)
+            if not call:
+                continue
+            name, args = call.groups()
+            denied = name in mutations or name == 'flock'
+            if name in {'open', 'openat', 'openat2'}:
+                denied = bool(re.search(r'O_(WRONLY|RDWR|CREAT|TRUNC|APPEND|TMPFILE)', args))
+                if re.search(r'"/dev/null", O_(?:WRONLY|RDWR)(?:\|O_(?:CLOEXEC|LARGEFILE))*[,)]', args):
+                    denied = False  # The observer sends validator stderr to this exact character device.
+            if name == 'fcntl' and re.search(r'F_(?:OFD_)?SETLK', args):
+                denied = True
+            if name in {'write', 'writev', 'pwrite64', 'pwritev', 'pwritev2'}:
+                destination = args.split(',', 1)[0]
+                denied = not re.search(r'<(?:pipe:|(?:UNIX|TCP|UDP):|/dev/null(?:<|>))', destination)
+            if denied:
+                forbidden.append(line)
+        return forbidden
+
+    def test_process_tree_guard_detects_large_shell_heredoc_write(self):
+        self.assertTrue(self.forbidden_syscalls('1 openat(AT_FDCWD, "/tmp/sh-thd", O_RDWR|O_CREAT|O_EXCL, 0600) = 3'))
+        self.assertTrue(self.forbidden_syscalls('1 write(3</tmp/sh-thd (deleted)>, "source", 6) = 6'))
+        self.assertTrue(self.forbidden_syscalls('1 unlink("/tmp/sh-thd") = 0'))
+        self.assertTrue(self.forbidden_syscalls('1 flock(3</synthetic/lock>, LOCK_EX|LOCK_NB) = 0'))
+        self.assertFalse(self.forbidden_syscalls('1 write(1<pipe:[123]>, "result", 6) = 6'))
+        self.assertFalse(self.forbidden_syscalls('1 openat(AT_FDCWD, "/dev/null", O_RDWR|O_CLOEXEC) = 3</dev/null<char 1:3>>'))
+        if not sys.platform.startswith('linux'):
+            print('Linux process-tree execution pending; local FD and syscall-parser controls executed', file=sys.stderr)
+            return
+        tracer = shutil.which('strace')
+        self.assertIsNotNone(tracer, 'Linux read-only gate requires strace')
+        trace = self.base / 'heredoc-negative-control.log'
+        result = subprocess.run([tracer, '-f', '-yy', '-s', '256', '-o', str(trace), '-e',
+            'trace=%file,write,writev,flock,fcntl', '/bin/bash', '-c',
+            "IFS= read -r -d '' value <<'LEGACY' || [[ -n \"$value\" ]]\n" + 'q' * 107595 + '\nLEGACY\n'],
+            capture_output=True, text=True, check=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        denied = self.forbidden_syscalls(trace.read_text())
+        self.assertTrue(any('O_CREAT' in line for line in denied), trace.read_text())
+
+    def test_preflight_source_inputs_are_pipes_at_process_boundaries(self):
+        rendered = self.rendered_preflight()
+        probe = self.source_input_probe()
+        # Source assignments precede target reads in the corrected template.
+        # The existing heredoc variant has no assignments and remains executable here.
+        assignments = []
+        for name in ('release_check_source', 'running_identity_source', 'observer_check_source'):
+            match = re.search(r'^' + name + r"=('(?:[^']|'\"'\"')*')$", rendered, re.M)
+            if match:
+                assignments.append(match.group(0))
+        identity_body = re.search(r"^running_identity_source\+='\n[\s\S]*?\n'", rendered, re.M)
+        if identity_body:
+            assignments.append(identity_body.group(0))
+        observer_start = rendered.index('[[ -f "$observer"')
+        observer_end = rendered.index('\nif [[ "$operator_mode"', observer_start)
+        release_start = rendered.index('  release_binding="')
+        release_end = rendered.index('\n  [[ "$active_release_sha"', release_start)
+        release = rendered[release_start:release_end]
+        # Probe the actual source redirection outside command substitution, whose
+        # old quoted heredoc cannot even be parsed by macOS Bash 3.2.
+        capture_end = release.index(')" || preflight_fail operator_release_binding')
+        release = release[len('  release_binding="$('):capture_end] + release[capture_end + len(')" || preflight_fail operator_release_binding'):]
+        identity_start = rendered.index('\n', rendered.index('  observation="$(sudo -n docker inspect --format')) + 1
+        identity_end = rendered.index('\n  done', identity_start)
+        old_observer = self.base / 'existing-observer.py'
+        self.write(old_observer, b'not executed\n')
+        shell = '''
+read() { "$P41_REAL_PYTHON" -B "$P41_PROBE" inspect read; builtin read "$@"; }
+sudo() { [[ "$1" == -n && "$2" == /usr/bin/python3 ]] || return 86; "$P41_REAL_PYTHON" -B "$P41_PROBE" consume "$boundary"; }
+/usr/bin/python3() { "$P41_REAL_PYTHON" -B "$P41_PROBE" consume "$boundary"; }
+python3() { "$P41_REAL_PYTHON" -B "$P41_PROBE" python json "$@"; }
+preflight_fail() { printf 'TARGET_PREFLIGHT_FAIL gate=%s\\n' "$1" >&2; return 1; }
+observer="$1"; release_root=/synthetic; requested_release_sha=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+source_platform_base=platform-infra/base; source_platform_ops=platform-infra/ops
+release_binding=$'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\\tsha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\\tsha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+platform_base_hash=x; platform_ops_hash=x; bound_product_sha=x; operations_commit=x; manifest_sha=x
+observation='{"Image":"sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","State":{"Running":true}}'
+expected=sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+release_dir=/synthetic
+''' + '\n'.join(assignments) + '\nboundary=release\n' + release + \
+            '\nboundary=identity\n' + rendered[identity_start:identity_end] + \
+            '\nboundary=observer\n' + rendered[observer_start:observer_end]
+        # Bash receives the test script through a pipe too, independent of ARG_MAX.
+        result = self.readonly_shell(['/bin/bash', '-euo', 'pipefail', '-s', '--', str(old_observer)],
+            input=shell, capture_output=True, text=True, check=False,
+            env=dict(os.environ, P41_REAL_PYTHON=sys.executable, P41_PROBE=str(probe)))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        observed = self.input_fd_observations(result)
+        self.assertTrue({'release', 'identity', 'observer'} <= {item['boundary'] for item in observed})
+        self.assertFalse([item for item in observed if item['regular']], result.stderr)
+
+    def test_common_read_validators_use_pipes_for_source_and_record_input(self):
+        probe = self.source_input_probe()
+        artifact = dict(self.artifact, bundle_path='catering-backup-stream-' + 'q' * 20000)
+        artifact_path = self.root / 'snapshots/large-artifact'
+        self.write_record(artifact_path, artifact)
+        item = self.policy['attestations']['secret']
+        record = dict(item['fields'], source_reference='offline_vault:/synthetic/' + 'q' * 20000,
+                      verified_at=stamp(NOW - 1000), valid_until=stamp(NOW + 900000), attestation_id=digest(b'large'))
+        attestation_path = self.root / 'large-secret-attestation'
+        checksum = self.write_record(attestation_path, record)
+        result = self.readonly_shell(['/bin/bash', '-euo', 'pipefail', '-c', '''
+source "$1"; EXPECTED_UID="$2"
+read() { "$P41_REAL_PYTHON" -B "$P41_PROBE" inspect read; builtin read "$@"; }
+python3() { "$P41_REAL_PYTHON" -B "$P41_PROBE" python python "$@"; }
+read_record "$3" artifact
+printf '\\n'
+validate_attestation_record secret "$4" "$5"
+''', 'common-read', str(self.module.COMMON), str(os.getuid()), str(artifact_path),
+            str(attestation_path), checksum], input='', capture_output=True, text=True, check=False,
+            env=dict(os.environ, CATERING_BACKUP_ROOT=str(self.root), CATERING_BACKUP_EXPECTED_UID=str(os.getuid()),
+                     P41_REAL_PYTHON=sys.executable, P41_PROBE=str(probe)))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(result.stdout, artifact_path.read_text() + attestation_path.read_text().rstrip('\n'))
+        observed = self.input_fd_observations(result)
+        self.assertTrue(any(item['boundary'] == 'python' for item in observed))
+        self.assertTrue(any(item['boundary'] == 'read' for item in observed))
+        self.assertFalse([item for item in observed if item['regular']], result.stderr)
+
+    def test_rendered_preflight_uses_bound_check_instead_of_installed_locking_observer(self):
+        rendered = self.rendered_preflight()
+        syntax = subprocess.run(['/bin/bash', '-n'], input=rendered,
+                                capture_output=True, text=True, check=False)
+        self.assertEqual(syntax.returncode, 0, syntax.stderr)
+        start = rendered.index('[[ -f "$observer"')
+        end = rendered.index('\nif [[ "$operator_mode"', start)
+        block = rendered[start:end].replace('/etc/catering-backup-monitor/policy.json', str(self.policy_path))
+        old_observer = self.base / 'installed-observer.py'
+        self.write(old_observer, b"import fcntl\nfcntl.flock(1, fcntl.LOCK_EX | fcntl.LOCK_NB)\n")
+        # Privilege and unit observations are synthetic; execute the real streamed module
+        # with the same protected records and real shared validators as direct checks.
+        bootstrap = '''
+import fcntl, json, os, pathlib, runpy, socket, sys
+def forbidden_lock(*args):
+    raise AssertionError('installed or streamed observer acquired flock')
+fcntl.flock = forbidden_lock
+original_open = os.open
+def read_only_open(path, flags, *args, **kwargs):
+    if os.fspath(path) != os.devnull and flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND):
+        raise AssertionError('streamed check opened a file for mutation')
+    return original_open(path, flags, *args, **kwargs)
+os.open = read_only_open
+socket.gethostname = lambda: 'fixture-host'
+def observation_trace(frame, event, arg):
+    if event == 'call' and frame.f_code.co_name == 'run' and 'Records' in frame.f_globals:
+        frame.f_globals['OWNER_UID'] = os.getuid()
+        frame.f_globals['OWNER_GID'] = os.getgid()
+        frame.f_globals['utc_now'] = lambda: ''' + str(NOW) + '''
+        frame.f_globals['get_units'] = lambda: json.loads(os.environ['P41_UNITS'])
+    return observation_trace
+sys.settrace(observation_trace)
+args = sys.argv[1:]
+if args[0] == '-B':
+    args = args[1:]
+assert args[:2] == ['-I', '-'] or args[0] == '-I', args
+if args[1] == '-':
+    sys.argv = ['-'] + args[2:]
+    exec(compile(sys.stdin.read(), '<rendered-observer>', 'exec'), {'__name__': '__main__', '__file__': '<stdin>'})
+else:
+    sys.argv = args[1:]
+    runpy.run_path(args[1], run_name='__main__')
+'''
+        self.write(self.base / 'bootstrap.py', bootstrap.encode())
+        before = self.monitor_snapshot()
+        check = self.readonly_shell(['/bin/bash', '-euo', 'pipefail', '-s', '--', str(old_observer)], input='''
+observer="$1"
+preflight_fail() { printf 'TARGET_PREFLIGHT_FAIL gate=%s\\n' "$1" >&2; return 1; }
+sudo() {
+  [[ "$1" == -n && "$2" == /usr/bin/python3 ]] || return 86
+  shift 2
+  "$P41_REAL_PYTHON" -B "$P41_BOOTSTRAP" "$@"
+}
+''' + block + '\nprintf "%s\\n" "$observer_json"',
+            capture_output=True, text=True, check=False, env=dict(os.environ,
+                P41_REAL_PYTHON=sys.executable, P41_BOOTSTRAP=str(self.base / 'bootstrap.py'),
+                P41_UNITS=json.dumps(self.units)))
+        self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+        outcome = json.loads(check.stdout)
+        self.assertEqual(outcome['backup_health'], 'healthy')
+        self.assertFalse(outcome['delivery_accepted'])
+        self.assertEqual(self.monitor_snapshot(), before)
 
     def test_historical_two_table_scope_cannot_authorize_target(self):
         self.policy['bindings']['scope'] = 'postgres,sites,platform-caddy,shared-edge-caddy'

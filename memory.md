@@ -1,9 +1,16 @@
 # memory.md
 
-version: 5.424
-date: 2026-10-01
+version: 5.426
+date: 2026-10-03
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
+
+## Aktueller Entwicklungsstand – P4.1 Observer-Check / Preservationbindung (2026-10-03)
+
+- Zwei lokal reproduzierte Operationsfehler sind im isolierten Korrekturstand behoben: `--check` erwirbt keinen `flock`; PostgreSQL-Datenvolume und Edge-Image werden je Apply/Update genau einmal vor Aktivierung unter Update-Lock gebunden. Postflight und Rollback prüfen ihre aktuellen Beobachtungen und Container gegen dieselben unveränderlichen Ursprungswerte. Rollbackdrift hält den Lock für manuelle Recovery.
+- Der Ziel-Preflight führt Observer und identische Common-Validatoren aus dem gebundenen Operationscheckout im Speicher aus. Er startet weder den alten installierten Observer noch dessen Common-Helper und benötigt keine vorgelagerte Produktionsinstallation. Policy-/Record-/Frische-/Dispatch-/Attestationsprüfungen bleiben unverändert; State- und Lockgenerationsdrift wird fail-closed erkannt. Sender behält exklusiven Lock, Publikation und Send.
+- R1-Review fand materialisierende Bash-Eingaben im Zielcaller. Diese Eingaben sind lokal korrigiert: shell-gequotete Quellassignments/Pipes, fünf AST-identische Common-Readprogramme über `-B -c` und `printf`-Prozesssubstitution für Record-/Metadateneingaben. Lokal grün: 112 betroffene Vitest-Tests, 52 Observer-Python-Tests, gezielte Common-Verträge und vollständige Render-/Source-Bashsyntax einschließlich macOS Bash 3.2. Linux-Prozessbaumgate (`strace -f -yy`, Normalcaller/große Records/alte-Heredoc-Negativkontrolle) und unabhängiger R1-Re-Review bleiben vor Annahme offen. Separate Verifybindung bleibt aktuell, da der Receipt keine historischen PostgreSQL-/Edge-Ausgangswerte besitzt.
+- Snapshot: `docs/agent-memory/2026-10-03-p4-1-observer-preservation.md`. Unabhängiger Review, exakter PR-Head/CI und reguläre Annahme bleiben offen. Keine Produktionsverbindung, Bundleerzeugung/-übertragung, Backup-/Restoreausführung, Workflowdispatch, Integration oder Hub-Schreibwirkung im Korrekturauftrag.
 
 ## Entwicklungsstand – P3.2 OCI-v4-Vertrag / Runtime-Blocker (2026-10-01)
 
@@ -2393,3 +2400,18 @@ Quelle: `8de2e96c8604f12da2ec14c39b187db04dfb61cf`. Der folgende Betriebsbericht
 - 57 Python- und 88 Vitest-Tests, Syntax-/Diffprüfung erfolgreich. Echter v4-Bundlebau und unabhängige A/R/M/C-Prüfung bestanden. Im separaten anfangs leeren containerd-Store sind beide M adressierbar und als laufende Container-Image-/Manifest-Descriptorwerte belegt; Node läuft tatsächlich als Linux/x64 v22.23.3. Kein Nachweis für einen laufenden Webdienst aus dem Shell-Identitätscontainer ableiten.
 - Der anschließende echte Caddy-Aufruf scheitert in der ARM64/QEMU-Umgebung mit Go `taggedPointerPack` (Container-Exit 2, kein OOM). Der eigentliche Phasen-Rehearsalpfad ist deshalb nicht gestartet; P3.2 BLOCKED. Die genaue Ursache dieses neuen Runtime-Abbruchs ist noch nicht eingegrenzt. Ein gesonderter kleiner Diagnoseentscheid innerhalb der vorhandenen VM ist nötig; keine automatische Store-/Architekturänderung oder Produktumgehung.
 - VM, eigene Zielengine, Bundle und Fehlerbelege bleiben erhalten; eigene kurzlebige Container wurden beendet. Kein Produktions-/Althostkontakt, keine Änderung historischer Worktrees, kein Hub-Writeback und kein Merge.
+
+### 5.425 - 2026-10-03 — P4.1 lokaler Observer-/Preservationfix
+
+- Observer-Check ohne Advisory-Lock und mit geschützter Lock-/Recordgeneration; sendender Pfad behält exklusiven Lock und bestehende State-/Sendsemantik. Operations-Preflight streamt gebundenen Observer und dieselben Common-Validatoren im Speicher, statt eine vorherige Produktionsinstallation vorauszusetzen.
+- Apply und Legacy-Update binden PostgreSQL-Datenvolume und Edge-Image nach dem Preflight unter Update-Lock vor Load/Aktivierung einmalig als readonly Erwartung. Aktuelle Postflight-/Rollbackbeobachtungen ersetzen diese Werte nicht; derselbe Containervergleich prüft auch nach Rollback den ursprünglichen Zustand. Separate Verify-/Receipt-/Legacyverträge bleiben erhalten.
+- RED: vier fokussierte Observer-/Callerfehler und sieben Preservationfehler auf der unveränderten Basis. GREEN: 57 Operator-/OCI-v4-Python-Tests und 112 Vitest-Tests in neun Dateien, einschließlich 49 Observer-Python-Tests. Reale lokale Preservationvergleiche decken auch Drift erst nach passendem Postflight beziehungsweise erst im Rollback-Verify ab. Bash-/Python-AST-/Diffprüfung durchgeführt; vollständiger Render-Syntaxnachweis unter Linux ist wegen der vorhandenen macOS-Bash-3.2-Grenze ein ausdrücklicher PR-CI-Gate.
+- Kein Produktionskontakt, Bundlebau/-transfer, Jobstart, Workflowdispatch, Merge oder Hub-Writeback. Unabhängiger Review und Draft-PR-CI sind noch keine vorweggenommene Annahme.
+
+
+### 5.426 - 2026-10-03 — P4.1 R1-Transportkorrektur
+
+- Unabhängiger Review hat R1 Important belegt: der große Observer-Heredoc und weitere tatsächlich ausgeführte Read-Eingaben materialisierten auf macOS Bash 3.2 reguläre entlinkte Dateien. Die Python-interne Write-Sperre konnte Elternprozess-Schreibwirkungen nicht erfassen; 5.425 war deshalb noch nicht abnahmefähig.
+- Ziel-Preflight nutzt jetzt sichere shell-gequotete Release-/OCI-/Observerassignments und Pipes. Nur die erreichten Common-Readfunktionen ändern den Quell-/Datentransport; ihre fünf Pythonprogramme haben identischen AST zur Basis. Sender-/Mutatorlogik und B sind unverändert.
+- Zwei meaningful R1-REDs und fokussiertes GREEN einschließlich echter Caller/Common-Validatoren; vollständiger gerenderter Preflight besteht jetzt auch macOS Bash 3.2. Linux-PR-CI erhält einen verpflichtenden Prozessbaumgate mit `strace` außerhalb Bash, großen bounded Records und großer alter-Heredoc-Negativkontrolle. Fehlender Tracer wird im bestehenden build-and-test-Job begrenzt erworben und sonst fail-closed behandelt.
+- Lokal geprüfter Korrekturstand ist noch keine Annahme: unabhängiger R1-Re-Review, genaue Commit-/Tree-/Artefaktbindung und vollständig grüne automatische PR-CI einschließlich Linux-Prozessbaum-/Syntaxnachweis bleiben offen. Kein Produktionskontakt, Workflowdispatch, Commit/Push oder Merge durch den Implementer.

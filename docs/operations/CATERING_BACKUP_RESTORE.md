@@ -202,6 +202,10 @@ Produktionsfreigabe werden daraus abgeleitet.
 
 ## Erforderliche Eingaben und Identitätsbindungen
 
+Der Observer-Check (`--check` beziehungsweise der Operations-Preflight mit `send=False`) liest ausschließlich die geschützten bestehenden Policy-, State-, Lock-, Evidence-, Artifact-, Restore- und Attestationsrecords sowie Service-/Uhrmetadaten. Er erwirbt keinen `flock` und publiziert oder sendet nichts. Die vorhandenen Schema-, Hash-, Ownership-, Generation-, Backup-/Restore-Frische-, Dispatch- und Fehlerlatchprüfungen bleiben identisch. Ein laufender Sender kann parallel beobachtet werden; Record-/Lockaustausch während der Prüfung wird fail-closed abgewiesen. Diese Beobachtung ist nicht atomar und belegt keinen Zustand nach dem letzten Read.
+
+Im Ziel-Preflight werden Observer und derselbe Common-Validatorcode aus dem gebundenen Operationscheckout im Speicher ausgeführt; der installierte Sender und sein dateibasierter Helper benötigen dafür kein Update. Die Quell- und Dateneingaben des Zielchecks verwenden shell-gequotete Variablen, Pipes, `-B -c` und Prozesssubstitution statt materialisierender Here-docs/Here-strings; die Common-Validatorlogik ist identisch. Im regulären sendenden Betrieb bleibt der exklusive, nicht blockierende Observer-Lock über Unsicherheitspublikation und HTTP-Send erhalten. Der Check startet weder Backup noch Restore und prüft kein Remote-Repository neu.
+
 Für die beiden read-only Restic-Abfragen liest der Collector dieselbe feste,
 root-owned-0600-Datei `/etc/catering-backup/catering-backup.env` als Daten.
 S3 benötigt `AWS_ACCESS_KEY_ID` und `AWS_SECRET_ACCESS_KEY`, optional einen

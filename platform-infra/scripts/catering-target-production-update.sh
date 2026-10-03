@@ -45,6 +45,8 @@ RUNTIME_IMAGE=""
 WEB_IMAGE=""
 POSTGRES_VOLUME=""
 EDGE_IMAGE=""
+EXPECTED_POSTGRES_VOLUME=""
+EXPECTED_EDGE_IMAGE=""
 ACTIVE_RELEASE_SHA=""
 PREVIOUS_RELEASE_SHA=""
 
@@ -432,8 +434,8 @@ render_trusted_template() {
   local marker="$1" tool="${2:-}"
   local oci_tool="${OPERATIONS_ROOT}/platform-infra/scripts/catering_target_oci.py"
   [[ -f "$oci_tool" && ! -L "$oci_tool" ]] || fail "versioned OCI helper is missing"
-  python3 -B -c 'from pathlib import Path; import sys
-marker, tool, oci_path = sys.argv[1:]
+  python3 -B -c 'from pathlib import Path; import shlex, sys
+marker, tool, oci_path, operations_root = sys.argv[1:]
 template = sys.stdin.read()
 source = Path(oci_path).read_text(encoding="utf-8")
 program = "import sys, types\n_oci = types.ModuleType(\"catering_target_oci\")\n"
@@ -444,12 +446,34 @@ if tool:
     program += "exec(compile(" + repr(Path(tool).read_text(encoding="utf-8")) + ", \"<stdin>\", \"exec\"), globals())\n"
 if template.count(marker) != 1:
     raise SystemExit(1)
-rendered = template.replace(marker, program)
+rendered = template.replace(marker, shlex.quote(program) if marker == "__PREFLIGHT_RELEASE_PYTHON__" else program)
+if "__PREFLIGHT_OCI_PYTHON__" in rendered:
+    if rendered.count("__PREFLIGHT_OCI_PYTHON__") != 1:
+        raise SystemExit(1)
+    rendered = rendered.replace("__PREFLIGHT_OCI_PYTHON__", shlex.quote(preload))
 if marker != "__OCI_HELPER_PYTHON__" and "__OCI_HELPER_PYTHON__" in rendered:
     if rendered.count("__OCI_HELPER_PYTHON__") != 1:
         raise SystemExit(1)
     rendered = rendered.replace("__OCI_HELPER_PYTHON__", preload)
-sys.stdout.write(rendered)' "$marker" "$tool" "$oci_tool"
+if "__PREFLIGHT_BACKUP_PYTHON__" in rendered:
+    if rendered.count("__PREFLIGHT_BACKUP_PYTHON__") != 1:
+        raise SystemExit(1)
+    backup_root = Path(operations_root) / "platform-infra/backup"
+    observer_path = backup_root / "catering-backup-observer.py"
+    common_path = backup_root / "catering-backup-common.sh"
+    if any(path.is_symlink() or not path.is_file() for path in (observer_path, common_path)):
+        raise SystemExit("versioned backup validators are missing")
+    observer = "import types\n_observer = types.ModuleType(\"catering_backup_observer\")\n"
+    observer += "_observer.__file__ = \"/usr/local/libexec/catering-backup-observer.py\"\n"
+    observer += "exec(compile(" + repr(observer_path.read_text(encoding="utf-8")) + ", \"<trusted-backup-observer>\", \"exec\"), _observer.__dict__)\n"
+    observer += "_observer.COMMON_SOURCE = " + repr(common_path.read_text(encoding="utf-8")) + "\n"
+    observer += "_observer.signal.signal(_observer.signal.SIGTERM, _observer.terminate_children)\n"
+    observer += "_observer.signal.signal(_observer.signal.SIGINT, _observer.terminate_children)\n"
+    observer += "outcome = _observer.run(\"/etc/catering-backup-monitor/policy.json\", send=False)\n"
+    observer += "print(_observer.json.dumps(outcome, sort_keys=True))\n"
+    observer += "raise SystemExit(0 if outcome[\"backup_health\"] == \"healthy\" else 1)\n"
+    rendered = rendered.replace("__PREFLIGHT_BACKUP_PYTHON__", shlex.quote(observer))
+sys.stdout.write(rendered)' "$marker" "$tool" "$oci_tool" "$OPERATIONS_ROOT"
 }
 
 oci_tool_sha256() {
@@ -500,7 +524,7 @@ remote_preflight() {
     "${operator_mode_arg}" "${layout_release_arg}" "${operations_commit_arg}" "${manifest_sha_arg}" \
     "${SOURCE_PLATFORM_BASE}" "${SOURCE_PLATFORM_OPS}" "${DEPLOY_COMMIT_SHA}"
   )
-  render_trusted_template "__RELEASE_STATE_PYTHON__" \
+  render_trusted_template "__PREFLIGHT_RELEASE_PYTHON__" \
     "${OPERATIONS_ROOT}/platform-infra/scripts/catering-target-release-state.py" <<'REMOTE_PREFLIGHT' | ssh_target bash -s -- "${remote_args[@]}"
 set -euo pipefail
 preflight_fail() {
@@ -571,7 +595,7 @@ fi
 command -v docker >/dev/null || preflight_fail docker_command
 check_compose_labels() {
   local container="$1" expected_project="$2" expected_working_dir="$3" expected_files="$4" expected_service="$5" gate="$6" result
-  if ! result="$(sudo -n docker inspect "$container" | python3 -c 'import json,sys
+  if ! result="$(sudo -n docker inspect "$container" | python3 -B -c 'import json,sys
 value=json.load(sys.stdin)
 if len(value) != 1:
     raise SystemExit(1)
@@ -601,13 +625,12 @@ platform_config_files="$platform_base,$platform_ops"
 if [[ "$operator_mode" == "__CATERING_OPERATOR__" ]]; then
   [[ "$source_platform_base" == platform-infra/* && "$source_platform_base" != *".."* ]] || preflight_fail operator_source_path
   [[ "$source_platform_ops" == platform-infra/* && "$source_platform_ops" != *".."* ]] || preflight_fail operator_source_path
-  release_binding="$(sudo -n /usr/bin/python3 -I - \
+release_check_source=__PREFLIGHT_RELEASE_PYTHON__
+  release_binding="$(printf '%s\n' "$release_check_source" | sudo -n /usr/bin/python3 -B -I - \
     "$release_root" "$requested_release_sha" "$source_platform_base" "$source_platform_ops" \
-    "$platform_base_hash" "$platform_ops_hash" "$bound_product_sha" "$operations_commit" "$manifest_sha" <<'REMOTE_OPERATOR_RELEASE'
-__RELEASE_STATE_PYTHON__
-REMOTE_OPERATOR_RELEASE
+    "$platform_base_hash" "$platform_ops_hash" "$bound_product_sha" "$operations_commit" "$manifest_sha"
   )" || preflight_fail operator_release_binding
-  IFS=$'\t' read -r active_release_sha active_runtime_image active_web_image <<< "$release_binding"
+  IFS=$'\t' read -r active_release_sha active_runtime_image active_web_image < <(printf '%s\n' "$release_binding")
   [[ "$active_release_sha" =~ ^[0-9a-f]{40}$ && "$active_runtime_image" =~ ^sha256:[0-9a-f]{64}$ && "$active_web_image" =~ ^sha256:[0-9a-f]{64}$ ]] || preflight_fail operator_release_binding
   release_dir="$release_root/$active_release_sha"
   app_working_dir="$release_dir/source/platform-infra"
@@ -619,12 +642,8 @@ REMOTE_OPERATOR_RELEASE
   for service in intake offer production exports web; do
     check_compose_labels "platform-infra-${service}-1" "$platform_project" "$app_working_dir" "$app_config_files" "$service" "platform_${service}"
   done
-  for service in intake offer production exports web; do
-    expected="$active_runtime_image"
-    [[ "$service" != web ]] || expected="$active_web_image"
-  observation="$(sudo -n docker inspect --format '{{json .}}' "platform-infra-${service}-1")"
-  /usr/bin/python3 -I - "$observation" "$expected" "$release_dir/manifest.json" <<'PY_RUNNING_IDENTITY'
-__OCI_HELPER_PYTHON__
+running_identity_source=__PREFLIGHT_OCI_PYTHON__
+running_identity_source+='
 import json, sys
 from pathlib import Path
 from catering_target_oci import check_running_container
@@ -636,7 +655,12 @@ else:
     # Legacy releases keep their observed immutable reference, without claiming a Config relation.
     if value.get("Image") != sys.argv[2] or value.get("State", {}).get("Running") is not True:
         raise SystemExit(1)
-PY_RUNNING_IDENTITY
+'
+  for service in intake offer production exports web; do
+    expected="$active_runtime_image"
+    [[ "$service" != web ]] || expected="$active_web_image"
+  observation="$(sudo -n docker inspect --format '{{json .}}' "platform-infra-${service}-1")"
+  printf '%s\n' "$running_identity_source" | /usr/bin/python3 -B -I - "$observation" "$expected" "$release_dir/manifest.json"
   done
 else
   for service in postgres intake offer production exports web; do
@@ -647,15 +671,18 @@ edge_config_files="$edge_base,$edge_ops"
 check_compose_labels "catering-edge-edge-1" "$edge_project" "$edge_working_dir" "$edge_config_files" edge edge
 
 [[ -f "$observer" && ! -L "$observer" ]] || preflight_fail backup_observer_file
-if ! observer_json="$(sudo -n /usr/bin/python3 -I "$observer" --check)"; then
+# Shell-quoted assignments avoid Bash materializing large heredocs on the target.
+# The operations-bound --check runs in memory; the installed sender needs no update.
+observer_check_source=__PREFLIGHT_BACKUP_PYTHON__
+if ! observer_json="$(printf '%s\n' "$observer_check_source" | sudo -n /usr/bin/python3 -B -I -)"; then
   preflight_fail backup_observer_command
 fi
-python3 - "$observer_json" <<'PY' || preflight_fail backup_observer_health
+python3 -B -c '
 import json, sys
 value = json.loads(sys.argv[1])
 if value.get("observer_run") != "completed" or value.get("backup_health") != "healthy":
     raise SystemExit(1)
-PY
+' "$observer_json" || preflight_fail backup_observer_health
 
 if [[ "$operator_mode" == "__CATERING_OPERATOR__" ]]; then
   sudo -n docker compose --env-file "$runtime_env" -f "$app_platform_base" -f "$app_platform_ops" -f "$app_override" config --format json >/dev/null || preflight_fail platform_compose_render
@@ -667,19 +694,19 @@ sudo -n docker compose --env-file "$runtime_env" -f "$edge_base" -f "$edge_ops" 
 if ! network_names="$(sudo -n docker network ls --format '{{.Name}}' | sort)"; then
   preflight_fail docker_network_list
 fi
-python3 - "$network_names" <<'PY' || preflight_fail docker_network_set
+python3 -B -c '
 import sys
 actual = set(filter(None, sys.argv[1].splitlines()))
 expected = {"bridge", "host", "none", "catering_private", "catering_ingress", "catering_public"}
 if actual != expected:
     raise SystemExit(1)
-PY
+' "$network_names" || preflight_fail docker_network_set
 
 networks_of() {
-  sudo -n docker inspect "$1" | python3 -c 'import json,sys; d=json.load(sys.stdin)[0]; print(",".join(sorted(d["NetworkSettings"]["Networks"].keys())))'
+  sudo -n docker inspect "$1" | python3 -B -c 'import json,sys; d=json.load(sys.stdin)[0]; print(",".join(sorted(d["NetworkSettings"]["Networks"].keys())))'
 }
 ports_of() {
-  sudo -n docker inspect "$1" | python3 -c 'import json,sys; d=json.load(sys.stdin)[0]; p=d["HostConfig"].get("PortBindings") or {}; print(",".join(sorted(k+"="+",".join(str(x.get("HostPort","")) for x in (v or [])) for k,v in p.items())))'
+  sudo -n docker inspect "$1" | python3 -B -c 'import json,sys; d=json.load(sys.stdin)[0]; p=d["HostConfig"].get("PortBindings") or {}; print(",".join(sorted(k+"="+",".join(str(x.get("HostPort","")) for x in (v or [])) for k,v in p.items())))'
 }
 image_of() {
   sudo -n docker inspect --format '{{.Image}}' "$1"
@@ -693,7 +720,7 @@ for service in postgres intake offer production exports web; do
 done
 require_running "catering-edge-edge-1" || preflight_fail container_running_edge
 
-if ! writer_mode="$(sudo -n docker inspect catering-edge-edge-1 | python3 -c 'import json,sys; d=json.load(sys.stdin)[0]; hits=[v.split("=",1)[1] for v in d.get("Config",{}).get("Env",[]) if v.startswith("CATERING_WRITER_MODE=")]; print(hits[0] if len(hits)==1 else "")')"; then
+if ! writer_mode="$(sudo -n docker inspect catering-edge-edge-1 | python3 -B -c 'import json,sys; d=json.load(sys.stdin)[0]; hits=[v.split("=",1)[1] for v in d.get("Config",{}).get("Env",[]) if v.startswith("CATERING_WRITER_MODE=")]; print(hits[0] if len(hits)==1 else "")')"; then
   preflight_fail writer_mode_read
 fi
 [[ "$writer_mode" == "enabled" ]] || preflight_fail writer_mode
@@ -714,7 +741,7 @@ for service in postgres intake offer production exports web; do
 done
 [[ "$(ports_of catering-edge-edge-1)" == "443/tcp=443,80/tcp=80" ]] || preflight_fail edge_ports
 
-if ! postgres_volume="$(sudo -n docker inspect platform-infra-postgres-1 | python3 -c 'import json,sys; d=json.load(sys.stdin)[0]; hits=[m.get("Name","") for m in d.get("Mounts",[]) if m.get("Type")=="volume" and m.get("Destination")=="/var/lib/postgresql/data"]; print(hits[0] if len(hits)==1 else "")')"; then
+if ! postgres_volume="$(sudo -n docker inspect platform-infra-postgres-1 | python3 -B -c 'import json,sys; d=json.load(sys.stdin)[0]; hits=[m.get("Name","") for m in d.get("Mounts",[]) if m.get("Type")=="volume" and m.get("Destination")=="/var/lib/postgresql/data"]; print(hits[0] if len(hits)==1 else "")')"; then
   preflight_fail postgres_volume_read
 fi
 [[ -n "$postgres_volume" ]] || preflight_fail postgres_volume
@@ -740,6 +767,19 @@ parse_preflight_binding() {
     ACTIVE_RELEASE_SHA="$(printf '%s\n' "${output}" | sed -n 's/.* runtime_state=release:\([0-9a-f]\{40\}\).*/\1/p' | tail -n 1)"
     [[ "${ACTIVE_RELEASE_SHA}" =~ ^[0-9a-f]{40}$ ]] || fail "operator release state output invalid"
   fi
+}
+
+bind_preservation_baseline() {
+  [[ -z "${EXPECTED_POSTGRES_VOLUME}" && -z "${EXPECTED_EDGE_IMAGE}" ]] || fail "preservation baseline is already bound"
+  [[ -n "${POSTGRES_VOLUME}" && "${EDGE_IMAGE}" =~ ^sha256:[0-9a-f]{64}$ ]] || fail "preservation baseline is invalid"
+  # Bind the actual predecessor under lock; later observations cannot replace it.
+  readonly EXPECTED_POSTGRES_VOLUME="${POSTGRES_VOLUME}"
+  readonly EXPECTED_EDGE_IMAGE="${EDGE_IMAGE}"
+}
+
+preservation_binding_matches() {
+  [[ -n "${EXPECTED_POSTGRES_VOLUME}" && -n "${EXPECTED_EDGE_IMAGE}" && \
+    "${POSTGRES_VOLUME}" == "${EXPECTED_POSTGRES_VOLUME}" && "${EDGE_IMAGE}" == "${EXPECTED_EDGE_IMAGE}" ]]
 }
 
 run_production_preflight() {
@@ -1273,7 +1313,7 @@ REMOTE_ACTIVATE
 verify_remote_override_and_health() {
   local override_path="$1"
   local release_dir="${override_path%/*}"
-  render_trusted_template "__OCI_HELPER_PYTHON__" <<'REMOTE_VERIFY' | ssh_target bash -s -- "${release_dir}" "${override_path}" "${POSTGRES_VOLUME}" "${EDGE_IMAGE}"
+  render_trusted_template "__OCI_HELPER_PYTHON__" <<'REMOTE_VERIFY' | ssh_target bash -s -- "${release_dir}" "${override_path}" "${EXPECTED_POSTGRES_VOLUME}" "${EXPECTED_EDGE_IMAGE}"
 set -euo pipefail
 release_dir="$1"; override="$2"; expected_postgres_volume="$3"; expected_edge_image="$4"
 [[ "$release_dir" =~ ^/opt/catering-releases/[0-9a-fA-F]{40}$ ]] || exit 1
@@ -1429,6 +1469,7 @@ rollback_remote_application() {
     return 1
   fi
   parse_preflight_binding "${rebound}"
+  preservation_binding_matches || return 1
   verify_remote_override_and_health "${override_path}"
 }
 
@@ -1476,6 +1517,7 @@ run_production_update() {
   local locked
   locked="$(remote_preflight "${LOCK_OWNER}")"
   parse_preflight_binding "${locked}"
+  bind_preservation_baseline
   if [[ -n "${CATERING_TARGET_OPERATIONS_COMMIT}" ]]; then
     PREVIOUS_RELEASE_SHA="${ACTIVE_RELEASE_SHA}"
   fi
@@ -1504,6 +1546,10 @@ run_production_update() {
     return $?
   fi
   parse_preflight_binding "${postflight}"
+  if ! preservation_binding_matches; then
+    handle_production_failure
+    return $?
+  fi
   printf 'TARGET_UPDATE_STAGE stage=postflight status=success\n' >&2
   printf 'TARGET_UPDATE_STAGE stage=health status=start\n' >&2
   if ! verify_remote_override_and_health "${release_dir}/candidate-images.json"; then
@@ -1615,6 +1661,7 @@ run_production_apply() {
   local locked
   locked="$(remote_preflight "${LOCK_OWNER}")"
   parse_preflight_binding "${locked}"
+  bind_preservation_baseline
   PREVIOUS_RELEASE_SHA="${ACTIVE_RELEASE_SHA}"
   local locked_state
   if ! locked_state="$(inspect_remote_stage_release)"; then
@@ -1665,6 +1712,10 @@ run_production_apply() {
     return $?
   fi
   parse_preflight_binding "${postflight}"
+  if ! preservation_binding_matches; then
+    handle_production_failure
+    return $?
+  fi
   printf 'TARGET_UPDATE_STAGE stage=postflight status=success\n' >&2
   printf 'TARGET_UPDATE_STAGE stage=health status=start\n' >&2
   if ! verify_remote_override_and_health "${release_dir}/candidate-images.json"; then
@@ -1723,6 +1774,8 @@ run_production_verify() {
     fail "TARGET_PREFLIGHT_FAIL gate=remote_target_invariants"
   fi
   parse_preflight_binding "${output}"
+  # A separate verify process has only the current observation, not an apply baseline.
+  bind_preservation_baseline
   verify_remote_bundle
   verify_remote_stage_receipt
   verify_remote_override_and_health "${RELEASE_ROOT}/${DEPLOY_COMMIT_SHA}/candidate-images.json"
