@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.426
+version: 5.427
 date: 2026-10-03
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -2415,3 +2415,9 @@ Quelle: `8de2e96c8604f12da2ec14c39b187db04dfb61cf`. Der folgende Betriebsbericht
 - Ziel-Preflight nutzt jetzt sichere shell-gequotete Release-/OCI-/Observerassignments und Pipes. Nur die erreichten Common-Readfunktionen ändern den Quell-/Datentransport; ihre fünf Pythonprogramme haben identischen AST zur Basis. Sender-/Mutatorlogik und B sind unverändert.
 - Zwei meaningful R1-REDs und fokussiertes GREEN einschließlich echter Caller/Common-Validatoren; vollständiger gerenderter Preflight besteht jetzt auch macOS Bash 3.2. Linux-PR-CI erhält einen verpflichtenden Prozessbaumgate mit `strace` außerhalb Bash, großen bounded Records und großer alter-Heredoc-Negativkontrolle. Fehlender Tracer wird im bestehenden build-and-test-Job begrenzt erworben und sonst fail-closed behandelt.
 - Lokal geprüfter Korrekturstand ist noch keine Annahme: unabhängiger R1-Re-Review, genaue Commit-/Tree-/Artefaktbindung und vollständig grüne automatische PR-CI einschließlich Linux-Prozessbaum-/Syntaxnachweis bleiben offen. Kein Produktionskontakt, Workflowdispatch, Commit/Push oder Merge durch den Implementer.
+
+### 5.427 - 2026-10-03 — P4.3 Observer-Gate-Diagnostik
+
+- Vom angenommenen Main `b86f268…`: der vorhandene einmalige Observer-Ausgang wird bei einem Fehler als begrenzte, typgeprüfte JSON-Projektion auf stderr erhalten. Bekannte Reasoncodes, Epoch und vorhandene Statusflags überleben den Remote-/Operator-Fehlerpfad; unbekannte Felder und freie Fehlertexte werden nicht übernommen.
+- Nonzero bleibt `backup_observer_command`; Exit0 ohne completed/healthy bleibt `backup_observer_health`. Keine Änderung an Backup-/Restore-Policy, Lock, Freshness, Apply/Rollback, Retry oder v4-Bindungen. Keine zusätzlichen Record-Generationen gesammelt.
+- Root Cause des ursprünglichen Apply-Fehlers bleibt offen. Nur diagnostischen Evidenzverlust korrigiert; keine Produktionsabfrage, Wiederholung, Stage, Apply, Integration oder Hub-Writeback. Review-/CI-Annahme bleibt ein separates Gate. Details: `docs/agent-memory/2026-10-03-p43-backup-observer-diagnostics.md`.
