@@ -444,10 +444,10 @@ elif sys.argv[2] == 'release':
         old_observer = self.base / 'existing-observer.py'
         self.write(old_observer, b'not executed\n')
         shell = '''
-read() { "$P41_REAL_PYTHON" -B "$P41_PROBE" inspect read; builtin read "$@"; }
-sudo() { [[ "$1" == -n && "$2" == /usr/bin/python3 ]] || return 86; "$P41_REAL_PYTHON" -B "$P41_PROBE" consume "$boundary"; }
-/usr/bin/python3() { "$P41_REAL_PYTHON" -B "$P41_PROBE" consume "$boundary"; }
-python3() { "$P41_REAL_PYTHON" -B "$P41_PROBE" python json "$@"; }
+read() { command "$P41_REAL_PYTHON" -B "$P41_PROBE" inspect read; builtin read "$@"; }
+sudo() { [[ "$1" == -n && "$2" == /usr/bin/python3 ]] || return 86; command "$P41_REAL_PYTHON" -B "$P41_PROBE" consume "$boundary"; }
+/usr/bin/python3() { command "$P41_REAL_PYTHON" -B "$P41_PROBE" consume "$boundary"; }
+python3() { command "$P41_REAL_PYTHON" -B "$P41_PROBE" python json "$@"; }
 preflight_fail() { printf 'TARGET_PREFLIGHT_FAIL gate=%s\\n' "$1" >&2; return 1; }
 observer="$1"; release_root=/synthetic; requested_release_sha=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 source_platform_base=platform-infra/base; source_platform_ops=platform-infra/ops
@@ -468,6 +468,21 @@ release_dir=/synthetic
         self.assertTrue({'release', 'identity', 'observer'} <= {item['boundary'] for item in observed})
         self.assertFalse([item for item in observed if item['regular']], result.stderr)
 
+    def test_preflight_source_probe_runs_external_python_when_path_matches_stub(self):
+        readonly_shell = self.readonly_shell
+
+        def colliding_interpreter(command, **kwargs):
+            kwargs['env']['P41_REAL_PYTHON'] = '/usr/bin/python3'
+            stub = '/usr/bin/python3() { '
+            self.assertIn(stub, kwargs['input'])
+            # Stop a recursive stub before it exhausts Bash's stack, including Bash 3.2.
+            kwargs['input'] = kwargs['input'].replace(stub, stub +
+                '[[ ${P41_PROBE_ACTIVE:-0} == 0 ]] || return 86; P41_PROBE_ACTIVE=1; ', 1)
+            return readonly_shell(command, **kwargs)
+
+        with mock.patch.object(self, 'readonly_shell', side_effect=colliding_interpreter):
+            self.test_preflight_source_inputs_are_pipes_at_process_boundaries()
+
     def test_common_read_validators_use_pipes_for_source_and_record_input(self):
         probe = self.source_input_probe()
         artifact = dict(self.artifact, bundle_path='catering-backup-stream-' + 'q' * 20000)
@@ -480,8 +495,8 @@ release_dir=/synthetic
         checksum = self.write_record(attestation_path, record)
         result = self.readonly_shell(['/bin/bash', '-euo', 'pipefail', '-c', '''
 source "$1"; EXPECTED_UID="$2"
-read() { "$P41_REAL_PYTHON" -B "$P41_PROBE" inspect read; builtin read "$@"; }
-python3() { "$P41_REAL_PYTHON" -B "$P41_PROBE" python python "$@"; }
+read() { command "$P41_REAL_PYTHON" -B "$P41_PROBE" inspect read; builtin read "$@"; }
+python3() { command "$P41_REAL_PYTHON" -B "$P41_PROBE" python python "$@"; }
 read_record "$3" artifact
 printf '\\n'
 validate_attestation_record secret "$4" "$5"
@@ -547,7 +562,7 @@ preflight_fail() { printf 'TARGET_PREFLIGHT_FAIL gate=%s\\n' "$1" >&2; return 1;
 sudo() {
   [[ "$1" == -n && "$2" == /usr/bin/python3 ]] || return 86
   shift 2
-  "$P41_REAL_PYTHON" -B "$P41_BOOTSTRAP" "$@"
+  command "$P41_REAL_PYTHON" -B "$P41_BOOTSTRAP" "$@"
 }
 ''' + block + '\nprintf "%s\\n" "$observer_json"',
             capture_output=True, text=True, check=False, env=dict(os.environ,
