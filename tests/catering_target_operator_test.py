@@ -50,26 +50,17 @@ stage_binding = importlib.util.module_from_spec(STAGE_BINDING_SPEC)
 STAGE_BINDING_SPEC.loader.exec_module(stage_binding)
 
 
+OCI_PATH = ROOT / "platform-infra/scripts/catering_target_oci.py"
+OCI_SHA = hashlib.sha256(OCI_PATH.read_bytes()).hexdigest()
+
 PRODUCT_SHA = "1" * 40
 OPERATIONS_SHA = "2" * 40
 
 
-def docker_archive(config: dict[str, str]) -> tuple[str, bytes]:
-    config_bytes = json.dumps(config, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    image_id = "sha256:" + hashlib.sha256(config_bytes).hexdigest()
-    archive = io.BytesIO()
-    with tarfile.open(fileobj=archive, mode="w") as handle:
-        info = tarfile.TarInfo("manifest.json")
-        manifest = json.dumps([{"Config": image_id.split(":", 1)[1] + ".json", "RepoTags": None, "Layers": ["layer.tar"]}]).encode("utf-8")
-        info.size = len(manifest)
-        handle.addfile(info, io.BytesIO(manifest))
-        info = tarfile.TarInfo(image_id.split(":", 1)[1] + ".json")
-        info.size = len(config_bytes)
-        handle.addfile(info, io.BytesIO(config_bytes))
-        info = tarfile.TarInfo("layer.tar")
-        info.size = 0
-        handle.addfile(info, io.BytesIO(b""))
-    return image_id, archive.getvalue()
+def oci_docker_archive(kind: str, identity: str, mutation: str | None = None) -> tuple[str, bytes, str]:
+    from catering_target_v4_test import archive_fixture
+    bindings, archive, iid = archive_fixture(kind, identity, mutation)
+    return bindings["platformManifestDigest"], archive, iid
 
 
 def successful_main_push(commit: str) -> dict[str, str]:
@@ -82,7 +73,7 @@ def successful_main_push(commit: str) -> dict[str, str]:
     }
 
 
-def build_fixture_bundle(base: Path) -> tuple[Path, str, dict[str, tuple[str, bytes]], list[list[str]], Path]:
+def build_fixture_bundle(base: Path, *, identity: str = "manifest", mutation: str | None = None) -> tuple[Path, str, dict[str, tuple[str, bytes]], list[list[str]], Path]:
     source = base / "source"
     (source / "platform-infra/docker").mkdir(parents=True)
     (source / "platform-infra/docker/Dockerfile.runtime").write_text("FROM scratch\n", encoding="utf-8")
@@ -90,10 +81,12 @@ def build_fixture_bundle(base: Path) -> tuple[Path, str, dict[str, tuple[str, by
     (source / "platform-infra/docker-compose.catering-target.json").write_text('{"services":{}}\n', encoding="utf-8")
     (source / "platform-infra/docker-compose.catering-target.operations.json").write_text('{"services":{}}\n', encoding="utf-8")
     output = base / "bundle"
-    images = {
-        "runtime": docker_archive({"architecture": "amd64", "os": "linux", "rootfs": {"type": "layers", "diff_ids": []}}),
-        "web": docker_archive({"architecture": "amd64", "os": "linux", "rootfs": {"type": "layers", "diff_ids": []}}),
-    }
+    images = {}
+    build_iids = {}
+    for kind in ("runtime", "web"):
+        manifest_digest, archive, build_iid = oci_docker_archive(kind, identity, mutation)
+        images[kind] = (manifest_digest, archive)
+        build_iids[kind] = build_iid
     commands: list[list[str]] = []
 
     def docker(command: list[str], **kwargs: object) -> CompletedProcess[bytes]:
@@ -101,7 +94,7 @@ def build_fixture_bundle(base: Path) -> tuple[Path, str, dict[str, tuple[str, by
         if command[1] == "build":
             iidfile = Path(command[command.index("--iidfile") + 1])
             kind = "runtime" if command[command.index("--file") + 1].endswith("Dockerfile.runtime") else "web"
-            iidfile.write_text(images[kind][0] + "\n", encoding="utf-8")
+            iidfile.write_text(build_iids[kind] + "\n", encoding="utf-8")
             return CompletedProcess(command, 0, b"", b"")
         if command[1] == "save":
             for image_id, archive in images.values():
@@ -111,7 +104,7 @@ def build_fixture_bundle(base: Path) -> tuple[Path, str, dict[str, tuple[str, by
 
     def save(image_id: str, destination: Path) -> None:
         commands.append(["docker", "save", image_id])
-        archive = next(archive for bound_id, archive in images.values() if bound_id == image_id)
+        archive = next(images[kind][1] for kind, bound_id in build_iids.items() if bound_id == image_id)
         destination.write_bytes(gzip.compress(archive, compresslevel=1, mtime=0))
 
     def export_context(source_root: Path, product_commit: str, destination: Path) -> None:
@@ -140,8 +133,10 @@ def build_release_state_fixture(base: Path, *, current_bundle: bool) -> tuple[Pa
     ops_file = release / "source" / ops_name
     base_file.write_text('{"services":{}}\n', encoding="utf-8")
     ops_file.write_text('{"services":{}}\n', encoding="utf-8")
-    runtime_id = "sha256:" + "a" * 64
-    web_id = "sha256:" + "b" * 64
+    from catering_target_v4_test import archive_fixture
+    rb, ra, _ = archive_fixture('runtime', 'manifest')
+    wb, wa, _ = archive_fixture('web', 'manifest')
+    runtime_id, web_id = (rb['platformManifestDigest'], wb['platformManifestDigest']) if current_bundle else ('sha256:' + 'a'*64, 'sha256:' + 'b'*64)
     candidate = {
         "services": {
             **{service: {"image": runtime_id} for service in ("intake", "offer", "production", "exports")},
@@ -160,20 +155,20 @@ def build_release_state_fixture(base: Path, *, current_bundle: bool) -> tuple[Pa
     }
     manifest_sha = "0" * 64
     if current_bundle:
-        (release / "runtime-image.tar.gz").write_bytes(b"runtime archive fixture")
-        (release / "web-image.tar.gz").write_bytes(b"web archive fixture")
+        (release / "runtime-image.tar.gz").write_bytes(gzip.compress(ra))
+        (release / "web-image.tar.gz").write_bytes(gzip.compress(wa))
         for name in ("runtime-image.tar.gz", "web-image.tar.gz"):
             (release / name).chmod(0o644)
         manifest = {
-            "schemaVersion": 3,
+            "schemaVersion": 4,
             "repository": "AlexanderSmyslowski/catering-agents-platform",
             "targetId": "catering-prod-1",
             "platform": "linux/amd64",
             "productCommit": PRODUCT_SHA,
             "operationsCommit": OPERATIONS_SHA,
             "images": {
-                "runtime": {"imageId": runtime_id, "archive": "runtime-image.tar.gz", "services": ["intake", "offer", "production", "exports"]},
-                "web": {"imageId": web_id, "archive": "web-image.tar.gz", "services": ["web"]},
+                "runtime": {**rb, "archive": "runtime-image.tar.gz", "services": ["intake", "offer", "production", "exports"]},
+                "web": {**wb, "archive": "web-image.tar.gz", "services": ["web"]},
             },
             "artifacts": {
                 "candidate-images.json": hashlib.sha256(candidate_path.read_bytes()).hexdigest(),
@@ -222,17 +217,21 @@ class CateringTargetOperatorTests(unittest.TestCase):
             relative: hashlib.sha256(source_path.read_bytes()).hexdigest()
             for relative, source_path in source_files.items()
         }
-        runtime_image = "sha256:" + "a" * 64
-        web_image = "sha256:" + "b" * 64
+        from catering_target_v4_test import archive_fixture
+        rb, ra, _ = archive_fixture('runtime', 'manifest')
+        wb, wa, _ = archive_fixture('web', 'manifest')
+        runtime_image, web_image = rb['platformManifestDigest'], wb['platformManifestDigest']
         candidate = {"services": {
             "intake": {"image": runtime_image}, "offer": {"image": runtime_image},
             "production": {"image": runtime_image}, "exports": {"image": runtime_image},
             "web": {"image": web_image},
         }}
         (release / "candidate-images.json").write_text(json.dumps(candidate, sort_keys=True) + "\n", encoding="utf-8")
-        (release / "runtime-image.tar.gz").write_bytes(b"runtime archive")
-        (release / "web-image.tar.gz").write_bytes(b"web archive")
+        (release / "runtime-image.tar.gz").write_bytes(gzip.compress(ra))
+        (release / "web-image.tar.gz").write_bytes(gzip.compress(wa))
         shutil.copyfile(STAGE_BINDING_PATH, release / "stage-binding.py")
+        shutil.copyfile(OCI_PATH, release / "catering_target_oci.py")
+        (release / "catering_target_oci.py").chmod(0o644)
         for name in ("candidate-images.json", "runtime-image.tar.gz", "web-image.tar.gz", "stage-binding.py"):
             (release / name).chmod(0o644)
         artifacts = {name: hashlib.sha256((release / name).read_bytes()).hexdigest() for name in ("candidate-images.json", "runtime-image.tar.gz", "web-image.tar.gz")}
@@ -240,15 +239,15 @@ class CateringTargetOperatorTests(unittest.TestCase):
             release / "source", expected_uid=os.getuid(), expected_gid=os.getgid()
         )
         manifest = {
-            "schemaVersion": 3,
+            "schemaVersion": 4,
             "repository": operator.REPOSITORY,
             "targetId": operator.TARGET_ID,
             "platform": "linux/amd64",
             "productCommit": PRODUCT_SHA,
             "operationsCommit": OPERATIONS_SHA,
             "images": {
-                "runtime": {"imageId": runtime_image, "archive": "runtime-image.tar.gz", "services": ["intake", "offer", "production", "exports"]},
-                "web": {"imageId": web_image, "archive": "web-image.tar.gz", "services": ["web"]},
+                "runtime": {**rb, "archive": "runtime-image.tar.gz", "services": ["intake", "offer", "production", "exports"]},
+                "web": {**wb, "archive": "web-image.tar.gz", "services": ["web"]},
             },
             "artifacts": artifacts,
             "sourceFiles": source_files_sha256,
@@ -264,7 +263,7 @@ class CateringTargetOperatorTests(unittest.TestCase):
             uid, gid = os.getuid(), os.getgid()
             values = stage_binding.stage_values(
                 release, manifest_sha256=manifest_sha, product_commit=PRODUCT_SHA, operations_commit=OPERATIONS_SHA,
-                runtime_image=runtime_image, web_image=web_image, stage_binding_sha256=checker_sha,
+                runtime_image=runtime_image, web_image=web_image, stage_binding_sha256=checker_sha, oci_sha256=OCI_SHA,
                 expected_uid=uid, expected_gid=gid, require_production_release_root=False,
             )
             stage_binding.write_receipt(release, values, expected_uid=uid, expected_gid=gid)
@@ -276,7 +275,7 @@ class CateringTargetOperatorTests(unittest.TestCase):
             uid, gid = os.getuid(), os.getgid()
             values = stage_binding.stage_values(
                 release, manifest_sha256=manifest_sha, product_commit=PRODUCT_SHA, operations_commit=OPERATIONS_SHA,
-                runtime_image=runtime_image, web_image=web_image, stage_binding_sha256=checker_sha,
+                runtime_image=runtime_image, web_image=web_image, stage_binding_sha256=checker_sha, oci_sha256=OCI_SHA,
                 expected_uid=uid, expected_gid=gid, require_production_release_root=False,
             )
             stage_binding.write_receipt(release, values, expected_uid=uid, expected_gid=gid)
@@ -285,7 +284,7 @@ class CateringTargetOperatorTests(unittest.TestCase):
                 stage_binding.inspect_existing_release(
                     release, manifest_sha256=manifest_sha, product_commit=PRODUCT_SHA,
                     operations_commit=OPERATIONS_SHA, runtime_image=runtime_image, web_image=web_image,
-                    stage_binding_sha256=checker_sha, expected_uid=uid, expected_gid=gid,
+                    stage_binding_sha256=checker_sha, oci_sha256=OCI_SHA, expected_uid=uid, expected_gid=gid,
                     require_production_release_root=False,
                 ),
                 "reusable",
@@ -302,7 +301,7 @@ class CateringTargetOperatorTests(unittest.TestCase):
                 "operations_commit": OPERATIONS_SHA,
                 "runtime_image": runtime_image,
                 "web_image": web_image,
-                "stage_binding_sha256": checker_sha,
+                "stage_binding_sha256": checker_sha, "oci_sha256": OCI_SHA,
                 "expected_uid": uid,
                 "expected_gid": gid,
                 "require_production_release_root": False,
@@ -343,7 +342,7 @@ class CateringTargetOperatorTests(unittest.TestCase):
                     "operations_commit": OPERATIONS_SHA,
                     "runtime_image": runtime_image,
                     "web_image": web_image,
-                    "stage_binding_sha256": checker_sha,
+                    "stage_binding_sha256": checker_sha, "oci_sha256": OCI_SHA,
                     "expected_uid": uid,
                     "expected_gid": gid,
                     "require_production_release_root": False,
@@ -390,7 +389,7 @@ class CateringTargetOperatorTests(unittest.TestCase):
                 "operations_commit": OPERATIONS_SHA,
                 "runtime_image": runtime_image,
                 "web_image": web_image,
-                "stage_binding_sha256": checker_sha,
+                "stage_binding_sha256": checker_sha, "oci_sha256": OCI_SHA,
                 "expected_uid": os.getuid(),
                 "expected_gid": os.getgid(),
                 "require_production_release_root": False,
@@ -413,7 +412,7 @@ class CateringTargetOperatorTests(unittest.TestCase):
                 "operations_commit": OPERATIONS_SHA,
                 "runtime_image": runtime_image,
                 "web_image": web_image,
-                "stage_binding_sha256": checker_sha,
+                "stage_binding_sha256": checker_sha, "oci_sha256": OCI_SHA,
                 "expected_uid": uid,
                 "expected_gid": gid,
                 "require_production_release_root": False,
@@ -435,7 +434,7 @@ class CateringTargetOperatorTests(unittest.TestCase):
             uid, gid = os.getuid(), os.getgid()
             values = stage_binding.stage_values(
                 release, manifest_sha256=manifest_sha, product_commit=PRODUCT_SHA, operations_commit=OPERATIONS_SHA,
-                runtime_image=runtime_image, web_image=web_image, stage_binding_sha256=checker_sha,
+                runtime_image=runtime_image, web_image=web_image, stage_binding_sha256=checker_sha, oci_sha256=OCI_SHA,
                 expected_uid=uid, expected_gid=gid, require_production_release_root=False,
             )
             stage_binding.write_receipt(release, values, expected_uid=uid, expected_gid=gid)
@@ -443,7 +442,7 @@ class CateringTargetOperatorTests(unittest.TestCase):
                 stage_binding.inspect_existing_release(
                     release, manifest_sha256="f" * 64, product_commit=PRODUCT_SHA,
                     operations_commit=OPERATIONS_SHA, runtime_image="sha256:" + "c" * 64,
-                    web_image=web_image, stage_binding_sha256=checker_sha, expected_uid=uid, expected_gid=gid,
+                    web_image=web_image, stage_binding_sha256=checker_sha, oci_sha256=OCI_SHA, expected_uid=uid, expected_gid=gid,
                     require_production_release_root=False,
                 )
 
@@ -457,7 +456,7 @@ class CateringTargetOperatorTests(unittest.TestCase):
                 "operations_commit": OPERATIONS_SHA,
                 "runtime_image": runtime_image,
                 "web_image": web_image,
-                "stage_binding_sha256": checker_sha,
+                "stage_binding_sha256": checker_sha, "oci_sha256": OCI_SHA,
                 "expected_uid": uid,
                 "expected_gid": gid,
                 "require_production_release_root": False,
@@ -488,7 +487,7 @@ class CateringTargetOperatorTests(unittest.TestCase):
             uid, gid = os.getuid(), os.getgid()
             values = stage_binding.stage_values(
                 release, manifest_sha256=manifest_sha, product_commit=PRODUCT_SHA, operations_commit=OPERATIONS_SHA,
-                runtime_image=runtime_image, web_image=web_image, stage_binding_sha256=checker_sha,
+                runtime_image=runtime_image, web_image=web_image, stage_binding_sha256=checker_sha, oci_sha256=OCI_SHA,
                 expected_uid=uid, expected_gid=gid, require_production_release_root=False,
             )
             stage_binding.write_receipt(release, values, expected_uid=uid, expected_gid=gid)
@@ -497,7 +496,7 @@ class CateringTargetOperatorTests(unittest.TestCase):
                 stage_binding.inspect_existing_release(
                     release, manifest_sha256=manifest_sha, product_commit=PRODUCT_SHA,
                     operations_commit=OPERATIONS_SHA, runtime_image=runtime_image, web_image=web_image,
-                    stage_binding_sha256=checker_sha, expected_uid=uid, expected_gid=gid,
+                    stage_binding_sha256=checker_sha, oci_sha256=OCI_SHA, expected_uid=uid, expected_gid=gid,
                     require_production_release_root=False,
                 )
 
@@ -507,7 +506,7 @@ class CateringTargetOperatorTests(unittest.TestCase):
             uid, gid = os.getuid(), os.getgid()
             values = stage_binding.stage_values(
                 release, manifest_sha256=manifest_sha, product_commit=PRODUCT_SHA, operations_commit=OPERATIONS_SHA,
-                runtime_image=runtime_image, web_image=web_image, stage_binding_sha256=checker_sha,
+                runtime_image=runtime_image, web_image=web_image, stage_binding_sha256=checker_sha, oci_sha256=OCI_SHA,
                 expected_uid=uid, expected_gid=gid, require_production_release_root=False,
             )
             stage_binding.write_receipt(release, values, expected_uid=uid, expected_gid=gid)
@@ -515,7 +514,7 @@ class CateringTargetOperatorTests(unittest.TestCase):
             with self.assertRaises(stage_binding.StageBindingError):
                 stage_binding.stage_values(
                     release, manifest_sha256=manifest_sha, product_commit=PRODUCT_SHA, operations_commit=OPERATIONS_SHA,
-                    runtime_image=runtime_image, web_image=web_image, stage_binding_sha256=checker_sha,
+                    runtime_image=runtime_image, web_image=web_image, stage_binding_sha256=checker_sha, oci_sha256=OCI_SHA,
                     expected_uid=uid, expected_gid=gid, require_production_release_root=False,
                 )
 
@@ -525,7 +524,7 @@ class CateringTargetOperatorTests(unittest.TestCase):
             uid, gid = os.getuid(), os.getgid()
             values = stage_binding.stage_values(
                 release, manifest_sha256=manifest_sha, product_commit=PRODUCT_SHA, operations_commit=OPERATIONS_SHA,
-                runtime_image=runtime_image, web_image=web_image, stage_binding_sha256=checker_sha,
+                runtime_image=runtime_image, web_image=web_image, stage_binding_sha256=checker_sha, oci_sha256=OCI_SHA,
                 expected_uid=uid, expected_gid=gid, require_production_release_root=False,
             )
             stage_binding.write_receipt(release, values, expected_uid=uid, expected_gid=gid)
@@ -534,7 +533,7 @@ class CateringTargetOperatorTests(unittest.TestCase):
             with self.assertRaises(stage_binding.StageBindingError):
                 stage_binding.stage_values(
                     release, manifest_sha256=manifest_sha, product_commit=PRODUCT_SHA, operations_commit=OPERATIONS_SHA,
-                    runtime_image=runtime_image, web_image=web_image, stage_binding_sha256=checker_sha,
+                    runtime_image=runtime_image, web_image=web_image, stage_binding_sha256=checker_sha, oci_sha256=OCI_SHA,
                     expected_uid=uid, expected_gid=gid, require_production_release_root=False,
                 )
     def test_contract_and_inventory_accept_the_versioned_control_values(self) -> None:
@@ -736,6 +735,9 @@ class CateringTargetOperatorTests(unittest.TestCase):
             manifest_path = release / "manifest.json"
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             manifest["schemaVersion"] = 1
+            for item in manifest['images'].values():
+                item['imageId'] = item.pop('platformManifestDigest')
+                item.pop('indexDigest'); item.pop('configDigest')
             manifest.pop("sourceFiles")
             manifest.pop("sourceTreeSha256")
             manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -762,6 +764,9 @@ class CateringTargetOperatorTests(unittest.TestCase):
             manifest_path = release / "manifest.json"
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             manifest["schemaVersion"] = 1
+            for item in manifest['images'].values():
+                item['imageId'] = item.pop('platformManifestDigest')
+                item.pop('indexDigest'); item.pop('configDigest')
             manifest.pop("sourceFiles")
             manifest.pop("sourceTreeSha256")
             manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -793,6 +798,9 @@ class CateringTargetOperatorTests(unittest.TestCase):
             manifest_path = release / "manifest.json"
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             manifest["schemaVersion"] = 2
+            for item in manifest['images'].values():
+                item['imageId'] = item.pop('platformManifestDigest')
+                item.pop('indexDigest'); item.pop('configDigest')
             manifest.pop("sourceTreeSha256")
             manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
             manifest_path.chmod(0o644)
@@ -816,8 +824,8 @@ class CateringTargetOperatorTests(unittest.TestCase):
             )
             self.assertEqual(binding["commit"], PRODUCT_SHA)
 
-    def test_generated_v3_bundle_passes_candidate_installed_and_rollback_checks(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="catering-operator-release-state-v3-") as temporary:
+    def test_generated_v4_bundle_passes_candidate_installed_and_rollback_checks(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="catering-operator-release-state-v4-") as temporary:
             base = Path(temporary)
             bundle, manifest_sha, images, _, product_source = build_fixture_bundle(base)
             release_root = base / "releases"
@@ -899,8 +907,8 @@ class CateringTargetOperatorTests(unittest.TestCase):
             )
             self.assertEqual(rollback["commit"], PRODUCT_SHA)
 
-    def test_installed_v3_release_rejects_changed_compose_source(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="catering-operator-release-state-v3-drift-") as temporary:
+    def test_installed_v4_release_rejects_changed_compose_source(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="catering-operator-release-state-v4-drift-") as temporary:
             base = Path(temporary)
             bundle, manifest_sha, images, _, product_source = build_fixture_bundle(base)
             release_root = base / "releases"
@@ -941,8 +949,8 @@ class CateringTargetOperatorTests(unittest.TestCase):
                     expected_gid=os.getgid(),
                 )
 
-    def test_v3_candidate_release_rejects_unbound_source_tree_file(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="catering-operator-release-state-v3-tree-drift-") as temporary:
+    def test_v4_candidate_release_rejects_unbound_source_tree_file(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="catering-operator-release-state-v4-tree-drift-") as temporary:
             release_root, base_name, ops_name, manifest_sha = build_release_state_fixture(Path(temporary), current_bundle=True)
             release = release_root / PRODUCT_SHA
             source = release / "source"
@@ -1060,10 +1068,39 @@ class CateringTargetOperatorTests(unittest.TestCase):
             manifest = operator.verify_bundle(output, PRODUCT_SHA, OPERATIONS_SHA, manifest_sha, source)
             self.assertEqual(manifest["productCommit"], PRODUCT_SHA)
             self.assertEqual(manifest["operationsCommit"], OPERATIONS_SHA)
-            self.assertEqual(manifest["images"]["runtime"]["imageId"], images["runtime"][0])
-            self.assertEqual(manifest["images"]["web"]["imageId"], images["web"][0])
+            self.assertEqual(manifest["images"]["runtime"]["platformManifestDigest"], images["runtime"][0])
+            self.assertEqual(manifest["images"]["web"]["platformManifestDigest"], images["web"][0])
             self.assertEqual([command[1] for command in commands], ["build", "save", "build", "save"])
             self.assertTrue(all(command[0] == "docker" for command in commands))
+
+    def test_oci_build_iid_binds_manifest_runtime_reference_in_v4_bundle(self) -> None:
+        for identity in ("index", "manifest"):
+            with self.subTest(identity=identity), tempfile.TemporaryDirectory(prefix="catering-operator-oci-") as temporary:
+                try:
+                    output, manifest_sha, images, commands, source = build_fixture_bundle(Path(temporary), identity=identity)
+                except operator.OperatorError as exc:
+                    self.fail(f"valid OCI {identity} build must bind its manifest digest: {exc}")
+                manifest = operator.verify_bundle(output, PRODUCT_SHA, OPERATIONS_SHA, manifest_sha, source)
+                self.assertEqual(manifest["schemaVersion"], 4)
+                candidate = json.loads((output / "candidate-images.json").read_text())
+                for kind, services in (("runtime", ("intake", "offer", "production", "exports")), ("web", ("web",))):
+                    manifest_digest, _, build_iid = oci_docker_archive(kind, identity)
+                    self.assertEqual(identity == "manifest", build_iid == manifest_digest)
+                    self.assertEqual(manifest["images"][kind]["platformManifestDigest"], manifest_digest)
+                    for service in services:
+                        self.assertEqual(candidate["services"][service]["image"], manifest_digest)
+                    self.assertIn(["docker", "save", build_iid], commands)
+
+
+    def test_oci_bundle_rejects_unbound_or_invalid_identity_chain(self) -> None:
+        for mutation in ("unrelated-iid", "tampered-index", "tampered-manifest", "tampered-config",
+                         "missing-manifest", "ambiguous-platform", "wrong-descriptor-platform",
+                         "wrong-config-platform", "wrong-manifest-size", "wrong-config-size",
+                         "wrong-manifest-type", "wrong-config-type", "different-docker-config", "duplicate-config"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory(prefix="catering-operator-oci-invalid-") as temporary:
+                with self.assertRaises(operator.OperatorError):
+                    build_fixture_bundle(Path(temporary), identity="index", mutation=mutation)
+                self.assertFalse((Path(temporary) / "bundle").exists())
 
     def test_manifest_sha_mismatch_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory(prefix="catering-operator-manifest-") as temporary:
@@ -1181,4 +1218,6 @@ class CateringTargetOperatorTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
+    from catering_target_v4_test import V4ContractTests
+
     unittest.main()

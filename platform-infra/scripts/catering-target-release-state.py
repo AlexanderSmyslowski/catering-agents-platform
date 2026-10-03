@@ -12,6 +12,21 @@ import sys
 from pathlib import Path, PurePosixPath
 
 
+def _oci():
+    # Streamed execution preloads the trusted operations helper. Local execution
+    # resolves the versioned sibling rather than searching cwd or PYTHONPATH.
+    import importlib.util
+    if __file__ == "<stdin>":
+        module = sys.modules.get("catering_target_oci")
+        if module is None:
+            raise ValueError("trusted OCI helper is missing")
+        return module
+    spec = importlib.util.spec_from_file_location("catering_target_oci", Path(__file__).with_name("catering_target_oci.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 REPOSITORY = "AlexanderSmyslowski/catering-agents-platform"
 TARGET_ID = "catering-prod-1"
 DISCOVER_INSTALLED = "__CATERING_DISCOVER_INSTALLED__"
@@ -167,7 +182,7 @@ def _verify_manifest(
         # Schema 1 is retained only so an existing installed release can be verified or rolled back.
         _require(allow_legacy_schema and set(manifest) == LEGACY_MANIFEST_KEYS)
     elif type(schema_version) is int and schema_version == 2:
-        _require(set(manifest) == CURRENT_MANIFEST_V2_KEYS)
+        _require(allow_legacy_schema and set(manifest) == CURRENT_MANIFEST_V2_KEYS)
         source_files = manifest.get("sourceFiles")
         _require(
             isinstance(source_files, dict)
@@ -179,7 +194,8 @@ def _verify_manifest(
         for relative, expected_sha256 in source_files.items():
             source_path = _regular_file(source / relative, 0o644, expected_uid, expected_gid)
             _require(_digest(source_path) == expected_sha256)
-    elif type(schema_version) is int and schema_version == 3:
+    elif type(schema_version) is int and schema_version in {3, 4}:
+        _require(schema_version == 4 or allow_legacy_schema)
         _require(set(manifest) == CURRENT_MANIFEST_V3_KEYS)
         source_files = manifest.get("sourceFiles")
         _require(
@@ -219,7 +235,18 @@ def _verify_manifest(
             "services": list(SERVICES["web"]),
         },
     }
-    _require(manifest["images"] == expected_images)
+    if schema_version == 4:
+        images = manifest['images']
+        _require(isinstance(images, dict) and set(images) == {"runtime", "web"})
+        for name, reference in (("runtime", runtime_image), ("web", web_image)):
+            image = images[name]
+            try:
+                _oci().verify_image(release / ARCHIVES[name], image)
+            except ValueError as exc:
+                raise ReleaseBindingError("release OCI image relation mismatch") from exc
+            _require(image['archive'] == ARCHIVES[name] and image['services'] == list(SERVICES[name]) and image['platformManifestDigest'] == reference)
+    else:
+        _require(manifest["images"] == expected_images)
     artifacts = manifest["artifacts"]
     _require(isinstance(artifacts, dict) and set(artifacts) == ARTIFACTS)
     for name in ARTIFACTS:

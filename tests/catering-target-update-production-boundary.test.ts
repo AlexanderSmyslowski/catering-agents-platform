@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -12,6 +13,124 @@ const smoke = () => readFileSync(path.join(root, "platform-infra/scripts/caterin
 const operatorSmoke = () => readFileSync(path.join(root, "platform-infra/scripts/catering-target-operator-smoke.mjs"), "utf8");
 
 describe("Catering target production command boundary", () => {
+
+  it("executes remote bundle verification against v4 archive bytes and rejects rehashed R/M/C drift", () => {
+    const production = readFileSync(path.join(root, "platform-infra/scripts/catering-target-production-update.sh"), "utf8");
+    const block = production.match(/<<'REMOTE_BUNDLE_VERIFY'[^\n]*\n([\s\S]*?)\nREMOTE_BUNDLE_VERIFY/)?.[1];
+    expect(block).toBeTruthy();
+    const program = String.raw`
+import hashlib, json, sys, tempfile
+from pathlib import Path
+sys.path.insert(0, str(Path.cwd() / 'tests'))
+from catering_target_operator_test import build_fixture_bundle, operator, PRODUCT_SHA, OPERATIONS_SHA
+sys.modules['catering_target_oci'] = operator._oci()
+script = json.loads(sys.argv[1]).replace('__OCI_HELPER_PYTHON__', '').replace('root = Path(release_dir)', 'root = Path(fixture_root)')
+for mutation in (None, 'indexDigest', 'platformManifestDigest', 'configDigest'):
+    with tempfile.TemporaryDirectory() as tmp:
+        out, sha, _, _, _ = build_fixture_bundle(Path(tmp))
+        manifest = json.loads((out / 'manifest.json').read_text())
+        runtime = manifest['images']['runtime']['platformManifestDigest']
+        web = manifest['images']['web']['platformManifestDigest']
+        if mutation:
+            manifest['images']['runtime'][mutation] = 'sha256:' + 'f'*64
+            (out / 'manifest.json').write_text(json.dumps(manifest))
+            sha = hashlib.sha256((out / 'manifest.json').read_bytes()).hexdigest()
+        sys.argv = ['-', '/opt/catering-releases/' + PRODUCT_SHA, sha, PRODUCT_SHA, OPERATIONS_SHA, runtime, web]
+        try:
+            exec(compile(script, '<remote-bundle>', 'exec'), {'fixture_root': str(out), '__name__': '__main__'})
+        except (SystemExit, ValueError):
+            if mutation is None: raise
+        else:
+            if mutation: raise AssertionError('remote runner accepted altered ' + mutation)
+`;
+    const result = spawnSync("python3", ["-B", "-c", program, JSON.stringify(block)], { cwd: root, encoding: "utf8" });
+    expect(result.status, result.stderr).toBe(0);
+  });
+
+  it("executes trusted rendered preflight and verify container guards in isolated Python", () => {
+    const production = readFileSync(path.join(root, "platform-infra/scripts/catering-target-production-update.sh"), "utf8");
+    const renderer = production.match(/render_trusted_template\(\) \{[\s\S]*?\n\}/)?.[0];
+    expect(renderer).toBeTruthy();
+    const blocks = [...production.matchAll(/<<'PY_RUNNING_IDENTITY'\n([\s\S]*?)\nPY_RUNNING_IDENTITY/g)];
+    expect(blocks).toHaveLength(2);
+    const directory = mkdtempSync(path.join(tmpdir(), "catering-v4-observed-"));
+    const manifest = path.join(directory, "manifest.json");
+    writeFileSync(manifest, JSON.stringify({ schemaVersion: 4 }));
+    const m = "sha256:" + "a".repeat(64);
+    const c = "sha256:" + "b".repeat(64);
+    for (const block of blocks) {
+      const rendered = spawnSync("/bin/bash", ["-c", renderer + "\nrender_trusted_template __OCI_HELPER_PYTHON__"], {
+        input: block[1], encoding: "utf8", env: { ...process.env, OPERATIONS_ROOT: root },
+      });
+      expect(rendered.status, rendered.stderr).toBe(0);
+      for (const [observation, success] of [
+        [{ Image: m, State: { Running: true } }, true],
+        [{ Image: m, State: { Running: true }, ImageManifestDescriptor: { digest: m } }, true],
+        [{ Image: c, State: { Running: true } }, false],
+        [{ Image: m, State: { Running: true }, ImageManifestDescriptor: { digest: c } }, false],
+        [{ Image: m, State: { Running: false } }, false],
+      ] as const) {
+        const checked = spawnSync("python3", ["-B", "-I", "-", JSON.stringify(observation), m, manifest], {
+          input: rendered.stdout, encoding: "utf8",
+        });
+        expect(checked.status === 0, checked.stderr).toBe(success);
+      }
+    }
+  });
+
+  it("preloads the trusted OCI module before executing the streamed stage tool", () => {
+    const production = readFileSync(path.join(root, "platform-infra/scripts/catering-target-production-update.sh"), "utf8");
+    const renderer = production.match(/render_trusted_template\(\) \{[\s\S]*?\n\}/)?.[0];
+    const tool = path.join(root, "platform-infra/scripts/catering-target-stage-binding.py");
+    const rendered = spawnSync("/bin/bash", ["-c", renderer + '\nrender_trusted_template __STAGE_BINDING_PYTHON__ "$1"', "renderer", tool], {
+      input: "__STAGE_BINDING_PYTHON__\n", encoding: "utf8", env: { ...process.env, OPERATIONS_ROOT: root },
+    });
+    expect(rendered.status, rendered.stderr).toBe(0);
+    const checked = spawnSync("python3", ["-B", "-I", "-", "--help"], { input: rendered.stdout, encoding: "utf8" });
+    expect(checked.status, checked.stderr).toBe(0);
+    expect(checked.stdout).toContain("inspect-existing");
+  });
+
+  it("executes post-load inspection and exported manifest/config relation checks", () => {
+    const production = readFileSync(path.join(root, "platform-infra/scripts/catering-target-production-update.sh"), "utf8");
+    const block = production.match(/<<'PY_LOADED_IDENTITY'\n([\s\S]*?)\nPY_LOADED_IDENTITY/)?.[1];
+    expect(block).toBeTruthy();
+    const program = String.raw`
+import json, os, sys, tempfile
+from pathlib import Path
+sys.path.insert(0, str(Path.cwd() / 'tests'))
+from catering_target_operator_test import build_fixture_bundle, operator
+sys.modules['catering_target_oci'] = operator._oci()
+script = json.loads(sys.argv[1]).replace('__OCI_HELPER_PYTHON__', '')
+with tempfile.TemporaryDirectory() as tmp:
+    out, _, _, _, _ = build_fixture_bundle(Path(tmp))
+    original = json.loads((out / 'manifest.json').read_text())
+    fixtures = {v['platformManifestDigest']: str(out / v['archive']) for v in original['images'].values()}
+    fake = Path(tmp) / 'docker'
+    fake.write_text('#!' + sys.executable + '\n' + 'import gzip,json,os,sys\nfrom pathlib import Path\n' +
+        'fixtures=' + repr(fixtures) + '\n' +
+        'reference=sys.argv[-1]\nassert reference in fixtures\n' +
+        'if sys.argv[1:3] == ["image","inspect"]:\n print(json.dumps({"Id": reference if os.environ["OBSERVATION"] != "wrong-id" else "sha256:"+"f"*64, "Os":"linux", "Architecture":"amd64"}))\n' +
+        'elif sys.argv[1] == "save":\n sys.stdout.buffer.write(gzip.decompress(Path(fixtures[reference]).read_bytes()))\n' +
+        'else: raise SystemExit(1)\n')
+    fake.chmod(0o755)
+    os.environ['PATH'] = tmp + os.pathsep + os.environ['PATH']
+    for mutation in ('valid', 'wrong-id', 'wrong-config'):
+        os.environ['OBSERVATION'] = mutation
+        manifest = json.loads(json.dumps(original))
+        if mutation == 'wrong-config': manifest['images']['runtime']['configDigest'] = 'sha256:' + 'f'*64
+        (out / 'manifest.json').write_text(json.dumps(manifest))
+        sys.argv = ['-', str(out / 'manifest.json')]
+        try:
+            exec(compile(script, '<remote-loaded>', 'exec'), {'__name__': '__main__'})
+        except (SystemExit, ValueError):
+            if mutation == 'valid': raise
+        else:
+            if mutation != 'valid': raise AssertionError('accepted loaded ' + mutation)
+`;
+    const result = spawnSync("python3", ["-B", "-c", program, JSON.stringify(block)], { cwd: root, encoding: "utf8" });
+    expect(result.status, result.stderr).toBe(0);
+  });
 
   it("keeps every remote Bash heredoc syntactically valid", () => {
     const production = readFileSync(
@@ -65,7 +184,7 @@ describe("Catering target production command boundary", () => {
       path.join(root, "platform-infra/scripts/catering-target-production-update.sh"),
       "utf8"
     );
-    const match = production.match(/<<'REMOTE_BUNDLE_VERIFY'\n([\s\S]*?)\nREMOTE_BUNDLE_VERIFY/);
+    const match = production.match(/<<'REMOTE_BUNDLE_VERIFY'[^\n]*\n([\s\S]*?)\nREMOTE_BUNDLE_VERIFY/);
     expect(match?.[1], "REMOTE_BUNDLE_VERIFY block missing").toBeTruthy();
     const check = spawnSync("python3", ["-c", "import ast,sys; ast.parse(sys.stdin.read())"], {
       input: match?.[1] ?? "",

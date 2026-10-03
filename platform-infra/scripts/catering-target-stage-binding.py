@@ -16,6 +16,21 @@ from pathlib import Path
 from typing import Any
 
 
+def _oci():
+    # Streamed execution preloads the trusted operations helper. Local execution
+    # resolves the versioned sibling rather than searching cwd or PYTHONPATH.
+    import importlib.util
+    if __file__ == "<stdin>":
+        module = sys.modules.get("catering_target_oci")
+        if module is None:
+            raise ValueError("trusted OCI helper is missing")
+        return module
+    spec = importlib.util.spec_from_file_location("catering_target_oci", Path(__file__).with_name("catering_target_oci.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 IMAGE_ID_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -28,7 +43,7 @@ MANIFEST_KEYS = {
     "images", "artifacts", "sourceFiles", "sourceTreeSha256",
 }
 RELEASE_FILES = {
-    "candidate-images.json", "runtime-image.tar.gz", "web-image.tar.gz", "manifest.json", "stage-binding.py",
+    "candidate-images.json", "runtime-image.tar.gz", "web-image.tar.gz", "manifest.json", "stage-binding.py", "catering_target_oci.py",
 }
 SERVICE_NAMES = {"intake", "offer", "production", "exports", "web"}
 
@@ -189,6 +204,7 @@ def inspect_existing_release(
     runtime_image: str,
     web_image: str,
     stage_binding_sha256: str,
+    oci_sha256: str,
     require_production_release_root: bool = True,
     expected_uid: int | None = 0,
     expected_gid: int | None = 0,
@@ -212,6 +228,7 @@ def inspect_existing_release(
         runtime_image=runtime_image,
         web_image=web_image,
         stage_binding_sha256=stage_binding_sha256,
+        oci_sha256=oci_sha256,
         require_production_release_root=require_production_release_root,
         expected_uid=expected_uid,
         expected_gid=expected_gid,
@@ -246,7 +263,7 @@ def _source_file_digests(
 
 
 def _validated_source_manifest(manifest: Any) -> dict[str, str]:
-    if not isinstance(manifest, dict) or manifest.get("schemaVersion") != 3 or set(manifest) != MANIFEST_KEYS:
+    if not isinstance(manifest, dict) or manifest.get("schemaVersion") != 4 or set(manifest) != MANIFEST_KEYS:
         raise StageBindingError("stage manifest source binding is invalid")
     source_files = manifest.get("sourceFiles")
     if not isinstance(source_files, dict) or set(source_files) != set(SOURCE_COMPOSE_FILES):
@@ -286,6 +303,7 @@ def stage_values(
     runtime_image: str,
     web_image: str,
     stage_binding_sha256: str,
+    oci_sha256: str,
     require_production_release_root: bool = True,
     expected_uid: int | None = 0,
     expected_gid: int | None = 0,
@@ -295,7 +313,7 @@ def stage_values(
         raise StageBindingError("stage release path is invalid")
     if Path(release).name != product_commit or not COMMIT_RE.fullmatch(product_commit) or not COMMIT_RE.fullmatch(operations_commit):
         raise StageBindingError("stage commit binding is invalid")
-    if not SHA256_RE.fullmatch(manifest_sha256) or not SHA256_RE.fullmatch(stage_binding_sha256):
+    if not SHA256_RE.fullmatch(manifest_sha256) or not SHA256_RE.fullmatch(stage_binding_sha256) or not SHA256_RE.fullmatch(oci_sha256):
         raise StageBindingError("stage digest binding is invalid")
     if not IMAGE_ID_RE.fullmatch(runtime_image) or not IMAGE_ID_RE.fullmatch(web_image):
         raise StageBindingError("stage image binding is invalid")
@@ -312,6 +330,9 @@ def stage_values(
     runtime_path = _regular(release_dir, "runtime-image.tar.gz", mode=0o644, uid=expected_uid, gid=expected_gid)
     web_path = _regular(release_dir, "web-image.tar.gz", mode=0o644, uid=expected_uid, gid=expected_gid)
     binding_path = _regular(release_dir, "stage-binding.py", mode=0o644, uid=expected_uid, gid=expected_gid)
+    oci_path = _regular(release_dir, "catering_target_oci.py", mode=0o644, uid=expected_uid, gid=expected_gid)
+    if _digest(oci_path) != oci_sha256:
+        raise StageBindingError("OCI helper tool digest mismatch")
     if _digest(binding_path) != stage_binding_sha256:
         raise StageBindingError("stage binding tool digest mismatch")
     if _digest(manifest_path) != manifest_sha256:
@@ -327,7 +348,7 @@ def stage_values(
     if source_tree_sha256(source_root, expected_uid=expected_uid, expected_gid=expected_gid) != tree_sha256:
         raise StageBindingError("stage source tree digest mismatch")
     if (
-        manifest.get("schemaVersion") != 3
+        manifest.get("schemaVersion") != 4
         or manifest.get("repository") != "AlexanderSmyslowski/catering-agents-platform"
         or manifest.get("targetId") != "catering-prod-1"
         or manifest.get("platform") != "linux/amd64"
@@ -335,11 +356,20 @@ def stage_values(
         or manifest.get("operationsCommit") != operations_commit
     ):
         raise StageBindingError("stage manifest commit binding mismatch")
-    if manifest.get("images") != {
-        "runtime": {"imageId": runtime_image, "archive": "runtime-image.tar.gz", "services": ["intake", "offer", "production", "exports"]},
-        "web": {"imageId": web_image, "archive": "web-image.tar.gz", "services": ["web"]},
-    }:
-        raise StageBindingError("stage manifest image binding mismatch")
+    images = manifest.get("images")
+    if not isinstance(images, dict) or set(images) != {"runtime", "web"}:
+        raise StageBindingError("stage manifest image set mismatch")
+    for name, reference, path, services in (
+        ("runtime", runtime_image, runtime_path, ["intake", "offer", "production", "exports"]),
+        ("web", web_image, web_path, ["web"]),
+    ):
+        image = images[name]
+        try:
+            _oci().verify_image(path, image)
+        except ValueError as exc:
+            raise StageBindingError("stage OCI image relation mismatch") from exc
+        if image['platformManifestDigest'] != reference or image['archive'] != path.name or image['services'] != services:
+            raise StageBindingError("stage manifest image binding mismatch")
     digests = {
         "candidate-images.json": _digest(candidate_path),
         "runtime-image.tar.gz": _digest(runtime_path),
@@ -355,7 +385,7 @@ def stage_values(
     if json.loads(candidate_path.read_text(encoding="utf-8")) != expected_candidate:
         raise StageBindingError("stage candidate image binding mismatch")
     values = {
-        "schema_version": "2",
+        "schema_version": "4",
         "product_commit": product_commit,
         "operations_commit": operations_commit,
         "manifest_sha256": manifest_sha256,
@@ -366,6 +396,9 @@ def stage_values(
         "web_image": web_image,
         "source_tree_sha256": tree_sha256,
         "stage_binding_sha256": stage_binding_sha256,
+        "oci_sha256": oci_sha256,
+        **{f"{name}_{field}": image[key] for name, image in images.items()
+           for field, key in (("index_digest", "indexDigest"), ("platform_manifest_digest", "platformManifestDigest"), ("config_digest", "configDigest"))},
         **{
             SOURCE_COMPOSE_FILES[relative]: source_bindings[relative]
             for relative in SOURCE_COMPOSE_FILES
@@ -422,6 +455,7 @@ def _main() -> int:
         receipt.add_argument("runtime_image")
         receipt.add_argument("web_image")
         receipt.add_argument("stage_binding_sha256")
+        receipt.add_argument("oci_sha256")
     source_check = actions.add_parser("verify-source")
     source_check.add_argument("source_root", type=Path)
     source_check.add_argument("manifest_path", type=Path)
@@ -440,6 +474,7 @@ def _main() -> int:
                 runtime_image=args.runtime_image,
                 web_image=args.web_image,
                 stage_binding_sha256=args.stage_binding_sha256,
+                oci_sha256=args.oci_sha256,
             ))
             return 0
         values = stage_values(
@@ -450,6 +485,7 @@ def _main() -> int:
             runtime_image=args.runtime_image,
             web_image=args.web_image,
             stage_binding_sha256=args.stage_binding_sha256,
+                oci_sha256=args.oci_sha256,
         )
         if args.action == "write":
             write_receipt(args.release_dir, values)

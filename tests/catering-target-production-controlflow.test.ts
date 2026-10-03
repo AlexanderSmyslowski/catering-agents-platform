@@ -67,15 +67,15 @@ function runProduction(
   );
   const commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
   const manifestText = JSON.stringify({
-    schemaVersion: 3,
+    schemaVersion: 4,
     repository: "AlexanderSmyslowski/catering-agents-platform",
     targetId: "catering-prod-1",
     platform: "linux/amd64",
     productCommit: commit,
     operationsCommit: commit,
     images: {
-      runtime: { imageId: runtimeImage, archive: "runtime-image.tar.gz", services: ["intake", "offer", "production", "exports"] },
-      web: { imageId: webImage, archive: "web-image.tar.gz", services: ["web"] },
+      runtime: { indexDigest: "sha256:" + "a".repeat(64), platformManifestDigest: runtimeImage, configDigest: "sha256:" + "c".repeat(64), archive: "runtime-image.tar.gz", services: ["intake", "offer", "production", "exports"] },
+      web: { indexDigest: "sha256:" + "b".repeat(64), platformManifestDigest: webImage, configDigest: "sha256:" + "d".repeat(64), archive: "web-image.tar.gz", services: ["web"] },
     },
     artifacts,
     sourceFiles,

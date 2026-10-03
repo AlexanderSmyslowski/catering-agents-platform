@@ -427,6 +427,37 @@ verify_runtime_ddl_unchanged() {
   [[ "${installed_hashes}" == "${expected}" ]] || fail "runtime DDL drift: explicit migration approval required"
 }
 
+# Render trusted operations code before SSH; remote cwd and PYTHONPATH are never import sources.
+render_trusted_template() {
+  local marker="$1" tool="${2:-}"
+  local oci_tool="${OPERATIONS_ROOT}/platform-infra/scripts/catering_target_oci.py"
+  [[ -f "$oci_tool" && ! -L "$oci_tool" ]] || fail "versioned OCI helper is missing"
+  python3 -B -c 'from pathlib import Path; import sys
+marker, tool, oci_path = sys.argv[1:]
+template = sys.stdin.read()
+source = Path(oci_path).read_text(encoding="utf-8")
+program = "import sys, types\n_oci = types.ModuleType(\"catering_target_oci\")\n"
+program += "exec(compile(" + repr(source) + ", \"<trusted-oci>\", \"exec\"), _oci.__dict__)\n"
+program += "sys.modules[\"catering_target_oci\"] = _oci\n"
+preload = program
+if tool:
+    program += "exec(compile(" + repr(Path(tool).read_text(encoding="utf-8")) + ", \"<stdin>\", \"exec\"), globals())\n"
+if template.count(marker) != 1:
+    raise SystemExit(1)
+rendered = template.replace(marker, program)
+if marker != "__OCI_HELPER_PYTHON__" and "__OCI_HELPER_PYTHON__" in rendered:
+    if rendered.count("__OCI_HELPER_PYTHON__") != 1:
+        raise SystemExit(1)
+    rendered = rendered.replace("__OCI_HELPER_PYTHON__", preload)
+sys.stdout.write(rendered)' "$marker" "$tool" "$oci_tool"
+}
+
+oci_tool_sha256() {
+  local tool="${OPERATIONS_ROOT}/platform-infra/scripts/catering_target_oci.py"
+  [[ -f "$tool" && ! -L "$tool" ]] || fail "versioned OCI helper is missing"
+  local_sha256 "$tool"
+}
+
 remote_preflight() {
   local expected_lock_owner="${1:-}"
   local expected_release_sha="${2:-}"
@@ -469,13 +500,7 @@ remote_preflight() {
     "${operator_mode_arg}" "${layout_release_arg}" "${operations_commit_arg}" "${manifest_sha_arg}" \
     "${SOURCE_PLATFORM_BASE}" "${SOURCE_PLATFORM_OPS}" "${DEPLOY_COMMIT_SHA}"
   )
-  python3 -c 'from pathlib import Path; import sys
-template = sys.stdin.read()
-marker = "__RELEASE_STATE_PYTHON__"
-helper = Path(sys.argv[1]).read_text(encoding="utf-8")
-if template.count(marker) != 1:
-    raise SystemExit(1)
-sys.stdout.write(template.replace(marker, helper))' \
+  render_trusted_template "__RELEASE_STATE_PYTHON__" \
     "${OPERATIONS_ROOT}/platform-infra/scripts/catering-target-release-state.py" <<'REMOTE_PREFLIGHT' | ssh_target bash -s -- "${remote_args[@]}"
 set -euo pipefail
 preflight_fail() {
@@ -594,10 +619,25 @@ REMOTE_OPERATOR_RELEASE
   for service in intake offer production exports web; do
     check_compose_labels "platform-infra-${service}-1" "$platform_project" "$app_working_dir" "$app_config_files" "$service" "platform_${service}"
   done
-  for service in intake offer production exports; do
-    [[ "$(sudo -n docker inspect --format '{{.Image}}' "platform-infra-${service}-1")" == "$active_runtime_image" ]] || preflight_fail "operator_runtime_image_${service}"
+  for service in intake offer production exports web; do
+    expected="$active_runtime_image"
+    [[ "$service" != web ]] || expected="$active_web_image"
+  observation="$(sudo -n docker inspect --format '{{json .}}' "platform-infra-${service}-1")"
+  /usr/bin/python3 -I - "$observation" "$expected" "$release_dir/manifest.json" <<'PY_RUNNING_IDENTITY'
+__OCI_HELPER_PYTHON__
+import json, sys
+from pathlib import Path
+from catering_target_oci import check_running_container
+value = json.loads(sys.argv[1])
+manifest = Path(sys.argv[3])
+if manifest.is_file() and json.loads(manifest.read_text()).get("schemaVersion") == 4:
+    check_running_container(value, sys.argv[2])
+else:
+    # Legacy releases keep their observed immutable reference, without claiming a Config relation.
+    if value.get("Image") != sys.argv[2] or value.get("State", {}).get("Running") is not True:
+        raise SystemExit(1)
+PY_RUNNING_IDENTITY
   done
-  [[ "$(sudo -n docker inspect --format '{{.Image}}' platform-infra-web-1)" == "$active_web_image" ]] || preflight_fail operator_web_image
 else
   for service in postgres intake offer production exports web; do
     check_compose_labels "platform-infra-${service}-1" "$platform_project" "$platform_working_dir" "$platform_config_files" "$service" "platform_${service}"
@@ -718,7 +758,8 @@ run_production_preflight() {
 verify_remote_bundle() {
   [[ -n "${CATERING_TARGET_OPERATIONS_COMMIT}" ]] || return 0
   local release_dir="${RELEASE_ROOT}/${DEPLOY_COMMIT_SHA}"
-  ssh_target python3 - "${release_dir}" "${CATERING_TARGET_MANIFEST_SHA256}" "${DEPLOY_COMMIT_SHA}" "${CATERING_TARGET_OPERATIONS_COMMIT}" "${RUNTIME_IMAGE}" "${WEB_IMAGE}" <<'REMOTE_BUNDLE_VERIFY'
+  render_trusted_template "__OCI_HELPER_PYTHON__" <<'REMOTE_BUNDLE_VERIFY' | ssh_target sudo -n /usr/bin/python3 -I - "${release_dir}" "${CATERING_TARGET_MANIFEST_SHA256}" "${DEPLOY_COMMIT_SHA}" "${CATERING_TARGET_OPERATIONS_COMMIT}" "${RUNTIME_IMAGE}" "${WEB_IMAGE}"
+__OCI_HELPER_PYTHON__
 import hashlib
 import json
 import os
@@ -726,6 +767,7 @@ from pathlib import Path
 import re
 import stat
 import sys
+from catering_target_oci import verify_image
 
 release_dir, manifest_sha, product_commit, operations_commit, runtime_image, web_image = sys.argv[1:]
 root = Path(release_dir)
@@ -755,7 +797,7 @@ if set(manifest) != {
         "schemaVersion", "repository", "targetId", "platform", "productCommit", "operationsCommit",
         "images", "artifacts", "sourceFiles", "sourceTreeSha256"}:
     raise SystemExit("bundle manifest shape invalid")
-if (manifest.get("schemaVersion") != 3 or
+if (manifest.get("schemaVersion") != 4 or
         manifest.get("repository") != "AlexanderSmyslowski/catering-agents-platform" or
         manifest.get("targetId") != "catering-prod-1" or
         manifest.get("platform") != "linux/amd64" or
@@ -786,11 +828,12 @@ for name, image_id in expected_images.items():
     if not re.fullmatch(r"sha256:[0-9a-f]{64}", image_id):
         raise SystemExit("bundle image identity invalid")
     item = images[name]
-    if item != {"imageId": image_id, "archive": expected_archives[name], "services": expected_services[name]}:
+    if not isinstance(item, dict) or item.get("platformManifestDigest") != image_id or item.get("archive") != expected_archives[name] or item.get("services") != expected_services[name]:
         raise SystemExit("bundle image binding mismatch")
     archive_path = regular(expected_archives[name])
     if artifacts.get(expected_archives[name]) != digest(archive_path):
         raise SystemExit("bundle image archive digest mismatch")
+    verify_image(archive_path, item)
 candidate_path = regular("candidate-images.json")
 if artifacts.get("candidate-images.json") != digest(candidate_path):
     raise SystemExit("bundle override digest mismatch")
@@ -821,18 +864,12 @@ inspect_remote_stage_release() {
   local tool="${OPERATIONS_ROOT}/platform-infra/scripts/catering-target-stage-binding.py"
   local tool_sha256
   tool_sha256="$(stage_binding_tool_sha256)"
-  python3 -c 'from pathlib import Path; import sys
-template = sys.stdin.read()
-marker = "__STAGE_BINDING_PYTHON__"
-helper = Path(sys.argv[1]).read_text(encoding="utf-8")
-if template.count(marker) != 1:
-    raise SystemExit(1)
-sys.stdout.write(template.replace(marker, helper))' "${tool}" <<'REMOTE_STAGE_INSPECT' |
+  render_trusted_template "__STAGE_BINDING_PYTHON__" "${tool}" <<'REMOTE_STAGE_INSPECT' |
 __STAGE_BINDING_PYTHON__
 REMOTE_STAGE_INSPECT
     ssh_target sudo -n /usr/bin/python3 -I - inspect-existing \
       "${release_dir}" "${CATERING_TARGET_MANIFEST_SHA256}" "${DEPLOY_COMMIT_SHA}" \
-      "${CATERING_TARGET_OPERATIONS_COMMIT}" "${RUNTIME_IMAGE}" "${WEB_IMAGE}" "${tool_sha256}"
+      "${CATERING_TARGET_OPERATIONS_COMMIT}" "${RUNTIME_IMAGE}" "${WEB_IMAGE}" "${tool_sha256}" "$(oci_tool_sha256)"
 }
 
 write_remote_stage_receipt() {
@@ -840,15 +877,19 @@ write_remote_stage_receipt() {
   local tool_sha256
   tool_sha256="$(stage_binding_tool_sha256)"
   ssh_target bash -s -- "${release_dir}" "${tool_sha256}" "${CATERING_TARGET_MANIFEST_SHA256}" \
-    "${DEPLOY_COMMIT_SHA}" "${CATERING_TARGET_OPERATIONS_COMMIT}" "${RUNTIME_IMAGE}" "${WEB_IMAGE}" <<'REMOTE_STAGE_RECEIPT'
+    "${DEPLOY_COMMIT_SHA}" "${CATERING_TARGET_OPERATIONS_COMMIT}" "${RUNTIME_IMAGE}" "${WEB_IMAGE}" "$(oci_tool_sha256)" <<'REMOTE_STAGE_RECEIPT'
 set -euo pipefail
-release="$1"; tool_sha="$2"; manifest_sha="$3"; product="$4"; operations="$5"; runtime="$6"; web="$7"
+release="$1"; tool_sha="$2"; manifest_sha="$3"; product="$4"; operations="$5"; runtime="$6"; web="$7"; oci_sha="$8"
 tool="$release/stage-binding.py"
 [[ "$release" =~ ^/opt/catering-releases/[0-9a-f]{40}$ && "${release##*/}" == "$product" ]] || exit 1
 [[ "$tool_sha" =~ ^[0-9a-f]{64}$ && "$manifest_sha" =~ ^[0-9a-f]{64}$ ]] || exit 1
 [[ -f "$tool" && ! -L "$tool" && "$(stat -c '%u:%g:%a' "$tool")" == "0:0:644" ]] || exit 1
 [[ "$(sha256sum "$tool" | awk '{print $1}')" == "$tool_sha" ]] || exit 1
-sudo -n python3 "$tool" write "$release" "$manifest_sha" "$product" "$operations" "$runtime" "$web" "$tool_sha"
+[[ "$oci_sha" =~ ^[0-9a-f]{64}$ ]] || exit 1
+oci_tool="$release/catering_target_oci.py"
+[[ -f "$oci_tool" && ! -L "$oci_tool" && "$(stat -c '%u:%g:%a' "$oci_tool")" == "0:0:644" ]] || exit 1
+[[ "$(sha256sum "$oci_tool" | awk '{print $1}')" == "$oci_sha" ]] || exit 1
+sudo -n python3 -B -I "$tool" write "$release" "$manifest_sha" "$product" "$operations" "$runtime" "$web" "$tool_sha" "$oci_sha"
 REMOTE_STAGE_RECEIPT
 }
 
@@ -857,15 +898,19 @@ verify_remote_stage_receipt() {
   local tool_sha256
   tool_sha256="$(stage_binding_tool_sha256)"
   ssh_target bash -s -- "${release_dir}" "${tool_sha256}" "${CATERING_TARGET_MANIFEST_SHA256}" \
-    "${DEPLOY_COMMIT_SHA}" "${CATERING_TARGET_OPERATIONS_COMMIT}" "${RUNTIME_IMAGE}" "${WEB_IMAGE}" <<'REMOTE_STAGE_VERIFY'
+    "${DEPLOY_COMMIT_SHA}" "${CATERING_TARGET_OPERATIONS_COMMIT}" "${RUNTIME_IMAGE}" "${WEB_IMAGE}" "$(oci_tool_sha256)" <<'REMOTE_STAGE_VERIFY'
 set -euo pipefail
-release="$1"; tool_sha="$2"; manifest_sha="$3"; product="$4"; operations="$5"; runtime="$6"; web="$7"
+release="$1"; tool_sha="$2"; manifest_sha="$3"; product="$4"; operations="$5"; runtime="$6"; web="$7"; oci_sha="$8"
 tool="$release/stage-binding.py"
 [[ "$release" =~ ^/opt/catering-releases/[0-9a-f]{40}$ && "${release##*/}" == "$product" ]] || exit 1
 [[ "$tool_sha" =~ ^[0-9a-f]{64}$ && "$manifest_sha" =~ ^[0-9a-f]{64}$ ]] || exit 1
 [[ -f "$tool" && ! -L "$tool" && "$(stat -c '%u:%g:%a' "$tool")" == "0:0:644" ]] || exit 1
 [[ "$(sha256sum "$tool" | awk '{print $1}')" == "$tool_sha" ]] || exit 1
-sudo -n python3 "$tool" verify "$release" "$manifest_sha" "$product" "$operations" "$runtime" "$web" "$tool_sha"
+[[ "$oci_sha" =~ ^[0-9a-f]{64}$ ]] || exit 1
+oci_tool="$release/catering_target_oci.py"
+[[ -f "$oci_tool" && ! -L "$oci_tool" && "$(stat -c '%u:%g:%a' "$oci_tool")" == "0:0:644" ]] || exit 1
+[[ "$(sha256sum "$oci_tool" | awk '{print $1}')" == "$oci_sha" ]] || exit 1
+sudo -n python3 -B -I "$tool" verify "$release" "$manifest_sha" "$product" "$operations" "$runtime" "$web" "$tool_sha" "$oci_sha"
 REMOTE_STAGE_VERIFY
 }
 
@@ -901,6 +946,7 @@ prepare_local_candidate() {
     local binding_tool="${OPERATIONS_ROOT}/platform-infra/scripts/catering-target-stage-binding.py"
     [[ -f "${binding_tool}" && ! -L "${binding_tool}" ]] || fail "versioned stage binding tool is missing"
     cp "${binding_tool}" "${LOCAL_RELEASE_DIR}/stage-binding.py"
+    cp "${OPERATIONS_ROOT}/platform-infra/scripts/catering_target_oci.py" "${LOCAL_RELEASE_DIR}/catering_target_oci.py"
     return 0
   fi
 
@@ -1033,13 +1079,13 @@ PY
 
   local bundle_files=("${LOCAL_RELEASE_DIR}/candidate-images.json" "${LOCAL_RELEASE_DIR}/runtime-image.tar.gz" "${LOCAL_RELEASE_DIR}/web-image.tar.gz")
   if [[ -n "${CATERING_TARGET_OPERATIONS_COMMIT}" ]]; then
-    bundle_files+=("${LOCAL_RELEASE_DIR}/manifest.json" "${LOCAL_RELEASE_DIR}/stage-binding.py")
+    bundle_files+=("${LOCAL_RELEASE_DIR}/manifest.json" "${LOCAL_RELEASE_DIR}/stage-binding.py" "${LOCAL_RELEASE_DIR}/catering_target_oci.py")
   fi
   rsync -az --no-owner --no-group     --rsync-path="sudo -n rsync"     -e "${rsync_rsh}"     "${bundle_files[@]}"     "${REMOTE}:${release_dir}/"
 
   ssh_target sudo -n chmod 0644     "${release_dir}/candidate-images.json"     "${release_dir}/runtime-image.tar.gz"     "${release_dir}/web-image.tar.gz"
   if [[ -n "${CATERING_TARGET_OPERATIONS_COMMIT}" ]]; then
-    ssh_target sudo -n chmod 0644 "${release_dir}/manifest.json" "${release_dir}/stage-binding.py"
+    ssh_target sudo -n chmod 0644 "${release_dir}/manifest.json" "${release_dir}/stage-binding.py" "${release_dir}/catering_target_oci.py"
   fi
 }
 
@@ -1056,11 +1102,11 @@ capture_previous_and_load_candidates() {
     stage_tool_sha="$(stage_binding_tool_sha256)"
     verify_remote_bundle || return 1
   fi
-  ssh_target bash -s -- "${release_dir}" "${TARGET_RUNTIME_ENV}" "${RUNTIME_IMAGE}" "${WEB_IMAGE}" "${SOURCE_PLATFORM_BASE}" "${SOURCE_PLATFORM_OPS}" \
-    "${stage_binding_required}" "${manifest_sha_arg}" "${DEPLOY_COMMIT_SHA}" "${operations_commit_arg}" "${stage_tool_sha}" <<'REMOTE_LOAD'
+  render_trusted_template "__OCI_HELPER_PYTHON__" <<'REMOTE_LOAD' | ssh_target bash -s -- "${release_dir}" "${TARGET_RUNTIME_ENV}" "${RUNTIME_IMAGE}" "${WEB_IMAGE}" "${SOURCE_PLATFORM_BASE}" "${SOURCE_PLATFORM_OPS}" \
+    "${stage_binding_required}" "${manifest_sha_arg}" "${DEPLOY_COMMIT_SHA}" "${operations_commit_arg}" "${stage_tool_sha}" "$(oci_tool_sha256)"
 set -euo pipefail
 release_dir="$1"; runtime_env="$2"; runtime_image="$3"; web_image="$4"; source_platform_base="$5"; source_platform_ops="$6"
-stage_binding_required="$7"; manifest_sha="$8"; product_commit="$9"; operations_commit="${10}"; stage_tool_sha="${11}"
+stage_binding_required="$7"; manifest_sha="$8"; product_commit="$9"; operations_commit="${10}"; stage_tool_sha="${11}"; oci_sha="${12}"
 [[ "$release_dir" =~ ^/opt/catering-releases/[0-9a-fA-F]{40}$ ]] || exit 1
 for value in "$runtime_image" "$web_image"; do [[ "$value" =~ ^sha256:[0-9a-f]{64}$ ]] || exit 1; done
 if [[ "$stage_binding_required" == true ]]; then
@@ -1069,7 +1115,11 @@ if [[ "$stage_binding_required" == true ]]; then
   [[ -f "$stage_tool" && ! -L "$stage_tool" && "$(stat -c '%u:%g:%a' "$stage_tool")" == "0:0:644" ]] || exit 1
   [[ "$(sha256sum "$stage_tool" | awk '{print $1}')" == "$stage_tool_sha" ]] || exit 1
   # TARGET_STAGE_BINDING_CAPTURE
-  sudo -n python3 "$stage_tool" verify "$release_dir" "$manifest_sha" "$product_commit" "$operations_commit" "$runtime_image" "$web_image" "$stage_tool_sha"
+[[ "$oci_sha" =~ ^[0-9a-f]{64}$ ]] || exit 1
+oci_tool="$release_dir/catering_target_oci.py"
+[[ -f "$oci_tool" && ! -L "$oci_tool" && "$(stat -c '%u:%g:%a' "$oci_tool")" == "0:0:644" ]] || exit 1
+[[ "$(sha256sum "$oci_tool" | awk '{print $1}')" == "$oci_sha" ]] || exit 1
+  sudo -n python3 -B -I "$stage_tool" verify "$release_dir" "$manifest_sha" "$product_commit" "$operations_commit" "$runtime_image" "$web_image" "$stage_tool_sha" "$oci_sha"
 elif [[ "$stage_binding_required" != false ]]; then
   exit 1
 fi
@@ -1115,8 +1165,42 @@ PY
 
 sudo -n gzip -dc "$release_dir/runtime-image.tar.gz" | sudo -n docker load >/dev/null
 sudo -n gzip -dc "$release_dir/web-image.tar.gz" | sudo -n docker load >/dev/null
-sudo -n docker image inspect "$runtime_image" >/dev/null
-sudo -n docker image inspect "$web_image" >/dev/null
+if [[ "$stage_binding_required" == true ]]; then
+  sudo -n /usr/bin/python3 -I - "$release_dir/manifest.json" <<'PY_LOADED_IDENTITY'
+__OCI_HELPER_PYTHON__
+import gzip, json, subprocess, sys, tempfile
+from pathlib import Path
+from catering_target_oci import check_loaded_image, inspect_archive
+manifest = json.loads(Path(sys.argv[1]).read_text())
+for name in ("runtime", "web"):
+    bound = manifest["images"][name]
+    reference = bound["platformManifestDigest"]
+    observed = json.loads(subprocess.check_output(["docker", "image", "inspect", "--format", "{{json .}}", reference], text=True))
+    check_loaded_image(observed, reference)
+    # Re-exporting the manifest proves the loaded Config relation independently
+    # of the original archive/index bytes already checked before docker load.
+    with tempfile.TemporaryDirectory(prefix="catering-loaded-identity-") as temporary:
+        path = Path(temporary) / "loaded.tar.gz"
+        with path.open("wb") as raw, gzip.GzipFile(fileobj=raw, mode="wb", mtime=0) as compressed:
+            process = subprocess.Popen(["docker", "save", reference], stdout=subprocess.PIPE)
+            try:
+                for chunk in iter(lambda: process.stdout.read(1024 * 1024), b""):
+                    compressed.write(chunk)
+                if process.wait() != 0:
+                    raise SystemExit("loaded image export failed")
+            finally:
+                process.stdout.close()
+                if process.poll() is None:
+                    process.kill()
+                    process.wait()
+        actual = inspect_archive(path, reference)
+        if any(actual[key] != bound[key] for key in ("platformManifestDigest", "configDigest")):
+            raise SystemExit("loaded image manifest/config relation mismatch")
+PY_LOADED_IDENTITY
+else
+  sudo -n docker image inspect "$runtime_image" >/dev/null
+  sudo -n docker image inspect "$web_image" >/dev/null
+fi
 
 [[ "$source_platform_base" == platform-infra/* && "$source_platform_base" != *".."* ]] || exit 1
 [[ "$source_platform_ops" == platform-infra/* && "$source_platform_ops" != *".."* ]] || exit 1
@@ -1130,13 +1214,7 @@ REMOTE_LOAD
 verify_remote_previous_release() {
   local release_sha="$1"
   [[ "${release_sha}" =~ ^[0-9a-f]{40}$ && "${release_sha}" == "${PREVIOUS_RELEASE_SHA}" && "${release_sha}" != "${DEPLOY_COMMIT_SHA}" ]] || return 1
-  python3 -c 'from pathlib import Path; import sys
-template = sys.stdin.read()
-marker = "__RELEASE_STATE_PYTHON__"
-helper = Path(sys.argv[1]).read_text(encoding="utf-8")
-if template.count(marker) != 1:
-    raise SystemExit(1)
-sys.stdout.write(template.replace(marker, helper))' \
+  render_trusted_template "__RELEASE_STATE_PYTHON__" \
     "${OPERATIONS_ROOT}/platform-infra/scripts/catering-target-release-state.py" <<'REMOTE_ROLLBACK_RELEASE' | ssh_target sudo -n /usr/bin/python3 -I - \
     "${RELEASE_ROOT}" --rollback "${release_sha}" "${SOURCE_PLATFORM_BASE}" "${SOURCE_PLATFORM_OPS}" \
     "${DEPLOY_COMMIT_SHA}" "${CATERING_TARGET_OPERATIONS_COMMIT}"
@@ -1165,10 +1243,10 @@ activate_remote_override() {
   fi
   ssh_target bash -s -- "${release_dir}" "${TARGET_RUNTIME_ENV}" "${override_path}" "${SOURCE_PLATFORM_BASE}" "${SOURCE_PLATFORM_OPS}" \
     "${staged_candidate}" "${CATERING_TARGET_MANIFEST_SHA256}" "${DEPLOY_COMMIT_SHA}" "${CATERING_TARGET_OPERATIONS_COMMIT}" \
-    "${RUNTIME_IMAGE}" "${WEB_IMAGE}" "${stage_tool_sha256}" <<'REMOTE_ACTIVATE'
+    "${RUNTIME_IMAGE}" "${WEB_IMAGE}" "${stage_tool_sha256}" "$(oci_tool_sha256)" <<'REMOTE_ACTIVATE'
 set -euo pipefail
 release_dir="$1"; runtime_env="$2"; override="$3"; source_platform_base="$4"; source_platform_ops="$5"
-staged_candidate="$6"; manifest_sha="$7"; product_commit="$8"; operations_commit="$9"; runtime_image="${10}"; web_image="${11}"; stage_tool_sha="${12}"
+staged_candidate="$6"; manifest_sha="$7"; product_commit="$8"; operations_commit="$9"; runtime_image="${10}"; web_image="${11}"; stage_tool_sha="${12}"; oci_sha="${13}"
 [[ "$release_dir" =~ ^/opt/catering-releases/[0-9a-fA-F]{40}$ ]] || exit 1
 [[ "$override" == "$release_dir/candidate-images.json" || "$override" == "$release_dir/previous-images.json" ]] || exit 1
 [[ -f "$override" && ! -L "$override" ]] || exit 1
@@ -1181,17 +1259,21 @@ if [[ "$staged_candidate" == true ]]; then
   [[ "$stage_tool_sha" =~ ^[0-9a-f]{64}$ ]] || exit 1
   [[ -f "$stage_tool" && ! -L "$stage_tool" && "$(stat -c '%u:%g:%a' "$stage_tool")" == "0:0:644" ]] || exit 1
   [[ "$(sha256sum "$stage_tool" | awk '{print $1}')" == "$stage_tool_sha" ]] || exit 1
-  sudo -n python3 "$stage_tool" verify "$release_dir" "$manifest_sha" "$product_commit" "$operations_commit" "$runtime_image" "$web_image" "$stage_tool_sha"
+[[ "$oci_sha" =~ ^[0-9a-f]{64}$ ]] || exit 1
+oci_tool="$release_dir/catering_target_oci.py"
+[[ -f "$oci_tool" && ! -L "$oci_tool" && "$(stat -c '%u:%g:%a' "$oci_tool")" == "0:0:644" ]] || exit 1
+[[ "$(sha256sum "$oci_tool" | awk '{print $1}')" == "$oci_sha" ]] || exit 1
+  sudo -n python3 -B -I "$stage_tool" verify "$release_dir" "$manifest_sha" "$product_commit" "$operations_commit" "$runtime_image" "$web_image" "$stage_tool_sha" "$oci_sha"
 fi
 sudo -n docker compose --env-file "$runtime_env" -f "$platform_base" -f "$platform_ops" -f "$override" config --format json >/dev/null
-sudo -n docker compose --env-file "$runtime_env" -f "$platform_base" -f "$platform_ops" -f "$override" up -d --no-deps intake offer production exports web
+sudo -n docker compose --env-file "$runtime_env" -f "$platform_base" -f "$platform_ops" -f "$override" up -d --no-deps --pull never intake offer production exports web
 REMOTE_ACTIVATE
 }
 
 verify_remote_override_and_health() {
   local override_path="$1"
   local release_dir="${override_path%/*}"
-  ssh_target bash -s -- "${release_dir}" "${override_path}" "${POSTGRES_VOLUME}" "${EDGE_IMAGE}" <<'REMOTE_VERIFY'
+  render_trusted_template "__OCI_HELPER_PYTHON__" <<'REMOTE_VERIFY' | ssh_target bash -s -- "${release_dir}" "${override_path}" "${POSTGRES_VOLUME}" "${EDGE_IMAGE}"
 set -euo pipefail
 release_dir="$1"; override="$2"; expected_postgres_volume="$3"; expected_edge_image="$4"
 [[ "$release_dir" =~ ^/opt/catering-releases/[0-9a-fA-F]{40}$ ]] || exit 1
@@ -1213,9 +1295,21 @@ PY
 
 for service in intake offer production exports web; do
   expected="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["services"][sys.argv[2]]["image"])' "$expected_images" "$service")"
-  actual="$(sudo -n docker inspect --format '{{.Image}}' "platform-infra-${service}-1")"
-  [[ "$actual" == "$expected" ]] || exit 1
-  [[ "$(sudo -n docker inspect --format '{{.State.Running}}' "platform-infra-${service}-1")" == true ]] || exit 1
+  observation="$(sudo -n docker inspect --format '{{json .}}' "platform-infra-${service}-1")"
+  /usr/bin/python3 -I - "$observation" "$expected" "$release_dir/manifest.json" <<'PY_RUNNING_IDENTITY'
+__OCI_HELPER_PYTHON__
+import json, sys
+from pathlib import Path
+from catering_target_oci import check_running_container
+value = json.loads(sys.argv[1])
+manifest = Path(sys.argv[3])
+if manifest.is_file() and json.loads(manifest.read_text()).get("schemaVersion") == 4:
+    check_running_container(value, sys.argv[2])
+else:
+    # Legacy releases keep their observed immutable reference, without claiming a Config relation.
+    if value.get("Image") != sys.argv[2] or value.get("State", {}).get("Running") is not True:
+        raise SystemExit(1)
+PY_RUNNING_IDENTITY
 done
 
 actual_postgres_volume="$(sudo -n docker inspect platform-infra-postgres-1 | python3 -c 'import json,sys; d=json.load(sys.stdin)[0]; hits=[m.get("Name","") for m in d.get("Mounts",[]) if m.get("Type")=="volume" and m.get("Destination")=="/var/lib/postgresql/data"]; print(hits[0] if len(hits)==1 else "")')"

@@ -1,9 +1,27 @@
 # memory.md
 
-version: 5.420
-date: 2026-09-29
+version: 5.424
+date: 2026-10-01
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
+
+## Entwicklungsstand – P3.2 OCI-v4-Vertrag / Runtime-Blocker (2026-10-01)
+
+- Manifest v4 und Stage-Receipt v4 trennen Archiv A, exportierten Index R, Linux/amd64-Manifest M und Config C. Nur M dient als Runtime-Referenz; Descriptor-/Layer-/Source-/Tool-/Rechteprüfungen bleiben fail-closed. Legacy-Versionen bleiben auf installierte Vorgänger und Rollback begrenzt.
+- Implementierungsstand `decca590787e8888cb4fe0efd444e9c195389cfc`: 57 gezielte Python- und 88 Vitest-Tests bestanden. Zwei echte linux/amd64-Images und ein v4-Bundle wurden erzeugt; A/R/M/C unabhängig aus den Archivbytes gegengeprüft. Der zuvor leere eigene Docker/containerd-Zielstore derselben Lima-VM lädt beide Images. M ist adressierbar; beide Identitäts-Testcontainer zeigen `.Image=M` und `ImageManifestDescriptor.digest=M`. Der Web-Testcontainer führt nur eine Shell aus und belegt keinen funktionierenden Caddy-Dienst.
+- Neuer Runtime-Blocker: Das tatsächliche amd64-Caddy-Binary des gebundenen Webimages endet unter QEMU 10.2.3 bereits bei `hash-password` mit `fatal error: taggedPointerPack`, Container-Exit 2, `OOMKilled=false`. Keine weitere Emulator- oder Produktkorrektur in diesem Lauf. Preflight, Stage, Apply, Verify, Rollback, Retry und M-4-Runtime-Ergänzung wurden nicht gestartet. Klassifikation: P3.2 BLOCKED.
+- Snapshot: `docs/agent-memory/2026-10-01-p3-2-oci-v4.md`. Produkt bleibt `9ce4fbc96a5dd877f2cd2f00588a22be861306b9`; der gebundene Operationsstand bleibt ein nicht regulär angenommener Entwicklungsstand. Unabhängiger Delta-Review, Integration, exakter push/main-Annahmenachweis und Betriebsfreigabe bleiben getrennt. Kein Produktionskontakt, Merge oder Hub-Writeback.
+
+## Aktueller Entwicklungsstand – P3.1C containerd-Adressierung (2026-10-01)
+
+- Der unveränderte P3.1B-Bundlestand mit Produkt `9ce4fbc96a5dd877f2cd2f00588a22be861306b9` und noch nicht regulär angenommenem Operationsstand `0cad37b840af516e165267df240a3196a8147a02` wurde in derselben isolierten VM real geladen. Beide gebundenen Config-Digests bleiben byte-identisch im containerd-Content und im erneuten lokalen Docker-save erhalten. Direkte Docker-CLI-Lookups nach Config-Digest scheitern; Inspect einer gültigen Index-Referenz liefert als `.Id` den Index beziehungsweise mit expliziter Plattform das Manifest, nicht den Config-Digest.
+- Der aktuelle Vertrag setzt Config-Bindung, Compose-Referenz und Container-Imagevergleich gleich. Ein absichtlich Index-adressierter, ansonsten hashgebundener Diagnose-Override wird vom unveränderten Operator abgewiesen. Ein Lookup-Teilfix schließt Compose, Verify und Rollback deshalb nicht. P3.1C stoppt an der ausdrücklich gesetzten Vertragsgrenze; kein Betriebsfix, kein neuer Bundlebau und kein Runtime-Rehearsal. Der kleinste nächste Entscheid betrifft die explizite Relation zwischen kanonischer Config-Identität und aus dem Archiv abgeleiteter unveränderlicher Docker-Referenz.
+- Snapshot: `docs/agent-memory/2026-10-01-p3-1c-containerd-identity.md`. Reale Rohbelege liegen ausschließlich im separaten privaten P3.1C-Paket. Keine Store-Umstellung, Produktionsverbindung, Credential-/Push-Reparatur oder Hub-Schreibwirkung; unabhängiger Review und reguläre Annahme bleiben offen.
+
+## Aktueller Entwicklungsstand – P3.1B OCI-Build-Identität (2026-09-30)
+
+- Der echte linux/amd64-Build auf der akzeptierten Basis `9ce4fbc96a5dd877f2cd2f00588a22be861306b9` lieferte eine OCI-Index-IID. Die unveränderte v3-Archivprüfung verlangt dagegen den Config-Digest; der Basis-Bundlebau stoppte vor Manifest-Erzeugung. Der lokale Producer-Fix löst Index-/Manifest-IIDs über die hashgeprüfte exportierte Blobkette auf diesen Config-Digest auf. Docker save verwendet weiterhin die ursprüngliche unveränderliche Build-IID; Manifest und Consumer-Vertrag bleiben unverändert.
+- Die übergebene Teständerung wurde anhand des privaten Evidenzpakets byte-identisch zugeordnet. Frisches RED: beide OCI-IID-Varianten scheitern auf der Basis. GREEN: 48 Operator-Python-Tests und 78 Tests in drei betroffenen Catering-Target-Vitest-Dateien bestanden. Dieser Entwicklungsstand besitzt noch keinen push/main-Annahmenachweis; unabhängiger Review, Integration und erneute Annahme bleiben erforderlich. Der echte Bundle-/Runtime-Nachweis wird separat im privaten P3.1B-Evidenzpaket geführt; kein Produkt-/Betriebs-GO.
 
 ## Aktueller Stand – P2.1 Retry nach Rollback / `candidate_rejected` (2026-09-29)
 
@@ -2353,3 +2371,25 @@ Quelle: `8de2e96c8604f12da2ec14c39b187db04dfb61cf`. Der folgende Betriebsbericht
 - Die Retry-Kontrollfluss-Tests verwenden jetzt einen über mehrere Apply-Versuche beständigen Stage-Zustand und führen den produktiven atomaren previous-images.json-Schreibblock lokal auf temporären Dateien aus. Sie prüfen candidate_rejected, Postactivation-Smoke-Fehler mit sauberem Rollback, identisches Manifest/Produktcommit, unverändertes Stage-Receipt, Snapshot-Modus 0600 und frische Vorgängerbindung.
 - Der echte Remote-Preflight bindet einen aktiven Kandidaten ohne Install-Receipt nicht. Scheitert dieser Preflight erst nach Lock-Erwerb, bleibt der Lock fail-closed für manuelle Recovery erhalten; die Dokumentation und Tests spiegeln diesen Pfad.
 - Verifiziert: 46 Operator-Python-Tests, 97 Tests in 8 Catering-Target-Vitest-Dateien, Bash-Syntax, Python-AST und git diff --check erfolgreich. Kein Hostkontakt, Deployment oder #712-Eingriff.
+
+### 5.421 - 2026-09-30 — P3.1B Producer-Kanonisierung (Entwicklungsstand)
+
+- OCI-Index bzw. OCI-Manifest aus `--iidfile` wird deterministisch aus dem tatsächlich exportierten Docker-Archiv in den bestehenden v3-Config-Digest überführt. Root-, Manifest-, Config- und Layer-Hashes sowie relevante Descriptor-Größen, Plattform und Docker-Archivzuordnung werden geprüft. Ungebundene oder manipulierte Artefakte bleiben fail-closed; Tags sind keine Identitätsquelle. Die bisherige strikte Archivprüfung bleibt unverändert.
+- Gezielte Regression mit zwei positiven IID-Varianten und 14 Ablehnungsvarianten: RED auf der Basis, GREEN mit dem lokalen Producer-Fix. Alle 48 betroffenen Python-Tests, 78 Vitest-Tests in drei direkt betroffenen Dateien, Syntax und Diffcheck erfolgreich. Der lokale Operations-Fix ist noch nicht regulär angenommen; Bundle-/Runtime-Ergebnis und spätere unabhängige Review werden nicht vorweggenommen. Kein Produktionskontakt, Hub-Writeback oder Workflow-Dispatch.
+
+### 5.422 - 2026-10-01 — P3.1C Image-Identität / Docker-Referenz getrennt diagnostiziert
+
+- Der unveränderte P3.1B-Bundlestand mit Produkt `9ce4fbc96a5dd877f2cd2f00588a22be861306b9` und noch nicht regulär angenommenem Operationsstand `0cad37b840af516e165267df240a3196a8147a02` wurde in derselben isolierten VM real geladen. Beide gebundenen Config-Digests bleiben byte-identisch im containerd-Content und im erneuten lokalen Docker-save erhalten. Direkte Docker-CLI-Lookups nach Config-Digest scheitern; Inspect einer gültigen Index-Referenz liefert als `.Id` den Index beziehungsweise mit expliziter Plattform das Manifest, nicht den Config-Digest.
+- Der aktuelle Vertrag setzt Config-Bindung, Compose-Referenz und Container-Imagevergleich gleich. Ein absichtlich Index-adressierter, ansonsten hashgebundener Diagnose-Override wird vom unveränderten Operator abgewiesen. Ein Lookup-Teilfix schließt Compose, Verify und Rollback deshalb nicht. P3.1C stoppt an der ausdrücklich gesetzten Vertragsgrenze; kein Betriebsfix, kein neuer Bundlebau und kein Runtime-Rehearsal. Der kleinste nächste Entscheid betrifft die explizite Relation zwischen kanonischer Config-Identität und aus dem Archiv abgeleiteter unveränderlicher Docker-Referenz.
+- Snapshot: `docs/agent-memory/2026-10-01-p3-1c-containerd-identity.md`. Reale Rohbelege liegen ausschließlich im separaten privaten P3.1C-Paket. Keine Store-Umstellung, Produktionsverbindung, Credential-/Push-Reparatur oder Hub-Schreibwirkung; unabhängiger Review und reguläre Annahme bleiben offen.
+
+### 5.423 - 2026-10-01 — P3.2 expliziter OCI-v4-Vertrag (Entwicklungsstand)
+
+- A/R/M/C werden durchgängig getrennt; M ist die Runtime-Referenz. Neue Kandidaten und Stage-Receipts verlangen v4; Legacy bleibt auf installierte-/Rollbackpfade begrenzt. Der aktuelle Snapshot beschreibt den zu prüfenden Vertrag und nimmt weder reale Runtime-Evidenz noch unabhängigen Review oder reguläre Operationsannahme vorweg.
+
+### 5.424 - 2026-10-01 — P3.2 v4-Bundle/Load nachgewiesen, Caddy-Runtime blockiert
+
+- Die vorhandene Implementierung ist lokal reviewbar: `47c19f5` führt den durchgängigen v4-Vertrag ein; `decca590` ergänzt ausschließlich die im realen Docker-save beobachtete, M-gebundene BuildKit-Attestationsstruktur. Der Producer deaktiviert neue Provenance-/SBOM-Erzeugung ausdrücklich; vorhandene exportierte Referrer bleiben vollständig hashgebunden.
+- 57 Python- und 88 Vitest-Tests, Syntax-/Diffprüfung erfolgreich. Echter v4-Bundlebau und unabhängige A/R/M/C-Prüfung bestanden. Im separaten anfangs leeren containerd-Store sind beide M adressierbar und als laufende Container-Image-/Manifest-Descriptorwerte belegt; Node läuft tatsächlich als Linux/x64 v22.23.3. Kein Nachweis für einen laufenden Webdienst aus dem Shell-Identitätscontainer ableiten.
+- Der anschließende echte Caddy-Aufruf scheitert in der ARM64/QEMU-Umgebung mit Go `taggedPointerPack` (Container-Exit 2, kein OOM). Der eigentliche Phasen-Rehearsalpfad ist deshalb nicht gestartet; P3.2 BLOCKED. Die genaue Ursache dieses neuen Runtime-Abbruchs ist noch nicht eingegrenzt. Ein gesonderter kleiner Diagnoseentscheid innerhalb der vorhandenen VM ist nötig; keine automatische Store-/Architekturänderung oder Produktumgehung.
+- VM, eigene Zielengine, Bundle und Fehlerbelege bleiben erhalten; eigene kurzlebige Container wurden beendet. Kein Produktions-/Althostkontakt, keine Änderung historischer Worktrees, kein Hub-Writeback und kein Merge.
