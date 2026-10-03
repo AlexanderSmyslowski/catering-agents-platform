@@ -916,9 +916,7 @@ REMOTE_STAGE_VERIFY
 
 cleanup_local_candidate() {
   if [[ -n "${LOCAL_RELEASE_DIR}" && -d "${LOCAL_RELEASE_DIR}" ]]; then
-    if [[ "$(uname -s)" == Darwin ]]; then
-      /usr/bin/trash "${LOCAL_RELEASE_DIR}"
-    fi
+    rm -rf -- "${LOCAL_RELEASE_DIR}"
   fi
 }
 

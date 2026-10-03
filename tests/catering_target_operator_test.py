@@ -1218,4 +1218,6 @@ class CateringTargetOperatorTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
+    from catering_target_v4_test import V4ContractTests
+
     unittest.main()
