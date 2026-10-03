@@ -284,11 +284,26 @@ elif sys.argv[2] == 'release':
     @staticmethod
     def forbidden_syscalls(trace):
         forbidden = []
+        pending = {}
         mutations = {'creat', 'truncate', 'ftruncate', 'fallocate', 'chmod', 'fchmod', 'fchmodat',
                      'chown', 'fchown', 'lchown', 'fchownat', 'utime', 'utimes', 'futimesat',
                      'utimensat', 'mkdir', 'mkdirat', 'rmdir', 'unlink', 'unlinkat', 'rename',
                      'renameat', 'renameat2', 'link', 'linkat', 'symlink', 'symlinkat', 'mknod', 'mknodat'}
         for line in trace.splitlines():
+            unfinished = re.fullmatch(r'(\d+)\s+([a-z0-9_]+)\((.*) <unfinished \.\.\.>', line)
+            if unfinished:
+                key = unfinished.group(1, 2)
+                if key in pending:
+                    forbidden.append(pending[key][0])
+                pending[key] = (line, unfinished[1] + ' ' + unfinished[2] + '(' + unfinished[3])
+                continue
+            resumed = re.fullmatch(r'(\d+)\s+<\.\.\. ([a-z0-9_]+) resumed>(.*)', line)
+            if resumed:
+                initial = pending.pop(resumed.group(1, 2), None)
+                if initial is None:
+                    forbidden.append(line)
+                    continue
+                line = initial[1] + resumed[3]
             call = re.search(r'\b([a-z0-9_]+)\((.*)', line)
             if not call:
                 continue
@@ -296,16 +311,90 @@ elif sys.argv[2] == 'release':
             denied = name in mutations or name == 'flock'
             if name in {'open', 'openat', 'openat2'}:
                 denied = bool(re.search(r'O_(WRONLY|RDWR|CREAT|TRUNC|APPEND|TMPFILE)', args))
-                if re.search(r'"/dev/null", O_(?:WRONLY|RDWR)(?:\|O_(?:CLOEXEC|LARGEFILE))*[,)]', args):
-                    denied = False  # The observer sends validator stderr to this exact character device.
+                if name in {'open', 'openat'}:
+                    prefix = r'AT_FDCWD(?:<[^>]*>)?, ' if name == 'openat' else ''
+                    # Flags alone do not distinguish a stderr character sink from a regular substitute.
+                    null_flags = r'(?:O_(?:WRONLY|RDWR)(?:\|O_(?:CLOEXEC|LARGEFILE))*|O_WRONLY\|O_CREAT\|O_TRUNC, 0666)'
+                    if re.fullmatch(prefix + r'"/dev/null", ' + null_flags + r'\) = \d+</dev/null<char 1:3>>', args):
+                        denied = False
+                # Bash probes a controlling terminal before starting without one; this failed open creates no FD.
+                if name == 'openat' and re.fullmatch(r'AT_FDCWD(?:<[^>]*>)?, "/dev/tty", O_RDWR\|O_NONBLOCK\) = -1 ENXIO \(No such device or address\)', args):
+                    denied = False
             if name == 'fcntl' and re.search(r'F_(?:OFD_)?SETLK', args):
                 denied = True
             if name in {'write', 'writev', 'pwrite64', 'pwritev', 'pwritev2'}:
                 destination = args.split(',', 1)[0]
-                denied = not re.search(r'<(?:pipe:|(?:UNIX|TCP|UDP):|/dev/null(?:<|>))', destination)
+                denied = not (re.search(r'<(?:pipe:|(?:UNIX|TCP|UDP):)', destination)
+                              or re.fullmatch(r'\d+</dev/null<char 1:3>>', destination))
             if denied:
                 forbidden.append(line)
+        forbidden.extend(original for original, _ in pending.values())
         return forbidden
+
+    def test_trace_parser_accepts_captured_null_character_stderr_redirection(self):
+        captured = ('711119 openat(AT_FDCWD</home/runner/work/catering-agents-platform/catering-agents-platform>, '
+                    '"/dev/null", O_WRONLY|O_CREAT|O_TRUNC, 0666) = 3</dev/null<char 1:3>>')
+        self.assertFalse(self.forbidden_syscalls(captured))
+        self.assertFalse(self.forbidden_syscalls('1 write(3</dev/null<char 1:3>>, "diagnostic", 10) = 10'))
+
+    def test_trace_parser_accepts_only_captured_failed_tty_startup(self):
+        captured = ('711108 openat(AT_FDCWD</home/runner/work/catering-agents-platform/catering-agents-platform>, '
+                    '"/dev/tty", O_RDWR|O_NONBLOCK) = -1 ENXIO (No such device or address)')
+        self.assertFalse(self.forbidden_syscalls(captured))
+
+    def test_trace_parser_keeps_device_substitutes_and_mutations_forbidden(self):
+        denied = [
+            '1 openat(AT_FDCWD, "/dev/null", O_RDWR|O_CLOEXEC) = 3</dev/null>',
+            '1 openat(AT_FDCWD, "/dev/null", O_RDWR|O_CLOEXEC) = 3',
+            '1 openat(AT_FDCWD, "/dev/null", O_RDWR|O_CLOEXEC) = -1 EACCES (Permission denied)',
+            '1 openat(AT_FDCWD, "/dev/null", O_WRONLY|O_CREAT|O_TRUNC, 0666) = 3</dev/null>',
+            '1 openat(AT_FDCWD, "/dev/null", O_WRONLY|O_CREAT|O_TRUNC, 0666) = 3</dev/null<char 1:5>>',
+            '1 openat(AT_FDCWD, "/dev/null", O_WRONLY|O_CREAT|O_TRUNC, 0600) = 3</dev/null<char 1:3>>',
+            '1 openat(AT_FDCWD, "/dev/null", O_WRONLY|O_CREAT|O_TRUNC|O_APPEND, 0666) = 3</dev/null<char 1:3>>',
+            '1 openat(AT_FDCWD, "/dev/nullish", O_WRONLY|O_CREAT|O_TRUNC, 0666) = 3</dev/nullish<char 1:3>>',
+            '1 openat(AT_FDCWD, "/dev/null", O_WRONLY|O_CREAT|O_TRUNC, 0666) = 3</tmp/substitute>',
+            '1 write(3</dev/null>, "source", 6) = 6',
+            '1 write(3</dev/null<char 1:5>>, "source", 6) = 6',
+            '1 write(3</dev/nullish<char 1:3>>, "source", 6) = 6',
+            '1 openat(AT_FDCWD, "/dev/tty", O_RDWR|O_NONBLOCK) = 3</dev/tty<char 5:0>>',
+            '1 openat(AT_FDCWD, "/dev/tty", O_RDWR|O_NONBLOCK) = -1 EACCES (Permission denied)',
+            '1 openat(AT_FDCWD, "/dev/tty", O_RDWR|O_NONBLOCK) = -1 EINTR (Interrupted system call)',
+            '1 openat(AT_FDCWD, "/dev/tty", O_RDWR|O_NONBLOCK|O_CREAT, 0666) = -1 ENXIO (No such device or address)',
+            '1 openat(AT_FDCWD, "/dev/tty", O_RDWR|O_NONBLOCK|O_CLOEXEC) = -1 ENXIO (No such device or address)',
+            '1 openat(AT_FDCWD, "/dev/other", O_RDWR|O_NONBLOCK) = -1 ENXIO (No such device or address)',
+            '1 open("/dev/tty", O_RDWR|O_NONBLOCK) = -1 ENXIO (No such device or address)',
+            '1 openat(AT_FDCWD, "/tmp/sh-thd", O_RDWR|O_CREAT|O_EXCL, 0600) = -1 EACCES (Permission denied)',
+            '1 openat(AT_FDCWD, "/tmp/sh-thd", O_RDWR|O_CREAT|O_EXCL, 0600) = 3</tmp/sh-thd (deleted)>',
+            '1 write(3</tmp/sh-thd (deleted)>, "source", 6) = 6',
+            '1 unlink("/tmp/sh-thd") = 0',
+            '1 flock(3</synthetic/lock>, LOCK_EX|LOCK_NB) = 0',
+        ]
+        for line in denied:
+            with self.subTest(trace=line):
+                self.assertTrue(self.forbidden_syscalls(line), line)
+
+    def test_trace_parser_requires_complete_matching_split_device_calls(self):
+        null_start = '1 openat(AT_FDCWD, "/dev/null", O_WRONLY|O_CREAT|O_TRUNC, 0666 <unfinished ...>'
+        null_end = '1 <... openat resumed>) = 3</dev/null<char 1:3>>'
+        interleaved = '2 write(1<pipe:[123]>, "result", 6) = 6'
+        self.assertFalse(self.forbidden_syscalls('\n'.join([null_start, interleaved, null_end])))
+        tty_start = '1 openat(AT_FDCWD, "/dev/tty", O_RDWR|O_NONBLOCK <unfinished ...>'
+        tty_end = '1 <... openat resumed>) = -1 ENXIO (No such device or address)'
+        self.assertFalse(self.forbidden_syscalls('\n'.join([tty_start, tty_end])))
+        rejected = [
+            null_start,
+            null_end,
+            null_start + '\n' + null_end.replace('1 <', '2 <'),
+            null_start + '\n' + null_end.replace('openat resumed', 'open resumed'),
+            null_start + '\n' + null_end.replace('<char 1:3>', ''),
+            null_start + '\n' + null_end.replace('3</dev/null<char 1:3>>', '-1 EACCES (Permission denied)'),
+            null_start + '\n' + '1 <... openat resumed>) = 3</dev/null<char 1:',
+            null_start + '\n' + null_start + '\n' + null_end,
+            tty_start + '\n' + '1 <... openat resumed>) = 3</dev/tty<char 5:0>>',
+        ]
+        for trace in rejected:
+            with self.subTest(trace=trace):
+                self.assertTrue(self.forbidden_syscalls(trace), trace)
 
     def test_process_tree_guard_detects_large_shell_heredoc_write(self):
         self.assertTrue(self.forbidden_syscalls('1 openat(AT_FDCWD, "/tmp/sh-thd", O_RDWR|O_CREAT|O_EXCL, 0600) = 3'))
