@@ -2064,10 +2064,10 @@ rto_elapsed_allowed 14400
     const target = path.join(root, "record.json");
     const common = source(files.common);
     const readerStart = common.indexOf("read_bound_text() {");
-    const marker = 'python3 - "$path" "$limit" "$expected_uid" "$expected_digest" "$single_line" <<\'PY\'\n';
+    const marker = "python3 -B -c '";
     const start = common.indexOf(marker, readerStart);
     expect(readerStart).toBeGreaterThanOrEqual(0);
-    const end = common.indexOf("\nPY\n}", start);
+    const end = common.indexOf('\' "$path" "$limit" "$expected_uid" "$expected_digest" "$single_line"', start);
     expect(start).toBeGreaterThanOrEqual(0);
     expect(end).toBeGreaterThan(start);
     const readerPython = common.slice(start + marker.length, end);
@@ -2599,9 +2599,9 @@ count=0
     const secureEnd = common.indexOf("\n' \"$command\"", secureStart);
     const securePython = common.slice(secureStart + "python3 -c '\n".length, secureEnd);
     const readerStart = common.indexOf("read_bound_text() {");
-    const readerMarker = 'python3 - "$path" "$limit" "$expected_uid" "$expected_digest" "$single_line" <<\'PY\'\n';
+    const readerMarker = "python3 -B -c '";
     const readerPythonStart = common.indexOf(readerMarker, readerStart);
-    const readerPythonEnd = common.indexOf("\nPY\n}", readerPythonStart);
+    const readerPythonEnd = common.indexOf('\' "$path" "$limit" "$expected_uid" "$expected_digest" "$single_line"', readerPythonStart);
     const readerPython = common.slice(readerPythonStart + readerMarker.length, readerPythonEnd);
     expect(securePython.length).toBeGreaterThan(0);
     expect(readerPython.length).toBeGreaterThan(0);
@@ -2693,9 +2693,9 @@ count=0
     const replacement = "status=replaced\n";
     writeFileSync(target, original, { mode: 0o600 });
     const readerStart = common.indexOf("read_bound_text() {");
-    const marker = 'python3 - "$path" "$limit" "$expected_uid" "$expected_digest" "$single_line" <<\'PY\'\n';
+    const marker = "python3 -B -c '";
     const start = common.indexOf(marker, readerStart);
-    const end = common.indexOf("\nPY\n}", start);
+    const end = common.indexOf('\' "$path" "$limit" "$expected_uid" "$expected_digest" "$single_line"', start);
     const readerPython = common.slice(start + marker.length, end);
     const mutated = readerPython.replace(
       "if expected_digest and hashlib.sha256(data).hexdigest() != expected_digest: print(\"CHECKSUM_MISMATCH\", file=sys.stderr); raise SystemExit(1)",

@@ -107,32 +107,26 @@ safe_record_path() {
   local path="${1-}" root cursor parent relative component
   # Keep the configured root as a lexical trust boundary.  Resolving it with
   # realpath first would turn a root or parent symlink into an accepted alias.
-  root="$(python3 - "$BACKUP_ROOT" <<'PY'
-import os, sys
-print(os.path.abspath(sys.argv[1]))
-PY
+  root="$(python3 -B -c 'import os, sys
+print(os.path.abspath(sys.argv[1]))' "$BACKUP_ROOT"
 )"
-  path="$(python3 - "$path" <<'PY'
-import os, sys
-print(os.path.abspath(sys.argv[1]))
-PY
+  path="$(python3 -B -c 'import os, sys
+print(os.path.abspath(sys.argv[1]))' "$path"
 )"
   [[ -d "$root" && ! -L "$root" && "$path" == "$root"/* && "$path" != *$'\n'* && "$path" != *$'\r'* ]] || return 1
   parent="$(dirname "$path")"
-  relative="$(python3 - "$root" "$parent" <<'PY'
-import os, sys
+  relative="$(python3 -B -c 'import os, sys
 try:
     value = os.path.relpath(sys.argv[2], sys.argv[1])
 except ValueError:
     raise SystemExit(1)
 if value == ".." or value.startswith("../"):
     raise SystemExit(1)
-print(value)
-PY
+print(value)' "$root" "$parent"
 )" || return 1
   cursor="$root"
   if [[ "$relative" != "." ]]; then
-    IFS=/ read -ra components <<< "$relative"
+    IFS=/ read -ra components < <(printf '%s\n' "$relative")
     for component in "${components[@]}"; do
       [[ -n "$component" ]] || continue
       cursor="$cursor/$component"
@@ -150,11 +144,11 @@ assert_root_mode_600() {
   [[ -n "$path" && ! -L "$path" ]] || { fail_state STATE_PATH_INVALID; return 1; }
   [[ "$expected_uid" =~ ^[0-9]+$ ]] || { fail_state STATE_MODE_INVALID; return 1; }
   if info="$(stat -c '%F:%a:%u' "$path" 2>/dev/null)"; then
-    IFS=: read -r kind mode owner <<< "$info"
+    IFS=: read -r kind mode owner < <(printf '%s\n' "$info")
     [[ "$kind" == "regular file" && "$mode" == 600 && "$owner" == "$expected_uid" ]] || { fail_state STATE_MODE_INVALID; return 1; }
   else
     info="$(stat -f '%HT:%Lp:%u' "$path" 2>/dev/null)" || { fail_state STATE_MISSING; return 1; }
-    IFS=: read -r kind mode owner <<< "$info"
+    IFS=: read -r kind mode owner < <(printf '%s\n' "$info")
     [[ "$kind" == "Regular File" && "$mode" == 600 && "$owner" == "$expected_uid" ]] || { fail_state STATE_MODE_INVALID; return 1; }
   fi
 }
@@ -168,8 +162,7 @@ read_bound_text() {
   [[ "$expected_uid" =~ ^[0-9]+$ ]] || { fail_state STATE_MODE_INVALID; return 1; }
   [[ "$limit" =~ ^[0-9]+$ ]] || { fail_state STATE_LIMIT_INVALID; return 1; }
   [[ -z "$expected_digest" || "$expected_digest" =~ ^[0-9a-f]{64}$ ]] || { fail_state CHECKSUM_INVALID; return 1; }
-  python3 - "$path" "$limit" "$expected_uid" "$expected_digest" "$single_line" <<'PY'
-import hashlib, os, stat, sys
+  python3 -B -c 'import hashlib, os, stat, sys
 path, limit, expected_uid, expected_digest, single_line = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), sys.argv[4], sys.argv[5] == "1"
 try:
     before = os.lstat(path)
@@ -203,8 +196,7 @@ except UnicodeDecodeError: print("STATE_ENCODING_INVALID", file=sys.stderr); rai
 if not text.endswith("\n"): print("STATE_FORMAT_INVALID", file=sys.stderr); raise SystemExit(1)
 text = text[:-1]
 if not text or (single_line and "\n" in text) or any((ord(ch) < 0x20 and ch != "\n") or ch in " \t" for ch in text): print("STATE_FORMAT_INVALID", file=sys.stderr); raise SystemExit(1)
-print(text, end="")
-PY
+print(text, end="")' "$path" "$limit" "$expected_uid" "$expected_digest" "$single_line"
 }
 
 # Repository and password files are trust-boundary inputs.  Read the locator
@@ -677,7 +669,7 @@ validate_attestation_record() {
     key="${line%%=*}"; [[ "$allowed" == *"|$key|"* && "$seen" != *"|$key|"* ]] || { fail_state ATTESTATION_INVALID; return 1; }
     [[ -n "${line#*=}" ]] || { fail_state ATTESTATION_INVALID; return 1; }
     seen+="$key|"
-  done <<< "$record"
+  done < <(printf '%s\n' "$record")
   for required_key in $required; do [[ "$seen" == *"|$required_key|"* ]] || { fail_state ATTESTATION_INVALID; return 1; }; done
   printf '%s' "$record"
 }
@@ -1289,8 +1281,7 @@ read_bounded_record() {
   # Production callers use UID 0; the narrow third argument lets an isolated
   # non-root test process prove writer/reader byte compatibility without
   # weakening the production owner contract.
-  python3 - "$path" "$limit" "$expected_uid" "$expected_digest" <<'PY'
-import hashlib, os, stat, sys
+  python3 -B -c 'import hashlib, os, stat, sys
 path, limit, expected_uid = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
 expected_digest = sys.argv[4] if len(sys.argv) > 4 else ""
 try:
@@ -1339,8 +1330,7 @@ if not text.endswith("\n"):
     print("STATE_FORMAT_INVALID", file=sys.stderr); raise SystemExit(1)
 if text.endswith("\n\n"):
     print("STATE_FORMAT_INVALID", file=sys.stderr); raise SystemExit(1)
-print(text, end="")
-PY
+print(text, end="")' "$path" "$limit" "$expected_uid" "$expected_digest"
 }
 
 require_hex() { [[ "${1-}" =~ ^[0-9a-f]+$ ]]; }
@@ -1395,7 +1385,7 @@ validate_record_schema() {
       return 1
     }
     seen+="$key|"
-  done <<< "$record"
+  done < <(printf '%s\n' "$record")
   for key in $required; do [[ "$seen" == *"|$key|"* ]] || { fail_state RECORD_MISSING_FIELD; return 1; }; done
 }
 

@@ -1,8 +1,8 @@
 # CateringOS – eigenständiger Zielserver-Updateweg
 
-**Stand:** 2026-10-01 (P3.2-Entwicklungsstand)
+**Stand:** 2026-10-03 (P4.1-Korrekturstand)
 **Ziel:** `catering-prod-1`  
-**Status:** Manifest-v4-Entwicklungsstand mit getrennten OCI-Identitäten. Unabhängiger Delta-Review, Integration und push/main-Annahmenachweis bleiben erforderlich; kein Betriebs-GO.
+**Status:** Manifest v4 mit getrennten OCI-Identitäten und lokalem P4.1-Fix für Observer-Check und Preservationbindung. Unabhängiger Review, PR-CI und reguläre Annahme bleiben erforderlich; kein Betriebs-GO.
 
 ## Zweck und Grenze
 
@@ -92,6 +92,10 @@ Die freigebbaren Phasen bleiben getrennt:
 6. `verify`: read-only Postflight-, Health-, Install-Receipt-, Stage-/Manifest- und Commitprüfung des installierten Releases. Diese Phase führt keinen authentisierten Anwendungssmoke aus.
 
 Vor `stage` und `apply` werden Herkunfts-, CI- und Bundle-Gates mit begrenzten Git-/GitHub-Timeouts fail-closed abgeschlossen. Der Update-Lock wird während des Aktivierungslaufs gehalten. Vor dem Compose-Preflight im `apply` und unmittelbar vor `docker compose up` prüft ein Remote-Schritt im selben SSH-Aufruf erneut Stage-Receipt, Produkt-/Betriebswerkzeug-Commit, Manifest, Override, Image-Archive und beide konsumierten Compose-Quelldateien. Nach Beginn der Aktivierung verwenden Postflight, Smoke, Receipt, Rollback und die separate `verify`-Phase keine GitHub- oder Git-Netzabfrage. Jeder fehlende oder abweichende Commit, Lauf, Manifestwert, Digest oder Stage-Receipt stoppt vor der nächsten Phase.
+
+`apply` und der bestehende `--update`-Pfad binden PostgreSQL-Datenvolume und Edge-Image genau einmal aus dem letzten Preflight unter gehaltenem Update-Lock vor Image-Load und Aktivierung. Diese Erwartungswerte bleiben für den gesamten Lauf unveränderlich. Postflight und Rollback erfassen eigene aktuelle Beobachtungen und prüfen sie gegen denselben ursprünglichen Zustand; eine Abweichung im Postflight führt in den bestehenden Rückweg, eine Abweichung im Rollback hält den Lock für manuelle Recovery. Auch der anschließende Containervergleich verwendet die ursprünglichen Werte. Der Kandidat ersetzt weder diese Bindung noch den zuvor unter Lock beobachteten Vorgängerrelease.
+
+Die separate `verify`-Phase startet einen neuen Prozess und bindet ihre aktuelle Preflight-Beobachtung. Der bestehende Install-Receipt enthält keine historischen PostgreSQL-/Edge-Ausgangswerte; ein erfolgreicher separater Verify belegt daher deren aktuelle Konsistenz, keinen nachträglichen Preservationnachweis eines früheren Apply. Receipt- und Legacyverträge bleiben unverändert.
 
 `stage`, `apply` und `verify` sind Zielbefehle. P2 hat sie ausschließlich lokal bzw. mit synthetischen Ziel-Fixtures geprüft; kein echter Zielserver wurde kontaktiert. Die zwei bestehenden GitHub-Workflows `update-catering-target.yml` und `catering-target-preflight.yml` bleiben unverändert; sie sind nicht der neue Einstieg und dürfen bis zur gesonderten Entscheidung nicht ausgelöst werden. Für Kompatibilität bleibt der historische Workflow-Kontext `Update Catering target` technisch als einziger ungebundener `--update`-Aufrufer zugelassen: exakt dieses Repository, `workflow_dispatch`, `refs/heads/main`, die versionierte Workflow-Referenz, übereinstimmender Workflow-SHA, Event-Input `confirmation=UPDATE_CATERING_TARGET` und identischer `commit_sha`. Dieses Zulassen ist keine Auslösefreigabe; das Auslösen bleibt organisatorisch untersagt. Der Mac-Operator verwendet ausschließlich `stage` und `apply`. Der historische `Deploy production`-Workflow, `deploy-hetzner.sh` und `deploy-web-listener-hetzner.sh` gehören nicht zum neuen Pfad.
 
@@ -223,7 +227,9 @@ Die Gate-Namen beschreiben nur die fehlgeschlagene Prüfkategorie, z. B. `platfo
 
 Read-only bedeutet hier: Der Preflight legt **keinen** `/opt/catering-target-update.lock` an, verändert keine Container, Dateien, Firewall-, Netzwerk- oder Anwendungszustände und startet keinen Updatepfad.
 
-Der Backup-Observer darf bei `--check` zur konsistenten Beobachtung kurzzeitig einen exklusiven, nicht blockierenden `flock` auf seiner **bereits vorhandenen, read-only geöffneten** Observer-Lockdatei halten. Dieser Synchronisations-Lock ist kein Deployment-/Update-Lock. Laut Observer-Vertrag schreibt `--check` keinen Observerstatus und führt weder Docker, Restic, Dump, Restore noch Reparaturen aus.
+Der Backup-Observer erwirbt bei `--check` keinen Advisory-Lock, schreibt keinen Observerstatus und führt weder Docker, Restic, Dump, Restore noch Send oder Reparaturen aus. Er liest die vorhandene geschützte Lockdatei mit derselben Ownership-/Modus-/Symlink-/Generationsprüfung wie die übrigen Records. Ein gleichzeitig gehaltener Sender-Lock allein verhindert die Prüfung nicht; geänderte Record- oder Lockgenerationen führen fail-closed zum Abbruch. Der sendende Observer behält seinen exklusiven, nicht blockierenden Lock einschließlich Statepublikation und Send.
+
+Der Preflight transportiert Observer und identische Common-Validatoren aus dem gebundenen Operationscheckout im bestehenden trusted-template-Pfad und führt den Check ausschließlich im Speicher über isoliertes Remote-Python aus. Der Renderer erzeugt sicher shell-gequotete Variablen; Release-/OCI-/Observercode wird auf dem Ziel über `printf`-Pipes an Python übergeben. Aufgerufene Common-Reader verwenden identischen Pythoncode über `-B -c` und Record-/Metadateneingaben über `printf`-Prozesssubstitution, sodass diese Eingaben keine temporären Zieldateien benötigen. Die vorhandene installierte Observerdatei muss weiterhin eine reguläre Datei sein, wird für den Check aber nicht ausgeführt; auch ihr Common-Helper wird nicht geladen. Deshalb benötigt dieser Checkfix keine vorgelagerte Installation auf dem Ziel. Policy, State, Evidence und Service-/Frische-/Attestationsprüfungen bleiben verbindlich. Die Beobachtung ist nicht atomar: Änderungen während der erfassten Generation werden erkannt, Ereignisse nach dem letzten Read können nicht ausgeschlossen werden.
 
 
 ## Kanonisches Laufzeitinventar
