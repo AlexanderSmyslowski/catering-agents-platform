@@ -674,7 +674,53 @@ check_compose_labels "catering-edge-edge-1" "$edge_project" "$edge_working_dir" 
 # Shell-quoted assignments avoid Bash materializing large heredocs on the target.
 # The operations-bound --check runs in memory; the installed sender needs no update.
 observer_check_source=__PREFLIGHT_BACKUP_PYTHON__
-if ! observer_json="$(printf '%s\n' "$observer_check_source" | sudo -n /usr/bin/python3 -B -I -)"; then
+backup_observer_diagnostic() {
+  # Failed remote stdout is discarded by the caller. Preserve only known fields
+  # on stderr, from this same invocation, without trusting arbitrary error text.
+  python3 -B -c '
+import json, sys
+diagnostic = {"gate": sys.argv[3], "observer_exit": int(sys.argv[2])}
+try:
+    if len(sys.argv[1]) > 4096:
+        raise ValueError()
+    value = json.loads(sys.argv[1])
+    if not isinstance(value, dict):
+        raise ValueError()
+except (ValueError, RecursionError):
+    diagnostic["diagnostic_status"] = "UNAVAILABLE"
+else:
+    reasons = {
+        "ACCOUNT_UNBOUND", "ARGUMENT_INVALID", "ATTESTATION_INVALID", "BINDING_INVALID",
+        "CLOCK_INVALID", "CLOCK_ROLLBACK", "CLOCK_UNSYNCED", "CYCLE_MISSING", "DELIVERY_FAILED",
+        "DISPATCH_BUDGET_EXCEEDED", "EVIDENCE_AGE_INVALID", "FAILURE_LATCHED", "GENERATION_CHANGED",
+        "HEALTHY", "INSUFFICIENT_DETECTION_MARGIN", "OBSERVATION_FAILED", "OBSERVER_BUDGET_EXCEEDED",
+        "OBSERVER_FAILED", "PING_WINDOW_CLOSED", "PRIVILEGE_INVALID", "PROTECTION_INVALID",
+        "PUBLICATION_MISSING", "RESTORE_BUDGET_EXCEEDED", "RESTORE_DISPATCH_MISSING",
+        "SERVICE_BUDGET_EXCEEDED", "SERVICE_FAILED", "SERVICE_UNKNOWN", "STATE_INVALID",
+        "TARGET_INVALID", "TIMER_NOT_ARMED", "TIMING_UNBOUND", "VALIDATOR_FAILED",
+    }
+    for key, allowed in (("backup_health", ("healthy", "warning", "critical", "unknown")),
+                         ("observer_run", ("completed", "failed"))):
+        if type(value.get(key)) is str and value[key] in allowed:
+            diagnostic[key] = value[key]
+    if "reason" in value:
+        reason = value["reason"]
+        diagnostic["reason"] = reason if type(reason) is str and reason in reasons else "REDACTED"
+    if "data_epoch" in value:
+        epoch = value["data_epoch"]
+        if epoch is None or (type(epoch) is int and 0 <= epoch <= 9223372036854775807):
+            diagnostic["data_epoch"] = epoch
+    for key in ("delivery_accepted", "recipient_confirmed", "remote_repository_checked"):
+        if type(value.get(key)) is bool:
+            diagnostic[key] = value[key]
+print("TARGET_BACKUP_OBSERVER_DIAGNOSTIC " + json.dumps(diagnostic, sort_keys=True))
+' "$observer_json" "$observer_status" "$1" >&2 || \
+    printf 'TARGET_BACKUP_OBSERVER_DIAGNOSTIC {"gate":"%s","observer_exit":%s,"diagnostic_status":"UNAVAILABLE"}\n' "$1" "$observer_status" >&2
+}
+observer_status=0
+observer_json="$(printf '%s\n' "$observer_check_source" | sudo -n /usr/bin/python3 -B -I -)" || observer_status=$?
+if [[ "$observer_status" -ne 0 ]]; then
+  backup_observer_diagnostic backup_observer_command
   preflight_fail backup_observer_command
 fi
 python3 -B -c '
@@ -682,7 +728,10 @@ import json, sys
 value = json.loads(sys.argv[1])
 if value.get("observer_run") != "completed" or value.get("backup_health") != "healthy":
     raise SystemExit(1)
-' "$observer_json" || preflight_fail backup_observer_health
+' "$observer_json" || {
+  backup_observer_diagnostic backup_observer_health
+  preflight_fail backup_observer_health
+}
 
 if [[ "$operator_mode" == "__CATERING_OPERATOR__" ]]; then
   sudo -n docker compose --env-file "$runtime_env" -f "$app_platform_base" -f "$app_platform_ops" -f "$app_override" config --format json >/dev/null || preflight_fail platform_compose_render

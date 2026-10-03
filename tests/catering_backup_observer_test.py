@@ -579,6 +579,121 @@ sudo() {
         self.save_policy()
         self.assertNotEqual(self.check()['backup_health'], 'healthy')
 
+    def observer_gate(self, payload, status=1):
+        rendered = self.rendered_preflight()
+        start = rendered.index('[[ -f "$observer"')
+        end = rendered.index('\nif [[ "$operator_mode"', start)
+        calls = self.base / 'observer-gate-calls'
+        self.write(calls, b'')
+        # Substitute only the external observer process. Run the rendered gate and
+        # its enclosing command substitution so failed stdout cannot hide the loss.
+        script = '''
+remote_preflight() {
+  observer="$P43_OBSERVER"
+  preflight_fail() { printf 'TARGET_PREFLIGHT_FAIL gate=%s\\n' "$1" >&2; exit 1; }
+  sudo() {
+    [[ "$*" == '-n /usr/bin/python3 -B -I -' ]] || return 86
+    cat >/dev/null
+    printf 'observer\\n' >> "$P43_CALLS"
+    printf '%s' "$P43_PAYLOAD"
+    return "$P43_STATUS"
+  }
+''' + rendered[start:end] + '''
+  printf 'TARGET_PREFLIGHT_OK backup=healthy\\n'
+}
+if ! output="$(remote_preflight)"; then
+  printf 'TARGET_PREFLIGHT_FAIL gate=remote_target_invariants\\n' >&2
+  exit 1
+fi
+printf '%s\\n' "$output"
+'''
+        result = subprocess.run(['/bin/bash', '-euo', 'pipefail', '-s'], input=script,
+            capture_output=True, text=True, timeout=10, check=False,
+            env=dict(os.environ, P43_OBSERVER=str(ENTRY), P43_CALLS=str(calls),
+                     P43_PAYLOAD=payload, P43_STATUS=str(status)))
+        self.assertEqual(calls.read_text().splitlines(), ['observer'])
+        return result
+
+    def gate_diagnostic(self, result, gate='backup_observer_command', status=1):
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertEqual(result.stdout, '')
+        self.assertIn('TARGET_PREFLIGHT_FAIL gate=' + gate, result.stderr)
+        lines = [line for line in result.stderr.splitlines()
+                 if line.startswith('TARGET_BACKUP_OBSERVER_DIAGNOSTIC ')]
+        self.assertEqual(len(lines), 1, result.stderr)
+        value = json.loads(lines[0].split(' ', 1)[1])
+        self.assertEqual(value['gate'], gate)
+        self.assertEqual(value['observer_exit'], status)
+        return value
+
+    def test_observer_gate_healthy_behavior_is_unchanged(self):
+        result = self.observer_gate(json.dumps(dict(backup_health='healthy', observer_run='completed')), 0)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, 'TARGET_PREFLIGHT_OK backup=healthy\n')
+        self.assertEqual(result.stderr, '')
+
+    def test_observer_failure_reason_and_epoch_survive_failed_remote_stdout(self):
+        for reason in ['GENERATION_CHANGED', 'EVIDENCE_AGE_INVALID', 'RESTORE_DISPATCH_MISSING',
+                       'RESTORE_BUDGET_EXCEEDED', 'VALIDATOR_FAILED', 'ACCOUNT_UNBOUND']:
+            with self.subTest(reason=reason):
+                value = self.gate_diagnostic(self.observer_gate(json.dumps(dict(
+                    backup_health='unknown', reason=reason, data_epoch=1789285400,
+                    observer_run='failed', delivery_accepted=False,
+                    recipient_confirmed=False, remote_repository_checked=False))))
+                self.assertEqual(value['reason'], reason)
+                self.assertEqual(value['data_epoch'], 1789285400)
+                self.assertEqual(value['backup_health'], 'unknown')
+                self.assertEqual(value['observer_run'], 'failed')
+                self.assertIs(value['delivery_accepted'], False)
+                self.assertIs(value['recipient_confirmed'], False)
+                self.assertIs(value['remote_repository_checked'], False)
+
+    def test_observer_command_nonzero_cannot_be_overridden_by_healthy_json(self):
+        value = self.gate_diagnostic(self.observer_gate(json.dumps(dict(
+            backup_health='healthy', reason='HEALTHY', observer_run='completed', data_epoch=None)), 7), status=7)
+        self.assertEqual(value['reason'], 'HEALTHY')
+        self.assertIsNone(value['data_epoch'])
+
+    def test_exit_zero_unhealthy_or_incomplete_observer_still_fails_health_gate(self):
+        for health, run in [('critical', 'completed'), ('warning', 'completed'),
+                            ('unknown', 'completed'), ('healthy', 'failed')]:
+            with self.subTest(health=health, run=run):
+                value = self.gate_diagnostic(self.observer_gate(json.dumps(dict(
+                    backup_health=health, observer_run=run, reason='GENERATION_CHANGED')), 0),
+                    gate='backup_observer_health', status=0)
+                self.assertEqual(value['backup_health'], health)
+
+    def test_observer_diagnostic_excludes_sensitive_fields_and_untrusted_values(self):
+        for reason in ['SYNTHETIC_SECRET', 'token=SYNTHETIC_SECRET\nforged_line']:
+            with self.subTest(reason=reason):
+                result = self.observer_gate(json.dumps(dict(
+                    reason=reason, backup_health='SYNTHETIC_SECRET', observer_run='SYNTHETIC_SECRET',
+                    data_epoch='SYNTHETIC_SECRET', delivery_accepted='SYNTHETIC_SECRET',
+                    recipient_confirmed=1, remote_repository_checked=[],
+                    token='SYNTHETIC_SECRET', credentials={'password': 'SYNTHETIC_SECRET'},
+                    url='https://SYNTHETIC_SECRET', generations={'/SYNTHETIC_SECRET': [1, 2]})))
+                value = self.gate_diagnostic(result)
+                self.assertEqual(value['reason'], 'REDACTED')
+                self.assertEqual(set(value), {'gate', 'observer_exit', 'reason'})
+                self.assertNotIn('SYNTHETIC_SECRET', result.stdout + result.stderr)
+                self.assertNotIn('forged_line', result.stderr)
+
+    def test_malformed_or_oversized_observer_output_is_not_logged_raw(self):
+        for payload in ['', 'SYNTHETIC_SECRET', '["SYNTHETIC_SECRET"]', 'null',
+                        '{"reason":"SYNTHETIC_SECRET","padding":"' + 'x' * 5000 + '"}']:
+            for status in [0, 1]:
+                with self.subTest(payload=payload[:30], status=status):
+                    result = self.observer_gate(payload, status)
+                    value = self.gate_diagnostic(result,
+                        gate='backup_observer_health' if status == 0 else 'backup_observer_command', status=status)
+                    self.assertEqual(value['diagnostic_status'], 'UNAVAILABLE')
+                    self.assertNotIn('SYNTHETIC_SECRET', result.stdout + result.stderr)
+
+    def test_boolean_epoch_is_not_emitted_as_an_integer(self):
+        value = self.gate_diagnostic(self.observer_gate(json.dumps(dict(
+            reason='GENERATION_CHANGED', data_epoch=True))))
+        self.assertNotIn('data_epoch', value)
+
     def test_candidate_without_restore_is_not_success(self):
         (self.root / 'catering-backup-evidence').rename(self.root / 'old-evidence')
         self.write_record(self.root / 'catering-backup-candidate', dict(status='pointer', candidate_path='/synthetic', candidate_checksum='a' * 64, created_at=stamp(self.created)))
