@@ -514,7 +514,7 @@ describe("backoffice route smoke", () => {
     installBackofficeEnvironmentMocks();
 
     const home = (await renderRoute("/")).text;
-    expect(home).toContain("Catering-Agenten");
+    expect(home).toContain("CateringOS");
     expect(home).toMatch(/gemeinsam.*regelkern/i);
     expect(home).toContain("Neuen Auftrag beginnen");
     expect(home).toContain("Frühere Aufträge");

@@ -21,7 +21,7 @@ function buildInput(route: AppRouteShellStateInput["route"]): AppRouteShellState
 describe("app route shell state", () => {
   it("maps route-dependent shell chrome out of App without changing labels", () => {
     expect(buildAppRouteShellState(buildInput("home")).shell).toEqual({
-      title: "Catering-Agenten",
+      title: "CateringOS",
       subtitle: "Zwei spezialisierte Arbeitsflächen mit gemeinsamem Regelkern und klar getrennten Zuständigkeiten.",
       hideKicker: false,
       className: undefined

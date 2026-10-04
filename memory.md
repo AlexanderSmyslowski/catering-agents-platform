@@ -1,7 +1,7 @@
 # memory.md
 
-version: 5.427
-date: 2026-10-03
+version: 5.428
+date: 2026-10-04
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
 
@@ -2421,3 +2421,10 @@ Quelle: `8de2e96c8604f12da2ec14c39b187db04dfb61cf`. Der folgende Betriebsbericht
 - Vom angenommenen Main `b86f268…`: der vorhandene einmalige Observer-Ausgang wird bei einem Fehler als begrenzte, typgeprüfte JSON-Projektion auf stderr erhalten. Bekannte Reasoncodes, Epoch und vorhandene Statusflags überleben den Remote-/Operator-Fehlerpfad; unbekannte Felder und freie Fehlertexte werden nicht übernommen.
 - Nonzero bleibt `backup_observer_command`; Exit0 ohne completed/healthy bleibt `backup_observer_health`. Keine Änderung an Backup-/Restore-Policy, Lock, Freshness, Apply/Rollback, Retry oder v4-Bindungen. Keine zusätzlichen Record-Generationen gesammelt.
 - Root Cause des ursprünglichen Apply-Fehlers bleibt offen. Nur diagnostischen Evidenzverlust korrigiert; keine Produktionsabfrage, Wiederholung, Stage, Apply, Integration oder Hub-Writeback. Review-/CI-Annahme bleibt ein separates Gate. Details: `docs/agent-memory/2026-10-03-p43-backup-observer-diagnostics.md`.
+
+### 5.428 - 2026-10-04 — CateringOS Installations-UX
+
+- Begrenzter Produktkandidat auf aktuellem Main `b1e3d445…`: CateringOS-Namen in Dokumenttitel, Login und Portal, root-basiertes Standalone-Manifest, credentialed Manifest-Link, Apple-Metadaten und vorhandener responsiver Web-App-Pfad. Kein Service Worker, Offlinebetrieb, zweiter Updater oder neuer Authzustand im Anwendungscode.
+- Freigegebener Entwurf B „Geteilter Teller“ wurde exakt aus dem zuvor übermittelten SVG-Codeblock wiederhergestellt. Einziger SVG-Master ist `backoffice-ui/public/favicon.svg`; PNGs 32/180/192/512 werden mit fixiertem Dev-Renderer reproduzierbar erzeugt und geprüft. Sichtprüfung bei 32/48 bestanden; Purpose nur `any`, keine Maskable-Freigabe.
+- Gezielt RED/GREEN für Installations-/Brandingverträge und bestehende Route-/Authchecks sowie Build. 109 gezielte Tests, Build und vollständiger lokaler synthetischer Browser-Rehearsal bestanden. Unabhängiger finaler Review und automatische PR-CI sind gesondert am Kandidaten zu binden. Keine OS-Installations-/Produktionsprobe; Safari-Sitzungscontainer und gesperrter Edge-Modus bleiben dokumentierte Grenzen. Nutzeranleitung: `docs/product/CATERINGOS_INSTALLATION.md`; Übergabe: `docs/agent-memory/2026-10-04-cateringos-installation-ux.md`.
+- Keine Änderung am v4-Updateweg, Backup/Restore, Infrastruktur oder Persistenz. Kein Merge, Deployment, Produktionskontakt oder Hub-Writeback.
