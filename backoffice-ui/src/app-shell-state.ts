@@ -181,7 +181,7 @@ export function getRouteTitle(route: AppRoute): string {
   if (route === "production") {
     return "Produktionsagent";
   }
-  return "Catering-Agenten";
+  return "CateringOS";
 }
 
 export function getRouteSubtitle(route: AppRoute): string {

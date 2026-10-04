@@ -1,7 +1,7 @@
 () => {
   const text = document.body.innerText;
   const missing = [
-    "Catering-Agenten",
+    "CateringOS",
     "Neuen Auftrag beginnen",
     "Frühere Aufträge"
   ].filter((marker) => !text.includes(marker));
