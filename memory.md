@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.430
+version: 5.431
 date: 2026-10-05
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -2447,3 +2447,8 @@ Quelle: `8de2e96c8604f12da2ec14c39b187db04dfb61cf`. Der folgende Betriebsbericht
 - Unabhängige Important-Befunde auf `a933fe06e8109f19424f8bce937c56ab711db833`: eine ersetzte PG-Instanz bzw. ein anderes Datenvolume konnte nach Appstart einen Initial-Receipt erhalten; die First-write-Datei synchronisierte ihr Elternverzeichnis nicht; lange Prüfungen konnten das freigegebene Fenster vor einer Mutation überschreiten.
 - Korrekturstand bindet tatsächliche PG-Container-ID und vollständigen Datenmount in Restore-/First-write-Belegen und vergleicht sie vor Start und vor/nach Smoke erneut. Legitimer Inhaltsschreibfortschritt bleibt erlaubt. Exklusive Dateipublikation synchronisiert Datei und Elternverzeichnis, neue State-/Lockpfade auch ihren Elternpfad. Zeitfenster werden nach langen Prüfungen direkt vor Mutationen, Auth-Smoke und Receiptpublikation erneut geprüft.
 - Gezielte synthetische RED-/GREEN-Prüfungen und negative Kontrollen; unabhängige erneute Prüfung und exakte CI-Annahme bleiben offen. Keine Host-, Docker-, Daten- oder Deploymentausführung.
+
+### 5.431 - 2026-10-05 — Observer-Testkontext für explizite Zielbindung
+
+- Die automatische PR-CI belegte zwei Fehler im isolierten Preflight-Testfragment: der vollständige Caller bindet `target_id`, das Fixture stellte diesen Kontext noch nicht bereit. Das Fixture benennt jetzt explizit `catering-prod-1`; alle Pipe-/Dateideskriptor-Assertions und Produktionsprüfungen bleiben erhalten.
+- Beide Fehler lokal vor der Korrektur reproduziert. Betroffene lokale Prüfungen sowie unabhängiger Review und automatische CI sind am korrigierten Stand gesondert zu binden. Kein Hostkontakt oder Produktionslauf.
