@@ -31,3 +31,12 @@ Restore, Timer-/Heartbeatstart, DNS-Änderung, Merge oder Hub-Writeback.
 
 Ausführbare spätere Reihenfolge und geschützte Eingabeverträge:
 [Bootstrap-Runbook](../operations/CATERING_TARGET02_BOOTSTRAP.md).
+
+## Reviewkorrektur 5.430
+
+Auf Reviewbasis `a933fe06…` wurden drei konkrete Important-Lücken korrigiert:
+PG-Container-/Datenmountidentität bleibt von Restore über First-write bis zur finalen
+Verifikation gebunden; die dauerhafte Publikation synchronisiert Elternverzeichnisse;
+langsame Prüfungen erlauben keine nachfolgenden Mutationen außerhalb der bestätigten
+Paket-/Zugangs-/Source-Fencing-Fenster. Legitime Zielwrites verändern weiter den DB-Inhalt.
+Erneuter unabhängiger Review und CI sind erforderlich; keine reale Ausführung.

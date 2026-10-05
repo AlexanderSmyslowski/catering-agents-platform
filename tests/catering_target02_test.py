@@ -59,11 +59,11 @@ _spec.loader.exec_module(bootstrap)
 
 
 def healthy_containers():
-    return [{'Name': '/platform-infra-' + name + '-1', 'Id': name + '-container-id', 'Image': image,
+    return [{'Name': '/platform-infra-' + name + '-1', 'Id': hashlib.sha256(name.encode()).hexdigest(), 'Image': image,
              'ImageManifestDescriptor': {'digest': image},
              'Config': {'Labels': {'com.docker.compose.service': name, 'com.docker.compose.project': 'platform-infra'}},
              'State': {'Running': True, 'Health': {'Status': 'healthy'}},
-             'Mounts': [{'Destination': '/var/lib/postgresql/data', 'Type': 'volume', 'Name': 'platform-infra_postgres_data'}] if name == 'postgres' else [],
+             'Mounts': [{'Destination': '/var/lib/postgresql/data', 'Type': 'volume', 'Name': 'platform-infra_postgres_data', 'Source': '/var/lib/docker/volumes/platform-infra_postgres_data/_data', 'Driver': 'local', 'RW': True, 'Mode': 'z', 'Propagation': ''}] if name == 'postgres' else [],
              'HostConfig': {'RestartPolicy': {'Name': 'no'}, 'PortBindings': {}, 'NetworkMode': 'catering_private'},
              'NetworkSettings': {'Networks': {network: {} for network in ({'catering_private', 'catering_ingress'} if name == 'web' else {'catering_private'})}}}
             for name, image in bootstrap.IMAGES.items()]
@@ -271,7 +271,8 @@ class FirstStartTests(unittest.TestCase):
         self.assertTrue(hasattr(bootstrap, 'start_application'), 'first-write transition must be separately testable')
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp).resolve(); release = root/'release'; release.mkdir()
-            (root/'restored.json').write_text(json.dumps({'inputsSha256': '1'*64})); (root/'restored.json').chmod(0o600)
+            pg = next(item for item in healthy_containers() if item['Name'] == '/platform-infra-postgres-1')
+            (root/'restored.json').write_text(json.dumps({'inputsSha256': '1'*64, 'postgresBinding': {'containerId': pg['Id'], 'image': pg['Image'], 'dataMount': pg['Mounts'][0]}})); (root/'restored.json').chmod(0o600)
             calls = []
             def docker(args, **kwargs):
                 calls.append(args)
@@ -287,7 +288,7 @@ class FirstStartTests(unittest.TestCase):
                 self.assertEqual(args[args.index('--pull')+1], 'never')
                 raise bootstrap.BootstrapError('synthetic start failure after potential write')
             with patch.object(bootstrap, 'STATE', root), patch.object(bootstrap, 'observe_containers', return_value=[item for item in healthy_containers() if item['Name'] == '/platform-infra-postgres-1']), \
-                 patch.object(bootstrap, 'verify_networks'), patch.object(bootstrap, 'verify_restored'), patch.object(bootstrap, 'run', side_effect=docker):
+                 patch.object(bootstrap, 'verify_networks'), patch.object(bootstrap, 'verify_restored'), patch.object(bootstrap, 'check_execution_windows'), patch.object(bootstrap, 'run', side_effect=docker):
                 with self.assertRaisesRegex(bootstrap.BootstrapError, 'synthetic start failure'):
                     bootstrap.start_application(release, {}, '1'*64, '2'*64, OPERATIONS_SHA)
                 count = len(calls)
@@ -295,6 +296,161 @@ class FirstStartTests(unittest.TestCase):
                     bootstrap.start_application(release, {}, '1'*64, '2'*64, OPERATIONS_SHA)
                 self.assertEqual(len(calls), count)
                 self.assertFalse((release/'install-receipt').exists())
+
+
+class PostgresPreservationTests(unittest.TestCase):
+    def test_installed_container_check_rejects_substituted_data_volume(self):
+        for field, value in (('Name', 'replacement-volume'), ('Type', 'bind')):
+            items = healthy_containers()
+            pg = next(item for item in items if item['Name'] == '/platform-infra-postgres-1')
+            pg['Mounts'][0][field] = value
+            with self.subTest(field=field), self.assertRaises(bootstrap.BootstrapError):
+                bootstrap.verify_installed_containers(items)
+
+    def test_first_start_records_the_restored_postgres_instance_and_full_mount(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(); release = root/'release'; release.mkdir()
+            pg = next(item for item in healthy_containers() if item['Name'] == '/platform-infra-postgres-1')
+            expected = {'containerId': pg['Id'], 'image': pg['Image'], 'dataMount': copy.deepcopy(pg['Mounts'][0])}
+            (root/'restored.json').write_text(json.dumps({'inputsSha256': '1'*64, 'postgresBinding': expected})); (root/'restored.json').chmod(0o600)
+            def docker(args, **kwargs):
+                if args[:3] == ['docker', 'image', 'inspect']:
+                    return json.dumps([{'Id': args[3], 'Os': 'linux', 'Architecture': 'amd64'}]).encode()
+                if 'config' in args:
+                    return json.dumps({'services': {name: {'image': image, 'restart': 'no'} for name,image in bootstrap.IMAGES.items()}}).encode()
+                self.assertEqual(json.loads((root/'first-app-write.json').read_text())['postgresBinding'], expected)
+                return b''
+            with patch.object(bootstrap, 'STATE', root), patch.object(bootstrap, 'observe_containers', return_value=[pg]), \
+                 patch.object(bootstrap, 'verify_networks'), patch.object(bootstrap, 'verify_restored'), patch.object(bootstrap, 'check_execution_windows'), patch.object(bootstrap, 'run', side_effect=docker):
+                bootstrap.start_application(release, {}, '1'*64, '2'*64, OPERATIONS_SHA)
+
+    def test_post_start_and_post_smoke_replacements_never_publish_receipt(self):
+        self.assertTrue(hasattr(bootstrap, 'verify_initial_install'), 'initial verification must expose its actual runtime transition for regression coverage')
+        for moment in ('before_verify', 'after_smoke', 'unchanged'):
+            for replacement in ('container', 'mount'):
+                with self.subTest(moment=moment, replacement=replacement), tempfile.TemporaryDirectory() as tmp:
+                    root = Path(tmp).resolve(); release = root/'release'; release.mkdir()
+                    initial = healthy_containers(); pg = next(item for item in initial if item['Name'] == '/platform-infra-postgres-1')
+                    binding = {'containerId': pg['Id'], 'image': pg['Image'], 'dataMount': copy.deepcopy(pg['Mounts'][0])}
+                    changed = copy.deepcopy(initial); changed_pg = next(item for item in changed if item['Name'] == pg['Name'])
+                    if replacement == 'container': changed_pg['Id'] = 'f'*64
+                    else: changed_pg['Mounts'][0]['Source'] = '/var/lib/docker/replaced-volume/_data'
+                    boundary = {'inputsSha256': '1'*64, 'manifestSha256': '2'*64, 'operationsCommit': OPERATIONS_SHA, 'postgresBinding': binding}
+                    restored = {'postgresBinding': binding, 'logicalDigests': {'database': 'old', 'globals': 'old'}}
+                    for name, value in [('first-app-write.json',boundary),('restored.json',restored),('credentials.json',{'basicUser':'synthetic','basicPassword':'synthetic','loginCode':'synthetic','pin':'synthetic'})]:
+                        (root/name).write_text(json.dumps(value)); (root/name).chmod(0o600)
+                    observations = [changed if moment == 'before_verify' else initial, initial, changed if moment == 'after_smoke' else initial]
+                    with patch.object(bootstrap, 'STATE', root), patch.object(bootstrap, 'observe_containers', side_effect=observations), \
+                         patch.object(bootstrap, 'verify_networks'), patch.object(bootstrap, 'verify_jobs_off'), patch.object(bootstrap, 'check_execution_windows'), \
+                         patch.object(bootstrap, 'database_digests', return_value={'database':'legitimate-app-writes','globals':'old'}), patch.object(bootstrap, 'run', return_value=b''):
+                        if moment == 'unchanged':
+                            bootstrap.verify_initial_install(release, {'smokeCredentials': {'path': str(root/'credentials.json')}}, '1'*64, '2'*64, OPERATIONS_SHA)
+                            self.assertTrue((release/'install-receipt').exists())
+                        else:
+                            with self.assertRaises(bootstrap.BootstrapError):
+                                bootstrap.verify_initial_install(release, {'smokeCredentials': {'path': str(root/'credentials.json')}}, '1'*64, '2'*64, OPERATIONS_SHA)
+                            self.assertFalse((release/'install-receipt').exists())
+                            self.assertFalse((root/'installed').exists())
+
+
+class DurableBoundaryTests(unittest.TestCase):
+    def test_exclusive_publication_syncs_file_then_parent_directory_before_return(self):
+        import stat
+        calls = []
+        original = os.fsync
+        def syncing(fd):
+            calls.append('directory' if stat.S_ISDIR(os.fstat(fd).st_mode) else 'file')
+            original(fd)
+        with tempfile.TemporaryDirectory() as tmp, patch.object(bootstrap.os, 'fsync', side_effect=syncing):
+            bootstrap.write_new(Path(tmp).resolve()/'boundary.json', '{}')
+        self.assertEqual(calls, ['file', 'directory'])
+
+
+class ExecutionWindowTests(unittest.TestCase):
+    def fixture(self, root):
+        window = {'windowStart': '2026-10-05T10:00:00+00:00', 'windowEnd': '2026-10-05T10:01:00+00:00'}
+        fence = root/'fence.json'; fence.write_text(json.dumps(window)); fence.chmod(0o600)
+        package = dict(window, sourceFence={'path': str(fence), 'sha256': hashlib.sha256(fence.read_bytes()).hexdigest()})
+        pg = next(item for item in healthy_containers() if item['Name'] == '/platform-infra-postgres-1')
+        binding = {'containerId': pg['Id'], 'image': pg['Image'], 'dataMount': copy.deepcopy(pg['Mounts'][0])}
+        for name,value in [('restored.json',{'inputsSha256':'1'*64,'postgresBinding':binding}),
+                           ('first-app-write-fixture.json',{'inputsSha256':'1'*64,'manifestSha256':'2'*64,'operationsCommit':OPERATIONS_SHA,'postgresBinding':binding}),
+                           ('credentials.json',{'basicUser':'synthetic','basicPassword':'synthetic','loginCode':'synthetic','pin':'synthetic'})]:
+            (root/name).write_text(json.dumps(value)); (root/name).chmod(0o600)
+        package['smokeCredentials'] = {'path': str(root/'credentials.json')}
+        return package, window, pg
+
+    def test_expired_window_after_slow_restore_prevents_first_write_and_app_start(self):
+        import datetime as dt
+        real_datetime = dt.datetime
+        clock = [real_datetime(2026,10,5,10,0,tzinfo=dt.timezone.utc)]
+        class Clock(real_datetime):
+            @classmethod
+            def now(cls, tz=None): return clock[0]
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp).resolve(); release=root/'release'; release.mkdir()
+            package,access,pg=self.fixture(root); calls=[]
+            def restore(_): clock[0] = real_datetime(2026,10,5,10,2,tzinfo=dt.timezone.utc)
+            def docker(args, **kwargs):
+                calls.append(args)
+                if args[:3] == ['docker','image','inspect']:
+                    return json.dumps([{'Id':args[3],'Os':'linux','Architecture':'amd64'}]).encode()
+                if 'config' in args:
+                    return json.dumps({'services':{name:{'image':image,'restart':'no'} for name,image in bootstrap.IMAGES.items()}}).encode()
+                return b''
+            with patch.object(bootstrap,'STATE',root), patch.object(bootstrap.dt,'datetime',Clock), \
+                 patch.object(bootstrap,'observe_containers',return_value=[pg]), patch.object(bootstrap,'verify_networks'), \
+                 patch.object(bootstrap,'verify_restored',side_effect=restore), patch.object(bootstrap,'run',side_effect=docker):
+                bootstrap.check_execution_windows(package,access)
+                with self.assertRaisesRegex(bootstrap.BootstrapError,'execution window'):
+                    bootstrap.start_application(release,package,'1'*64,'2'*64,OPERATIONS_SHA,access=access)
+            self.assertFalse((root/'first-app-write.json').exists())
+            self.assertFalse(any('up' in args for args in calls))
+
+    def test_expired_window_after_slow_health_prevents_auth_smoke_and_receipt(self):
+        import datetime as dt
+        real_datetime = dt.datetime
+        clock = [real_datetime(2026,10,5,10,0,tzinfo=dt.timezone.utc)]
+        class Clock(real_datetime):
+            @classmethod
+            def now(cls, tz=None): return clock[0]
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp).resolve(); release=root/'release'; release.mkdir()
+            package,access,_=self.fixture(root)
+            (root/'first-app-write-fixture.json').rename(root/'first-app-write.json')
+            calls=[]
+            def docker(args, **kwargs):
+                calls.append(args)
+                clock[0]=real_datetime(2026,10,5,10,2,tzinfo=dt.timezone.utc)
+                return b''
+            with patch.object(bootstrap,'STATE',root), patch.object(bootstrap.dt,'datetime',Clock), \
+                 patch.object(bootstrap,'observe_containers',return_value=healthy_containers()), patch.object(bootstrap,'verify_networks'), \
+                 patch.object(bootstrap,'database_digests',return_value={}), patch.object(bootstrap,'run',side_effect=docker):
+                with self.assertRaisesRegex(bootstrap.BootstrapError,'execution window'):
+                    bootstrap.verify_initial_install(release,package,'1'*64,'2'*64,OPERATIONS_SHA,access=access)
+            self.assertFalse(any('-i' in args for args in calls))
+            self.assertFalse((release/'install-receipt').exists())
+            self.assertFalse((root/'installed').exists())
+
+    def test_failed_directory_sync_prevents_application_command(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp).resolve();release=root/'release';release.mkdir()
+            package,access,pg=self.fixture(root);calls=[]
+            def docker(args,**kwargs):
+                calls.append(args)
+                if args[:3]==['docker','image','inspect']:
+                    return json.dumps([{'Id':args[3],'Os':'linux','Architecture':'amd64'}]).encode()
+                if 'config' in args:
+                    return json.dumps({'services':{name:{'image':image,'restart':'no'} for name,image in bootstrap.IMAGES.items()}}).encode()
+                return b''
+            with patch.object(bootstrap,'STATE',root), patch.object(bootstrap,'observe_containers',return_value=[pg]), \
+                 patch.object(bootstrap,'verify_networks'), patch.object(bootstrap,'verify_restored'), patch.object(bootstrap,'check_execution_windows'), \
+                 patch.object(bootstrap,'sync_directory',side_effect=OSError('synthetic fsync failure')), patch.object(bootstrap,'run',side_effect=docker):
+                with self.assertRaises(OSError):
+                    bootstrap.start_application(release,package,'1'*64,'2'*64,OPERATIONS_SHA,access=access)
+            self.assertFalse(any('up' in args for args in calls))
+            self.assertTrue((root/'first-app-write.json').exists())
+            self.assertFalse((release/'install-receipt').exists())
 
 if __name__ == '__main__':
     unittest.main()

@@ -158,18 +158,33 @@ def verify_networks():
                 and items[0]['Options'].get('com.docker.network.bridge.gateway_mode_ipv4') == 'isolated', 'application network is not isolated')
 
 
+def postgres_binding(containers):
+    matches = [item for item in containers if item.get('Name') == '/platform-infra-postgres-1']
+    require(len(matches) == 1, 'database container identity missing or ambiguous')
+    item = matches[0]
+    require(isinstance(item.get('Id'), str) and re.fullmatch('[0-9a-f]{64}', item['Id']), 'database container ID invalid')
+    mounts = [m for m in item.get('Mounts', []) if m.get('Destination') == '/var/lib/postgresql/data']
+    require(len(mounts) == 1 and mounts[0].get('Type') == 'volume' and mounts[0].get('Name') == 'platform-infra_postgres_data', 'database volume identity mismatch')
+    require(isinstance(mounts[0].get('Source'), str) and mounts[0]['Source'].startswith('/')
+            and mounts[0].get('Driver') == 'local' and mounts[0].get('RW') is True, 'database mount identity invalid')
+    # Copy the complete observed mount: later observations must never mutate the baseline.
+    return {'containerId': item['Id'], 'image': item['Image'], 'dataMount': json.loads(json.dumps(mounts[0]))}
+
+
 def verify_database_only(containers):
     require(classify_containers(containers) == 'database_only', 'restore/first start requires only the database')
     item = containers[0]
     require(item['Image'] == PG and item['State']['Running'] is True and item['State'].get('Health', {}).get('Status') == 'healthy', 'restored database image or health mismatch')
     require(item['HostConfig']['RestartPolicy']['Name'] == 'no' and not item['HostConfig'].get('PortBindings')
             and not item['HostConfig'].get('Privileged') and set(item['NetworkSettings']['Networks']) == {'catering_private'}, 'database isolation mismatch')
-    mounts = [m for m in item.get('Mounts', []) if m.get('Destination') == '/var/lib/postgresql/data']
-    require(len(mounts) == 1 and mounts[0].get('Type') == 'volume' and mounts[0].get('Name') == 'platform-infra_postgres_data', 'database volume identity mismatch')
+    return postgres_binding(containers)
 
 
-def verify_installed_containers(containers):
+def verify_installed_containers(containers, *, expected_database=None):
     require(classify_containers(containers) == 'application_present', 'initial install has not been observed')
+    actual_database = postgres_binding(containers)
+    if expected_database is not None:
+        require(actual_database == expected_database, 'restored PostgreSQL instance or data mount changed')
     identities = {}
     for item in containers:
         service = item['Config']['Labels'].get('com.docker.compose.service')
@@ -284,6 +299,22 @@ def verify_inputs(args):
     return package
 
 
+def sync_directory(path):
+    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def check_execution_windows(package, access):
+    fresh_window(package)
+    fresh_window(access)
+    fence = package['sourceFence']
+    require(digest(protected(fence['path'])) == fence['sha256'], 'source fencing evidence changed')
+    fresh_window(read_json(fence['path']))
+
+
 def write_new(path, content, mode=0o600):
     # Exclusive, synced writes preserve partial-work evidence and forbid silent retries.
     fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, mode)
@@ -291,6 +322,7 @@ def write_new(path, content, mode=0o600):
         handle.write(content)
         handle.flush()
         os.fsync(handle.fileno())
+    sync_directory(Path(path).parent)
 
 
 def compose(release):
@@ -315,23 +347,31 @@ def verify_restored(package):
     return {'logicalDigests': package['logicalDigests'], 'fileInventorySha256': package['fileInventory']['sha256']}
 
 
-def write_initial_receipt(release, proof, runtime_image, web_image):
+def write_initial_receipt(release, proof, runtime_image, web_image, *, before_publish=None):
     """Publish only after the caller has verified actual isolated runtime and auth smoke."""
+    if before_publish is not None:
+        before_publish()
     write_new(release / 'bootstrap-verification.json', json.dumps(proof, sort_keys=True))
     receipt = {'status': 'installed', 'commit': proof['productCommit'], 'runtime_image': runtime_image, 'web_image': web_image,
                'operations_commit': proof['operationsCommit'], 'manifest_sha256': proof['manifestSha256'], 'installation_kind': 'initial',
                'bootstrap_evidence_sha256': digest(release / 'bootstrap-verification.json'),
                'installed_at': dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}
+    if before_publish is not None:
+        before_publish()
     write_new(release / 'install-receipt', ''.join(f'{k}={v}\n' for k, v in receipt.items()))
+    if before_publish is not None:
+        before_publish()
     write_new(release.parent / 'installed', proof['productCommit'] + '\n', 0o644)
 
 
-def start_application(release, package, inputs_sha256, manifest_sha256, operations_commit):
+def start_application(release, package, inputs_sha256, manifest_sha256, operations_commit, *, access=None):
     boundary = STATE / 'first-app-write.json'
     require(not boundary.exists(), 'first app write may have occurred; manual recovery required')
     containers = observe_containers()
-    verify_database_only(containers)
-    require(read_json(STATE / 'restored.json')['inputsSha256'] == inputs_sha256, 'restore input binding changed')
+    database = verify_database_only(containers)
+    restored = read_json(STATE / 'restored.json')
+    require(restored['inputsSha256'] == inputs_sha256, 'restore input binding changed')
+    require(restored.get('postgresBinding') == database, 'restored PostgreSQL instance or data mount changed')
     verify_networks()
     verify_restored(package)
     for reference in set(IMAGES.values()):
@@ -340,10 +380,44 @@ def start_application(release, package, inputs_sha256, manifest_sha256, operatio
     effective = json.loads(run(compose(release) + ['config', '--format', 'json']))
     for name, service in effective['services'].items():
         require(name in IMAGES and service['image'] == IMAGES[name] and service.get('restart', 'no') == 'no' and not service.get('ports'), 'first-start Compose image, restart or port mismatch')
+    require(verify_database_only(observe_containers()) == database, 'PostgreSQL instance or data mount changed during pre-start verification')
+    check_execution_windows(package, access)
     write_new(boundary, json.dumps({'targetId': TARGET, 'productCommit': PRODUCT, 'operationsCommit': operations_commit,
-                                 'inputsSha256': inputs_sha256, 'manifestSha256': manifest_sha256,
+                                 'inputsSha256': inputs_sha256, 'manifestSha256': manifest_sha256, 'postgresBinding': database,
                                  'startedAt': dt.datetime.now(dt.timezone.utc).isoformat()}))
+    check_execution_windows(package, access)
     run(compose(release) + ['up', '-d', '--no-deps', '--pull', 'never', 'intake', 'offer', 'production', 'exports', 'web'])
+
+
+def verify_initial_install(release, package, inputs_sha256, manifest_sha256, operations_commit, *, access=None):
+    boundary = STATE / 'first-app-write.json'
+    observed_boundary = read_json(boundary)
+    require(observed_boundary['inputsSha256'] == inputs_sha256 and observed_boundary['manifestSha256'] == manifest_sha256
+            and observed_boundary['operationsCommit'] == operations_commit, 'initial write boundary mismatch')
+    expected_database = observed_boundary.get('postgresBinding')
+    require(isinstance(expected_database, dict) and read_json(STATE / 'restored.json').get('postgresBinding') == expected_database, 'restored PostgreSQL baseline missing or changed')
+    verify_networks()
+    identities = verify_installed_containers(observe_containers(), expected_database=expected_database)
+    database_digests()  # Read actual version/schema; initial app writes may legitimately change the data digest.
+    for service, port in (('intake', 3101), ('offer', 3102), ('production', 3103), ('exports', 3104)):
+        run(['docker', 'exec', 'platform-infra-' + service + '-1', 'node', '--input-type=module', '-e',
+             f"const r=await fetch('http://127.0.0.1:{port}/health',{{signal:AbortSignal.timeout(10000)}});if(!r.ok||(await r.json()).status!=='ok')process.exit(1)"])
+    run(['docker', 'exec', 'platform-infra-web-1', 'caddy', 'validate', '--config', '/etc/caddy/Caddyfile', '--adapter', 'caddyfile'])
+    proof = {'state': 'verified_initial_install', 'targetId': TARGET, 'productCommit': PRODUCT, 'operationsCommit': operations_commit,
+             'manifestSha256': manifest_sha256, 'inputsSha256': inputs_sha256, 'containers': identities,
+             'postgresBinding': expected_database, 'writeBoundarySha256': digest(boundary), 'restoredSha256': digest(STATE / 'restored.json')}
+    credentials = read_json(package['smokeCredentials']['path'])
+    require(set(credentials) == {'basicUser', 'basicPassword', 'loginCode', 'pin'} and all(isinstance(v, str) and v for v in credentials.values()), 'protected smoke credentials missing')
+    smoke = (SCRIPTS / 'catering-target-operator-smoke.mjs').read_text()
+    verify_installed_containers(observe_containers(), expected_database=expected_database)
+    check_execution_windows(package, access)
+    run(['docker', 'exec', '-i', 'platform-infra-intake-1', 'node', '--input-type=module', '-e', smoke],
+        input=json.dumps(credentials).encode())
+    verify_jobs_off()
+    verify_networks()
+    proof['containers'] = verify_installed_containers(observe_containers(), expected_database=expected_database)
+    write_initial_receipt(release, proof, IMAGES['intake'], IMAGES['web'],
+                          before_publish=lambda: check_execution_windows(package, access))
 
 
 def main(argv=None):
@@ -358,7 +432,7 @@ def main(argv=None):
     parser.add_argument('--inputs-sha256')
     args = parser.parse_args(argv)
     try:
-        verify_access(args.access_evidence, args.known_hosts, args.host)
+        access = verify_access(args.access_evidence, args.known_hosts, args.host)
         if args.phase == 'access':
             print('TARGET02_ACCESS_BINDING_OK')
             return 0
@@ -377,7 +451,9 @@ def main(argv=None):
         release = RELEASE_ROOT / PRODUCT
         manifest = module('operator').verify_bundle(release, PRODUCT, args.operations_commit, args.manifest_sha256, release / 'source', target_id=TARGET)
         require(not (RELEASE_ROOT / 'installed').exists(), 'initial install already has an installed marker')
+        check_execution_windows(package, access)
         STATE.mkdir(mode=0o700, exist_ok=True)
+        sync_directory(STATE.parent)
         require(STATE.lstat().st_uid == 0 and stat.S_IMODE(STATE.lstat().st_mode) == 0o700 and not STATE.is_symlink(), 'bootstrap state directory unsafe')
         # flock serializes cooperating bootstrap commands. The durable boundary additionally blocks retries after app writes.
         import fcntl
@@ -387,7 +463,9 @@ def main(argv=None):
         require(not (RELEASE_ROOT / 'installed').exists(), 'initial install already recorded')
         owner = f'bootstrap_target={TARGET}\noperations_commit={args.operations_commit}\ninputs_sha256={args.inputs_sha256}\n'
         if args.phase == 'prepare':
+            check_execution_windows(package, access)
             UPDATE_LOCK.mkdir(mode=0o700)
+            sync_directory(UPDATE_LOCK.parent)
             write_new(UPDATE_LOCK / 'owner', owner)
         else:
             require(UPDATE_LOCK.is_dir() and not UPDATE_LOCK.is_symlink() and UPDATE_LOCK.lstat().st_uid == 0,
@@ -399,6 +477,7 @@ def main(argv=None):
             stage_binding_sha256=digest(SCRIPTS / 'catering-target-stage-binding.py'),
             oci_sha256=digest(SCRIPTS / 'catering_target_oci.py'), target_id=TARGET)
         if args.phase == 'prepare':
+            check_execution_windows(package, access)
             stage.write_receipt(release, stage_values)
         else:
             stage.verify_receipt(release, stage_values)
@@ -410,61 +489,51 @@ def main(argv=None):
             names = set(run(['docker', 'network', 'ls', '--format', '{{.Name}}']).decode().splitlines())
             require(names == {'bridge', 'host', 'none'}, 'new host has pre-existing application networks')
             for root in ('/etc/catering-target', '/opt/catering-agents-platform/platform-infra/sites', '/opt/catering-edge'):
+                check_execution_windows(package, access)
                 Path(root).mkdir(parents=True, mode=0o755, exist_ok=True)
             for scope in ('platform', 'edge'):
                 for entry in module('contract').RUNTIME_FILE_BINDINGS[scope]:
                     _, destination, source = entry
+                    check_execution_windows(package, access)
                     write_new(Path(destination), (release / 'source' / source).read_text(), 0o644)
+            check_execution_windows(package, access)
             write_new(STATE / 'prepared.json', json.dumps({'productCommit': PRODUCT, 'operationsCommit': args.operations_commit, 'manifestSha256': args.manifest_sha256}))
         elif args.phase == 'load':
             require(classify_containers(containers) == 'empty', 'image load requires an empty host')
             protected(STATE / 'prepared.json')
             for path in [release / 'runtime-image.tar.gz', release / 'web-image.tar.gz'] + [Path(package['infraArchives'][name]['path']) for name in ('postgres', 'edge')]:
+                check_execution_windows(package, access)
                 run(['docker', 'load', '--input', str(path)])
             for reference in set(IMAGES.values()) | {EDGE}:
                 observed = json.loads(run(['docker', 'image', 'inspect', reference]))
                 require(len(observed) == 1 and observed[0]['Id'] == reference, 'loaded immutable image mismatch')
+            check_execution_windows(package, access)
             write_new(STATE / 'images-loaded.json', json.dumps({'manifestSha256': args.manifest_sha256, 'images': IMAGES}))
         elif args.phase == 'postgres':
             require(classify_containers(containers) == 'empty', 'database start requires an empty host')
             protected(STATE / 'images-loaded.json')
             protected(RUNTIME)
             require('CATERING_WRITER_MODE=enabled' not in RUNTIME.read_text().splitlines(), 'productive writer must remain disabled')
+            check_execution_windows(package, access)
             run(compose(release) + ['up', '-d', '--no-deps', '--pull', 'never', 'postgres'])
             verify_networks()
         elif args.phase == 'verify-restored':
-            verify_database_only(containers)
+            database = verify_database_only(containers)
             verify_networks()
             proof = verify_restored(package)
-            write_new(STATE / 'restored.json', json.dumps(dict(proof, inputsSha256=args.inputs_sha256, manifestSha256=args.manifest_sha256)))
+            require(verify_database_only(observe_containers()) == database, 'PostgreSQL instance or data mount changed during restore verification')
+            check_execution_windows(package, access)
+            write_new(STATE / 'restored.json', json.dumps(dict(proof, inputsSha256=args.inputs_sha256, manifestSha256=args.manifest_sha256, postgresBinding=database)))
         elif args.phase == 'start':
-            start_application(release, package, args.inputs_sha256, args.manifest_sha256, args.operations_commit)
+            start_application(release, package, args.inputs_sha256, args.manifest_sha256, args.operations_commit, access=access)
         else:
             require(args.phase == 'verify-install', 'unsupported transition')
-            observed_boundary = read_json(boundary)
-            require(observed_boundary['inputsSha256'] == args.inputs_sha256 and observed_boundary['manifestSha256'] == args.manifest_sha256
-                    and observed_boundary['operationsCommit'] == args.operations_commit, 'initial write boundary mismatch')
-            verify_networks()
-            identities = verify_installed_containers(containers)
-            database_digests()  # Read actual version/schema; initial app writes may legitimately change the data digest.
-            for service, port in (('intake', 3101), ('offer', 3102), ('production', 3103), ('exports', 3104)):
-                run(['docker', 'exec', 'platform-infra-' + service + '-1', 'node', '--input-type=module', '-e',
-                     f"const r=await fetch('http://127.0.0.1:{port}/health',{{signal:AbortSignal.timeout(10000)}});if(!r.ok||(await r.json()).status!=='ok')process.exit(1)"])
-            run(['docker', 'exec', 'platform-infra-web-1', 'caddy', 'validate', '--config', '/etc/caddy/Caddyfile', '--adapter', 'caddyfile'])
-            proof = {'state': 'verified_initial_install', 'targetId': TARGET, 'productCommit': PRODUCT, 'operationsCommit': args.operations_commit,
-                     'manifestSha256': args.manifest_sha256, 'inputsSha256': args.inputs_sha256, 'containers': identities,
-                     'writeBoundarySha256': digest(boundary), 'restoredSha256': digest(STATE / 'restored.json')}
-            credentials = read_json(package['smokeCredentials']['path'])
-            require(set(credentials) == {'basicUser', 'basicPassword', 'loginCode', 'pin'} and all(isinstance(v, str) and v for v in credentials.values()), 'protected smoke credentials missing')
-            smoke = (SCRIPTS / 'catering-target-operator-smoke.mjs').read_text()
-            run(['docker', 'exec', '-i', 'platform-infra-intake-1', 'node', '--input-type=module', '-e', smoke],
-                input=json.dumps(credentials).encode())
-            verify_jobs_off()
-            verify_networks()
-            verify_installed_containers(observe_containers())
-            write_initial_receipt(release, proof, IMAGES['intake'], IMAGES['web'])
+            verify_initial_install(release, package, args.inputs_sha256, args.manifest_sha256, args.operations_commit, access=access)
             # Preserve the exclusion and its owner as evidence while reopening the normal updater's lock path.
+            check_execution_windows(package, access)
             UPDATE_LOCK.rename(STATE / 'completed-update-lock')
+            sync_directory(STATE)
+            sync_directory(UPDATE_LOCK.parent)
         print('TARGET02_BOOTSTRAP_OK phase=' + args.phase + ' productive_writer_released=false')
         return 0
     except (BootstrapError, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError,

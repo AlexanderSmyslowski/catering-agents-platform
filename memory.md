@@ -1,6 +1,6 @@
 # memory.md
 
-version: 5.429
+version: 5.430
 date: 2026-10-05
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -2441,3 +2441,9 @@ Quelle: `8de2e96c8604f12da2ec14c39b187db04dfb61cf`. Der folgende Betriebsbericht
 - Geschlossener Zwei-Ziel-Operationspfad: prod-1 bleibt Standard, prod-02 ist explizites Opt-in auf 168651076/2.28.200.16. Verträge und Prüfwerkzeuge vom gebundenen Operationscheckout; Produktbaum unverändert von 9ce. Die neue Bundlebindung verwendet P4-Archivbytes ohne Neubau und dokumentiert das historische Quellmanifest.
 - Separater Bootstrap mit prüfbaren Zuständen und vollem geschütztem Restorevergleich; Erstinstallation besitzt einen eigenen gebundenen Receipt ohne vorherige Images. Initiale App-/Login-/Auditwrites sind eine dauerhafte Rückfallgrenze; produktiver Writer, Edge, Timer und Heartbeat werden nicht freigegeben. Normale Update-/Backup-/Preservationgates bleiben erhalten.
 - Gezielte synthetische Python-/Vitest-Prüfungen dokumentieren Verhalten und Grenzen; unabhängiger Review und automatische PR-CI bleiben offen. Keine reale Quelle/Zielausführung, Bundleerzeugung, Übertragung, Restore, Integration oder Hub-Schreibwirkung.
+
+### 5.430 - 2026-10-05 — target02 Reviewkorrektur: PG-Erhaltung, dauerhafte Schreibgrenze, Zeitfenster
+
+- Unabhängige Important-Befunde auf `a933fe06e8109f19424f8bce937c56ab711db833`: eine ersetzte PG-Instanz bzw. ein anderes Datenvolume konnte nach Appstart einen Initial-Receipt erhalten; die First-write-Datei synchronisierte ihr Elternverzeichnis nicht; lange Prüfungen konnten das freigegebene Fenster vor einer Mutation überschreiten.
+- Korrekturstand bindet tatsächliche PG-Container-ID und vollständigen Datenmount in Restore-/First-write-Belegen und vergleicht sie vor Start und vor/nach Smoke erneut. Legitimer Inhaltsschreibfortschritt bleibt erlaubt. Exklusive Dateipublikation synchronisiert Datei und Elternverzeichnis, neue State-/Lockpfade auch ihren Elternpfad. Zeitfenster werden nach langen Prüfungen direkt vor Mutationen, Auth-Smoke und Receiptpublikation erneut geprüft.
+- Gezielte synthetische RED-/GREEN-Prüfungen und negative Kontrollen; unabhängige erneute Prüfung und exakte CI-Annahme bleiben offen. Keine Host-, Docker-, Daten- oder Deploymentausführung.

@@ -237,12 +237,19 @@ keine Wiederholung eines unklaren Schritts.
    ```
 
    `start` vergleicht Restore und Isolation erneut, prüft effektive Compose-Images und
-   schreibt **vor** Appausführung exklusiv `first-app-write.json`. Compose verwendet
+   bindet die tatsächlich restaurierte PostgreSQL-Container-ID samt vollständigem Datenmount
+   unveränderlich in Restore- und First-write-Beleg und schreibt **vor** Appausführung
+   exklusiv `first-app-write.json`. Datei und Elternverzeichnis werden vor dem Appstart
+   synchronisiert. Instanz-/Mountdrift wird vor Start, bei Erstprüfung und vor/nach
+   dem Auth-Smoke abgewiesen; legitime Appwrites erfordern keinen unveränderten DB-Inhaltshash. Compose verwendet
    Base + P4-Candidate-Override, Restart `no`, `--no-deps --pull never`. Selbst ein Fehler
    unmittelbar danach gilt als mögliche Zielschreibwirkung und sperrt automatischen Retry.
    `verify-install` prüft echte Containeridentitäten, M-Descriptor, Netze/Restart/Ports,
    PG17.9/Schema3, HTTP-Health und den gebundenen authentisierten Read-Smoke. Auch dessen
    Login-/Session-/Auditwrites liegen bereits hinter der markierten Schreibgrenze.
+   Nach langsamen Prüfungen werden Paket-, Zugangs- und Source-Fencing-Zeitfenster
+   unmittelbar vor Mutation, Appstart, Auth-Smoke und jeder Receipt-Publikation erneut geprüft.
+   Ein abgelaufenes Fenster hält den Schritt mit erhaltenen Belegen an.
    Erst danach entstehen `bootstrap-verification.json`, `installation_kind=initial`
    im Install-Receipt und der installierte Marker. Kein `previous-images.json` wird erfunden.
 
