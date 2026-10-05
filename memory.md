@@ -1,9 +1,16 @@
 # memory.md
 
-version: 5.428
-date: 2026-10-04
+version: 5.429
+date: 2026-10-05
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
+
+## Entwicklungsstand – prod-02-Zielbindung und isolierter Erstaufbau (2026-10-05)
+
+- Begrenzter Operationskandidat auf Main `9c09aa981a1724b2cd23fc6353c38b53a0fc177b`: explizites prod-02-Opt-in, Operationsvertrag vom Operationscheckout, Produktquellen weiter getrennt. Kein kopiertes prod-1-Runtimeinventar und keine Abschwächung des normalen Produktions-Preflights.
+- Migrationsprodukt bleibt `9ce4fbc96a5dd877f2cd2f00588a22be861306b9`, PG17.9/Schema3. Neue Manifestbindung übernimmt ausschließlich geprüfte P4-Archivbytes mit expliziter historischer Quellprovenienz; neuer Operations-SHA ist erst nach regulärer Annahme einzusetzen. PWA-Main wird nicht als Migration freigegeben.
+- Hostlokaler Bootstrap trennt Beobachtung, Vorbereitung, Image-Load, Datenbankstart, echten Restorevergleich, ersten isolierten Appstart und beobachtete Erstinstallation. Source-Fencing-/Inventar-/Backup-/Zugangs-/Ressourcen-/Fenstereingaben bleiben geschützte externe Voraussetzungen. Erste mögliche Appwrites erhalten eine dauerhafte Grenze; kein erfundener Vorgänger und keine automatische Rückfallbehauptung. Prod-1-/Stage-/Release-State-Verträge und Initial-Receipt sind gezielt getestet.
+- Noch keine unabhängige Codeabnahme, keine exakte main/push-CI-Annahme und keine Ausführungsfreigabe. Kein Hostkontakt, realer Bundlebau/-transfer, Docker/Restore/Timer/Heartbeat, DNS-Wechsel oder Hub-Writeback. Details und Grenzen: `docs/operations/CATERING_TARGET02_BOOTSTRAP.md`, Snapshot `docs/agent-memory/2026-10-05-target02-bootstrap.md`.
 
 ## Aktueller Entwicklungsstand – P4.1 Observer-Check / Preservationbindung (2026-10-03)
 
@@ -2428,3 +2435,9 @@ Quelle: `8de2e96c8604f12da2ec14c39b187db04dfb61cf`. Der folgende Betriebsbericht
 - Freigegebener Entwurf B „Geteilter Teller“ wurde exakt aus dem zuvor übermittelten SVG-Codeblock wiederhergestellt. Einziger SVG-Master ist `backoffice-ui/public/favicon.svg`; PNGs 32/180/192/512 werden mit fixiertem Dev-Renderer reproduzierbar erzeugt und geprüft. Sichtprüfung bei 32/48 bestanden; Purpose nur `any`, keine Maskable-Freigabe.
 - Gezielt RED/GREEN für Installations-/Brandingverträge und bestehende Route-/Authchecks sowie Build. 109 gezielte Tests, Build und vollständiger lokaler synthetischer Browser-Rehearsal bestanden. Unabhängiger finaler Review und automatische PR-CI sind gesondert am Kandidaten zu binden. Keine OS-Installations-/Produktionsprobe; Safari-Sitzungscontainer und gesperrter Edge-Modus bleiben dokumentierte Grenzen. Nutzeranleitung: `docs/product/CATERINGOS_INSTALLATION.md`; Übergabe: `docs/agent-memory/2026-10-04-cateringos-installation-ux.md`.
 - Keine Änderung am v4-Updateweg, Backup/Restore, Infrastruktur oder Persistenz. Kein Merge, Deployment, Produktionskontakt oder Hub-Writeback.
+
+### 5.429 - 2026-10-05 — prod-02-Bindung / isolierter Erstaufbau (Review ausstehend)
+
+- Geschlossener Zwei-Ziel-Operationspfad: prod-1 bleibt Standard, prod-02 ist explizites Opt-in auf 168651076/2.28.200.16. Verträge und Prüfwerkzeuge vom gebundenen Operationscheckout; Produktbaum unverändert von 9ce. Die neue Bundlebindung verwendet P4-Archivbytes ohne Neubau und dokumentiert das historische Quellmanifest.
+- Separater Bootstrap mit prüfbaren Zuständen und vollem geschütztem Restorevergleich; Erstinstallation besitzt einen eigenen gebundenen Receipt ohne vorherige Images. Initiale App-/Login-/Auditwrites sind eine dauerhafte Rückfallgrenze; produktiver Writer, Edge, Timer und Heartbeat werden nicht freigegeben. Normale Update-/Backup-/Preservationgates bleiben erhalten.
+- Gezielte synthetische Python-/Vitest-Prüfungen dokumentieren Verhalten und Grenzen; unabhängiger Review und automatische PR-CI bleiben offen. Keine reale Quelle/Zielausführung, Bundleerzeugung, Übertragung, Restore, Integration oder Hub-Schreibwirkung.

@@ -35,7 +35,7 @@ for mutation in (None, 'indexDigest', 'platformManifestDigest', 'configDigest'):
             manifest['images']['runtime'][mutation] = 'sha256:' + 'f'*64
             (out / 'manifest.json').write_text(json.dumps(manifest))
             sha = hashlib.sha256((out / 'manifest.json').read_bytes()).hexdigest()
-        sys.argv = ['-', '/opt/catering-releases/' + PRODUCT_SHA, sha, PRODUCT_SHA, OPERATIONS_SHA, runtime, web]
+        sys.argv = ['-', '/opt/catering-releases/' + PRODUCT_SHA, sha, PRODUCT_SHA, OPERATIONS_SHA, runtime, web, 'catering-prod-1']
         try:
             exec(compile(script, '<remote-bundle>', 'exec'), {'fixture_root': str(out), '__name__': '__main__'})
         except (SystemExit, ValueError):

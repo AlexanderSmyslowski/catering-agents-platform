@@ -376,3 +376,12 @@ Vor dem ersten echten Zielzugriff sind erneut erforderlich:
 6. ausdrückliche Betriebsfreigabe für genau diese Commit- und Bundlebindungen.
 
 Bis dahin gilt: **kein Dispatch, kein SSH-Live-Lauf, kein Deployment.**
+
+
+## Begrenzter Erstaufbau auf prod-02
+
+Der explizite Zielwechsel und die getrennte, isolierte Erstinstallation sind in
+[CATERING_TARGET02_BOOTSTRAP.md](CATERING_TARGET02_BOOTSTRAP.md) beschrieben.
+Ohne `--target catering-prod-02` bleibt der Operator auf prod-1. Das historische
+Runtimeinventar und bestehende Produktions-Preflight-Gates bleiben erhalten.
+Dieser Entwicklungsstand ist keine Operationsannahme oder Migrationsfreigabe.

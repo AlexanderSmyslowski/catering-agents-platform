@@ -157,6 +157,18 @@ def _validate_install_receipt(release_dir: Path, values: dict[str, str], *, expe
         "operations_commit": values["operations_commit"],
         "manifest_sha256": values["manifest_sha256"],
     }
+    if observed.get("installation_kind") != "initial" and (release_dir / "bootstrap-verification.json").exists():
+        raise StageBindingError("bootstrap evidence requires an initial install receipt")
+    if observed.get("installation_kind") == "initial":
+        if values.get("target_id") != "catering-prod-02" or (release_dir / "previous-images.json").exists():
+            raise StageBindingError("initial install cannot invent a predecessor")
+        proof = _regular(release_dir, "bootstrap-verification.json", mode=0o600, uid=expected_uid, gid=expected_gid)
+        expected["installation_kind"] = "initial"
+        expected["bootstrap_evidence_sha256"] = _digest(proof)
+        document = json.loads(proof.read_text())
+        for key, value in {"targetId": "catering-prod-02", "productCommit": values["product_commit"], "operationsCommit": values["operations_commit"], "manifestSha256": values["manifest_sha256"], "state": "verified_initial_install"}.items():
+            if document.get(key) != value:
+                raise StageBindingError("initial install evidence mismatch")
     if (
         set(observed) != set(expected) | {"installed_at"}
         or any(observed.get(key) != value for key, value in expected.items())
@@ -180,7 +192,7 @@ def _verify_release_layout(
     _directory(release_dir, "", mode=0o755, uid=expected_uid, gid=expected_gid)
     names = {entry.name for entry in release_dir.iterdir()}
     required = RELEASE_FILES | {"source"}
-    optional = {"stage-receipt", "previous-images.json", "install-receipt"}
+    optional = {"stage-receipt", "previous-images.json", "install-receipt", "bootstrap-verification.json"}
     if not required.issubset(names) or names - required - optional:
         raise StageBindingError("stage release layout is invalid")
     if require_stage_receipt and "stage-receipt" not in names:
@@ -189,7 +201,9 @@ def _verify_release_layout(
         _regular(release_dir, "stage-receipt", mode=0o600, uid=expected_uid, gid=expected_gid)
     if "previous-images.json" in names:
         _validate_previous_images(release_dir, expected_uid=expected_uid, expected_gid=expected_gid)
-    if "install-receipt" in names and "previous-images.json" not in names:
+    if "bootstrap-verification.json" in names and "install-receipt" not in names:
+        raise StageBindingError("partial initial install requires manual recovery")
+    if "install-receipt" in names and "previous-images.json" not in names and "bootstrap-verification.json" not in names:
         raise StageBindingError("installed release state is incomplete")
     if "install-receipt" in names:
         _regular(release_dir, "install-receipt", mode=0o600, uid=expected_uid, gid=expected_gid)
@@ -205,6 +219,7 @@ def inspect_existing_release(
     web_image: str,
     stage_binding_sha256: str,
     oci_sha256: str,
+    target_id: str = "catering-prod-1",
     require_production_release_root: bool = True,
     expected_uid: int | None = 0,
     expected_gid: int | None = 0,
@@ -229,6 +244,7 @@ def inspect_existing_release(
         web_image=web_image,
         stage_binding_sha256=stage_binding_sha256,
         oci_sha256=oci_sha256,
+        target_id=target_id,
         require_production_release_root=require_production_release_root,
         expected_uid=expected_uid,
         expected_gid=expected_gid,
@@ -263,7 +279,7 @@ def _source_file_digests(
 
 
 def _validated_source_manifest(manifest: Any) -> dict[str, str]:
-    if not isinstance(manifest, dict) or manifest.get("schemaVersion") != 4 or set(manifest) != MANIFEST_KEYS:
+    if not isinstance(manifest, dict) or manifest.get("schemaVersion") != 4 or set(manifest) != MANIFEST_KEYS | ({"migrationSource"} if manifest.get("targetId") == "catering-prod-02" else set()):
         raise StageBindingError("stage manifest source binding is invalid")
     source_files = manifest.get("sourceFiles")
     if not isinstance(source_files, dict) or set(source_files) != set(SOURCE_COMPOSE_FILES):
@@ -304,10 +320,13 @@ def stage_values(
     web_image: str,
     stage_binding_sha256: str,
     oci_sha256: str,
+    target_id: str = "catering-prod-1",
     require_production_release_root: bool = True,
     expected_uid: int | None = 0,
     expected_gid: int | None = 0,
 ) -> dict[str, str]:
+    if target_id not in {"catering-prod-1", "catering-prod-02"}:
+        raise StageBindingError("unknown target")
     release = str(release_dir)
     if require_production_release_root and not re.fullmatch(r"/opt/catering-releases/[0-9a-f]{40}", release):
         raise StageBindingError("stage release path is invalid")
@@ -350,7 +369,7 @@ def stage_values(
     if (
         manifest.get("schemaVersion") != 4
         or manifest.get("repository") != "AlexanderSmyslowski/catering-agents-platform"
-        or manifest.get("targetId") != "catering-prod-1"
+        or manifest.get("targetId") != target_id
         or manifest.get("platform") != "linux/amd64"
         or manifest.get("productCommit") != product_commit
         or manifest.get("operationsCommit") != operations_commit
@@ -404,6 +423,12 @@ def stage_values(
             for relative in SOURCE_COMPOSE_FILES
         },
     }
+    if target_id == "catering-prod-02":
+        if product_commit != "9ce4fbc96a5dd877f2cd2f00588a22be861306b9" or operations_commit == "b1e3d44573bf6fe6d3c8e46861792a592535e856":
+            raise StageBindingError("target02 migration commit mismatch")
+        if manifest.get("migrationSource") != {'targetId': 'catering-prod-1', 'operationsCommit': 'b1e3d44573bf6fe6d3c8e46861792a592535e856', 'manifestSha256': '9a0bb5c49fd09a9e64a99d00babf69ac771e66238ec5ae728eeedebe7ed79df0'}:
+            raise StageBindingError("migration source provenance mismatch")
+        values["target_id"] = target_id
     if (release_dir / "install-receipt").exists():
         _validate_install_receipt(release_dir, values, expected_uid=expected_uid, expected_gid=expected_gid)
     return values
@@ -448,6 +473,7 @@ def _main() -> int:
     actions = parser.add_subparsers(dest="action", required=True)
     for action in ("write", "verify", "inspect-existing"):
         receipt = actions.add_parser(action)
+        receipt.add_argument("--target", choices=("catering-prod-1", "catering-prod-02"), default="catering-prod-1")
         receipt.add_argument("release_dir", type=Path)
         receipt.add_argument("manifest_sha256")
         receipt.add_argument("product_commit")
@@ -468,6 +494,7 @@ def _main() -> int:
         if args.action == "inspect-existing":
             print(inspect_existing_release(
                 args.release_dir,
+                target_id=args.target,
                 manifest_sha256=args.manifest_sha256,
                 product_commit=args.product_commit,
                 operations_commit=args.operations_commit,
@@ -479,6 +506,7 @@ def _main() -> int:
             return 0
         values = stage_values(
             args.release_dir,
+            target_id=args.target,
             manifest_sha256=args.manifest_sha256,
             product_commit=args.product_commit,
             operations_commit=args.operations_commit,
