@@ -450,6 +450,8 @@ sudo() { [[ "$1" == -n && "$2" == /usr/bin/python3 ]] || return 86; command "$P4
 python3() { command "$P41_REAL_PYTHON" -B "$P41_PROBE" python json "$@"; }
 preflight_fail() { printf 'TARGET_PREFLIGHT_FAIL gate=%s\\n' "$1" >&2; return 1; }
 observer="$1"; release_root=/synthetic; requested_release_sha=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+# The extracted release fragment inherits this target from the full preflight caller.
+target_id=catering-prod-1
 source_platform_base=platform-infra/base; source_platform_ops=platform-infra/ops
 release_binding=$'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\\tsha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\\tsha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
 platform_base_hash=x; platform_ops_hash=x; bound_product_sha=x; operations_commit=x; manifest_sha=x
