@@ -39,6 +39,20 @@ def decode(data):
 
 def inspect_archive(path: Path, build_iid: str | None = None) -> dict[str, str]:
     """R hashes index.json bytes; M alone is the runnable immutable reference."""
+    return _inspect_archive(path, build_iid=build_iid)
+
+
+def inspect_infrastructure_archive(path: Path, pinned_root: str) -> dict:
+    """Prove an explicitly pinned index's amd64 branch in a partial Docker export.
+
+    Foreign manifests and their attestations may be absent; their descriptor
+    metadata is root-bound, but their bytes are explicitly NOT verified.
+    """
+    require(isinstance(pinned_root, str) and DIGEST.fullmatch(pinned_root))
+    return _inspect_archive(path, infrastructure_root=pinned_root)
+
+
+def _inspect_archive(path, *, build_iid=None, infrastructure_root=None):
     try:
         with tarfile.open(path, "r:gz") as archive:
             members = {}
@@ -60,13 +74,17 @@ def inspect_archive(path: Path, build_iid: str | None = None) -> dict[str, str]:
                 with archive.extractfile(members[name]) as stream:
                     return stream.read()
 
-            def blob(descriptor, *, payload=True, extra_keys=frozenset()):
+            def descriptor_fields(descriptor, extra_keys=frozenset()):
                 require(isinstance(descriptor, dict) and set(descriptor) <= {"mediaType", "digest", "size", "platform", "annotations"} | extra_keys)
                 digest, size = descriptor.get("digest"), descriptor.get("size")
                 require(isinstance(digest, str) and DIGEST.fullmatch(digest) and type(size) is int and size >= 0)
                 require(isinstance(descriptor.get("mediaType"), str))
                 if "annotations" in descriptor:
                     require(isinstance(descriptor["annotations"], dict) and all(isinstance(k, str) and isinstance(v, str) for k, v in descriptor["annotations"].items()))
+                return digest, size
+
+            def blob(descriptor, *, payload=True, extra_keys=frozenset()):
+                digest, size = descriptor_fields(descriptor, extra_keys)
                 name = "blobs/sha256/" + digest[7:]
                 require(name in members and members[name].isfile() and members[name].size == size)
                 visited.add(name)
@@ -85,6 +103,7 @@ def inspect_archive(path: Path, build_iid: str | None = None) -> dict[str, str]:
             selected = []
             attestations = []
             referrer_subjects = []
+            unverified = []
 
             def referrer(descriptor, data):
                 # Docker may export a previously attached BuildKit provenance
@@ -134,11 +153,18 @@ def inspect_archive(path: Path, build_iid: str | None = None) -> dict[str, str]:
                     index(data, nested=True)
                     return
                 require(descriptor["mediaType"] == MANIFEST)
-                require(set(data) == {"schemaVersion", "mediaType", "config", "layers"})
+                keys = {"schemaVersion", "mediaType", "config", "layers"}
+                if infrastructure_root is not None and "annotations" in data:
+                    require(isinstance(data["annotations"], dict) and all(isinstance(k, str) and isinstance(v, str) for k, v in data["annotations"].items()))
+                    keys.add("annotations")
+                require(set(data) == keys)
                 is_attestation = descriptor.get("platform") == UNKNOWN
                 if is_attestation:
                     require(not root)
-                    require(set(descriptor.get("annotations", {})) == {"vnd.docker.reference.type", "vnd.docker.reference.digest"})
+                    annotation_keys = {"vnd.docker.reference.type", "vnd.docker.reference.digest"}
+                    if infrastructure_root is not None and "com.docker.official-images.bashbrew.arch" in descriptor.get("annotations", {}):
+                        annotation_keys.add("com.docker.official-images.bashbrew.arch")
+                    require(set(descriptor.get("annotations", {})) == annotation_keys)
                     require(descriptor["annotations"]["vnd.docker.reference.type"] == "attestation-manifest")
                     attestations.append(descriptor)
                 else:
@@ -161,6 +187,43 @@ def inspect_archive(path: Path, build_iid: str | None = None) -> dict[str, str]:
                     require(annotation is None or annotation == config["digest"])
                     selected.append((descriptor["digest"], config["digest"], ["blobs/sha256/" + layer["digest"][7:] for layer in layers]))
 
+            def infrastructure_descriptors(descriptors):
+                # This is a platform selection rule, never a missing-file fallback:
+                # the selected manifest/config/layers and selected attestation
+                # must all exist. Only named foreign branches can be omitted.
+                foreign = set()
+                for descriptor in descriptors:
+                    descriptor_fields(descriptor)
+                    require(descriptor["mediaType"] == MANIFEST)
+                    platform = descriptor.get("platform")
+                    require(isinstance(platform, dict) and {"os", "architecture"} <= set(platform) <= {"os", "architecture", "variant"})
+                    require(all(isinstance(v, str) and v for v in platform.values()))
+                    if platform == UNKNOWN:
+                        continue
+                    require(platform["os"] == "linux" and platform["architecture"] != "unknown")
+                    if platform["architecture"] == "amd64":
+                        require(platform == PLATFORM)
+                    else:
+                        require(not any(k.startswith("vnd.docker.reference.") for k in descriptor.get("annotations", {})))
+                        foreign.add(descriptor["digest"])
+                runnable = [d for d in descriptors if d.get("platform") == PLATFORM]
+                require(len(runnable) == 1)
+                chosen = runnable[0]["digest"]
+                for descriptor in descriptors:
+                    omitted = descriptor["digest"] in foreign
+                    if descriptor.get("platform") == UNKNOWN:
+                        annotations = descriptor.get("annotations", {})
+                        require(annotations.get("vnd.docker.reference.type") == "attestation-manifest")
+                        require(set(annotations) <= {"vnd.docker.reference.type", "vnd.docker.reference.digest", "com.docker.official-images.bashbrew.arch"})
+                        subject = annotations.get("vnd.docker.reference.digest")
+                        require(subject == chosen or subject in foreign)
+                        omitted = subject in foreign
+                    if omitted:
+                        require("blobs/sha256/" + descriptor["digest"][7:] not in members)
+                        unverified.append(descriptor["digest"])
+                    else:
+                        image(descriptor)
+
             def index(data, *, nested=False):
                 require(isinstance(data, dict) and set(data) <= {"schemaVersion", "mediaType", "manifests", "annotations"})
                 require(type(data.get("schemaVersion")) is int and data["schemaVersion"] == 2 and data.get("mediaType") == INDEX)
@@ -170,6 +233,12 @@ def inspect_archive(path: Path, build_iid: str | None = None) -> dict[str, str]:
                 require(len({descriptor.get("digest") for descriptor in descriptors}) == len(descriptors))
                 if not nested:
                     require(sum("artifactType" not in descriptor for descriptor in descriptors) == 1)
+                if infrastructure_root is not None:
+                    if nested:
+                        infrastructure_descriptors(descriptors)
+                        return
+                    require(len(descriptors) == 1 and descriptors[0].get("mediaType") == INDEX
+                            and descriptors[0].get("digest") == infrastructure_root)
                 for descriptor in descriptors:
                     if not nested and "artifactType" not in descriptor:
                         roots.append(descriptor.get("digest"))
@@ -190,7 +259,10 @@ def inspect_archive(path: Path, build_iid: str | None = None) -> dict[str, str]:
             tags = legacy[0].get("RepoTags")
             require(tags is None or isinstance(tags, list) and all(isinstance(tag, str) for tag in tags))
             require(visited == {name for name, member in members.items() if member.isfile()})
-            return {"indexDigest": "sha256:" + hashlib.sha256(index_bytes).hexdigest(), "platformManifestDigest": m, "configDigest": c}
+            result = {"indexDigest": "sha256:" + hashlib.sha256(index_bytes).hexdigest(), "platformManifestDigest": m, "configDigest": c}
+            if infrastructure_root is not None:
+                result.update(rootIndexDigest=infrastructure_root, unverifiedDescriptors=unverified)
+            return result
     except ArchiveError:
         raise
     except (OSError, EOFError, tarfile.TarError, ValueError, KeyError, TypeError, UnicodeError, AttributeError) as exc:
@@ -210,6 +282,21 @@ def check_loaded_image(value: dict, expected_m: str) -> None:
     require(value.get("Os") == "linux" and value.get("Architecture") == "amd64" and value.get("Variant", "") == "")
     if "Descriptor" in value:
         require(isinstance(value["Descriptor"], dict) and value["Descriptor"].get("digest") == expected_m)
+
+
+def check_loaded_infrastructure(root: dict, platform: dict, binding: dict) -> None:
+    """Docker must resolve the pinned root to the archive-proven amd64 manifest.
+
+    The caller obtains `platform` by inspecting that same root with the explicit
+    linux/amd64 selector, not by inspecting an unrelated manifest independently.
+    """
+    r, m = binding["rootIndexDigest"], binding["platformManifestDigest"]
+    check_loaded_image(root, r)
+    check_loaded_image(platform, m)
+    require(root.get("Descriptor", {}).get("mediaType") == INDEX)
+    require(root.get("Descriptor", {}).get("digest") == r)
+    require(platform.get("Descriptor", {}).get("mediaType") == MANIFEST)
+    require(platform.get("Descriptor", {}).get("digest") == m)
 
 
 def check_running_container(value: dict, expected_m: str) -> None:
