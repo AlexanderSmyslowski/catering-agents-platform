@@ -28,6 +28,16 @@ SERVER = 168651076
 IP = '2.28.200.16'
 PG = 'sha256:778d0b486d6daa02b77434d0358ec57a1b21fd8b6d22ac2eef56a33e816928f6'
 EDGE = 'sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648'
+# Source Docker IDs are index roots. Their proven amd64 manifests remain
+# separate identities; Compose continues to request the original pinned roots.
+INFRA_IDENTITIES = {
+    'postgres': {'rootIndexDigest': PG,
+                 'platformManifestDigest': 'sha256:08693671787a11fadf8d313e687c5f5a43de631c298bc2f2e0520f432ff1eb0b',
+                 'configDigest': 'sha256:543fd794d2d9f63d895fe05cd707fb042604fe7d593d66147d86ede6152f429b'},
+    'edge': {'rootIndexDigest': EDGE,
+             'platformManifestDigest': 'sha256:98eb57d882ccd5213d1688764db10c1ca2c58a1ca3a6717a3411ad798f7a423a',
+             'configDigest': 'sha256:af555904a0961945f16bb323a501457b13a4f7e9bde969b145b97da80b38ecbe'},
+}
 IMAGES = {
     'intake': 'sha256:6ba5bef903323aa5f4fdc63d1043b627fdaed1cb681526ba19b94a7d7f72c0f3',
     'offer': 'sha256:6ba5bef903323aa5f4fdc63d1043b627fdaed1cb681526ba19b94a7d7f72c0f3',
@@ -174,6 +184,7 @@ def postgres_binding(containers):
 def verify_database_only(containers):
     require(classify_containers(containers) == 'database_only', 'restore/first start requires only the database')
     item = containers[0]
+    verify_infrastructure_container(item, 'postgres')
     require(item['Image'] == PG and item['State']['Running'] is True and item['State'].get('Health', {}).get('Status') == 'healthy', 'restored database image or health mismatch')
     require(item['HostConfig']['RestartPolicy']['Name'] == 'no' and not item['HostConfig'].get('PortBindings')
             and not item['HostConfig'].get('Privileged') and set(item['NetworkSettings']['Networks']) == {'catering_private'}, 'database isolation mismatch')
@@ -191,7 +202,9 @@ def verify_installed_containers(containers, *, expected_database=None):
         require(service in IMAGES and item['Name'] == '/platform-infra-' + service + '-1', 'container identity mismatch')
         require(item['Config']['Labels'].get('com.docker.compose.project') == 'platform-infra', 'compose project mismatch')
         require(item['Image'] == IMAGES[service], 'running image mismatch')
-        if service != 'postgres':
+        if service == 'postgres':
+            verify_infrastructure_container(item, service)
+        else:
             require(item.get('ImageManifestDescriptor', {}).get('digest') == IMAGES[service], 'running platform manifest mismatch')
         require(item['State']['Running'] is True and not item['State'].get('OOMKilled'), 'container is not running')
         if service == 'postgres':
@@ -285,11 +298,7 @@ def verify_inputs(args):
         archive_magic = handle.read(5)
     require(archive_magic == b'PGDMP', 'custom PostgreSQL archive required')
     require(set(package['logicalDigests']) == {'database', 'globals'} and all(re.fullmatch('[0-9a-f]{64}', v) for v in package['logicalDigests'].values()), 'protected logical comparison missing')
-    for name, image in (('postgres', PG), ('edge', EDGE)):
-        archive = package['infraArchives'][name]
-        require(digest(protected(archive['path'])) == archive['sha256'], 'mandatory infrastructure archive missing or changed')
-        identity = module('operator')._inspect_archive(Path(archive['path']))
-        require(image in {identity['configDigest'], identity['platformManifestDigest']}, 'infrastructure image identity mismatch')
+    verify_infrastructure_archives(package)
     require(all(type(package['resources'][key]) is int and package['resources'][key] > 0 for key in ('freeBytes', 'freeInodes', 'availableRamBytes')), 'approved resource budget missing')
     disk = os.statvfs('/opt')
     mem = dict(line.split(':', 1) for line in Path('/proc/meminfo').read_text().splitlines())
@@ -297,6 +306,67 @@ def verify_inputs(args):
             and int(mem['MemAvailable'].split()[0]) * 1024 >= package['resources']['availableRamBytes'], 'migration resource reserve insufficient')
     verify_source_fence(package['sourceFence']['path'])
     return package
+
+
+def verify_infrastructure_archives(package):
+    bindings = {}
+    require(set(package['infraArchives']) == set(INFRA_IDENTITIES), 'mandatory infrastructure archives missing')
+    for name, expected in INFRA_IDENTITIES.items():
+        archive = package['infraArchives'][name]
+        path = protected(archive['path'])
+        require(digest(path) == archive['sha256'], 'mandatory infrastructure archive missing or changed')
+        try:
+            identity = module('operator')._oci().inspect_infrastructure_archive(path, expected['rootIndexDigest'])
+        except ValueError as exc:
+            raise BootstrapError('infrastructure archive proof invalid') from exc
+        require(all(identity[key] == value for key, value in expected.items()), 'infrastructure image identity mismatch')
+        bindings[name] = dict(identity, archiveSha256=archive['sha256'])
+    return bindings
+
+
+def verify_loaded_images():
+    oci = module('operator')._oci()
+    try:
+        for reference in set(IMAGES.values()) - {PG}:
+            observed = json.loads(run(['docker', 'image', 'inspect', reference]))
+            require(len(observed) == 1, 'loaded application image missing or ambiguous')
+            oci.check_loaded_image(observed[0], reference)
+        for binding in INFRA_IDENTITIES.values():
+            reference = binding['rootIndexDigest']
+            root = json.loads(run(['docker', 'image', 'inspect', reference]))
+            selected = json.loads(run(['docker', 'image', 'inspect', '--platform', 'linux/amd64', reference]))
+            require(len(root) == 1 and len(selected) == 1, 'loaded infrastructure image missing or ambiguous')
+            oci.check_loaded_infrastructure(root[0], selected[0], binding)
+    except ValueError as exc:
+        raise BootstrapError('loaded immutable image binding mismatch') from exc
+
+
+def verify_infrastructure_container(item, name):
+    binding = INFRA_IDENTITIES[name]
+    descriptor = item.get('ImageManifestDescriptor')
+    require(item.get('Image') == binding['rootIndexDigest']
+            and isinstance(descriptor, dict) and descriptor.get('digest') == binding['platformManifestDigest'],
+            'running infrastructure index or platform manifest mismatch')
+
+
+def load_images(release, package, manifest_sha256, inputs_sha256, *, access):
+    bindings = verify_infrastructure_archives(package)
+    archives = [(release / name, []) for name in ('runtime-image.tar.gz', 'web-image.tar.gz')]
+    archives += [(Path(package['infraArchives'][name]['path']), ['--platform', 'linux/amd64']) for name in ('postgres', 'edge')]
+    for path, selector in archives:
+        check_execution_windows(package, access)
+        run(['docker', 'load', *selector, '--input', str(path)])
+    verify_loaded_images()
+    check_execution_windows(package, access)
+    write_new(STATE / 'images-loaded.json', json.dumps({'manifestSha256': manifest_sha256, 'inputsSha256': inputs_sha256,
+                                                     'images': IMAGES, 'infrastructureBindings': bindings}))
+
+
+def verify_loaded_receipt(package, manifest_sha256, inputs_sha256):
+    expected = {'manifestSha256': manifest_sha256, 'inputsSha256': inputs_sha256,
+                'images': IMAGES, 'infrastructureBindings': verify_infrastructure_archives(package)}
+    require(read_json(STATE / 'images-loaded.json') == expected, 'loaded infrastructure receipt binding changed')
+    verify_loaded_images()
 
 
 def sync_directory(path):
@@ -374,9 +444,7 @@ def start_application(release, package, inputs_sha256, manifest_sha256, operatio
     require(restored.get('postgresBinding') == database, 'restored PostgreSQL instance or data mount changed')
     verify_networks()
     verify_restored(package)
-    for reference in set(IMAGES.values()):
-        loaded = json.loads(run(['docker', 'image', 'inspect', reference]))
-        require(len(loaded) == 1 and loaded[0]['Id'] == reference and loaded[0]['Os'] == 'linux' and loaded[0]['Architecture'] == 'amd64', 'first-start loaded image mismatch')
+    verify_loaded_images()
     effective = json.loads(run(compose(release) + ['config', '--format', 'json']))
     for name, service in effective['services'].items():
         require(name in IMAGES and service['image'] == IMAGES[name] and service.get('restart', 'no') == 'no' and not service.get('ports'), 'first-start Compose image, restart or port mismatch')
@@ -501,17 +569,10 @@ def main(argv=None):
         elif args.phase == 'load':
             require(classify_containers(containers) == 'empty', 'image load requires an empty host')
             protected(STATE / 'prepared.json')
-            for path in [release / 'runtime-image.tar.gz', release / 'web-image.tar.gz'] + [Path(package['infraArchives'][name]['path']) for name in ('postgres', 'edge')]:
-                check_execution_windows(package, access)
-                run(['docker', 'load', '--input', str(path)])
-            for reference in set(IMAGES.values()) | {EDGE}:
-                observed = json.loads(run(['docker', 'image', 'inspect', reference]))
-                require(len(observed) == 1 and observed[0]['Id'] == reference, 'loaded immutable image mismatch')
-            check_execution_windows(package, access)
-            write_new(STATE / 'images-loaded.json', json.dumps({'manifestSha256': args.manifest_sha256, 'images': IMAGES}))
+            load_images(release, package, args.manifest_sha256, args.inputs_sha256, access=access)
         elif args.phase == 'postgres':
             require(classify_containers(containers) == 'empty', 'database start requires an empty host')
-            protected(STATE / 'images-loaded.json')
+            verify_loaded_receipt(package, args.manifest_sha256, args.inputs_sha256)
             protected(RUNTIME)
             require('CATERING_WRITER_MODE=enabled' not in RUNTIME.read_text().splitlines(), 'productive writer must remain disabled')
             check_execution_windows(package, access)

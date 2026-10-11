@@ -60,13 +60,33 @@ _spec.loader.exec_module(bootstrap)
 
 def healthy_containers():
     return [{'Name': '/platform-infra-' + name + '-1', 'Id': hashlib.sha256(name.encode()).hexdigest(), 'Image': image,
-             'ImageManifestDescriptor': {'digest': image},
+             'ImageManifestDescriptor': {'digest': 'sha256:08693671787a11fadf8d313e687c5f5a43de631c298bc2f2e0520f432ff1eb0b' if name == 'postgres' else image},
              'Config': {'Labels': {'com.docker.compose.service': name, 'com.docker.compose.project': 'platform-infra'}},
              'State': {'Running': True, 'Health': {'Status': 'healthy'}},
              'Mounts': [{'Destination': '/var/lib/postgresql/data', 'Type': 'volume', 'Name': 'platform-infra_postgres_data', 'Source': '/var/lib/docker/volumes/platform-infra_postgres_data/_data', 'Driver': 'local', 'RW': True, 'Mode': 'z', 'Propagation': ''}] if name == 'postgres' else [],
              'HostConfig': {'RestartPolicy': {'Name': 'no'}, 'PortBindings': {}, 'NetworkMode': 'catering_private'},
              'NetworkSettings': {'Networks': {network: {} for network in ({'catering_private', 'catering_ingress'} if name == 'web' else {'catering_private'})}}}
             for name, image in bootstrap.IMAGES.items()]
+
+
+def loaded_inspect(args):
+    # Docker's unqualified root observation and the platform-qualified result
+    # have different Id/Descriptor identities in the source's containerd store.
+    selected = '--platform' in args
+    reference = args[-1]
+    manifests = {
+        'sha256:778d0b486d6daa02b77434d0358ec57a1b21fd8b6d22ac2eef56a33e816928f6': 'sha256:08693671787a11fadf8d313e687c5f5a43de631c298bc2f2e0520f432ff1eb0b',
+        'sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648': 'sha256:98eb57d882ccd5213d1688764db10c1ca2c58a1ca3a6717a3411ad798f7a423a',
+    }
+    if selected:
+        assert args == ['docker','image','inspect','--platform','linux/amd64',reference]
+        image = manifests[reference]
+    else:
+        assert args == ['docker','image','inspect',reference]
+        image = reference
+    media = 'index' if reference in manifests and not selected else 'manifest'
+    return json.dumps([{'Id':image, 'Os':'linux', 'Architecture':'amd64',
+                        'Descriptor': {'digest':image, 'mediaType':'application/vnd.oci.image.'+media+'.v1+json'}}]).encode()
 
 
 class BootstrapGatesTests(unittest.TestCase):
@@ -277,7 +297,7 @@ class FirstStartTests(unittest.TestCase):
             def docker(args, **kwargs):
                 calls.append(args)
                 if args[:3] == ['docker', 'image', 'inspect']:
-                    return json.dumps([{'Id': args[3], 'Os': 'linux', 'Architecture': 'amd64'}]).encode()
+                    return loaded_inspect(args)
                 if 'config' in args:
                     return json.dumps({'services': {name: {'image': image, 'restart': 'no'} for name,image in bootstrap.IMAGES.items()}}).encode()
                 self.assertTrue((root/'first-app-write.json').exists(), 'app started before durable write boundary')
@@ -315,7 +335,7 @@ class PostgresPreservationTests(unittest.TestCase):
             (root/'restored.json').write_text(json.dumps({'inputsSha256': '1'*64, 'postgresBinding': expected})); (root/'restored.json').chmod(0o600)
             def docker(args, **kwargs):
                 if args[:3] == ['docker', 'image', 'inspect']:
-                    return json.dumps([{'Id': args[3], 'Os': 'linux', 'Architecture': 'amd64'}]).encode()
+                    return loaded_inspect(args)
                 if 'config' in args:
                     return json.dumps({'services': {name: {'image': image, 'restart': 'no'} for name,image in bootstrap.IMAGES.items()}}).encode()
                 self.assertEqual(json.loads((root/'first-app-write.json').read_text())['postgresBinding'], expected)
@@ -394,7 +414,7 @@ class ExecutionWindowTests(unittest.TestCase):
             def docker(args, **kwargs):
                 calls.append(args)
                 if args[:3] == ['docker','image','inspect']:
-                    return json.dumps([{'Id':args[3],'Os':'linux','Architecture':'amd64'}]).encode()
+                    return loaded_inspect(args)
                 if 'config' in args:
                     return json.dumps({'services':{name:{'image':image,'restart':'no'} for name,image in bootstrap.IMAGES.items()}}).encode()
                 return b''
@@ -439,7 +459,7 @@ class ExecutionWindowTests(unittest.TestCase):
             def docker(args,**kwargs):
                 calls.append(args)
                 if args[:3]==['docker','image','inspect']:
-                    return json.dumps([{'Id':args[3],'Os':'linux','Architecture':'amd64'}]).encode()
+                    return loaded_inspect(args)
                 if 'config' in args:
                     return json.dumps({'services':{name:{'image':image,'restart':'no'} for name,image in bootstrap.IMAGES.items()}}).encode()
                 return b''

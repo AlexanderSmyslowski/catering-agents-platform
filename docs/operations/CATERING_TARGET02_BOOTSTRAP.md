@@ -34,14 +34,57 @@ Die führende konkrete Migrationsvorbereitung bleibt das lokale
 - `catering-target02-update-contract.json` ist ein beabsichtigter Vertrag.
   Er ist kein beobachtetes Runtimeinventar. Das prod-1-Inventar bleibt unverändert.
 
+## Infrastruktur-OCI-Bindung
+
+Die Quellen-IDs von PostgreSQL und Edge sind OCI-Indexwurzeln, nicht Config- oder
+Plattformmanifest-IDs. Der eigene Infrastrukturpfad prüft den exportierten
+`index.json`, die darin referenzierte **exakt gepinnte Indexwurzel**, genau ein
+`linux/amd64`-Manifest, dessen Config und sämtliche Layer jeweils auf SHA-256 und
+Descriptorgröße. Manifest-Annotationen der offiziellen Images sind als Stringmaps
+zulässig. Die mitgelieferte amd64-Attestation samt Config/Layern wird ebenfalls
+geprüft; daraus folgt keine externe Vertrauens- oder Signaturbehauptung.
+
+Der Originalexport enthält nicht die anderen Plattformen der Indexwurzel. Nur
+explizit als fremde Linuxarchitektur bezeichnete fehlende Manifestdeskriptoren und
+deren eindeutig zugeordnete Attestationen werden als `unverifiedDescriptors`
+aufgeführt. Sie sind **nicht verifiziert**. Fehlende benötigte amd64-Bytes, falsche
+Plattformen, Mehrdeutigkeit, Hash-/Größendrift oder zusätzliche ungebundene Dateien
+halten die Prüfung an. App-v4 verwendet weiterhin seinen bisherigen strengen Pfad.
+
+| Infrastruktur | Gepinnte Indexwurzel | amd64-Manifest M | Config C |
+| --- | --- | --- | --- |
+| PostgreSQL 17.9 | `sha256:778d0b486d6daa02b77434d0358ec57a1b21fd8b6d22ac2eef56a33e816928f6` | `sha256:08693671787a11fadf8d313e687c5f5a43de631c298bc2f2e0520f432ff1eb0b` | `sha256:543fd794d2d9f63d895fe05cd707fb042604fe7d593d66147d86ede6152f429b` |
+| Edge | `sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648` | `sha256:98eb57d882ccd5213d1688764db10c1ca2c58a1ca3a6717a3411ad798f7a423a` | `sha256:af555904a0961945f16bb323a501457b13a4f7e9bde969b145b97da80b38ecbe` |
+
+Compose behält die ursprünglichen PG-/Edge-Indexreferenzen. Infrastrukturarchive
+werden mit `docker load --platform linux/amd64 --input …` geladen; App-v4 behält
+seinen bestehenden Loadaufruf. Dieser explizite Plattformselector erfordert laut
+[Docker-CLI-Vertrag](https://docs.docker.com/reference/cli/docker/image/load/)
+API 1.48 oder neuer; eine nicht vorhandene Plattform ist ein Fehler. Nach einem später
+freigegebenen Load muss Docker sowohl die Indexreferenz als auch deren explizite
+`docker image inspect --platform linux/amd64 <Index>`-Auflösung auf M mit passendem
+Descriptor bestätigen. Der Load-Beleg bindet zusätzlich Eingabepaket-SHA,
+Archiv-SHA, Exportindex, Indexwurzel, M, C und die ungeprüften Deskriptoren.
+Vor PostgreSQL-Start werden dieser Beleg, die Archive und Docker neu verglichen.
+Vor Appstart wird Docker erneut geprüft; die PostgreSQL-Laufzeit muss sowohl die
+geforderte Index-ID als auch `ImageManifestDescriptor.digest=M` zeigen. Docker
+mit abweichender oder fehlender Beobachtungsstruktur wird abgewiesen, nicht als
+kompatibel angenommen. Der lokale Test ersetzt keinen späteren nativen Loadnachweis.
+
+Die Originalarchive und historische Pakete/Receipts werden nicht umgeschrieben.
+Auch das vorhandene target02-Manifest `26362122f5d18eaca22d74cc0dffe73213cff8cb60cbf8d946efeca6c75f4700`
+bleibt historisch unverändert. Eine neue regulär angenommene Operationsversion
+benötigt später eine separat freigegebene neue Paketbindung.
+
 ## Vorbedingungen, die gegenwärtig offen bleiben
 
 Die Codeannahme ist keine Ausführungsfreigabe. Vor jedem späteren Hostkontakt:
 angenommener exakter Operations-SHA samt main/push-CI, frische geschützte Provider-
 und Hostkeybindung, ausdrückliches Wartungsfenster und Schreibpause, Ressourcenbudget,
 vollständiges Quellinventar, vollständige DB-/Datei-/Authsicherung und Rückfallfreigabe.
-PG- und Edge-Archive sind derzeit nicht nachgewiesen. Alle unbekannten Bestände bleiben
-unbekannt. Die neuen Helfer beschaffen keine dieser Eingaben selbst.
+Die am 11.10.2026 original exportierten PG-/Edge-Archive sind lokal gegen den
+Infrastrukturvalidator geprüft; das ist kein Docker-Load- oder Zielnachweis. Alle
+unbekannten Bestände bleiben unbekannt. Die Helfer beschaffen diese Eingaben nicht selbst.
 
 Der Zielhost benötigt vorab geprüftes Python 3, Docker/Compose mit dem gebundenen
 Image-Store-Verhalten, GNU-Werkzeuge, `systemctl`, ausreichend Platten-/Inode-/RAMreserve
@@ -74,7 +117,7 @@ spätere SSH-Transport verwendet strikt diese IP und `StrictHostKeyChecking=yes`
 | `fullDatabaseDump`, `rolesDump`, `databaseSettings`, `sourceFence`, `fileInventory`, `smokeCredentials` | Je `{path, sha256}`, alle obligatorisch |
 | `dumpFormat`, `postgresVersion`, `schemaVersion` | `custom-with-owners-and-acls`, `17.9`, `3`; zusätzlich prüft der Helfer reale Archivmagic und restaurierten Server/Schema |
 | `logicalDigests` | `{database, globals}`: SHA-256 der unten beschriebenen vollständigen logischen Quellausgaben |
-| `infraArchives` | `postgres` und `edge`, jeweils `{path, sha256}`; echte OCI-Bytes müssen die exakt gepinnten PG-/Edge-IDs enthalten |
+| `infraArchives` | `postgres` und `edge`, jeweils `{path, sha256}`; die gepinnten Indexwurzeln müssen die unten beschriebene vollständige amd64-Kette beweisen |
 | `resources` | Positive, vorab dimensionierte Mindestreserven `freeBytes`, `freeInodes`, `availableRamBytes`; reale Werte werden je Phase gemessen |
 
 `sourceInventory` muss alle Bereiche enthalten: `database`, `roles`, `owners`, `acls`,
@@ -171,7 +214,7 @@ keine Wiederholung eines unklaren Schritts.
    `prepare` validiert das vollständige Release, schreibt den gebundenen Stage-Receipt,
    richtet ausschließlich bekannte Runtime-Dateien ein und hält den gemeinsamen
    Update-Ausschluss. `load` lädt die vier vorab gehashten Archive ohne Pull und prüft
-   tatsächliche unveränderliche Image-IDs. Fehlende PG-/Edge-Archive halten bereits
+   die oben beschriebene Index-/Plattformbindung. Fehlende PG-/Edge-Archive halten bereits
    vor Einrichtung an. Es gibt kein erfolgreiches manuelles Boolean-Receipt.
 
 4. **Konfiguration/Dateien und Datenbank:** geprüfte geschützte Zielkonfiguration

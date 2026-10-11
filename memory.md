@@ -1,9 +1,16 @@
 # memory.md
 
-version: 5.431
-date: 2026-10-05
+version: 5.432
+date: 2026-10-11
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
+
+## Entwicklungsstand – Infrastruktur-OCI-Indexbindung (2026-10-11)
+
+- Begrenzter lokaler Operationsfix auf Basis `0f015c46623233256f8a139ad4f19af9ff80ea7f`: eigener Validator für die originalen offiziellen PG-/Edge-Exporte mit gepinnter Indexwurzel, genau einer vollständigen linux/amd64-Manifest-/Config-/Layerkette und geprüfter mitgelieferter Attestation. Fehlende Fremdplattformzweige werden ausdrücklich als ungeprüft ausgewiesen; der App-v4-Vertrag bleibt streng.
+- Bootstrap behält die ursprünglichen PG-/Edge-Indexreferenzen. Späterer Infrastruktur-Load selektiert explizit linux/amd64; Docker muss dieselbe Wurzel plattformqualifiziert auf das archivgeprüfte M auflösen. Load-Beleg bindet Archiv, Exportindex, Wurzel, M, C und Eingabepaket. PostgreSQL-Laufzeit prüft Index-ID und M-Descriptor zusätzlich zur bestehenden Instanz-/Mountbindung.
+- Die beiden unveränderten Originalarchive vom 11.10. bestehen lokal die neue Archivprüfung; der Basisvalidator weist dieselben Bytes ab. PG meldet 14, Edge 12 nicht verifizierte Fremdplattform-/Attestationsdeskriptoren. Dieser Read-only-Nachweis ist kein Docker-Load-, Host- oder Betriebsnachweis.
+- Produkt bleibt `9ce4fbc96a5dd877f2cd2f00588a22be861306b9`, PG17.9/Schema3; Appimages, Originalarchive und vorhandenes target02-Paket bleiben unverändert. Neue Paketbindung erst nach regulärer Operationsannahme und separater Freigabe. Unabhängiger Delta-Review und automatische CI noch offen. Kein Hostkontakt, Dockeraufruf, Paketbau/-installation, Merge/Push oder Hub-Writeback in diesem Implementierungsschritt. Details: `docs/agent-memory/2026-10-11-infrastructure-oci-binding.md`.
 
 ## Entwicklungsstand – prod-02-Zielbindung und isolierter Erstaufbau (2026-10-05)
 
@@ -2452,3 +2459,9 @@ Quelle: `8de2e96c8604f12da2ec14c39b187db04dfb61cf`. Der folgende Betriebsbericht
 
 - Die automatische PR-CI belegte zwei Fehler im isolierten Preflight-Testfragment: der vollständige Caller bindet `target_id`, das Fixture stellte diesen Kontext noch nicht bereit. Das Fixture benennt jetzt explizit `catering-prod-1`; alle Pipe-/Dateideskriptor-Assertions und Produktionsprüfungen bleiben erhalten.
 - Beide Fehler lokal vor der Korrektur reproduziert. Betroffene lokale Prüfungen sowie unabhängiger Review und automatische CI sind am korrigierten Stand gesondert zu binden. Kein Hostkontakt oder Produktionslauf.
+
+### 5.432 - 2026-10-11 — explizite PG-/Edge-Index→amd64-Bindung
+
+- Der bisherige allgemeine OCI-Validator lehnte die offiziellen Runnable-Manifest-Annotationen und deren teilweise exportierte Multiplattformindizes ab. Außerdem konnte die Bootstrap-Infrastrukturprüfung eine gepinnte Index-ID nur mit M/C vergleichen. Ein eigener Infrastrukturpfad beweist nun die vollständige benötigte Hash-/Größenkette; fehlende fremde Zweige erhalten keine Verifikationsbehauptung. App-v4- und prod-1-Pfade behalten ihre strengen Verträge.
+- Load und Erstaufbau tragen die gleiche Bindung weiter: explizite Infrastruktur-Plattformauswahl, doppelte Docker-Index-/Plattformbeobachtung, gebundener Load-Beleg und PostgreSQL-M-Descriptorprüfung. Source-Fencing, 15 Inventarbereiche, Zeitfenster, Jobs-aus und dauerhafte Erstschreibgrenze bleiben erhalten.
+- Gezieltes RED/GREEN einschließlich unveränderter Originalarchive dokumentiert; technische Tests und lokale Grenzen siehe Snapshot. Annahme bleibt bis zum unabhängigen Delta-Review und exakter CI-/Commitbindung offen. Kein neuer Migrationspaketstand und keine Ausführungserlaubnis abgeleitet.
