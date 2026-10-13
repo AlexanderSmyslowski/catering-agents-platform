@@ -26,6 +26,8 @@ PRODUCT = '9ce4fbc96a5dd877f2cd2f00588a22be861306b9'
 SOURCE_OPERATIONS = 'b1e3d44573bf6fe6d3c8e46861792a592535e856'
 SERVER = 168651076
 IP = '2.28.200.16'
+MIGRATION_CONTRACT_VERSION = 2
+DATABASES = ('catering_agents', 'catering_agents_pre_cutover_20260920', 'catering_operator_probe_20260919')
 PG = 'sha256:778d0b486d6daa02b77434d0358ec57a1b21fd8b6d22ac2eef56a33e816928f6'
 EDGE = 'sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648'
 # Source Docker IDs are index roots. Their proven amd64 manifests remain
@@ -220,23 +222,90 @@ def verify_installed_containers(containers, *, expected_database=None):
 
 
 def logical_digest(payload):
+    # Legacy helper only; version 2 compares unmodified streams.
     # PG 17.9 emits a random psql restrict token. Its value is not database state.
     lines = payload.splitlines(keepends=True)
     normalized = b''.join(line for line in lines if not re.fullmatch(rb'\\(?:un)?restrict [A-Za-z0-9]+\r?\n?', line))
     return hashlib.sha256(normalized).hexdigest()
 
 
-def database_digests():
+def verify_database_version():
     prefix = ['docker', 'exec', 'platform-infra-postgres-1']
     args = ['--username=catering', '--no-password']
     version = run(prefix + ['psql', *args, '--no-psqlrc', '--dbname=catering_agents', '-Atc', 'SHOW server_version']).decode().strip()
-    require(version.split()[0] == '17.9', 'PostgreSQL version mismatch')
+    require(version.split()[:1] == ['17.9'], 'PostgreSQL version mismatch')
     schema = run(prefix + ['psql', *args, '--no-psqlrc', '--dbname=catering_agents', '-Atc', "SELECT version_number FROM catering_schema_migrations WHERE unit_name = 'catering_business_records'"]).decode().strip()
     require(schema == '3', 'restored schema mismatch')
-    return {
-        'database': logical_digest(run(prefix + ['pg_dump', *args, '--dbname=catering_agents', '--create', '--format=plain'])),
-        'globals': logical_digest(run(prefix + ['pg_dumpall', *args, '--globals-only'])),
-    }
+
+
+def database_catalog():
+    names = run(['docker', 'exec', 'platform-infra-postgres-1', 'psql', '--username=catering', '--no-password',
+                 '--no-psqlrc', '--dbname=postgres', '-Atc', 'SELECT datname FROM pg_database ORDER BY datname']).decode().splitlines()
+    expected = set(DATABASES) | {'postgres', 'template0', 'template1'}
+    require(len(names) == len(expected) and set(names) == expected, 'complete database catalog differs from migration scope')
+    return names
+
+
+def database_digests(comparison_restrict_key):
+    require(isinstance(comparison_restrict_key, str) and re.fullmatch("[A-Za-z0-9]{64}", comparison_restrict_key), "bound comparison restrict key required")
+    prefix = ['docker', 'exec', 'platform-infra-postgres-1']
+    args = ['--username=catering', '--no-password']
+    verify_database_version()
+    for command in ('pg_dump', 'pg_dumpall'):
+        version = run(prefix + [command, '--version']).decode().strip()
+        require(re.fullmatch(re.escape(command) + r' \(PostgreSQL\) 17\.9(?: \([^\n]+\))?', version), 'PostgreSQL dump client version mismatch')
+    before = database_catalog()
+    databases = {}
+    for name in DATABASES:
+        payload = run(prefix + ['pg_dump', *args, '--dbname=' + name, '--create', '--format=plain', '--restrict-key=' + comparison_restrict_key])
+        require(payload, 'complete database comparison output missing')
+        databases[name] = hashlib.sha256(payload).hexdigest()
+    payload = run(prefix + ['pg_dumpall', *args, '--globals-only', '--restrict-key=' + comparison_restrict_key])
+    require(payload, 'complete globals comparison output missing')
+    result = {'databases': databases, 'globals': hashlib.sha256(payload).hexdigest()}
+    require(database_catalog() == before, 'database catalog changed during comparison')
+    return result
+
+
+def verify_database_inputs(package):
+    require({'migrationContractVersion', 'comparisonRestrictKey', 'fullDatabaseDumps', 'logicalDigests', 'logicalComparisonSource', 'sourceFence', 'windowStart', 'windowEnd'} <= set(package),
+            'complete three-database migration inputs required')
+    require(type(package['migrationContractVersion']) is int and package['migrationContractVersion'] == MIGRATION_CONTRACT_VERSION,
+            'three-database migration contract required')
+    require(isinstance(package['comparisonRestrictKey'], str) and re.fullmatch('[A-Za-z0-9]{64}', package['comparisonRestrictKey']), 'bound comparison restrict key required')
+    require('fullDatabaseDump' not in package, 'legacy single-database migration input forbidden')
+    archives = package['fullDatabaseDumps']
+    require(isinstance(archives, dict) and set(archives) == set(DATABASES), 'all three database archives required')
+    identities, archive_digests = set(), set()
+    for record in archives.values():
+        require(isinstance(record, dict) and set(record) == {'path', 'sha256'}, 'database archive record invalid')
+        path = protected(record['path'])
+        info = path.stat()
+        identity = (info.st_dev, info.st_ino)
+        require(identity not in identities, 'database archives must be distinct files')
+        identities.add(identity)
+        require(isinstance(record['sha256'], str) and record['sha256'] not in archive_digests, 'database archives must have distinct contents')
+        archive_digests.add(record['sha256'])
+        require(digest(path) == record['sha256'], 'database archive binding changed')
+        with path.open('rb') as handle:
+            require(handle.read(5) == b'PGDMP', 'custom PostgreSQL archive required')
+    logical = package['logicalDigests']
+    require(isinstance(logical, dict) and set(logical) == {'databases', 'globals'} and isinstance(logical['databases'], dict)
+            and set(logical['databases']) == set(DATABASES), 'all three logical comparisons required')
+    require(all(isinstance(value, str) and re.fullmatch('[0-9a-f]{64}', value) for value in [*logical['databases'].values(), logical['globals']]),
+            'protected logical comparison invalid')
+    source = package['logicalComparisonSource']
+    require(isinstance(source, dict) and set(source) == {'serverId', 'ip', 'sourceFenceSha256', 'capturedAt', 'pgDumpVersion'},
+            'logical comparison source provenance required')
+    require(source['serverId'] == 166533273 and source['ip'] == '2.29.43.174' and source['pgDumpVersion'] == '17.9'
+            and source['sourceFenceSha256'] == package['sourceFence']['sha256'], 'logical comparison source binding mismatch')
+    require(isinstance(source['capturedAt'], str), 'logical comparison capture time required')
+    captured = dt.datetime.fromisoformat(source['capturedAt'].replace('Z', '+00:00'))
+    fence = read_json(package['sourceFence']['path'])
+    for window in (package, fence):
+        start = dt.datetime.fromisoformat(window['windowStart'].replace('Z', '+00:00'))
+        end = dt.datetime.fromisoformat(window['windowEnd'].replace('Z', '+00:00'))
+        require(start <= captured < end and captured <= dt.datetime.now(dt.timezone.utc), 'logical comparison capture outside source window')
 
 
 def file_inventory(root):
@@ -283,21 +352,19 @@ def verify_inputs(args):
     require(digest(args.inputs) == args.inputs_sha256, 'protected input package binding mismatch')
     fresh_window(package)
     require(package['targetId'] == TARGET and package['serverId'] == SERVER and package['productCommit'] == PRODUCT
-            and package['operationsCommit'] == args.operations_commit and args.operations_commit != SOURCE_OPERATIONS,
+            and package['operationsCommit'] == args.operations_commit and args.operations_commit != SOURCE_OPERATIONS
+            and package['manifestSha256'] == args.manifest_sha256,
             'migration package identity mismatch')
     require(set(package['sourceInventory']) == DOMAINS, 'complete source inventory is mandatory')
     for name in DOMAINS:
         record = package['sourceInventory'][name]
         require(digest(protected(record['path'])) == record['sha256'], 'protected source inventory binding mismatch')
-    for name in ('fullDatabaseDump', 'rolesDump', 'databaseSettings', 'sourceFence', 'fileInventory', 'smokeCredentials'):
+    for name in ('rolesDump', 'databaseSettings', 'sourceFence', 'fileInventory', 'smokeCredentials'):
         record = package[name]
         require(digest(protected(record['path'])) == record['sha256'], 'full-fidelity migration input missing or changed')
     require(package['dumpFormat'] == 'custom-with-owners-and-acls' and package['postgresVersion'] == '17.9' and package['schemaVersion'] == 3,
             'full-fidelity PostgreSQL backup required')
-    with protected(package['fullDatabaseDump']['path']).open('rb') as handle:
-        archive_magic = handle.read(5)
-    require(archive_magic == b'PGDMP', 'custom PostgreSQL archive required')
-    require(set(package['logicalDigests']) == {'database', 'globals'} and all(re.fullmatch('[0-9a-f]{64}', v) for v in package['logicalDigests'].values()), 'protected logical comparison missing')
+    verify_database_inputs(package)
     verify_infrastructure_archives(package)
     require(all(type(package['resources'][key]) is int and package['resources'][key] > 0 for key in ('freeBytes', 'freeInodes', 'availableRamBytes')), 'approved resource budget missing')
     disk = os.statvfs('/opt')
@@ -403,7 +470,7 @@ def compose(release):
 
 
 def verify_restored(package):
-    require(database_digests() == package['logicalDigests'], 'restored database, roles, owners, ACLs or settings differ')
+    require(database_digests(package['comparisonRestrictKey']) == package['logicalDigests'], 'restored database, roles, owners, ACLs or settings differ')
     expected = read_json(package['fileInventory']['path'])
     require(isinstance(expected, dict) and expected, 'full file inventory required')
     required = {'/opt/catering-agents-platform/data', '/etc/catering-target/runtime.env', '/opt/catering-agents-platform/platform-infra/sites',
@@ -414,7 +481,7 @@ def verify_restored(package):
     for root, records in expected.items():
         require(root in allowed, 'file inventory outside migration allowlist')
         require(file_inventory(root) == records, 'restored file metadata or contents differ')
-    return {'logicalDigests': package['logicalDigests'], 'fileInventorySha256': package['fileInventory']['sha256']}
+    return {'migrationContractVersion': MIGRATION_CONTRACT_VERSION, 'logicalDigests': package['logicalDigests'], 'fileInventorySha256': package['fileInventory']['sha256']}
 
 
 def write_initial_receipt(release, proof, runtime_image, web_image, *, before_publish=None):
@@ -440,7 +507,10 @@ def start_application(release, package, inputs_sha256, manifest_sha256, operatio
     containers = observe_containers()
     database = verify_database_only(containers)
     restored = read_json(STATE / 'restored.json')
-    require(restored['inputsSha256'] == inputs_sha256, 'restore input binding changed')
+    require(restored['inputsSha256'] == inputs_sha256 and restored['manifestSha256'] == manifest_sha256
+            and restored['productCommit'] == PRODUCT and restored['operationsCommit'] == operations_commit
+            and restored['migrationContractVersion'] == package['migrationContractVersion'] == MIGRATION_CONTRACT_VERSION
+            and restored['logicalDigests'] == package['logicalDigests'], 'restore input binding changed')
     require(restored.get('postgresBinding') == database, 'restored PostgreSQL instance or data mount changed')
     verify_networks()
     verify_restored(package)
@@ -451,6 +521,7 @@ def start_application(release, package, inputs_sha256, manifest_sha256, operatio
     require(verify_database_only(observe_containers()) == database, 'PostgreSQL instance or data mount changed during pre-start verification')
     check_execution_windows(package, access)
     write_new(boundary, json.dumps({'targetId': TARGET, 'productCommit': PRODUCT, 'operationsCommit': operations_commit,
+                                 'migrationContractVersion': MIGRATION_CONTRACT_VERSION, 'logicalDigests': package['logicalDigests'],
                                  'inputsSha256': inputs_sha256, 'manifestSha256': manifest_sha256, 'postgresBinding': database,
                                  'startedAt': dt.datetime.now(dt.timezone.utc).isoformat()}))
     check_execution_windows(package, access)
@@ -466,7 +537,8 @@ def verify_initial_install(release, package, inputs_sha256, manifest_sha256, ope
     require(isinstance(expected_database, dict) and read_json(STATE / 'restored.json').get('postgresBinding') == expected_database, 'restored PostgreSQL baseline missing or changed')
     verify_networks()
     identities = verify_installed_containers(observe_containers(), expected_database=expected_database)
-    database_digests()  # Read actual version/schema; initial app writes may legitimately change the data digest.
+    verify_database_version()  # Initial app writes may legitimately change the data digest.
+    database_catalog()
     for service, port in (('intake', 3101), ('offer', 3102), ('production', 3103), ('exports', 3104)):
         run(['docker', 'exec', 'platform-infra-' + service + '-1', 'node', '--input-type=module', '-e',
              f"const r=await fetch('http://127.0.0.1:{port}/health',{{signal:AbortSignal.timeout(10000)}});if(!r.ok||(await r.json()).status!=='ok')process.exit(1)"])
@@ -527,6 +599,8 @@ def main(argv=None):
         import fcntl
         lock = os.open(STATE / 'lock', os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        # Inputs may have changed while another bootstrap phase held the lock.
+        package = verify_inputs(args)
         containers = observe_containers()
         require(not (RELEASE_ROOT / 'installed').exists(), 'initial install already recorded')
         owner = f'bootstrap_target={TARGET}\noperations_commit={args.operations_commit}\ninputs_sha256={args.inputs_sha256}\n'
@@ -584,7 +658,8 @@ def main(argv=None):
             proof = verify_restored(package)
             require(verify_database_only(observe_containers()) == database, 'PostgreSQL instance or data mount changed during restore verification')
             check_execution_windows(package, access)
-            write_new(STATE / 'restored.json', json.dumps(dict(proof, inputsSha256=args.inputs_sha256, manifestSha256=args.manifest_sha256, postgresBinding=database)))
+            write_new(STATE / 'restored.json', json.dumps(dict(proof, productCommit=PRODUCT, operationsCommit=args.operations_commit,
+                       inputsSha256=args.inputs_sha256, manifestSha256=args.manifest_sha256, postgresBinding=database)))
         elif args.phase == 'start':
             start_application(release, package, args.inputs_sha256, args.manifest_sha256, args.operations_commit, access=access)
         else:
