@@ -111,12 +111,17 @@ spätere SSH-Transport verwendet strikt diese IP und `StrictHostKeyChecking=yes`
 
 | Feld | Inhalt / Herkunft |
 | --- | --- |
+| `migrationContractVersion` | Verpflichtend Integer `2`; alte Ein-DB-Eingaben werden abgewiesen, keine Defaults |
 | `targetId`, `serverId`, `productCommit`, `operationsCommit` | Exakte neue Ziel-/Commitbindung |
+| `manifestSha256` | Exaktes angenommenes Paketmanifest, identisch zum CLI-Argument |
 | `windowStart`, `windowEnd` | Tatsächlich freigegebenes Zeitfenster |
 | `sourceInventory` | Für jeden unten genannten Bereich ein `{path, sha256}` auf die geschützte vollständige Quellbeobachtung |
-| `fullDatabaseDump`, `rolesDump`, `databaseSettings`, `sourceFence`, `fileInventory`, `smokeCredentials` | Je `{path, sha256}`, alle obligatorisch |
+| `fullDatabaseDumps` | Exaktes Mapping der unten genannten drei Datenbanknamen auf je `{path, sha256}`; drei verschiedene geschützte reguläre Dateien mit verschiedenen Inhalten, keine Pfad-/Hardlink-Aliase oder Archivkopien |
+| `rolesDump`, `databaseSettings`, `sourceFence`, `fileInventory`, `smokeCredentials` | Je `{path, sha256}`, alle obligatorisch |
 | `dumpFormat`, `postgresVersion`, `schemaVersion` | `custom-with-owners-and-acls`, `17.9`, `3`; zusätzlich prüft der Helfer reale Archivmagic und restaurierten Server/Schema |
-| `logicalDigests` | `{database, globals}`: SHA-256 der unten beschriebenen vollständigen logischen Quellausgaben |
+| `comparisonRestrictKey` | Bei finaler Quellerfassung neu zufällig erzeugte 64 alphanumerische Zeichen; derselbe eingabengebundene Wert für alle Vergleichsausgaben auf Quelle und Ziel |
+| `logicalDigests` | Exakt `{databases: {catering_agents: SHA256, catering_agents_pre_cutover_20260920: SHA256, catering_operator_probe_20260919: SHA256}, globals: SHA256}` der unveränderten vollständigen Quellausgaben |
+| `logicalComparisonSource` | Exakt `{serverId, ip, sourceFenceSha256, capturedAt, pgDumpVersion}`: Quelle `166533273` / `2.29.43.174`, SHA des tatsächlich gebundenen Source-Fence-Belegs, realer UTC-Erfassungszeitpunkt innerhalb beider Ausführungsfenster, `pgDumpVersion="17.9"` |
 | `infraArchives` | `postgres` und `edge`, jeweils `{path, sha256}`; die gepinnten Indexwurzeln müssen die unten beschriebene vollständige amd64-Kette beweisen |
 | `resources` | Positive, vorab dimensionierte Mindestreserven `freeBytes`, `freeInodes`, `availableRamBytes`; reale Werte werden je Phase gemessen |
 
@@ -124,6 +129,14 @@ spätere SSH-Transport verwendet strikt diese IP und `StrictHostKeyChecking=yes`
 `settings`, `extensions`, `tablespaces`, `sequences`, `large_objects`, `auth`,
 `uploads`, `documents`, `configuration`, `caddy`, `os_identity_mapping`.
 Hashprüfung dieser Eingaben ersetzt keine unabhängige Prüfung ihrer Vollständigkeit.
+`fullDatabaseDump` ist im Vertrag 2 ausdrücklich verboten. Jede der drei Archivdateien
+wird separat auf SHA und PGDMP-Magic geprüft. Der tatsächliche Quellkatalog und die
+Zuordnung jedes vollständigen Archivs zu seinem Datenbanknamen müssen unabhängig
+geprüft im geschützten Inventar stehen; ein Dateihash beweist diese Herkunft nicht.
+Der Quellzeitpunkt liegt im wirklichen Übernahmefenster; er behauptet keine Erfassung
+nach dem abschließenden PostgreSQL-Stopp des Fencing-Belegs. Der Zielhelfer fragt die
+Quelle nicht selbst ab. Eingaben werden nach Erwerb des vorhandenen Bootstraplocks
+nochmals vollständig validiert.
 Unbekannte Mounts, Zusatzpfade, Tablespaces, Writer oder Authspeicher halten die
 Migration an; den aktuellen begrenzten Pfad dafür nicht ad hoc erweitern.
 
@@ -245,8 +258,10 @@ keine Wiederholung eines unklaren Schritts.
      --username=catering --dbname=postgres --set=ON_ERROR_STOP=1 < "$ROLES_RECONCILE_SQL"
    docker exec -i platform-infra-postgres-1 psql --no-psqlrc --no-password \
      --username=catering --dbname=catering_agents --set=ON_ERROR_STOP=1 < "$TABLESPACES_EXTENSIONS_SQL"
+   # Für jede der drei Datenbanken: eigenes gebundenes Vollarchiv und tatsächlich
+   # vorab geprüfte DB-Anlage/-Settings. Kein pauschales --clean oder Fehlerignorieren.
    docker exec -i platform-infra-postgres-1 pg_restore --no-password --username=catering \
-     --dbname=catering_agents --exit-on-error --single-transaction < "$FULL_DATABASE_DUMP"
+     --dbname="$RESTORE_DATABASE" --exit-on-error --single-transaction < "$BOUND_DATABASE_DUMP"
    docker exec -i platform-infra-postgres-1 psql --no-psqlrc --no-password \
      --username=catering --dbname=postgres --set=ON_ERROR_STOP=1 < "$DATABASE_SETTINGS_SQL"
    ```
@@ -258,13 +273,35 @@ keine Wiederholung eines unklaren Schritts.
    Hardlinks, ACLs/xattrs und Symlinks wiederherstellen (z.B. geprüfter
    `rsync -aHAX --numeric-ids`-Aufruf pro Pfad, ohne Delete); keine Pfade erraten.
 
-   Die vollständigen logischen Quellvergleichswerte werden bei PG17.9 aus
-   `pg_dump --username=catering --no-password --dbname=catering_agents --create --format=plain`
-   und `pg_dumpall --username=catering --no-password --globals-only` erhoben. Nur die
-   zufälligen `\restrict`-/`\unrestrict`-Tokenzeilen werden vor SHA256 entfernt
-   (`logical_digest` im Helfer). Ausgaben können Secrets enthalten und bleiben geschützt.
-   Der Zielhelfer führt genau dieselben Reads selbst aus und vergleicht vollständige
-   Hashes, zusätzlich reale PG-/Schemaversion und alle Dateiinventare:
+   Vollständig restauriert und verglichen werden exakt `catering_agents`,
+   `catering_agents_pre_cutover_20260920` und `catering_operator_probe_20260919`.
+   `RESTORE_DATABASE` und `BOUND_DATABASE_DUMP` müssen je Schritt aus dem überprüften
+   exakten Mapping stammen; keine Standarddatenbank ergänzen, kein Archiv wiederverwenden.
+
+   Die vollständigen logischen Quellvergleichswerte werden mit PG17.9 und demselben
+   `comparisonRestrictKey` für jede dieser Datenbanken erhoben:
+   `pg_dump --username=catering --no-password --dbname="$DATABASE" --create --format=plain --restrict-key="$COMPARISON_RESTRICT_KEY"`
+   sowie `pg_dumpall --username=catering --no-password --globals-only --restrict-key="$COMPARISON_RESTRICT_KEY"`.
+   Beide Quell-Dumpclients müssen tatsächlich Version 17.9 sein. Die Vergleichsstreams
+   werden ausschließlich bytegenau mit SHA256 gehasht, **niemals ausgeführt**. Keine
+   Normalisierung, kein SQL-/COPY-Filter; auch Verifikatoren und Guard-ähnliche Daten
+   bleiben vollständig enthalten. Der alte `logical_digest`-Helper wird für Vertrag 2
+   nicht verwendet. Der gebundene zufällige Schlüssel ist kein Authentifizierungssecret;
+   Dumps, Globals und deren Inhaltsdigests bleiben trotzdem ausschließlich geschützt.
+
+   PostgreSQL 17.9 unterstützt `--restrict-key` in
+   [pg_dump](https://github.com/postgres/postgres/blob/REL_17_9/src/bin/pg_dump/pg_dump.c) und
+   [pg_dumpall](https://github.com/postgres/postgres/blob/REL_17_9/src/bin/pg_dump/pg_dumpall.c).
+   Der [Archiver](https://github.com/postgres/postgres/blob/REL_17_9/src/bin/pg_dump/pg_backup_archiver.c)
+   erzeugt beim `--create`-Reconnect weitere Guard-Zeilen. Der identische Schlüssel
+   ermöglicht daher einen vollständigen Bytevergleich ohne fehleranfälliges Entfernen
+   von Zeilen, die auch in gespeicherten SQL-Funktionen vorkommen können.
+
+   Der Zielhelfer führt genau dieselben Reads selbst aus und vergleicht alle vier
+   vollständigen Hashes. Vor und nach der Dumpserie muss der Katalog exakt die drei
+   genannten Datenbanken plus `postgres`, `template0`, `template1` enthalten; zusätzliche,
+   fehlende oder doppelte Einträge halten an. Außerdem werden reale PG-/Clientversion
+   17.9, Schema 3 und alle Dateiinventare geprüft:
 
    ```bash
    python3 -B "$BOOT" verify-restored "${COMMON[@]}"
@@ -279,7 +316,13 @@ keine Wiederholung eines unklaren Schritts.
    python3 -B "$BOOT" verify-install "${COMMON[@]}"
    ```
 
-   `start` vergleicht Restore und Isolation erneut, prüft effektive Compose-Images und
+   `start` vergleicht alle drei Datenbanken samt Globals und Isolation erneut unter
+   demselben Bootstraplock. Ein vorgeschalteter externer Vergleich ist kein Ersatz.
+   Restore- und First-write-Beleg enthalten Vertragsversion 2 und alle vier Vergleiche;
+   Input-SHA, Produkt, Operationscommit und Manifest bleiben exakt gebunden.
+   Der Lock serialisiert kooperierende Bootstrapaufrufe; die gesonderte technische
+   Exklusivität gegen externe psql-/Docker-/Jobwriter bleibt zwingende Voraussetzung.
+   `start` prüft effektive Compose-Images und
    bindet die tatsächlich restaurierte PostgreSQL-Container-ID samt vollständigem Datenmount
    unveränderlich in Restore- und First-write-Beleg und schreibt **vor** Appausführung
    exklusiv `first-app-write.json`. Datei und Elternverzeichnis werden vor dem Appstart
@@ -288,7 +331,9 @@ keine Wiederholung eines unklaren Schritts.
    Base + P4-Candidate-Override, Restart `no`, `--no-deps --pull never`. Selbst ein Fehler
    unmittelbar danach gilt als mögliche Zielschreibwirkung und sperrt automatischen Retry.
    `verify-install` prüft echte Containeridentitäten, M-Descriptor, Netze/Restart/Ports,
-   PG17.9/Schema3, HTTP-Health und den gebundenen authentisierten Read-Smoke. Auch dessen
+   PG17.9/Schema3 und den vollständigen Datenbankkatalog, HTTP-Health und den gebundenen
+   authentisierten Read-Smoke. Nach dem Appstart wird keine Gleichheit mit den
+   Vor-Start-Inhaltshashes verlangt; legitime Appwrites bleiben möglich. Auch dessen
    Login-/Session-/Auditwrites liegen bereits hinter der markierten Schreibgrenze.
    Nach langsamen Prüfungen werden Paket-, Zugangs- und Source-Fencing-Zeitfenster
    unmittelbar vor Mutation, Appstart, Auth-Smoke und jeder Receipt-Publikation erneut geprüft.

@@ -1,9 +1,14 @@
 # memory.md
 
-version: 5.432
-date: 2026-10-11
+version: 5.433
+date: 2026-10-13
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
+
+## Entwicklungskandidat — vollständiger target02-Datenbankvergleich (2026-10-13)
+
+- Isolierter Operationskandidat auf Basis `c7480c2582a4aa7b50a3b2cbe86b9ef73ba70144`: Bootstrap-Vertrag 2 verlangt alle drei Catering-Datenbankarchive und vollständige bytegenaue Vergleiche einschließlich Globals vor dem ersten Appstart unter dem vorhandenen Lock. Gebundener PG17.9-`comparisonRestrictKey` ersetzt Inhaltsnormalisierung; Source-/Input-/Manifest-/Receiptbindungen bleiben obligatorisch.
+- Keine Hostaktion, Produktänderung oder neue Paketannahme. Dieser lokale Kandidat benötigt unabhängigen Review, reguläre Operationsannahme und neue Paketbindung vor einem Einsatz. Das bisher angenommene c7480c2-Paket bleibt unverändert. Vertrag und Grenzen: `docs/operations/CATERING_TARGET02_BOOTSTRAP.md`.
 
 ## Entwicklungsstand – Infrastruktur-OCI-Indexbindung (2026-10-11)
 
@@ -2465,3 +2470,9 @@ Quelle: `8de2e96c8604f12da2ec14c39b187db04dfb61cf`. Der folgende Betriebsbericht
 - Der bisherige allgemeine OCI-Validator lehnte die offiziellen Runnable-Manifest-Annotationen und deren teilweise exportierte Multiplattformindizes ab. Außerdem konnte die Bootstrap-Infrastrukturprüfung eine gepinnte Index-ID nur mit M/C vergleichen. Ein eigener Infrastrukturpfad beweist nun die vollständige benötigte Hash-/Größenkette; fehlende fremde Zweige erhalten keine Verifikationsbehauptung. App-v4- und prod-1-Pfade behalten ihre strengen Verträge.
 - Load und Erstaufbau tragen die gleiche Bindung weiter: explizite Infrastruktur-Plattformauswahl, doppelte Docker-Index-/Plattformbeobachtung, gebundener Load-Beleg und PostgreSQL-M-Descriptorprüfung. Source-Fencing, 15 Inventarbereiche, Zeitfenster, Jobs-aus und dauerhafte Erstschreibgrenze bleiben erhalten.
 - Gezieltes RED/GREEN einschließlich unveränderter Originalarchive dokumentiert; technische Tests und lokale Grenzen siehe Snapshot. Annahme bleibt bis zum unabhängigen Delta-Review und exakter CI-/Commitbindung offen. Kein neuer Migrationspaketstand und keine Ausführungserlaubnis abgeleitet.
+
+### 5.433 - 2026-10-13 — vollständiger target02-Datenbankvergleich (Kandidat)
+
+- Der vorhandene Bootstrapvergleich wird auf `catering_agents`, `catering_agents_pre_cutover_20260920` und `catering_operator_probe_20260919` sowie vollständige Globals erweitert. Version-2-Eingaben verlangen drei getrennte geschützte Archive, ein exaktes Digestmapping, Quellprovenienz, einen eingabengebundenen Vergleichsschlüssel und das angenommene Manifest. Legacy-Ein-DB-Eingaben bleiben geschlossen.
+- Zielkatalog und PG-/Dumpclientversion werden geprüft; nach Lockübernahme werden Eingaben neu validiert. Alle Datenbankbytes werden vor der First-write-Grenze erneut verglichen, Restore-/Writebelege binden Version und vollständigen Vergleich. Nach legitimen Appwrites bleiben Version/Schema/Katalog und Instanz-/Mountbindung maßgeblich, nicht die früheren Dateninhalte.
+- Nur lokaler Entwicklungskandidat mit synthetischen Regressionen. Unabhängige Prüfung, Operationsintegration und neuer gebundener Paketstand stehen separat aus; kein Hostkontakt, Restore, Appstart, DNS-/Jobwrite oder angenommener Release aus diesem Eintrag abgeleitet.

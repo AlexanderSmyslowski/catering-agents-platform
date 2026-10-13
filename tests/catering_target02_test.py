@@ -69,6 +69,17 @@ def healthy_containers():
             for name, image in bootstrap.IMAGES.items()]
 
 
+def migration_fixture():
+    return {'migrationContractVersion': 2, 'comparisonRestrictKey': '0123456789abcdef'*4, 'logicalDigests': {'databases': {
+        'catering_agents': 'a'*64, 'catering_agents_pre_cutover_20260920': 'b'*64,
+        'catering_operator_probe_20260919': 'c'*64}, 'globals': 'd'*64}}
+
+
+def restored_fixture(binding):
+    return dict(migration_fixture(), productCommit=bootstrap.PRODUCT, operationsCommit=OPERATIONS_SHA,
+                manifestSha256='2'*64, inputsSha256='1'*64, postgresBinding=binding)
+
+
 def loaded_inspect(args):
     # Docker's unqualified root observation and the platform-qualified result
     # have different Id/Descriptor identities in the source's containerd store.
@@ -116,10 +127,10 @@ class BootstrapGatesTests(unittest.TestCase):
             path = Path(tmp).resolve() / 'inputs.json'
             now = dt.datetime.now(dt.timezone.utc)
             value = {'windowStart': (now-dt.timedelta(minutes=1)).isoformat(), 'windowEnd': (now+dt.timedelta(minutes=10)).isoformat(),
-                     'targetId': TARGET, 'serverId': 168651076, 'productCommit': bootstrap.PRODUCT,
+                     'targetId': TARGET, 'serverId': 168651076, 'productCommit': bootstrap.PRODUCT, 'manifestSha256': '2'*64,
                      'operationsCommit': OPERATIONS_SHA, 'sourceInventory': {}}
             path.write_text(json.dumps(value)); path.chmod(0o600)
-            args = SimpleNamespace(inputs=path, inputs_sha256=hashlib.sha256(path.read_bytes()).hexdigest(), operations_commit=OPERATIONS_SHA)
+            args = SimpleNamespace(inputs=path, inputs_sha256=hashlib.sha256(path.read_bytes()).hexdigest(), operations_commit=OPERATIONS_SHA, manifest_sha256='2'*64)
             with patch.object(bootstrap, 'run', side_effect=AssertionError('host command is not allowed')):
                 with self.assertRaisesRegex(bootstrap.BootstrapError, 'complete source inventory'):
                     bootstrap.verify_inputs(args)
@@ -292,7 +303,7 @@ class FirstStartTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp).resolve(); release = root/'release'; release.mkdir()
             pg = next(item for item in healthy_containers() if item['Name'] == '/platform-infra-postgres-1')
-            (root/'restored.json').write_text(json.dumps({'inputsSha256': '1'*64, 'postgresBinding': {'containerId': pg['Id'], 'image': pg['Image'], 'dataMount': pg['Mounts'][0]}})); (root/'restored.json').chmod(0o600)
+            (root/'restored.json').write_text(json.dumps(restored_fixture(bootstrap.postgres_binding([pg])))); (root/'restored.json').chmod(0o600)
             calls = []
             def docker(args, **kwargs):
                 calls.append(args)
@@ -310,10 +321,10 @@ class FirstStartTests(unittest.TestCase):
             with patch.object(bootstrap, 'STATE', root), patch.object(bootstrap, 'observe_containers', return_value=[item for item in healthy_containers() if item['Name'] == '/platform-infra-postgres-1']), \
                  patch.object(bootstrap, 'verify_networks'), patch.object(bootstrap, 'verify_restored'), patch.object(bootstrap, 'check_execution_windows'), patch.object(bootstrap, 'run', side_effect=docker):
                 with self.assertRaisesRegex(bootstrap.BootstrapError, 'synthetic start failure'):
-                    bootstrap.start_application(release, {}, '1'*64, '2'*64, OPERATIONS_SHA)
+                    bootstrap.start_application(release, migration_fixture(), '1'*64, '2'*64, OPERATIONS_SHA)
                 count = len(calls)
                 with self.assertRaises(bootstrap.BootstrapError):
-                    bootstrap.start_application(release, {}, '1'*64, '2'*64, OPERATIONS_SHA)
+                    bootstrap.start_application(release, migration_fixture(), '1'*64, '2'*64, OPERATIONS_SHA)
                 self.assertEqual(len(calls), count)
                 self.assertFalse((release/'install-receipt').exists())
 
@@ -332,7 +343,7 @@ class PostgresPreservationTests(unittest.TestCase):
             root = Path(tmp).resolve(); release = root/'release'; release.mkdir()
             pg = next(item for item in healthy_containers() if item['Name'] == '/platform-infra-postgres-1')
             expected = {'containerId': pg['Id'], 'image': pg['Image'], 'dataMount': copy.deepcopy(pg['Mounts'][0])}
-            (root/'restored.json').write_text(json.dumps({'inputsSha256': '1'*64, 'postgresBinding': expected})); (root/'restored.json').chmod(0o600)
+            (root/'restored.json').write_text(json.dumps(restored_fixture(expected))); (root/'restored.json').chmod(0o600)
             def docker(args, **kwargs):
                 if args[:3] == ['docker', 'image', 'inspect']:
                     return loaded_inspect(args)
@@ -342,7 +353,7 @@ class PostgresPreservationTests(unittest.TestCase):
                 return b''
             with patch.object(bootstrap, 'STATE', root), patch.object(bootstrap, 'observe_containers', return_value=[pg]), \
                  patch.object(bootstrap, 'verify_networks'), patch.object(bootstrap, 'verify_restored'), patch.object(bootstrap, 'check_execution_windows'), patch.object(bootstrap, 'run', side_effect=docker):
-                bootstrap.start_application(release, {}, '1'*64, '2'*64, OPERATIONS_SHA)
+                bootstrap.start_application(release, migration_fixture(), '1'*64, '2'*64, OPERATIONS_SHA)
 
     def test_post_start_and_post_smoke_replacements_never_publish_receipt(self):
         self.assertTrue(hasattr(bootstrap, 'verify_initial_install'), 'initial verification must expose its actual runtime transition for regression coverage')
@@ -362,7 +373,7 @@ class PostgresPreservationTests(unittest.TestCase):
                     observations = [changed if moment == 'before_verify' else initial, initial, changed if moment == 'after_smoke' else initial]
                     with patch.object(bootstrap, 'STATE', root), patch.object(bootstrap, 'observe_containers', side_effect=observations), \
                          patch.object(bootstrap, 'verify_networks'), patch.object(bootstrap, 'verify_jobs_off'), patch.object(bootstrap, 'check_execution_windows'), \
-                         patch.object(bootstrap, 'database_digests', return_value={'database':'legitimate-app-writes','globals':'old'}), patch.object(bootstrap, 'run', return_value=b''):
+                         patch.object(bootstrap, 'verify_database_version'), patch.object(bootstrap, 'database_catalog'), patch.object(bootstrap, 'run', return_value=b''):
                         if moment == 'unchanged':
                             bootstrap.verify_initial_install(release, {'smokeCredentials': {'path': str(root/'credentials.json')}}, '1'*64, '2'*64, OPERATIONS_SHA)
                             self.assertTrue((release/'install-receipt').exists())
@@ -390,10 +401,10 @@ class ExecutionWindowTests(unittest.TestCase):
     def fixture(self, root):
         window = {'windowStart': '2026-10-05T10:00:00+00:00', 'windowEnd': '2026-10-05T10:01:00+00:00'}
         fence = root/'fence.json'; fence.write_text(json.dumps(window)); fence.chmod(0o600)
-        package = dict(window, sourceFence={'path': str(fence), 'sha256': hashlib.sha256(fence.read_bytes()).hexdigest()})
+        package = dict(window, **migration_fixture(), sourceFence={'path': str(fence), 'sha256': hashlib.sha256(fence.read_bytes()).hexdigest()})
         pg = next(item for item in healthy_containers() if item['Name'] == '/platform-infra-postgres-1')
         binding = {'containerId': pg['Id'], 'image': pg['Image'], 'dataMount': copy.deepcopy(pg['Mounts'][0])}
-        for name,value in [('restored.json',{'inputsSha256':'1'*64,'postgresBinding':binding}),
+        for name,value in [('restored.json',restored_fixture(binding)),
                            ('first-app-write-fixture.json',{'inputsSha256':'1'*64,'manifestSha256':'2'*64,'operationsCommit':OPERATIONS_SHA,'postgresBinding':binding}),
                            ('credentials.json',{'basicUser':'synthetic','basicPassword':'synthetic','loginCode':'synthetic','pin':'synthetic'})]:
             (root/name).write_text(json.dumps(value)); (root/name).chmod(0o600)
@@ -445,7 +456,7 @@ class ExecutionWindowTests(unittest.TestCase):
                 return b''
             with patch.object(bootstrap,'STATE',root), patch.object(bootstrap.dt,'datetime',Clock), \
                  patch.object(bootstrap,'observe_containers',return_value=healthy_containers()), patch.object(bootstrap,'verify_networks'), \
-                 patch.object(bootstrap,'database_digests',return_value={}), patch.object(bootstrap,'run',side_effect=docker):
+                 patch.object(bootstrap,'verify_database_version'), patch.object(bootstrap,'database_catalog'), patch.object(bootstrap,'run',side_effect=docker):
                 with self.assertRaisesRegex(bootstrap.BootstrapError,'execution window'):
                     bootstrap.verify_initial_install(release,package,'1'*64,'2'*64,OPERATIONS_SHA,access=access)
             self.assertFalse(any('-i' in args for args in calls))
@@ -471,6 +482,252 @@ class ExecutionWindowTests(unittest.TestCase):
             self.assertFalse(any('up' in args for args in calls))
             self.assertTrue((root/'first-app-write.json').exists())
             self.assertFalse((release/'install-receipt').exists())
+
+class ThreeDatabaseTests(unittest.TestCase):
+    comparison_key = '0123456789abcdef'*4
+    databases = ('catering_agents', 'catering_agents_pre_cutover_20260920', 'catering_operator_probe_20260919')
+
+    def fixture(self):
+        catalog = '\n'.join(sorted((*self.databases, 'postgres', 'template0', 'template1'))).encode() + b'\n'
+        dumps = {name: b'\\restrict Source123\nCREATE DATABASE ' + name.encode() + b';\n\\unrestrict Source123\n\\connect ' + name.encode() + b'\n\\restrict Source123\nCOPY t FROM stdin;\nrow\n\\.\n\\unrestrict Source123\n' for name in self.databases}
+        globals_dump = b"\\restrict Source123\nALTER ROLE catering PASSWORD 'synthetic-verifier';\n\\unrestrict Source123\n"
+        dumps = {name: value.replace(b'Source123', self.comparison_key.encode()) for name, value in dumps.items()}
+        globals_dump = globals_dump.replace(b'Source123', self.comparison_key.encode())
+        def expected(payload):
+            return hashlib.sha256(payload).hexdigest()
+        logical = {'databases': {name: expected(value) for name, value in dumps.items()}, 'globals': expected(globals_dump)}
+        calls = []
+        def host(args, **kwargs):
+            calls.append(args)
+            self.assertEqual(args[:3], ['docker', 'exec', 'platform-infra-postgres-1'])
+            command = args[3]
+            if command in ('pg_dump', 'pg_dumpall') and args[4:] == ['--version']:
+                return (command + ' (PostgreSQL) 17.9\n').encode()
+            if command == 'psql':
+                self.assertIn('--no-psqlrc', args)
+                sql = args[-1]
+                if sql == 'SHOW server_version': return b'17.9\n'
+                if sql == "SELECT version_number FROM catering_schema_migrations WHERE unit_name = 'catering_business_records'": return b'3\n'
+                if sql == 'SELECT datname FROM pg_database ORDER BY datname': return catalog
+            if command == 'pg_dump':
+                name = next(value.split('=', 1)[1] for value in args if value.startswith('--dbname='))
+                self.assertEqual(args[4:], ['--username=catering', '--no-password', '--dbname=' + name, '--create', '--format=plain', '--restrict-key=' + self.comparison_key])
+                return dumps[name]
+            if command == 'pg_dumpall':
+                self.assertEqual(args[4:], ['--username=catering', '--no-password', '--globals-only', '--restrict-key=' + self.comparison_key])
+                return globals_dump
+            self.fail('unexpected observation command')
+        return dumps, logical, calls, host
+
+    def test_compares_all_three_complete_databases_and_globals(self):
+        _, logical, _, host = self.fixture()
+        with patch.object(bootstrap, 'run', side_effect=host):
+            self.assertEqual(bootstrap.database_digests(self.comparison_key), logical)
+
+    def test_extra_missing_duplicate_or_changed_database_catalog_fails_closed(self):
+        for drift in ('extra', 'missing', 'duplicate', 'changed_after_dumps'):
+            _, _, _, host = self.fixture(); reads = [0]
+            def changed(args, **kwargs):
+                value = host(args, **kwargs)
+                if args[-1] == 'SELECT datname FROM pg_database ORDER BY datname':
+                    reads[0] += 1
+                    if drift == 'extra' or drift == 'changed_after_dumps' and reads[0] > 1: return value + b'foreign_database\n'
+                    if drift == 'missing': return value.replace(b'catering_operator_probe_20260919\n', b'')
+                    if drift == 'duplicate': return value + b'catering_agents\n'
+                return value
+            with self.subTest(drift=drift), patch.object(bootstrap, 'run', side_effect=changed), self.assertRaises(bootstrap.BootstrapError):
+                bootstrap.database_digests(self.comparison_key)
+
+    def test_each_omitted_database_change_prevents_first_write(self):
+        for name in self.databases[1:]:
+            dumps, logical, calls, host = self.fixture()
+            dumps[name] = dumps[name].replace(b'row\n', b'changed\n')
+            with self.subTest(database=name), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp).resolve(); release = root/'release'; release.mkdir()
+                pg = next(item for item in healthy_containers() if item['Name'] == '/platform-infra-postgres-1')
+                receipt = {'migrationContractVersion': 2, 'productCommit': bootstrap.PRODUCT, 'operationsCommit': OPERATIONS_SHA,
+                           'manifestSha256': '2'*64, 'inputsSha256': '1'*64, 'logicalDigests': logical,
+                           'postgresBinding': bootstrap.postgres_binding([pg])}
+                (root/'restored.json').write_text(json.dumps(receipt)); (root/'restored.json').chmod(0o600)
+                with patch.object(bootstrap, 'STATE', root), patch.object(bootstrap, 'observe_containers', return_value=[pg]), \
+                     patch.object(bootstrap, 'verify_networks'), patch.object(bootstrap, 'run', side_effect=host), \
+                     self.assertRaises(bootstrap.BootstrapError):
+                    bootstrap.start_application(release, {'migrationContractVersion': 2, 'comparisonRestrictKey': self.comparison_key, 'logicalDigests': logical}, '1'*64, '2'*64, OPERATIONS_SHA)
+                self.assertFalse((root/'first-app-write.json').exists())
+                self.assertFalse(any('up' in args for args in calls))
+
+    def test_all_three_comparisons_precede_first_write_and_instance_drift_holds(self):
+        for drift in ('none', 'container', 'mount'):
+            _, logical, _, host = self.fixture()
+            with self.subTest(drift=drift), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp).resolve(); release = root/'release'; release.mkdir()
+                pg = next(item for item in healthy_containers() if item['Name'] == '/platform-infra-postgres-1')
+                changed = copy.deepcopy(pg)
+                if drift == 'container': changed['Id'] = 'f'*64
+                if drift == 'mount': changed['Mounts'][0]['Source'] = '/replacement'
+                package = dict(migration_fixture(), logicalDigests=logical)
+                receipt = dict(restored_fixture(bootstrap.postgres_binding([pg])), logicalDigests=logical)
+                (root/'restored.json').write_text(json.dumps(receipt)); (root/'restored.json').chmod(0o600)
+                inventory = {name: [] for name in ('/opt/catering-agents-platform/data', '/etc/catering-target/runtime.env',
+                    '/opt/catering-agents-platform/platform-infra/sites', '/var/lib/docker/volumes/platform-infra_caddy_data/_data',
+                    '/var/lib/docker/volumes/platform-infra_caddy_config/_data', '/var/lib/docker/volumes/catering-edge_edge_caddy_data/_data',
+                    '/var/lib/docker/volumes/catering-edge_edge_caddy_config/_data')}
+                path = root/'inventory.json'; path.write_text(json.dumps(inventory)); path.chmod(0o600)
+                package['fileInventory'] = {'path': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
+                started = []
+                def execute(args, **kwargs):
+                    if 'config' in args: return json.dumps({'services': {name: {'image': image, 'restart': 'no'} for name, image in bootstrap.IMAGES.items()}}).encode()
+                    if 'up' in args:
+                        proof = json.loads((root/'first-app-write.json').read_text())
+                        self.assertEqual(proof['logicalDigests'], logical)
+                        self.assertEqual(proof['migrationContractVersion'], 2)
+                        started.append(True); return b''
+                    return host(args, **kwargs)
+                with patch.object(bootstrap, 'STATE', root), patch.object(bootstrap, 'observe_containers', side_effect=[[pg], [changed]]), \
+                     patch.object(bootstrap, 'verify_networks'), patch.object(bootstrap, 'verify_loaded_images'), \
+                     patch.object(bootstrap, 'check_execution_windows'), patch.object(bootstrap, 'file_inventory', return_value=[]), \
+                     patch.object(bootstrap, 'run', side_effect=execute):
+                    if drift == 'none': bootstrap.start_application(release, package, '1'*64, '2'*64, OPERATIONS_SHA)
+                    else:
+                        with self.assertRaises(bootstrap.BootstrapError): bootstrap.start_application(release, package, '1'*64, '2'*64, OPERATIONS_SHA)
+                self.assertEqual(bool(started), drift == 'none')
+                self.assertEqual((root/'first-app-write.json').exists(), drift == 'none')
+
+    def test_input_drift_is_rechecked_inside_main_lock_before_any_phase_mutation(self):
+        import fcntl
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(); events = []
+            class TargetState:
+                parent = root.parent
+                def mkdir(self, **kwargs): pass
+                def lstat(self): return SimpleNamespace(st_uid=0, st_mode=0o40700)
+                def is_symlink(self): return False
+                def __truediv__(self, name): return root/name
+            def inputs(args):
+                events.append('input')
+                if events.count('input') == 2: raise bootstrap.BootstrapError('synthetic input drift')
+                return {}
+            original_text = Path.read_text
+            def text(path, *args, **kwargs):
+                return 'VERSION_ID="24.04"' if str(path) == '/etc/os-release' else original_text(path, *args, **kwargs)
+            args = ['start', '--access-evidence', str(root/'access'), '--known-hosts', str(root/'hosts'), '--host', bootstrap.IP,
+                    '--operations-commit', OPERATIONS_SHA, '--manifest-sha256', '2'*64, '--inputs', str(root/'inputs'), '--inputs-sha256', '1'*64]
+            output = io.StringIO()
+            with patch.object(bootstrap, 'STATE', TargetState()), patch.object(bootstrap, 'RELEASE_ROOT', root), \
+                 patch.object(bootstrap, 'verify_access', return_value={}), patch.object(bootstrap.os, 'geteuid', return_value=0), \
+                 patch.object(bootstrap.sys, 'platform', 'linux'), patch.object(bootstrap.socket, 'gethostname', return_value=TARGET), \
+                 patch.object(bootstrap.os, 'uname', return_value=SimpleNamespace(machine='x86_64')), patch.object(Path, 'read_text', text), \
+                 patch.object(operator, '_validate_checkout'), patch.object(operator, 'verify_bundle', return_value={}), \
+                 patch.object(bootstrap, 'module', side_effect=lambda name: operator if name == 'operator' else stage_binding), \
+                 patch.object(bootstrap, 'verify_jobs_off'), patch.object(bootstrap, 'observe_containers', return_value=[]), \
+                 patch.object(bootstrap, 'verify_inputs', side_effect=inputs), patch.object(bootstrap, 'check_execution_windows'), \
+                 patch.object(bootstrap, 'sync_directory'), patch.object(fcntl, 'flock', side_effect=lambda *args: events.append('lock')), \
+                 contextlib.redirect_stderr(output):
+                self.assertEqual(bootstrap.main(args), 1)
+            self.assertEqual(events, ['input', 'lock', 'input'])
+            self.assertFalse((root/'first-app-write.json').exists())
+
+    def test_first_start_rejects_misbound_restore_receipt_before_database_commands(self):
+        for field in ('inputsSha256', 'manifestSha256', 'productCommit', 'operationsCommit', 'migrationContractVersion', 'logicalDigests'):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp).resolve()
+                pg = next(item for item in healthy_containers() if item['Name'] == '/platform-infra-postgres-1')
+                receipt = restored_fixture(bootstrap.postgres_binding([pg])); receipt[field] = 'mismatched'
+                path = root/'restored.json'; path.write_text(json.dumps(receipt)); path.chmod(0o600)
+                with patch.object(bootstrap, 'STATE', root), patch.object(bootstrap, 'observe_containers', return_value=[pg]), \
+                     patch.object(bootstrap, 'run', side_effect=AssertionError('host command before bound receipt')), \
+                     self.assertRaises(bootstrap.BootstrapError):
+                    bootstrap.start_application(root/'release', migration_fixture(), '1'*64, '2'*64, OPERATIONS_SHA)
+                self.assertFalse((root/'first-app-write.json').exists())
+
+    def test_same_key_in_sql_body_or_copy_is_never_normalized_away(self):
+        for data in (b"CREATE FUNCTION f() RETURNS text AS $$\n\\restrict " + self.comparison_key.encode() + b"\n$$ LANGUAGE sql;\n",
+                     b"\\restrict " + self.comparison_key.encode() + b"\n"):
+            dumps, _, _, host = self.fixture()
+            dumps[self.databases[1]] = dumps[self.databases[1]].replace(b'row\n', data)
+            with patch.object(bootstrap, 'run', side_effect=host):
+                before = bootstrap.database_digests(self.comparison_key)
+                dumps[self.databases[1]] = dumps[self.databases[1]].replace(data, data.replace(b'restrict', b'unrestrict'))
+                after = bootstrap.database_digests(self.comparison_key)
+            self.assertNotEqual(before['databases'][self.databases[1]], after['databases'][self.databases[1]])
+
+    def test_empty_or_wrong_pg_and_client_versions_fail_closed(self):
+        for observed in (b'', b'17.8\n', b'18.0\n'):
+            with self.subTest(observed=observed), patch.object(bootstrap, 'run', return_value=observed), self.assertRaises(bootstrap.BootstrapError):
+                bootstrap.database_digests(self.comparison_key)
+        _, _, _, host = self.fixture()
+        def wrong_client(args, **kwargs):
+            return b'pg_dump (PostgreSQL) 17.8\n' if args[-1] == '--version' else host(args, **kwargs)
+        with patch.object(bootstrap, 'run', side_effect=wrong_client), self.assertRaises(bootstrap.BootstrapError):
+            bootstrap.database_digests(self.comparison_key)
+
+    def test_failed_dump_keeps_private_output_out_of_exception_and_logs(self):
+        from types import SimpleNamespace
+        private = b'synthetic-private-verifier-and-row'
+        output = io.StringIO()
+        with patch.object(bootstrap.subprocess, 'run', return_value=SimpleNamespace(returncode=1, stdout=private, stderr=private)), \
+             contextlib.redirect_stdout(output), contextlib.redirect_stderr(output), self.assertRaises(bootstrap.BootstrapError) as raised:
+            bootstrap.database_digests(self.comparison_key)
+        self.assertNotIn(private.decode(), str(raised.exception) + output.getvalue())
+
+    def test_successful_command_with_empty_dump_is_not_a_complete_comparison(self):
+        for command in ('pg_dump', 'pg_dumpall'):
+            _, _, _, host = self.fixture()
+            def empty(args, **kwargs):
+                return b'' if args[3] == command and args[-1] != '--version' else host(args, **kwargs)
+            with self.subTest(command=command), patch.object(bootstrap, 'run', side_effect=empty), self.assertRaises(bootstrap.BootstrapError):
+                bootstrap.database_digests(self.comparison_key)
+
+    def test_complete_archive_and_source_contract_rejects_partial_or_misbound_inputs(self):
+        import datetime as dt
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            now = dt.datetime.now(dt.timezone.utc)
+            window = {'windowStart': (now-dt.timedelta(minutes=1)).isoformat(), 'windowEnd': (now+dt.timedelta(minutes=5)).isoformat()}
+            fence = root/'fence.json'; fence.write_text(json.dumps(window)); fence.chmod(0o600)
+            package = dict(window, **migration_fixture(), sourceFence={'path': str(fence), 'sha256': hashlib.sha256(fence.read_bytes()).hexdigest()})
+            package['fullDatabaseDumps'] = {}
+            for name in self.databases:
+                path = root/(name+'.dump'); path.write_bytes(b'PGDMP-synthetic-'+name.encode()); path.chmod(0o600)
+                package['fullDatabaseDumps'][name] = {'path': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
+            package['logicalComparisonSource'] = {'serverId': 166533273, 'ip': '2.29.43.174', 'sourceFenceSha256': package['sourceFence']['sha256'],
+                                                  'capturedAt': now.isoformat(), 'pgDumpVersion': '17.9'}
+            bootstrap.verify_database_inputs(package)
+            for mutation in ('legacy_version', 'no_version', 'missing_key', 'invalid_key', 'legacy_archive', 'missing_archive', 'extra_archive', 'duplicate_archive', 'hardlinked_archive', 'copied_archive', 'bad_archive_hash', 'bad_archive_magic',
+                             'missing_digest', 'extra_digest', 'invalid_digest', 'extra_logical_key', 'source', 'fence', 'future_capture', 'old_capture', 'client', 'missing_provenance'):
+                changed = copy.deepcopy(package)
+                if mutation == 'legacy_version': changed['migrationContractVersion'] = 1
+                if mutation == 'no_version': changed.pop('migrationContractVersion')
+                if mutation == 'missing_key': changed.pop('comparisonRestrictKey')
+                if mutation == 'invalid_key': changed['comparisonRestrictKey'] = 'unsafe key'
+                if mutation == 'legacy_archive': changed['fullDatabaseDump'] = changed['fullDatabaseDumps'][self.databases[0]]
+                if mutation == 'missing_archive': changed['fullDatabaseDumps'].pop(self.databases[2])
+                if mutation == 'extra_archive': changed['fullDatabaseDumps']['extra'] = changed['fullDatabaseDumps'][self.databases[0]]
+                if mutation == 'duplicate_archive': changed['fullDatabaseDumps'][self.databases[1]] = changed['fullDatabaseDumps'][self.databases[0]]
+                if mutation == 'hardlinked_archive':
+                    hardlink = root/'hardlink.dump'; os.link(changed['fullDatabaseDumps'][self.databases[0]]['path'], hardlink)
+                    changed['fullDatabaseDumps'][self.databases[1]] = {'path': str(hardlink), 'sha256': changed['fullDatabaseDumps'][self.databases[0]]['sha256']}
+                if mutation == 'copied_archive':
+                    copied = root/'copied.dump'; copied.write_bytes(Path(changed['fullDatabaseDumps'][self.databases[0]]['path']).read_bytes()); copied.chmod(0o600)
+                    changed['fullDatabaseDumps'][self.databases[1]] = {'path': str(copied), 'sha256': changed['fullDatabaseDumps'][self.databases[0]]['sha256']}
+                if mutation == 'bad_archive_hash': changed['fullDatabaseDumps'][self.databases[1]]['sha256'] = 'f'*64
+                if mutation == 'bad_archive_magic':
+                    bad = root/'invalid.dump'; bad.write_bytes(b'not-custom'); bad.chmod(0o600)
+                    changed['fullDatabaseDumps'][self.databases[2]] = {'path': str(bad), 'sha256': hashlib.sha256(bad.read_bytes()).hexdigest()}
+                if mutation == 'missing_digest': changed['logicalDigests']['databases'].pop(self.databases[1])
+                if mutation == 'extra_digest': changed['logicalDigests']['databases']['extra'] = 'f'*64
+                if mutation == 'invalid_digest': changed['logicalDigests']['databases'][self.databases[1]] = ''
+                if mutation == 'extra_logical_key': changed['logicalDigests']['ignored'] = 'f'*64
+                if mutation == 'source': changed['logicalComparisonSource']['serverId'] = 168651076
+                if mutation == 'fence': changed['logicalComparisonSource']['sourceFenceSha256'] = 'f'*64
+                if mutation == 'future_capture': changed['logicalComparisonSource']['capturedAt'] = (now+dt.timedelta(minutes=6)).isoformat()
+                if mutation == 'old_capture': changed['logicalComparisonSource']['capturedAt'] = (now-dt.timedelta(minutes=2)).isoformat()
+                if mutation == 'client': changed['logicalComparisonSource']['pgDumpVersion'] = '17.8'
+                if mutation == 'missing_provenance': changed['logicalComparisonSource'].pop('capturedAt')
+                with self.subTest(mutation=mutation), self.assertRaises(bootstrap.BootstrapError):
+                    bootstrap.verify_database_inputs(changed)
+
 
 if __name__ == '__main__':
     unittest.main()
