@@ -1,9 +1,21 @@
 # memory.md
 
-version: 5.434
+version: 5.435
 date: 2026-10-18
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
+
+## Aktueller Produktstand — 18.10.2026 / Version 5.435
+
+Der vollständige neue synthetische 100-Gäste-Referenzauftrag ist jetzt im isolierten lokalen Stack über die normale Oberfläche durchgeführt: Anfrage → Angebot mit fünf belegbar als synthetisch markierten Preiszeilen → interne Variantenentscheidung → Produktionsübergabe → neun Rezeptimporte/-zuordnungen → bestehende modellgebundene Planungsnachweise → 13 Karten prüfen → intern freigeben → übernehmen → neun Produktionsbatches und 29 konsolidierte Einkaufspositionen → CSV und 18-seitige A4-Produktionsmappe. Hauptgerichte 55/25/20, Dessert 80/20. Unabhängige Decimal-Nachrechnung aus den ursprünglichen Rezepttexten bestätigt alle 49 Zutatenbeiträge und 29 Summen exakt. Zimt 0,002 kg (= 2 g) bleibt in CSV, Rezeptkarte, Küchenblatt und Einkauf erhalten. Vollständiges Menü einschließlich Empfang, Beilagen und Dessert; Angebot 8.043,20 EUR netto / 1.528,21 EUR ausdrücklich synthetische 19%-Teststeuer / 9.571,41 EUR brutto. Keine realen Preis-/Steuerfreigaben abgeleitet.
+
+Vier tatsächlich im Browser belegte enge Produktfehler repariert, Produktcommit 75d9f46: Rezeptbibliothek vor dem ersten Plan im aktiv berechtigten Produktionsfall anzeigen; nach gespeicherter kanonischer Entwurfsrevision vorhandenes Refreshsignal auslösen; interne Freigabeanzeige aus dem serverbestätigten Approval-/Applyzustand statt festem „nicht erteilt“ ableiten; kurze Küchenblattblöcke im Druck zusammenhalten. Keine neue API, Persistenz, Freigabewahrheit oder Architektur. 104 gezielte Tests in neun tatsächlich ausgeführten Dateien und finaler Build PASS; unabhängige Prüfung /root/menu_repair_review einschließlich Boundary-/Stale-/Approval-/Printdelta ohne materielle Befunde angenommen. Keine unveränderte Vollsuite lokal wiederholt.
+
+Eigener lokaler Stack vollständig beendet und mit demselben synthetischen Datenroot neu gestartet: neun Batches/29 Positionen und „Interne Produktionsfreigabe: erteilt · übernommen“ bleiben erhalten. Alle 13 eingefrorenen Quellartefakte einschließlich neun Originalrezepten bytegleich. Originalrezepte bleiben review_required; keine Bibliotheks-/echte Küchenfreigabe erteilt. Wiederverwendet ist ausschließlich Alexanders belegte Annahmenbestätigung für den synthetischen Rechentest vom17.10., keine neue Freigabe erfunden. CSV-Mengen sämtlich exakt mit gespeicherter Einkaufsliste verglichen. Neu gerenderte 18-seitige A4-PDF vollständig als Kontaktbogen angesehen; kurze Küchenblätter werden nicht mehr zwischen Rezeptkopf und Zubereitung zerteilt. Lokale Belege tmp/product-pilot-20261018/full-reference-*.txt und *-arithmetic.json/*-restart-export-proof.json; Dateien output/pdf/CateringOS-SYNTHETISCH-100-Gaeste-{Produktionsmappe.pdf,Einkauf.csv}. Keine privaten Angebote, Rechnungen oder Credentials darin.
+
+Dieser Meilenstein ist ein lokaler synthetischer UI-Nachweis, kein Nürnberger Release-/Betriebsnachweis. Auslieferung des Inkrements und endgültige tatsächliche Opus-5.5-Produktprüfung bleiben offen. Bekannte konkrete UX-/Fachlücken: generische Auftragstitel, veralteter Resumehinweis nach Apply, redundante Prüfkarteflächen, technische Rollen-/Quellenbegriffe, noch offene Küchenausrüstung/Stationen/Zeiten und Sonderkost-/Lieferanten-/Temperaturentscheidungen. Kosten/Marge und vollständiges Rechnungsarchiv weiterhin ungeklärt; vorhandene Angebote 2022–2026 und App-Transfer bleiben die bestätigte Recherchegrundlage. Keine echte Küchenfreigabe oder Pilot-GO. Eigene Nürnberger Backup→Restore→Cleanup-/Observerabnahme weiter offen; Helsinki OFF und erhalten, keine DNS-/Host-/Daten-/Konto-/ADH-/Löschaktion.
+
+Integration führt weiterhin Draft-PR #727. Überholter Run39075030417 ist abschließend CANCELLED, nicht PASS. Run39077420694 auf ae65beb hat Browser/Compose/macOS und Build PASS, aber Haupttest weiterhin laufend. Konkreter Diagnosehinweis aus dem abgeschlossenen alten Log: synthetischer Observer-Pythontest ist die einzige damals vorhandene unvollendete Testdatei. Kein blinder Retry, keine Schutzabschwächung; eng begrenzte lesende Ursachenprüfung läuft. Nächster Ausführungsschritt: CI-Hänger konkret schließen, das geprüfte Produktinkrement im bestehenden PR integrieren und danach tatsächliche Opus-Browserprüfung sowie freigegebene Nürnberger Auslieferung/Abnahme fortsetzen. App-Gesamtziel bleibt ACTIVE.
 
 ## Aktueller Produktstand — 18.10.2026 / Version 5.434
 
@@ -2498,3 +2510,8 @@ Quelle: `8de2e96c8604f12da2ec14c39b187db04dfb61cf`. Der folgende Betriebsbericht
 ### 5.434 - 2026-10-18 — persistierte Angebotskalkulation und normaler UI-Weg
 
 Produktcommit 74bdc25, historische Angebotsgrundlagen wiedergefunden, gezielte unabhängige Prüfung und lokaler synthetischer Browsernachweis bis Handoff/Neustart/Wiederöffnen. Details und unveränderte Ausschlüsse im aktuellen Produktstand oben; noch keine Release-/Nürnberg-/Pilotabnahme.
+
+
+### 5.435 — 18.10.2026: vollständiger lokaler synthetischer UI-Ablauf
+
+Neun Rezepte, 49 Zutatenbeiträge, 29 Einkaufspositionen, 55/25/20 und 2 g exakt; Produkt75d9f46, 104 Tests/9 Dateien, Build und unabhängige Prüfung PASS. Lokaler Neustart/CSV/18-Seiten-PDF bestätigt; CI, Opus-Endabnahme und Nürnberg offen.
