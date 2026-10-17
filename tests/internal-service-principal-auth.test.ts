@@ -29,11 +29,12 @@ type ServiceName = "Offer-Service" | "Production-Service";
 interface InternalTriple {
   target: "intake" | "offer";
   service: ServiceName;
-  method: "GET" | "PUT";
+  method: "GET" | "PUT" | "POST";
   path: string;
 }
 
 const triples: readonly InternalTriple[] = [
+  { target: "intake", service: "Offer-Service", method: "POST", path: "/v1/intake/internal/text-sources" },
   { target: "intake", service: "Offer-Service", method: "GET", path: "/v1/intake/internal/requests/missing-request" },
   { target: "intake", service: "Offer-Service", method: "GET", path: "/v1/intake/internal/source-documents/missing-document" },
   { target: "intake", service: "Offer-Service", method: "GET", path: "/v1/intake/internal/specs/missing-spec" },
@@ -68,7 +69,7 @@ function neighboringMethod(method: InternalTriple["method"]): Method {
 }
 
 describe("narrow internal service principals", () => {
-  it("accepts exactly the ten approved method/path/service triples", async () => {
+  it("accepts exactly the approved method/path/service triples", async () => {
     const rootDir = dataRoot();
     const intake = buildIntakeApp({ rootDir, env });
     const offer = buildOfferApp({ rootDir, env });
@@ -85,6 +86,29 @@ describe("narrow internal service principals", () => {
       expect(response.statusCode, `${triple.service} ${triple.method} ${triple.path}`).not.toBe(401);
       expect(response.statusCode, `${triple.service} ${triple.method} ${triple.path}`).not.toBe(403);
     }
+  });
+
+  it("inserts only canonical text and rejects changed input/spec, arbitrary fields and the wrong service", async () => {
+    const rootDir = dataRoot();
+    const store = new IntakeStore({ rootDir });
+    const intake = buildIntakeApp({ rootDir, store, env });
+    apps.push(intake);
+    const url = "/v1/intake/internal/text-sources";
+    const payload = { requestId: "insert-only-source", text: "SYNTHETISCH: Lunch für 100 Personen am 12.11.2026. 55 Portionen Ragout, 25 Portionen Gemüse, 20 Portionen Linsen." };
+    const send = (body: unknown, headers = serviceHeaders("Offer-Service")) => intake.inject({ method: "POST", url, headers, payload: body as any });
+    const first = await send(payload);
+    expect(first.statusCode, first.body).toBe(201);
+    const baseline = first.json().acceptedEventSpec;
+    expect((await send(payload)).json()).toEqual(first.json());
+    expect((await send({ ...payload, text: "Anderer Text" })).statusCode).toBe(409);
+    expect((await send({ ...payload, acceptedEventSpec: baseline })).statusCode).toBe(422);
+    expect((await send(payload, serviceHeaders("Production-Service"))).statusCode).toBe(401);
+    expect(await store.getSpec({ businessId: "forged-other-business" }, baseline.specId)).toBeUndefined();
+    expect(await store.getSpec({ businessId }, baseline.specId)).toEqual(baseline);
+    const changed = { ...baseline, attendees: { expected: 99 } };
+    expect(await store.replaceSpec({ businessId }, baseline, changed)).toBe("updated");
+    expect((await send(payload)).statusCode).toBe(409);
+    expect(await store.getSpec({ businessId }, baseline.specId)).toEqual(changed);
   });
 
   it("fails closed for every neighboring method, path and service name", async () => {

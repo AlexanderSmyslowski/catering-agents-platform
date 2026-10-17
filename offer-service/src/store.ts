@@ -524,7 +524,8 @@ export class OfferStore {
     context: BusinessContext,
     caseId: string,
     draft: OfferDraft,
-    sourceRefs: readonly CaseSourceRef[] = []
+    sourceRefs: readonly CaseSourceRef[] = [],
+    continuation?: { draftId: string; revision: number }
   ): Promise<"saved" | "case_conflict"> {
     const normalizedDraft = validateOfferDraft(draft);
     const storage = this.storageOptions ?? {};
@@ -561,6 +562,18 @@ export class OfferStore {
         }
         if (linkedCaseIds[0] && linkedCaseIds[0] !== caseId) return "case_conflict";
 
+        if (continuation) {
+          const events = (await caseCollections.events.list(context))
+            .filter((event) => event.caseId === caseId && event.kind === "draft_created")
+            .sort((a, b) => b.sequence - a.sequence);
+          const source = await draftCollection.get(context, continuation.draftId);
+          const retry = events.some((event) => event.artifactId === normalizedDraft.draftId);
+          const current = events[0];
+          if (!source || source.revision !== continuation.revision || (!retry &&
+            (current?.artifactId !== continuation.draftId || current.revisionRef?.revision !== continuation.revision))) {
+            throw Object.assign(new Error("Der Auftrag wurde inzwischen bearbeitet. Bitte neu laden."), { statusCode: 409 });
+          }
+        }
         await saveOfferDraftInCollection(draftCollection, context, normalizedDraft);
         for (const sourceRef of sourceRefs) {
           const existingSourceEvent = (await caseCollections.events.list(context)).find(

@@ -1,6 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import {
   areJsonValuesEqual,
+  createEventRequestFromText,
+  normalizeEventRequestToSpec,
   projectAcceptedEventSpecForActor,
   validateAcceptedEventSpec,
   validateEventRequest,
@@ -123,6 +125,40 @@ export function registerIntakeWorkItemRoutes(
       ? actor
       : undefined;
   };
+
+  app.post<{ Body: { requestId?: unknown; text?: unknown } }>(
+    "/v1/intake/internal/text-sources", async (request, reply) => {
+      const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+      if (!actor.trusted || actor.name !== "Offer-Service") return reply.code(403).send({ message: "Offer-Service erforderlich." });
+      const body = request.body;
+      if (!body || typeof body !== "object" || Array.isArray(body)
+        || Object.keys(body).some((key) => !["requestId", "text"].includes(key))
+        || typeof body.requestId !== "string" || !body.requestId.trim() || body.requestId.length > 200
+        || typeof body.text !== "string" || !body.text.trim() || body.text.length > 100000) {
+        return reply.code(422).send({ message: "requestId und Anfragetext erforderlich." });
+      }
+      const requestId = body.requestId.trim();
+      const text = body.text.trim();
+      const proposed = createEventRequestFromText({ requestId, channel: "text", rawText: text });
+      await store.insertRequest(actor, proposed);
+      const original = await store.getRequest(actor, requestId);
+      // Preserve the first timestamp; every other field must still match the
+      // same source. Partial source/spec insertion is safe to repair on retry.
+      if (!original || !areJsonValuesEqual(original, { ...proposed, source: { ...proposed.source, receivedAt: original.source.receivedAt } })) {
+        return reply.code(409).send({ message: "Anfrage existiert mit abweichendem Inhalt." });
+      }
+      const canonical = validateAcceptedEventSpec(normalizeEventRequestToSpec(original));
+      await store.insertSpec(actor, canonical);
+      const observed = await store.getSpec(actor, canonical.specId);
+      if (!areJsonValuesEqual(observed, canonical)) return reply.code(409).send({ message: "Intake-Spec existiert mit abweichendem Inhalt." });
+      await auditLog.logFor(actor, {
+        action: "intake.offer_text_source_registered", entityType: "AcceptedEventSpec",
+        entityId: canonical.specId, actor, idempotencyKey: `offer-text-source:${requestId}`,
+        summary: "Unveränderlicher Textursprung für Angebotsprüfung gespeichert.", details: { requestId }
+      });
+      return reply.code(201).send({ acceptedEventSpec: canonical });
+    }
+  );
 
   app.get<{ Params: { requestId: string } }>(
     "/v1/intake/internal/requests/:requestId",

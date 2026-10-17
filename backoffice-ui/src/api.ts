@@ -1300,3 +1300,18 @@ export function productionFolderExportUrl(planId: string): string {
 export function purchaseListExportUrl(purchaseListId: string): string {
   return `/api/exports/v1/exports/purchase-lists/${purchaseListId}/csv`;
 }
+
+export type OfferMenuEditItem = {
+  componentId?: string;
+  label: string;
+  servings: number;
+  menuCategory?: "classic" | "vegetarian" | "vegan";
+  dietaryTags?: string[];
+};
+
+export async function reviseOfferMenu(draftId: string, revision: number, menuPlan: OfferMenuEditItem[]) {
+  return fetchJson<OfferDraft>(`/api/offers/v1/offers/drafts/${encodeURIComponent(draftId)}/menu`, {
+    method: "POST",
+    body: JSON.stringify({ revision, menuPlan })
+  });
+}

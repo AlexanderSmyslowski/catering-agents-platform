@@ -94,6 +94,26 @@ describe("print export HTML escaping", () => {
     expect(html).not.toContain('"quoted" & \'single\'');
   });
 
+  it("prints explicit dish portions while retaining the publish gate", () => {
+    const draft = minimalOfferDraft({
+      proposedEventSpec: { menuPlan: [
+        { componentId: "chicken", label: "Hähnchenragout", servings: 55 },
+        { componentId: "veg", label: "Bratlinge", servings: 25, dietaryTags: ["vegetarian"] },
+        { componentId: "vegan", label: "Linsenragout", servings: 20, dietaryTags: ["vegan"] },
+        { componentId: "unknown", label: "Optionale Beilage" }
+      ] } as OfferDraft["proposedEventSpec"],
+      customerFacingText: "Unpublished customer text"
+    });
+    const html = renderOfferHtml(draft);
+    expect(html).toContain("Hähnchenragout: 55 Portionen");
+    expect(html).toContain("Bratlinge: 25 Portionen");
+    expect(html).toContain("Linsenragout: 20 Portionen");
+    expect(html).toContain("Optionale Beilage: Portionszahl offen");
+    expect(html).toContain("vegetarisch");
+    expect(html).toContain("vegan");
+    expect(html).not.toContain("Unpublished customer text");
+  });
+
   it("keeps unapproved offer customer text out of the HTML export", () => {
     const html = renderOfferHtml(
       minimalOfferDraft({

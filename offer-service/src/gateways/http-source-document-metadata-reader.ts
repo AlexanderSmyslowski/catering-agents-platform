@@ -148,14 +148,28 @@ export class HttpSourceDocumentMetadataReader implements SourceDocumentMetadataR
     }
   }
 
-  private async request(context: BusinessContext, path: string): Promise<Response> {
+  async ensureTextRequest(context: BusinessContext, requestId: string, text: string): Promise<AcceptedEventSpec> {
+    const response = await this.request(context, "/v1/intake/internal/text-sources", {
+      method: "POST", body: JSON.stringify({ requestId, text })
+    });
+    if (!response.ok) throw Object.assign(new Error("Intake-Ursprung konnte nicht unveränderlich gespeichert werden."), { statusCode: response.status === 409 ? 409 : 503 });
+    const payload = await response.json() as { acceptedEventSpec: AcceptedEventSpec };
+    const spec = validateAcceptedEventSpec(payload.acceptedEventSpec);
+    if (spec.specId !== `spec-${requestId}` || !spec.sourceLineage.some((source) => source.reference === requestId)) throw new Error("Intake-Ursprung passt nicht zur Anfrage.");
+    return spec;
+  }
+
+  private async request(context: BusinessContext, path: string, init?: { method: string; body: string }): Promise<Response> {
     try {
       return await this.fetcher(
         `${this.options.intakeServiceUrl.replace(/\/$/, "")}${path}`,
         {
+          ...init,
+          signal: AbortSignal.timeout(15000),
           redirect: "error",
           headers: {
             accept: "application/json",
+            ...(init ? { "content-type": "application/json" } : {}),
             "x-catering-actor-name": "Offer-Service",
             "x-catering-business-id": context.businessId,
             ...(this.options.trustedServiceSecret

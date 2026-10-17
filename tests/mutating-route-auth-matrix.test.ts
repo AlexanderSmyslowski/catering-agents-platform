@@ -35,6 +35,10 @@ type MutableRoute = {
 };
 
 const mutatingMvpRoutes: MutableRoute[] = [
+  { service: "offer", method: "POST", pathTemplate: "/v1/offers/drafts/:draftId/menu",
+    requiredRole: "offer_operator", url: "/v1/offers/drafts/matrix-draft/menu",
+    payload: { revision: 1, menuPlan: [{ label: "Synthetisch", servings: 10 }] } },
+
   {
     service: "intake",
     method: "POST",

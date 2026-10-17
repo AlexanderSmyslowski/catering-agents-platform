@@ -221,7 +221,13 @@ export function renderOfferHtml(draft: OfferDraft): string {
     `<p>Offene Punkte: ${draft.openQuestions.length}</p>`,
     ...openQuestionsSection,
     "<ul>",
-    ...draft.serviceModules.map((module) => `<li>${escapeHtml(module.label)}</li>`),
+    ...(draft.proposedEventSpec.menuPlan ?? []).map((component) => {
+      const dietary = component.dietaryTags?.map(tag => tag === "vegetarian" ? "vegetarisch" : tag).join(", ");
+      const portions = component.servings === undefined ? "Portionszahl offen" : `${escapeHtml(component.servings)} Portionen`;
+      return `<li>${escapeHtml(component.label)}: ${portions}${dietary ? ` · ${escapeHtml(dietary)}` : ""}</li>`;
+    }),
+    ...draft.serviceModules.filter(module => module.category !== "food" || !draft.proposedEventSpec.menuPlan?.length)
+      .map((module) => `<li>${escapeHtml(module.label)}</li>`),
     "</ul>",
     `<p>Gesamt: ${draft.pricingSummary.subtotal.amount.toFixed(2)} ${escapeHtml(draft.pricingSummary.subtotal.currency)}</p>`,
     ...reviewStatusSection,

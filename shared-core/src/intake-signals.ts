@@ -185,6 +185,21 @@ function isComponentScopedDietarySegment(segment: string, canonical: string): bo
 }
 
 function shouldPromoteDietarySignalToConstraint(segment: string, canonical: string): boolean {
+  if (canonical === "vegan" || canonical === "vegetarian") {
+    const diet = canonical === "vegan" ? "vegan(?:e|er|en|es)?" : "(?:vegetarisch(?:e|er|en|es)?|vegetarian)";
+    const explicitGlobal = /\b(?:gesamte[nmrs]?|komplett|durchgehend|ausschließlich|ausschliesslich|vollständig|vollstaendig)\b/i.test(segment)
+      || /\b(?:alle Gäste|alle Gaeste|für alle|fuer alle)\b/i.test(segment)
+      || new RegExp(diet+"\\s+(?:Buffet|Menü|Menu|Catering|Event|Veranstaltung|Essen)\\b", "i").test(segment)
+      || new RegExp("(?:Buffet|Menü|Menu|Catering|Event|Veranstaltung|Essen)\\s+(?:muss|soll|sollte)\\s+(?:"+diet+")\\b", "i").test(segment);
+    // Counts and guest choices describe part of a mixed menu. An explicit
+    // whole-event mandate still takes precedence over that local wording.
+    const portionOrGroup = new RegExp("\\b\\d+\\s+(?:Portion(?:en)?\\s+)?"+diet+"\\b", "i").test(segment)
+      || new RegExp(diet+"\\s+(?:Optionen|Alternativen)\\b", "i").test(segment)
+      || (/\b(?:Gäste|Gaeste|Personen)\b/i.test(segment)
+        && new RegExp("(?:wählen|waehlen)\\s+"+diet+"\\b", "i").test(segment));
+    if (portionOrGroup && !explicitGlobal) return false;
+  }
+
   if (requestLevelDietaryIntentPattern.test(segment)) {
     return true;
   }
@@ -229,7 +244,7 @@ export function analyzeIntakeText(text: string): IntakeSignals {
     constraints,
     uncertainties
   };
-  const segments = text.split(/[,;\n]+/).map(normalizeSegment).filter(Boolean);
+  const segments = text.split(/[,;\n]+|(?<=[.!?])\s+(?=[A-ZÄÖÜ])/).map(normalizeSegment).filter(Boolean);
 
   for (const segment of segments) {
     const attendee = extractAttendeeObservation(segment);

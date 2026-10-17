@@ -1,4 +1,5 @@
-import { useMemo, useState, type ChangeEvent } from "react";
+import { OfferMenuEditor } from "./offer-menu-editor.js";
+import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { offerExportUrl, type IntakeDocumentChannel } from "./api.js";
 import { productionDraftEntryUrl } from "./production-entry-focus.js";
 import { MiniPilotCheckPanel } from "./mini-pilot-check-panel.js";
@@ -75,6 +76,8 @@ export type OfferWorkbenchProps = {
   selectedVariantId?: string;
   setSelectedVariantId?: (variantId: string | undefined) => void;
   approveDraft: (draftId: string, revision: number, variantId: string) => Promise<void>;
+  onMenuEditingChange?: (editing: boolean) => void;
+  onMenuSaved?: (draftId: string) => Promise<void>;
   approvalBinding?: OfferApprovalBinding;
   createHandoff?: (offerDraftId: string, offerDraftRevision: number, approvedOfferId: string) => Promise<void>;
   filteredSpecs: Array<Record<string, unknown>>;
@@ -199,6 +202,8 @@ export function OfferConversationalWorkbench({
   setSelectedVariantId = () => undefined,
   approveDraft,
   approvalBinding,
+  onMenuSaved,
+  onMenuEditingChange,
   createHandoff,
   filteredSpecs,
   activeSpec,
@@ -230,6 +235,8 @@ export function OfferConversationalWorkbench({
   const focusedOpenQuestions = Array.isArray(focusedDraft?.openQuestions)
     ? (focusedDraft.openQuestions as string[])
     : [];
+  const [editingMenu, setEditingMenu] = useState(false);
+  useEffect(() => { setEditingMenu(false); onMenuEditingChange?.(false); }, [focusedDraftId]);
   const [historySearch, setHistorySearch] = useState("");
   const visibleOfferDrafts = useMemo(() => {
     const query = historySearch.trim().toLowerCase();
@@ -414,6 +421,17 @@ export function OfferConversationalWorkbench({
                   {focusedDraftSource ? <p className="helper-text">Entwurfs-Quelle: {focusedDraftSource}</p> : null}
                 </details>
               ) : null}
+              {onMenuSaved && focusedDraftRevision !== undefined ? (
+                <OfferMenuEditor
+                  key={focusedDraftId}
+                  draftId={focusedDraftId}
+                  revision={focusedDraftRevision}
+                  menuPlan={Array.isArray(focusedDraftSpec?.menuPlan) ? focusedDraftSpec.menuPlan as Array<Record<string, unknown>> : []}
+                  onSaved={onMenuSaved}
+                  disabled={submitting}
+                  onEditingChange={(editing) => { setEditingMenu(editing); onMenuEditingChange?.(editing); }}
+                />
+              ) : null}
               {focusedOpenQuestions.length > 0 ? (
                 <ul className="item-list compact">
                   {focusedOpenQuestions.map((question) => (
@@ -463,7 +481,7 @@ export function OfferConversationalWorkbench({
                       key={variantId}
                       className="secondary-button"
                       aria-pressed={selectedVariantId === variantId}
-                      disabled={submitting || focusedDraftRevision === undefined}
+                      disabled={submitting || editingMenu || focusedDraftRevision === undefined}
                       onClick={() => {
                         setSelectedVariantId(variantId);
                         if (focusedDraftRevision !== undefined) {
@@ -481,7 +499,7 @@ export function OfferConversationalWorkbench({
                 {focusedApprovalBinding && createHandoff ? (
                   <button
                     className="secondary-button"
-                    disabled={submitting}
+                    disabled={submitting || editingMenu}
                     onClick={() => void createHandoff(focusedDraftId, focusedApprovalBinding.offerDraftRevision, focusedApprovalBinding.approvedOfferId)}
                   >
                     An Produktion übergeben

@@ -355,6 +355,10 @@ export class IntakeStore {
     this.shadowRuns = collections.shadowRuns;
   }
 
+  async insertRequest(context: BusinessContext, request: EventRequest): Promise<"created" | "exists"> {
+    return this.requests.insert(context, validateEventRequest(request));
+  }
+
   async saveRequest(context: BusinessContext, request: EventRequest): Promise<void> {
     await this.saveRecord(context, this.requests, request.requestId, request, "request");
   }

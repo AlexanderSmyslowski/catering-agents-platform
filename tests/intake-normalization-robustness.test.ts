@@ -174,6 +174,27 @@ describe("intake normalization robustness", () => {
     );
   });
 
+  it("does not turn explicit mixed-menu portions and guest subgroups into a global vegan mandate", () => {
+    const rawText = "SYNTHETISCHER TESTAUFTRAG – KEIN ECHTER KUNDE. Kunde TEST NÜRNBERG Wissenschaftsforum, test-catering@example.invalid. Wissenschaftliche Abendveranstaltung am 12.11.2026 in Nürnberg für 100 Erwachsene. Empfang 18:00–19:00 mit 200 kleinen Canapés à 25–35 g, davon 100 vegan und 100 vegetarisch. Abendbuffet 19:00–21:00: 55 Portionen Hähnchenragout, 25 Portionen vegetarische Gemüsebratlinge, 20 Portionen veganes Linsenragout; jeweils 150 g gegarte Hauptkomponente. Für alle 100 Gäste je 180 g gegarte Rosmarinkartoffeln und 150 g gegartes Ofengemüse. Dessert: 80 Quarkcreme und 20 vegane Fruchtkompotte à 100 g. Gäste: 60 omnivor, 25 vegetarisch, 15 vegan; fünf omnivore Gäste wählen veganes Hauptgericht und Dessert. Insgesamt 100 Hauptgerichte und Desserts, Diätuntergruppen nicht addieren. Vier Gäste benötigen glutenfreie Speisen, drei dürfen keine Schalenfrüchte erhalten; Gruppen können sich überschneiden. Konkrete Allergene, Lieferantendeklarationen und Kreuzkontakte vor Freigabe klären; keine unbelegte Allergenfreiheit. Für glutenfreie Gäste geeignete getrennte Empfangshäppchen und Hauptgerichte vorsehen. Personalannahme: zwei Küchenkräfte je acht Stunden, vier Servicekräfte je sechs Stunden und eine Fahrkraft fünf Stunden, zusammen 45 Stunden. Logistik: Warm- und Kühltransport, getrennte beschriftete Sonderkost, GN-Behälter, Warmhaltung und Geschirr. Anlieferung 16:30, Aufbau bis 17:45, Abbau ab 21:00. Budgetrahmen 6.500 EUR netto einschließlich Personal und Logistik. Umsatzsteuer und Bruttopreis aus bestehender tatsächlicher Kalkulation ausweisen; keine fingierten Rezept- oder Einkaufspreise. Vollständiges Angebot, nachvollziehbare Leistungen, Ernährungskennzeichnung, Allergene, Personal und Transport; offene Annahmen sichtbar klären. Ausschließlich diesen Testauftrag bearbeiten.";
+    const request = createEventRequestFromText({ requestId: "nue-mixed-100", channel: "text", rawText });
+    const spec = normalizeEventRequestToSpec(request);
+    expect(spec.productionConstraints ?? []).not.toContain("vegan");
+    expect(spec.productionConstraints ?? []).not.toContain("vegetarian");
+    expect(spec.menuPlan.map(item => item.servings)).toEqual([55, 25, 20]);
+  });
+
+  it.each(["Das gesamte Buffet muss vegan sein.", "Das Buffet muss vegan sein und glutenfreie Optionen bieten.", "Bitte veganes Buffet mit glutenfreien Alternativen.", "Wir wählen ein veganes Buffet.", "Alle Gäste erhalten ausschließlich vegane Speisen.", "25 vegane Portionen; das gesamte Catering muss vegan sein.", "25 vegane Portionen. Das gesamte Buffet muss vegan sein.", "25 vegane Portionen, das Buffet muss vegan sein."])(
+    "retains an explicit global vegan mandate: %s", rawText => {
+      expect(createEventRequestFromText({ requestId: "global-vegan", channel: "text", rawText }).constraints).toContain("vegan");
+    }
+  );
+
+  it("retains hard allergy constraints alongside portion-scoped diet labels", () => {
+    const request = createEventRequestFromText({ requestId: "allergy-mixed", channel: "text",
+      rawText: "25 Portionen vegetarische Bratlinge, 20 Portionen veganes Linsenragout. Allergie: keine Milch, ohne Gluten." });
+    expect(request.constraints).toEqual(expect.arrayContaining(["milk_free", "gluten_free"]));
+  });
+
   it("extracts comma-separated dishes after an inline menu marker", () => {
     const request = createEventRequestFromText({
       requestId: "inline-menu-marker-1",

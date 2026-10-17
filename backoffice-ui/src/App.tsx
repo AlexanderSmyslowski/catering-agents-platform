@@ -426,6 +426,11 @@ function ProductWorkspaceView({
   currentProductionResultArtifactId
 }: ProductWorkspaceProps) {
   const [submitting, setSubmitting] = useState(false);
+  const [offerMenuEditing, setOfferMenuEditing] = useState(false);
+  const offerMenuEditingRef = useRef(false);
+  const offerFocusRef = useRef({ caseId: activeOfferCaseId, draftId: activeOfferDraftId });
+  offerFocusRef.current = { caseId: activeOfferCaseId, draftId: activeOfferDraftId };
+
   const nextActionRunnerRef = useRef<CaseNextActionRunner | undefined>(undefined);
   if (!nextActionRunnerRef.current) {
     nextActionRunnerRef.current = createCaseNextActionRunner(setSubmitting);
@@ -1170,6 +1175,15 @@ function ProductWorkspaceView({
      activeDraft: activeOfferDraft ? buildRecordView(activeOfferDraft) : undefined,
      selectedDraft: selectedDraft ? buildRecordView(selectedDraft) : undefined,
     approvalBinding: effectiveOfferApprovalBinding,
+    onMenuEditingChange: (editing) => { offerMenuEditingRef.current = editing; setOfferMenuEditing(editing); },
+    onMenuSaved: async (draftId) => {
+      if (offerFocusRef.current.caseId !== activeOfferCaseId || offerFocusRef.current.draftId !== activeOfferDraftId) return;
+      setOfferApprovalBinding(undefined);
+      setSelectedVariantId(undefined);
+      setSelectedDraftId(draftId);
+      await refreshDashboard();
+      if (offerFocusRef.current.caseId === activeOfferCaseId) setNotice("Menü als neue Angebotsfassung gespeichert. Bitte erneut prüfen.");
+    },
     setSelectedDraftId,
     selectedVariantId,
     setSelectedVariantId,
@@ -1246,6 +1260,9 @@ function ProductWorkspaceView({
   ]);
 
   async function runNextAction(action: CaseNextAction): Promise<void> {
+    if (route === "offer" && offerMenuEditingRef.current && (action.kind === "approve_offer" || action.kind === "send_handoff")) {
+      setError("Bitte Menübearbeitung zuerst speichern oder abbrechen."); return;
+    }
     const focus = (selector: string) => {
       const element = document.querySelector<HTMLElement>(selector);
       element?.focus({ preventScroll: true });
@@ -1326,7 +1343,7 @@ function ProductWorkspaceView({
       <CaseNextActionBar
         action={nextAction}
         onAction={(action) => void runNextAction(action).catch((cause) => setError(cause instanceof Error ? cause.message : "Nächster Schritt konnte nicht ausgeführt werden."))}
-        busy={submitting}
+        busy={submitting || (route === "offer" && offerMenuEditing)}
         error={error}
       />
 
