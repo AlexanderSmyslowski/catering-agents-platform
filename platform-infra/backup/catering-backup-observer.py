@@ -19,6 +19,7 @@ from urllib.parse import urlsplit
 
 OWNER_UID, OWNER_GID = 0, 0
 COMMON = Path(__file__).resolve().with_name('catering-backup-common.sh')
+COMMON_SOURCE = None
 ENV = {'PATH': '/usr/bin:/bin', 'LANG': 'C', 'LC_ALL': 'C', 'TZ': 'UTC'}
 SCOPE = 'postgres-full,sites,platform-caddy,catering-edge-caddy'
 COMPONENTS = ('sites', 'platform_caddy_data', 'platform_caddy_config',
@@ -94,8 +95,12 @@ def shell(root, command, args, payload=None):
     mask = signal.pthread_sigmask(signal.SIG_BLOCK, {signal.SIGTERM, signal.SIGINT})
     process = None
     try:
-        process = subprocess.Popen(['/bin/bash', '-c', 'source "$1"; EXPECTED_UID="$CATERING_BACKUP_EXPECTED_UID"; '
-                                'shift; ' + command, 'observer', str(COMMON), *map(str, args)],
+        # A streamed operations check carries these same validators in memory.
+        # Installed senders continue sourcing their adjacent, versioned helper.
+        loader = COMMON_SOURCE + '\n' if COMMON_SOURCE is not None else 'source "$1"; shift; '
+        helper_args = [] if COMMON_SOURCE is not None else [str(COMMON)]
+        process = subprocess.Popen(['/bin/bash', '-c', loader + 'EXPECTED_UID="$CATERING_BACKUP_EXPECTED_UID"; '
+                                + command, 'observer', *helper_args, *map(str, args)],
                                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                                env=env, start_new_session=True)
         CHILD_GROUPS.add(process.pid)
@@ -319,10 +324,12 @@ def run(policy_path, send=False):
             info = root.lstat()
             require(stat.S_ISDIR(info.st_mode) and info.st_uid == OWNER_UID and info.st_gid == OWNER_GID and
                     stat.S_IMODE(info.st_mode) == 0o700, 'PROTECTION_INVALID')
-        _, lock_identity = protected(state_root / 'lock')
-        lock = os.open(state_root / 'lock', os.O_RDONLY | os.O_NOFOLLOW)
-        require(generation(os.fstat(lock)) == lock_identity, 'GENERATION_CHANGED')
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        records.read(state_root / 'lock')
+        if send:
+            lock_identity = records.generations[str(state_root / 'lock')][1]
+            lock = os.open(state_root / 'lock', os.O_RDONLY | os.O_NOFOLLOW)
+            require(generation(os.fstat(lock)) == lock_identity, 'GENERATION_CHANGED')
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         state = records.record(state_root, state_root / 'state', 'observer')
         require(state['status'] == 'observer' and state['backup_health'] in ('unknown', 'healthy', 'warning', 'critical') and
                 state['delivery_accepted'] in ('true', 'false'), 'STATE_INVALID')

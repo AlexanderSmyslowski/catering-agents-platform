@@ -22,7 +22,7 @@ export function LoginView({ busy, error, onSubmit }: LoginViewProps) {
   return (
     <main className="app-shell" aria-label="Catering-Anmeldung">
       <section className="masthead-card">
-        <p className="eyebrow">Catering Backoffice</p>
+        <p className="eyebrow">CateringOS</p>
         <h1>Anmelden</h1>
         <form onSubmit={(event) => void submit(event)}>
           <label>

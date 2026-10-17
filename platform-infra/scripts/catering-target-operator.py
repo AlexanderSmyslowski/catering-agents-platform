@@ -20,6 +20,18 @@ from typing import Any, Callable, Sequence
 
 REPOSITORY = "AlexanderSmyslowski/catering-agents-platform"
 TARGET_ID = "catering-prod-1"
+MIGRATION_PRODUCT = "9ce4fbc96a5dd877f2cd2f00588a22be861306b9"
+SOURCE_OPERATIONS = "b1e3d44573bf6fe6d3c8e46861792a592535e856"
+SOURCE_MANIFEST = "9a0bb5c49fd09a9e64a99d00babf69ac771e66238ec5ae728eeedebe7ed79df0"
+P4_IMAGES = {
+    "runtime": "sha256:6ba5bef903323aa5f4fdc63d1043b627fdaed1cb681526ba19b94a7d7f72c0f3",
+    "web": "sha256:3e45d18ffae79f78d84a4018aa52ac17419f29f2bda3e49ccb3e94311440d48e",
+}
+P4_ARCHIVES = {
+    "runtime-image.tar.gz": "3e540113a4dfbe272d15c8eac5713f0911c2fc0831873e87e9d35588701ba43b",
+    "web-image.tar.gz": "886d43cde21132b644f91c5a7f52c578a2bc2e6e31b533fd31ff96ea98f64166",
+}
+MIGRATION_SOURCE = {'targetId': 'catering-prod-1', 'operationsCommit': 'b1e3d44573bf6fe6d3c8e46861792a592535e856', 'manifestSha256': '9a0bb5c49fd09a9e64a99d00babf69ac771e66238ec5ae728eeedebe7ed79df0'}
 CI_WORKFLOW = "ci.yml"
 APPLICATION_SERVICES = ("intake", "offer", "production", "exports", "web")
 SOURCE_COMPOSE_FILES = (
@@ -295,48 +307,20 @@ def _regular_file(root: Path, name: str) -> Path:
     return path
 
 
-def _verify_docker_archive(path: Path, expected_image_id: str) -> None:
-    if not IMAGE_ID_RE.fullmatch(expected_image_id):
-        raise OperatorError("bundle image identity is not an immutable sha256 image ID")
+def _inspect_archive(path: Path, build_iid: str | None = None) -> dict[str, str]:
     try:
-        with tarfile.open(path, mode="r:gz") as archive:
-            manifest_file = archive.extractfile("manifest.json")
-            if manifest_file is None:
-                raise OperatorError("Docker archive has no manifest")
-            entries = json.loads(manifest_file.read())
-            if not isinstance(entries, list) or len(entries) != 1 or not isinstance(entries[0], dict):
-                raise OperatorError("Docker archive manifest is ambiguous")
-            entry = entries[0]
-            config_name = entry.get("Config")
-            layers = entry.get("Layers")
-            if not isinstance(config_name, str) or not isinstance(layers, list):
-                raise OperatorError("Docker archive manifest shape is invalid")
-            config_relative = PurePosixPath(config_name)
-            if config_relative.is_absolute() or any(part in {".", ".."} for part in config_relative.parts):
-                raise OperatorError("Docker archive config path is invalid")
-            config_file = archive.extractfile(config_name)
-            if config_file is None:
-                raise OperatorError("Docker archive config is missing")
-            config_bytes = config_file.read()
-            actual_image_id = "sha256:" + hashlib.sha256(config_bytes).hexdigest()
-            if actual_image_id != expected_image_id:
-                raise OperatorError("Docker archive config does not match its bound image ID")
-            config = json.loads(config_bytes)
-            if config.get("os") != "linux" or config.get("architecture") != "amd64":
-                raise OperatorError("Docker archive platform does not match linux/amd64")
-            for layer in layers:
-                if not isinstance(layer, str):
-                    raise OperatorError("Docker archive layer path is invalid")
-                relative = PurePosixPath(layer)
-                if relative.is_absolute() or any(part in {".", ".."} for part in relative.parts):
-                    raise OperatorError("Docker archive layer path is invalid")
-                member = archive.getmember(layer)
-                if not member.isfile():
-                    raise OperatorError("Docker archive layer is not a regular file")
-    except OperatorError:
-        raise
-    except (OSError, EOFError, tarfile.TarError, json.JSONDecodeError, KeyError, TypeError) as exc:
-        raise OperatorError("Docker archive is missing, invalid, or unreadable") from exc
+        return _oci().inspect_archive(path, build_iid)
+    except ValueError as exc:
+        raise OperatorError("bundle OCI archive identity is invalid") from exc
+
+
+def _oci():
+    # Resolve only the versioned sibling, never a module from the working directory.
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("catering_target_oci", Path(__file__).with_name("catering_target_oci.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def verify_bundle(
@@ -345,7 +329,9 @@ def verify_bundle(
     operations_commit: str,
     expected_manifest_sha256: str,
     product_source_root: Path,
+    *, target_id: str = TARGET_ID,
 ) -> dict[str, Any]:
+    validate_target(target_id, product_commit, operations_commit)
     if not COMMIT_RE.fullmatch(product_commit) or not COMMIT_RE.fullmatch(operations_commit):
         raise OperatorError("bundle requires full product and operations commit SHAs")
     if not SHA256_RE.fullmatch(expected_manifest_sha256):
@@ -360,7 +346,7 @@ def verify_bundle(
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise OperatorError("bundle manifest is unreadable or invalid") from exc
-    if not isinstance(manifest, dict) or set(manifest) != {
+    if not isinstance(manifest, dict) or set(manifest) != ({
         "schemaVersion",
         "repository",
         "targetId",
@@ -371,18 +357,20 @@ def verify_bundle(
         "artifacts",
         "sourceFiles",
         "sourceTreeSha256",
-    }:
+    } | ({"migrationSource"} if target_id == "catering-prod-02" else set())):
         raise OperatorError("bundle manifest shape is unsupported")
     if (
-        manifest.get("schemaVersion") != 3
+        manifest.get("schemaVersion") != 4
         or manifest.get("repository") != REPOSITORY
-        or manifest.get("targetId") != TARGET_ID
+        or manifest.get("targetId") != target_id
         or manifest.get("platform") != "linux/amd64"
         or manifest.get("productCommit") != product_commit
         or manifest.get("operationsCommit") != operations_commit
     ):
         raise OperatorError("bundle manifest does not match the explicit repository and commit bindings")
 
+    if target_id == "catering-prod-02" and manifest.get("migrationSource") != MIGRATION_SOURCE:
+        raise OperatorError("migration source provenance mismatch")
     images = manifest.get("images")
     artifacts = manifest.get("artifacts")
     source_files = manifest.get("sourceFiles")
@@ -415,11 +403,11 @@ def verify_bundle(
     }
     for name, archive_name in (("runtime", "runtime-image.tar.gz"), ("web", "web-image.tar.gz")):
         image = images[name]
-        if not isinstance(image, dict) or set(image) != {"imageId", "archive", "services"}:
+        if not isinstance(image, dict) or set(image) != {"indexDigest", "platformManifestDigest", "configDigest", "archive", "services"}:
             raise OperatorError("bundle image binding shape is invalid")
         if image.get("archive") != archive_name or image.get("services") != expected_services[name]:
             raise OperatorError("bundle image is bound to the wrong application services")
-        image_id = image.get("imageId")
+        image_id = image.get("platformManifestDigest")
         if not isinstance(image_id, str) or not IMAGE_ID_RE.fullmatch(image_id):
             raise OperatorError("bundle image identity is not immutable")
         archive_path = _regular_file(bundle, archive_name)
@@ -428,7 +416,8 @@ def verify_bundle(
             raise OperatorError("bundle image archive digest is invalid")
         if _file_sha256(archive_path) != declared_sha:
             raise OperatorError("bundle image archive digest mismatch")
-        _verify_docker_archive(archive_path, image_id)
+        if _inspect_archive(archive_path) != {key: image[key] for key in ("indexDigest", "platformManifestDigest", "configDigest")}:
+            raise OperatorError("bundle OCI archive binding mismatch")
 
     candidate_path = _regular_file(bundle, "candidate-images.json")
     candidate_digest = artifacts.get("candidate-images.json")
@@ -440,8 +429,8 @@ def verify_bundle(
         candidate = json.loads(candidate_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise OperatorError("candidate image override is invalid") from exc
-    runtime_id = images["runtime"]["imageId"]
-    web_id = images["web"]["imageId"]
+    runtime_id = images["runtime"]["platformManifestDigest"]
+    web_id = images["web"]["platformManifestDigest"]
     expected_candidate = {
         "services": {
             service: {"image": runtime_id}
@@ -451,7 +440,43 @@ def verify_bundle(
     }
     if candidate != expected_candidate:
         raise OperatorError("candidate image override does not match the bundle manifest")
+    if target_id == "catering-prod-02":
+        if any(images[name]["platformManifestDigest"] != value for name, value in P4_IMAGES.items()) or any(artifacts[name] != value for name, value in P4_ARCHIVES.items()):
+            raise OperatorError("target02 requires unchanged P4.4C archives and platform manifests")
     return manifest
+
+
+def validate_target(target_id: str, product_commit: str, operations_commit: str) -> None:
+    if target_id not in {TARGET_ID, "catering-prod-02"}:
+        raise OperatorError("unknown target")
+    if target_id == "catering-prod-02" and (product_commit != MIGRATION_PRODUCT or operations_commit == SOURCE_OPERATIONS):
+        raise OperatorError("target02 requires the migration product and newly accepted operations")
+
+
+def reuse_migration_bundle(source_bundle: Path, product_source: Path, operations_commit: str, output: Path) -> str:
+    """Create a separate target binding; never rewrite historical source evidence."""
+    validate_target("catering-prod-02", MIGRATION_PRODUCT, operations_commit)
+    original = verify_bundle(source_bundle, MIGRATION_PRODUCT, SOURCE_OPERATIONS, SOURCE_MANIFEST, product_source)
+    if any(original["images"][name]["platformManifestDigest"] != value for name, value in P4_IMAGES.items()):
+        raise OperatorError("source P4 image mismatch")
+    if any(original["artifacts"][name] != value for name, value in P4_ARCHIVES.items()):
+        raise OperatorError("source P4 archive mismatch")
+    output = output.expanduser().absolute()
+    if output.parent.resolve() != output.parent or any(root.resolve() == output or root.resolve() in output.parents for root in (source_bundle, product_source)):
+        raise OperatorError("new target bundle must be outside historical evidence and product source")
+    if output.exists() or output.is_symlink():
+        raise OperatorError("new target bundle destination must not exist")
+    output.mkdir(mode=0o755)
+    for name in original["artifacts"]:
+        shutil.copyfile(_regular_file(source_bundle, name), output / name)
+        (output / name).chmod(0o644)
+    manifest = dict(original, targetId="catering-prod-02", operationsCommit=operations_commit, migrationSource=MIGRATION_SOURCE)
+    path = output / "manifest.json"
+    path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.chmod(0o644)
+    digest = _file_sha256(path)
+    verify_bundle(output, MIGRATION_PRODUCT, operations_commit, digest, product_source, target_id="catering-prod-02")
+    return digest
 
 
 def _default_docker_runner(command: list[str], **kwargs: Any) -> Any:
@@ -572,7 +597,7 @@ def create_bundle(
     build_state = Path(tempfile.mkdtemp(prefix=".catering-target-build-", dir=output.parent))
     source_context = build_state / "source"
     context_exporter(source, product_commit, source_context)
-    built_images: dict[str, str] = {}
+    built_images: dict[str, dict[str, str]] = {}
 
     for name, dockerfile in (
         ("runtime", "platform-infra/docker/Dockerfile.runtime"),
@@ -582,6 +607,8 @@ def create_bundle(
         command = [
             "docker",
             "build",
+            "--provenance=false",
+            "--sbom=false",
             "--platform",
             "linux/amd64",
             "--iidfile",
@@ -599,13 +626,12 @@ def create_bundle(
             raise OperatorError("Docker did not produce an immutable image identity") from exc
         if not IMAGE_ID_RE.fullmatch(image_id):
             raise OperatorError("Docker returned an invalid immutable image identity")
-        built_images[name] = image_id
-        docker_saver(image_id, staging / f"{name}-image.tar.gz")
+        archive_path = staging / f"{name}-image.tar.gz"
+        docker_saver(image_id, archive_path)
+        built_images[name] = _inspect_archive(archive_path, image_id)
 
-    runtime_id = built_images["runtime"]
-    web_id = built_images["web"]
-    _verify_docker_archive(staging / "runtime-image.tar.gz", runtime_id)
-    _verify_docker_archive(staging / "web-image.tar.gz", web_id)
+    runtime_id = built_images["runtime"]["platformManifestDigest"]
+    web_id = built_images["web"]["platformManifestDigest"]
     candidate = {
         "services": {
             **{service: {"image": runtime_id} for service in ("intake", "offer", "production", "exports")},
@@ -622,7 +648,7 @@ def create_bundle(
     source_files = _source_compose_digests(source_context)
     source_tree_sha256 = _source_tree_digest(source_context)
     manifest = {
-        "schemaVersion": 3,
+        "schemaVersion": 4,
         "repository": REPOSITORY,
         "targetId": TARGET_ID,
         "platform": "linux/amd64",
@@ -630,12 +656,12 @@ def create_bundle(
         "operationsCommit": operations_commit,
         "images": {
             "runtime": {
-                "imageId": runtime_id,
+                **built_images["runtime"],
                 "archive": "runtime-image.tar.gz",
                 "services": ["intake", "offer", "production", "exports"],
             },
             "web": {
-                "imageId": web_id,
+                **built_images["web"],
                 "archive": "web-image.tar.gz",
                 "services": ["web"],
             },
@@ -688,8 +714,11 @@ def _runner_environment(
     *,
     bundle_dir: Path | None = None,
     manifest_sha256: str | None = None,
+    target_id: str = TARGET_ID,
 ) -> dict[str, str]:
+    validate_target(target_id, product_commit, operations_commit)
     environment = os.environ.copy()
+    environment["CATERING_TARGET_ID"] = target_id
     environment["DEPLOY_COMMIT_SHA"] = product_commit
     environment["CATERING_TARGET_SOURCE_ROOT"] = str(product_root.resolve(strict=True))
     environment["CATERING_TARGET_OPERATIONS_COMMIT"] = operations_commit
@@ -713,6 +742,7 @@ def _arguments() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="phase", required=True)
 
     def bound_inputs(command: argparse.ArgumentParser) -> None:
+        command.add_argument("--target", choices=(TARGET_ID, "catering-prod-02"), default=TARGET_ID)
         command.add_argument("--product-commit", required=True)
         command.add_argument("--operations-commit", required=True)
         command.add_argument("--product-source", type=Path, required=True)
@@ -723,6 +753,11 @@ def _arguments() -> argparse.ArgumentParser:
     bundle = subparsers.add_parser("bundle", help="build and bind secret-free linux/amd64 image artifacts")
     bound_inputs(bundle)
     bundle.add_argument("--output-dir", type=Path, required=True)
+
+    reuse = subparsers.add_parser("reuse-migration-bundle", help="copy verified P4 archives into a new target02 operations binding")
+    bound_inputs(reuse)
+    reuse.add_argument("--source-bundle", type=Path, required=True)
+    reuse.add_argument("--output-dir", type=Path, required=True)
 
     preflight = subparsers.add_parser("preflight", help="run the separate read-only target preflight")
     bound_inputs(preflight)
@@ -768,6 +803,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         ops_root = repository_root()
         product_sha = args.product_commit
         operations_sha = args.operations_commit
+        validate_target(args.target, product_sha, operations_sha)
+        if args.phase == "bundle" and args.target != TARGET_ID:
+            raise OperatorError("target02 migration must reuse P4 archives; image build is forbidden")
         if args.phase in {"verify", "_bundle-bindings-local"}:
             operations = _validate_checkout(ops_root, operations_sha, "operations")
             product = _validate_checkout(args.product_source, product_sha, "product")
@@ -780,6 +818,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.product_source,
                 product_sha,
             )
+        if args.phase == "reuse-migration-bundle":
+            if args.target != "catering-prod-02":
+                raise OperatorError("archive reuse requires explicit target02")
+            digest = reuse_migration_bundle(args.source_bundle, product, operations_sha, args.output_dir)
+            print(f"CATERING_TARGET_BUNDLE_OK target={args.target} manifest_sha256={digest} source_manifest={SOURCE_MANIFEST}")
+            return 0
         if args.phase == "validate":
             print(f"CATERING_OPERATOR_GATES_OK product={product_sha} operations={operations_sha}")
             return 0
@@ -791,24 +835,24 @@ def main(argv: Sequence[str] | None = None) -> int:
             if (args.bundle_dir is None) != (args.manifest_sha256 is None):
                 raise OperatorError("bundle directory and manifest SHA must be supplied together")
             if args.bundle_dir is not None:
-                verify_bundle(args.bundle_dir, product_sha, operations_sha, args.manifest_sha256, product)
+                verify_bundle(args.bundle_dir, product_sha, operations_sha, args.manifest_sha256, product, target_id=args.target)
             return 0
         if args.phase in {"_bundle-bindings", "_bundle-bindings-local"}:
-            manifest = verify_bundle(args.bundle_dir, product_sha, operations_sha, args.manifest_sha256, product)
-            print(f"{manifest['images']['runtime']['imageId']}\t{manifest['images']['web']['imageId']}")
+            manifest = verify_bundle(args.bundle_dir, product_sha, operations_sha, args.manifest_sha256, product, target_id=args.target)
+            print(f"{manifest['images']['runtime']['platformManifestDigest']}\t{manifest['images']['web']['platformManifestDigest']}")
             return 0
 
-        environment = _runner_environment(product_sha, operations_sha, product)
+        environment = _runner_environment(product_sha, operations_sha, product, target_id=args.target)
         if args.phase == "preflight":
             _run_production_phase(production_runner_command(operations, "--preflight"), environment)
             return 0
         if args.phase == "stage":
             if args.confirm != "STAGE_CATERING_TARGET":
                 raise OperatorError("stage requires --confirm STAGE_CATERING_TARGET")
-            verify_bundle(args.bundle_dir, product_sha, operations_sha, args.manifest_sha256, product)
+            verify_bundle(args.bundle_dir, product_sha, operations_sha, args.manifest_sha256, product, target_id=args.target)
             environment.update(_runner_environment(
                 product_sha, operations_sha, product,
-                bundle_dir=args.bundle_dir, manifest_sha256=args.manifest_sha256,
+                bundle_dir=args.bundle_dir, manifest_sha256=args.manifest_sha256, target_id=args.target,
             ))
             environment["CATERING_TARGET_CONFIRMATION"] = "STAGE_CATERING_TARGET"
             with tempfile.TemporaryDirectory(prefix="catering-target-source-") as temporary:
@@ -820,24 +864,24 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.phase == "apply":
             if args.confirm != "ACTIVATE_CATERING_TARGET":
                 raise OperatorError("apply requires --confirm ACTIVATE_CATERING_TARGET")
-            verify_bundle(args.bundle_dir, product_sha, operations_sha, args.manifest_sha256, product)
+            verify_bundle(args.bundle_dir, product_sha, operations_sha, args.manifest_sha256, product, target_id=args.target)
             environment.update(
                 _runner_environment(
                     product_sha,
                     operations_sha,
                     product,
                     bundle_dir=args.bundle_dir,
-                    manifest_sha256=args.manifest_sha256,
+                    manifest_sha256=args.manifest_sha256, target_id=args.target,
                 )
             )
             environment["CATERING_TARGET_CONFIRMATION"] = "ACTIVATE_CATERING_TARGET"
             _run_production_phase(production_runner_command(operations, "--apply"), environment)
             return 0
         if args.phase == "verify":
-            verify_bundle(args.bundle_dir, product_sha, operations_sha, args.manifest_sha256, product)
+            verify_bundle(args.bundle_dir, product_sha, operations_sha, args.manifest_sha256, product, target_id=args.target)
             environment.update(_runner_environment(
                 product_sha, operations_sha, product,
-                bundle_dir=args.bundle_dir, manifest_sha256=args.manifest_sha256,
+                bundle_dir=args.bundle_dir, manifest_sha256=args.manifest_sha256, target_id=args.target,
             ))
             _run_production_phase(production_runner_command(operations, "--verify"), environment)
             return 0

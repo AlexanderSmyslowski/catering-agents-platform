@@ -31,6 +31,9 @@ npm run dev:ui
 
 Die interne Web-App laeuft im Dev-Modus ueber Vite auf Port `3200`.
 
+Die kurze [CateringOS-Installationsanleitung](docs/product/CATERINGOS_INSTALLATION.md)
+beschreibt die Nutzung als Web-App auf Mac, iPhone/iPad und Windows.
+
 ## Lokaler Stack
 
 ```bash

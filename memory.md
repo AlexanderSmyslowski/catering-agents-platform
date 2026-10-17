@@ -1,9 +1,53 @@
 # memory.md
 
-version: 5.420
-date: 2026-09-29
+version: 5.433
+date: 2026-10-13
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
+
+## Entwicklungskandidat — vollständiger target02-Datenbankvergleich (2026-10-13)
+
+- Isolierter Operationskandidat auf Basis `c7480c2582a4aa7b50a3b2cbe86b9ef73ba70144`: Bootstrap-Vertrag 2 verlangt alle drei Catering-Datenbankarchive und vollständige bytegenaue Vergleiche einschließlich Globals vor dem ersten Appstart unter dem vorhandenen Lock. Gebundener PG17.9-`comparisonRestrictKey` ersetzt Inhaltsnormalisierung; Source-/Input-/Manifest-/Receiptbindungen bleiben obligatorisch.
+- Keine Hostaktion, Produktänderung oder neue Paketannahme. Dieser lokale Kandidat benötigt unabhängigen Review, reguläre Operationsannahme und neue Paketbindung vor einem Einsatz. Das bisher angenommene c7480c2-Paket bleibt unverändert. Vertrag und Grenzen: `docs/operations/CATERING_TARGET02_BOOTSTRAP.md`.
+
+## Entwicklungsstand – Infrastruktur-OCI-Indexbindung (2026-10-11)
+
+- Begrenzter lokaler Operationsfix auf Basis `0f015c46623233256f8a139ad4f19af9ff80ea7f`: eigener Validator für die originalen offiziellen PG-/Edge-Exporte mit gepinnter Indexwurzel, genau einer vollständigen linux/amd64-Manifest-/Config-/Layerkette und geprüfter mitgelieferter Attestation. Fehlende Fremdplattformzweige werden ausdrücklich als ungeprüft ausgewiesen; der App-v4-Vertrag bleibt streng.
+- Bootstrap behält die ursprünglichen PG-/Edge-Indexreferenzen. Späterer Infrastruktur-Load selektiert explizit linux/amd64; Docker muss dieselbe Wurzel plattformqualifiziert auf das archivgeprüfte M auflösen. Load-Beleg bindet Archiv, Exportindex, Wurzel, M, C und Eingabepaket. PostgreSQL-Laufzeit prüft Index-ID und M-Descriptor zusätzlich zur bestehenden Instanz-/Mountbindung.
+- Die beiden unveränderten Originalarchive vom 11.10. bestehen lokal die neue Archivprüfung; der Basisvalidator weist dieselben Bytes ab. PG meldet 14, Edge 12 nicht verifizierte Fremdplattform-/Attestationsdeskriptoren. Dieser Read-only-Nachweis ist kein Docker-Load-, Host- oder Betriebsnachweis.
+- Produkt bleibt `9ce4fbc96a5dd877f2cd2f00588a22be861306b9`, PG17.9/Schema3; Appimages, Originalarchive und vorhandenes target02-Paket bleiben unverändert. Neue Paketbindung erst nach regulärer Operationsannahme und separater Freigabe. Unabhängiger Delta-Review und automatische CI noch offen. Kein Hostkontakt, Dockeraufruf, Paketbau/-installation, Merge/Push oder Hub-Writeback in diesem Implementierungsschritt. Details: `docs/agent-memory/2026-10-11-infrastructure-oci-binding.md`.
+
+## Entwicklungsstand – prod-02-Zielbindung und isolierter Erstaufbau (2026-10-05)
+
+- Begrenzter Operationskandidat auf Main `9c09aa981a1724b2cd23fc6353c38b53a0fc177b`: explizites prod-02-Opt-in, Operationsvertrag vom Operationscheckout, Produktquellen weiter getrennt. Kein kopiertes prod-1-Runtimeinventar und keine Abschwächung des normalen Produktions-Preflights.
+- Migrationsprodukt bleibt `9ce4fbc96a5dd877f2cd2f00588a22be861306b9`, PG17.9/Schema3. Neue Manifestbindung übernimmt ausschließlich geprüfte P4-Archivbytes mit expliziter historischer Quellprovenienz; neuer Operations-SHA ist erst nach regulärer Annahme einzusetzen. PWA-Main wird nicht als Migration freigegeben.
+- Hostlokaler Bootstrap trennt Beobachtung, Vorbereitung, Image-Load, Datenbankstart, echten Restorevergleich, ersten isolierten Appstart und beobachtete Erstinstallation. Source-Fencing-/Inventar-/Backup-/Zugangs-/Ressourcen-/Fenstereingaben bleiben geschützte externe Voraussetzungen. Erste mögliche Appwrites erhalten eine dauerhafte Grenze; kein erfundener Vorgänger und keine automatische Rückfallbehauptung. Prod-1-/Stage-/Release-State-Verträge und Initial-Receipt sind gezielt getestet.
+- Noch keine unabhängige Codeabnahme, keine exakte main/push-CI-Annahme und keine Ausführungsfreigabe. Kein Hostkontakt, realer Bundlebau/-transfer, Docker/Restore/Timer/Heartbeat, DNS-Wechsel oder Hub-Writeback. Details und Grenzen: `docs/operations/CATERING_TARGET02_BOOTSTRAP.md`, Snapshot `docs/agent-memory/2026-10-05-target02-bootstrap.md`.
+
+## Aktueller Entwicklungsstand – P4.1 Observer-Check / Preservationbindung (2026-10-03)
+
+- Zwei lokal reproduzierte Operationsfehler sind im isolierten Korrekturstand behoben: `--check` erwirbt keinen `flock`; PostgreSQL-Datenvolume und Edge-Image werden je Apply/Update genau einmal vor Aktivierung unter Update-Lock gebunden. Postflight und Rollback prüfen ihre aktuellen Beobachtungen und Container gegen dieselben unveränderlichen Ursprungswerte. Rollbackdrift hält den Lock für manuelle Recovery.
+- Der Ziel-Preflight führt Observer und identische Common-Validatoren aus dem gebundenen Operationscheckout im Speicher aus. Er startet weder den alten installierten Observer noch dessen Common-Helper und benötigt keine vorgelagerte Produktionsinstallation. Policy-/Record-/Frische-/Dispatch-/Attestationsprüfungen bleiben unverändert; State- und Lockgenerationsdrift wird fail-closed erkannt. Sender behält exklusiven Lock, Publikation und Send.
+- R1-Review fand materialisierende Bash-Eingaben im Zielcaller. Diese Eingaben sind lokal korrigiert: shell-gequotete Quellassignments/Pipes, fünf AST-identische Common-Readprogramme über `-B -c` und `printf`-Prozesssubstitution für Record-/Metadateneingaben. Lokal grün: 112 betroffene Vitest-Tests, 52 Observer-Python-Tests, gezielte Common-Verträge und vollständige Render-/Source-Bashsyntax einschließlich macOS Bash 3.2. Linux-Prozessbaumgate (`strace -f -yy`, Normalcaller/große Records/alte-Heredoc-Negativkontrolle) und unabhängiger R1-Re-Review bleiben vor Annahme offen. Separate Verifybindung bleibt aktuell, da der Receipt keine historischen PostgreSQL-/Edge-Ausgangswerte besitzt.
+- Snapshot: `docs/agent-memory/2026-10-03-p4-1-observer-preservation.md`. Unabhängiger Review, exakter PR-Head/CI und reguläre Annahme bleiben offen. Keine Produktionsverbindung, Bundleerzeugung/-übertragung, Backup-/Restoreausführung, Workflowdispatch, Integration oder Hub-Schreibwirkung im Korrekturauftrag.
+
+## Entwicklungsstand – P3.2 OCI-v4-Vertrag / Runtime-Blocker (2026-10-01)
+
+- Manifest v4 und Stage-Receipt v4 trennen Archiv A, exportierten Index R, Linux/amd64-Manifest M und Config C. Nur M dient als Runtime-Referenz; Descriptor-/Layer-/Source-/Tool-/Rechteprüfungen bleiben fail-closed. Legacy-Versionen bleiben auf installierte Vorgänger und Rollback begrenzt.
+- Implementierungsstand `decca590787e8888cb4fe0efd444e9c195389cfc`: 57 gezielte Python- und 88 Vitest-Tests bestanden. Zwei echte linux/amd64-Images und ein v4-Bundle wurden erzeugt; A/R/M/C unabhängig aus den Archivbytes gegengeprüft. Der zuvor leere eigene Docker/containerd-Zielstore derselben Lima-VM lädt beide Images. M ist adressierbar; beide Identitäts-Testcontainer zeigen `.Image=M` und `ImageManifestDescriptor.digest=M`. Der Web-Testcontainer führt nur eine Shell aus und belegt keinen funktionierenden Caddy-Dienst.
+- Neuer Runtime-Blocker: Das tatsächliche amd64-Caddy-Binary des gebundenen Webimages endet unter QEMU 10.2.3 bereits bei `hash-password` mit `fatal error: taggedPointerPack`, Container-Exit 2, `OOMKilled=false`. Keine weitere Emulator- oder Produktkorrektur in diesem Lauf. Preflight, Stage, Apply, Verify, Rollback, Retry und M-4-Runtime-Ergänzung wurden nicht gestartet. Klassifikation: P3.2 BLOCKED.
+- Snapshot: `docs/agent-memory/2026-10-01-p3-2-oci-v4.md`. Produkt bleibt `9ce4fbc96a5dd877f2cd2f00588a22be861306b9`; der gebundene Operationsstand bleibt ein nicht regulär angenommener Entwicklungsstand. Unabhängiger Delta-Review, Integration, exakter push/main-Annahmenachweis und Betriebsfreigabe bleiben getrennt. Kein Produktionskontakt, Merge oder Hub-Writeback.
+
+## Aktueller Entwicklungsstand – P3.1C containerd-Adressierung (2026-10-01)
+
+- Der unveränderte P3.1B-Bundlestand mit Produkt `9ce4fbc96a5dd877f2cd2f00588a22be861306b9` und noch nicht regulär angenommenem Operationsstand `0cad37b840af516e165267df240a3196a8147a02` wurde in derselben isolierten VM real geladen. Beide gebundenen Config-Digests bleiben byte-identisch im containerd-Content und im erneuten lokalen Docker-save erhalten. Direkte Docker-CLI-Lookups nach Config-Digest scheitern; Inspect einer gültigen Index-Referenz liefert als `.Id` den Index beziehungsweise mit expliziter Plattform das Manifest, nicht den Config-Digest.
+- Der aktuelle Vertrag setzt Config-Bindung, Compose-Referenz und Container-Imagevergleich gleich. Ein absichtlich Index-adressierter, ansonsten hashgebundener Diagnose-Override wird vom unveränderten Operator abgewiesen. Ein Lookup-Teilfix schließt Compose, Verify und Rollback deshalb nicht. P3.1C stoppt an der ausdrücklich gesetzten Vertragsgrenze; kein Betriebsfix, kein neuer Bundlebau und kein Runtime-Rehearsal. Der kleinste nächste Entscheid betrifft die explizite Relation zwischen kanonischer Config-Identität und aus dem Archiv abgeleiteter unveränderlicher Docker-Referenz.
+- Snapshot: `docs/agent-memory/2026-10-01-p3-1c-containerd-identity.md`. Reale Rohbelege liegen ausschließlich im separaten privaten P3.1C-Paket. Keine Store-Umstellung, Produktionsverbindung, Credential-/Push-Reparatur oder Hub-Schreibwirkung; unabhängiger Review und reguläre Annahme bleiben offen.
+
+## Aktueller Entwicklungsstand – P3.1B OCI-Build-Identität (2026-09-30)
+
+- Der echte linux/amd64-Build auf der akzeptierten Basis `9ce4fbc96a5dd877f2cd2f00588a22be861306b9` lieferte eine OCI-Index-IID. Die unveränderte v3-Archivprüfung verlangt dagegen den Config-Digest; der Basis-Bundlebau stoppte vor Manifest-Erzeugung. Der lokale Producer-Fix löst Index-/Manifest-IIDs über die hashgeprüfte exportierte Blobkette auf diesen Config-Digest auf. Docker save verwendet weiterhin die ursprüngliche unveränderliche Build-IID; Manifest und Consumer-Vertrag bleiben unverändert.
+- Die übergebene Teständerung wurde anhand des privaten Evidenzpakets byte-identisch zugeordnet. Frisches RED: beide OCI-IID-Varianten scheitern auf der Basis. GREEN: 48 Operator-Python-Tests und 78 Tests in drei betroffenen Catering-Target-Vitest-Dateien bestanden. Dieser Entwicklungsstand besitzt noch keinen push/main-Annahmenachweis; unabhängiger Review, Integration und erneute Annahme bleiben erforderlich. Der echte Bundle-/Runtime-Nachweis wird separat im privaten P3.1B-Evidenzpaket geführt; kein Produkt-/Betriebs-GO.
 
 ## Aktueller Stand – P2.1 Retry nach Rollback / `candidate_rejected` (2026-09-29)
 
@@ -2353,3 +2397,82 @@ Quelle: `8de2e96c8604f12da2ec14c39b187db04dfb61cf`. Der folgende Betriebsbericht
 - Die Retry-Kontrollfluss-Tests verwenden jetzt einen über mehrere Apply-Versuche beständigen Stage-Zustand und führen den produktiven atomaren previous-images.json-Schreibblock lokal auf temporären Dateien aus. Sie prüfen candidate_rejected, Postactivation-Smoke-Fehler mit sauberem Rollback, identisches Manifest/Produktcommit, unverändertes Stage-Receipt, Snapshot-Modus 0600 und frische Vorgängerbindung.
 - Der echte Remote-Preflight bindet einen aktiven Kandidaten ohne Install-Receipt nicht. Scheitert dieser Preflight erst nach Lock-Erwerb, bleibt der Lock fail-closed für manuelle Recovery erhalten; die Dokumentation und Tests spiegeln diesen Pfad.
 - Verifiziert: 46 Operator-Python-Tests, 97 Tests in 8 Catering-Target-Vitest-Dateien, Bash-Syntax, Python-AST und git diff --check erfolgreich. Kein Hostkontakt, Deployment oder #712-Eingriff.
+
+### 5.421 - 2026-09-30 — P3.1B Producer-Kanonisierung (Entwicklungsstand)
+
+- OCI-Index bzw. OCI-Manifest aus `--iidfile` wird deterministisch aus dem tatsächlich exportierten Docker-Archiv in den bestehenden v3-Config-Digest überführt. Root-, Manifest-, Config- und Layer-Hashes sowie relevante Descriptor-Größen, Plattform und Docker-Archivzuordnung werden geprüft. Ungebundene oder manipulierte Artefakte bleiben fail-closed; Tags sind keine Identitätsquelle. Die bisherige strikte Archivprüfung bleibt unverändert.
+- Gezielte Regression mit zwei positiven IID-Varianten und 14 Ablehnungsvarianten: RED auf der Basis, GREEN mit dem lokalen Producer-Fix. Alle 48 betroffenen Python-Tests, 78 Vitest-Tests in drei direkt betroffenen Dateien, Syntax und Diffcheck erfolgreich. Der lokale Operations-Fix ist noch nicht regulär angenommen; Bundle-/Runtime-Ergebnis und spätere unabhängige Review werden nicht vorweggenommen. Kein Produktionskontakt, Hub-Writeback oder Workflow-Dispatch.
+
+### 5.422 - 2026-10-01 — P3.1C Image-Identität / Docker-Referenz getrennt diagnostiziert
+
+- Der unveränderte P3.1B-Bundlestand mit Produkt `9ce4fbc96a5dd877f2cd2f00588a22be861306b9` und noch nicht regulär angenommenem Operationsstand `0cad37b840af516e165267df240a3196a8147a02` wurde in derselben isolierten VM real geladen. Beide gebundenen Config-Digests bleiben byte-identisch im containerd-Content und im erneuten lokalen Docker-save erhalten. Direkte Docker-CLI-Lookups nach Config-Digest scheitern; Inspect einer gültigen Index-Referenz liefert als `.Id` den Index beziehungsweise mit expliziter Plattform das Manifest, nicht den Config-Digest.
+- Der aktuelle Vertrag setzt Config-Bindung, Compose-Referenz und Container-Imagevergleich gleich. Ein absichtlich Index-adressierter, ansonsten hashgebundener Diagnose-Override wird vom unveränderten Operator abgewiesen. Ein Lookup-Teilfix schließt Compose, Verify und Rollback deshalb nicht. P3.1C stoppt an der ausdrücklich gesetzten Vertragsgrenze; kein Betriebsfix, kein neuer Bundlebau und kein Runtime-Rehearsal. Der kleinste nächste Entscheid betrifft die explizite Relation zwischen kanonischer Config-Identität und aus dem Archiv abgeleiteter unveränderlicher Docker-Referenz.
+- Snapshot: `docs/agent-memory/2026-10-01-p3-1c-containerd-identity.md`. Reale Rohbelege liegen ausschließlich im separaten privaten P3.1C-Paket. Keine Store-Umstellung, Produktionsverbindung, Credential-/Push-Reparatur oder Hub-Schreibwirkung; unabhängiger Review und reguläre Annahme bleiben offen.
+
+### 5.423 - 2026-10-01 — P3.2 expliziter OCI-v4-Vertrag (Entwicklungsstand)
+
+- A/R/M/C werden durchgängig getrennt; M ist die Runtime-Referenz. Neue Kandidaten und Stage-Receipts verlangen v4; Legacy bleibt auf installierte-/Rollbackpfade begrenzt. Der aktuelle Snapshot beschreibt den zu prüfenden Vertrag und nimmt weder reale Runtime-Evidenz noch unabhängigen Review oder reguläre Operationsannahme vorweg.
+
+### 5.424 - 2026-10-01 — P3.2 v4-Bundle/Load nachgewiesen, Caddy-Runtime blockiert
+
+- Die vorhandene Implementierung ist lokal reviewbar: `47c19f5` führt den durchgängigen v4-Vertrag ein; `decca590` ergänzt ausschließlich die im realen Docker-save beobachtete, M-gebundene BuildKit-Attestationsstruktur. Der Producer deaktiviert neue Provenance-/SBOM-Erzeugung ausdrücklich; vorhandene exportierte Referrer bleiben vollständig hashgebunden.
+- 57 Python- und 88 Vitest-Tests, Syntax-/Diffprüfung erfolgreich. Echter v4-Bundlebau und unabhängige A/R/M/C-Prüfung bestanden. Im separaten anfangs leeren containerd-Store sind beide M adressierbar und als laufende Container-Image-/Manifest-Descriptorwerte belegt; Node läuft tatsächlich als Linux/x64 v22.23.3. Kein Nachweis für einen laufenden Webdienst aus dem Shell-Identitätscontainer ableiten.
+- Der anschließende echte Caddy-Aufruf scheitert in der ARM64/QEMU-Umgebung mit Go `taggedPointerPack` (Container-Exit 2, kein OOM). Der eigentliche Phasen-Rehearsalpfad ist deshalb nicht gestartet; P3.2 BLOCKED. Die genaue Ursache dieses neuen Runtime-Abbruchs ist noch nicht eingegrenzt. Ein gesonderter kleiner Diagnoseentscheid innerhalb der vorhandenen VM ist nötig; keine automatische Store-/Architekturänderung oder Produktumgehung.
+- VM, eigene Zielengine, Bundle und Fehlerbelege bleiben erhalten; eigene kurzlebige Container wurden beendet. Kein Produktions-/Althostkontakt, keine Änderung historischer Worktrees, kein Hub-Writeback und kein Merge.
+
+### 5.425 - 2026-10-03 — P4.1 lokaler Observer-/Preservationfix
+
+- Observer-Check ohne Advisory-Lock und mit geschützter Lock-/Recordgeneration; sendender Pfad behält exklusiven Lock und bestehende State-/Sendsemantik. Operations-Preflight streamt gebundenen Observer und dieselben Common-Validatoren im Speicher, statt eine vorherige Produktionsinstallation vorauszusetzen.
+- Apply und Legacy-Update binden PostgreSQL-Datenvolume und Edge-Image nach dem Preflight unter Update-Lock vor Load/Aktivierung einmalig als readonly Erwartung. Aktuelle Postflight-/Rollbackbeobachtungen ersetzen diese Werte nicht; derselbe Containervergleich prüft auch nach Rollback den ursprünglichen Zustand. Separate Verify-/Receipt-/Legacyverträge bleiben erhalten.
+- RED: vier fokussierte Observer-/Callerfehler und sieben Preservationfehler auf der unveränderten Basis. GREEN: 57 Operator-/OCI-v4-Python-Tests und 112 Vitest-Tests in neun Dateien, einschließlich 49 Observer-Python-Tests. Reale lokale Preservationvergleiche decken auch Drift erst nach passendem Postflight beziehungsweise erst im Rollback-Verify ab. Bash-/Python-AST-/Diffprüfung durchgeführt; vollständiger Render-Syntaxnachweis unter Linux ist wegen der vorhandenen macOS-Bash-3.2-Grenze ein ausdrücklicher PR-CI-Gate.
+- Kein Produktionskontakt, Bundlebau/-transfer, Jobstart, Workflowdispatch, Merge oder Hub-Writeback. Unabhängiger Review und Draft-PR-CI sind noch keine vorweggenommene Annahme.
+
+
+### 5.426 - 2026-10-03 — P4.1 R1-Transportkorrektur
+
+- Unabhängiger Review hat R1 Important belegt: der große Observer-Heredoc und weitere tatsächlich ausgeführte Read-Eingaben materialisierten auf macOS Bash 3.2 reguläre entlinkte Dateien. Die Python-interne Write-Sperre konnte Elternprozess-Schreibwirkungen nicht erfassen; 5.425 war deshalb noch nicht abnahmefähig.
+- Ziel-Preflight nutzt jetzt sichere shell-gequotete Release-/OCI-/Observerassignments und Pipes. Nur die erreichten Common-Readfunktionen ändern den Quell-/Datentransport; ihre fünf Pythonprogramme haben identischen AST zur Basis. Sender-/Mutatorlogik und B sind unverändert.
+- Zwei meaningful R1-REDs und fokussiertes GREEN einschließlich echter Caller/Common-Validatoren; vollständiger gerenderter Preflight besteht jetzt auch macOS Bash 3.2. Linux-PR-CI erhält einen verpflichtenden Prozessbaumgate mit `strace` außerhalb Bash, großen bounded Records und großer alter-Heredoc-Negativkontrolle. Fehlender Tracer wird im bestehenden build-and-test-Job begrenzt erworben und sonst fail-closed behandelt.
+- Lokal geprüfter Korrekturstand ist noch keine Annahme: unabhängiger R1-Re-Review, genaue Commit-/Tree-/Artefaktbindung und vollständig grüne automatische PR-CI einschließlich Linux-Prozessbaum-/Syntaxnachweis bleiben offen. Kein Produktionskontakt, Workflowdispatch, Commit/Push oder Merge durch den Implementer.
+
+### 5.427 - 2026-10-03 — P4.3 Observer-Gate-Diagnostik
+
+- Vom angenommenen Main `b86f268…`: der vorhandene einmalige Observer-Ausgang wird bei einem Fehler als begrenzte, typgeprüfte JSON-Projektion auf stderr erhalten. Bekannte Reasoncodes, Epoch und vorhandene Statusflags überleben den Remote-/Operator-Fehlerpfad; unbekannte Felder und freie Fehlertexte werden nicht übernommen.
+- Nonzero bleibt `backup_observer_command`; Exit0 ohne completed/healthy bleibt `backup_observer_health`. Keine Änderung an Backup-/Restore-Policy, Lock, Freshness, Apply/Rollback, Retry oder v4-Bindungen. Keine zusätzlichen Record-Generationen gesammelt.
+- Root Cause des ursprünglichen Apply-Fehlers bleibt offen. Nur diagnostischen Evidenzverlust korrigiert; keine Produktionsabfrage, Wiederholung, Stage, Apply, Integration oder Hub-Writeback. Review-/CI-Annahme bleibt ein separates Gate. Details: `docs/agent-memory/2026-10-03-p43-backup-observer-diagnostics.md`.
+
+### 5.428 - 2026-10-04 — CateringOS Installations-UX
+
+- Begrenzter Produktkandidat auf aktuellem Main `b1e3d445…`: CateringOS-Namen in Dokumenttitel, Login und Portal, root-basiertes Standalone-Manifest, credentialed Manifest-Link, Apple-Metadaten und vorhandener responsiver Web-App-Pfad. Kein Service Worker, Offlinebetrieb, zweiter Updater oder neuer Authzustand im Anwendungscode.
+- Freigegebener Entwurf B „Geteilter Teller“ wurde exakt aus dem zuvor übermittelten SVG-Codeblock wiederhergestellt. Einziger SVG-Master ist `backoffice-ui/public/favicon.svg`; PNGs 32/180/192/512 werden mit fixiertem Dev-Renderer reproduzierbar erzeugt und geprüft. Sichtprüfung bei 32/48 bestanden; Purpose nur `any`, keine Maskable-Freigabe.
+- Gezielt RED/GREEN für Installations-/Brandingverträge und bestehende Route-/Authchecks sowie Build. 109 gezielte Tests, Build und vollständiger lokaler synthetischer Browser-Rehearsal bestanden. Unabhängiger finaler Review und automatische PR-CI sind gesondert am Kandidaten zu binden. Keine OS-Installations-/Produktionsprobe; Safari-Sitzungscontainer und gesperrter Edge-Modus bleiben dokumentierte Grenzen. Nutzeranleitung: `docs/product/CATERINGOS_INSTALLATION.md`; Übergabe: `docs/agent-memory/2026-10-04-cateringos-installation-ux.md`.
+- Keine Änderung am v4-Updateweg, Backup/Restore, Infrastruktur oder Persistenz. Kein Merge, Deployment, Produktionskontakt oder Hub-Writeback.
+
+### 5.429 - 2026-10-05 — prod-02-Bindung / isolierter Erstaufbau (Review ausstehend)
+
+- Geschlossener Zwei-Ziel-Operationspfad: prod-1 bleibt Standard, prod-02 ist explizites Opt-in auf 168651076/2.28.200.16. Verträge und Prüfwerkzeuge vom gebundenen Operationscheckout; Produktbaum unverändert von 9ce. Die neue Bundlebindung verwendet P4-Archivbytes ohne Neubau und dokumentiert das historische Quellmanifest.
+- Separater Bootstrap mit prüfbaren Zuständen und vollem geschütztem Restorevergleich; Erstinstallation besitzt einen eigenen gebundenen Receipt ohne vorherige Images. Initiale App-/Login-/Auditwrites sind eine dauerhafte Rückfallgrenze; produktiver Writer, Edge, Timer und Heartbeat werden nicht freigegeben. Normale Update-/Backup-/Preservationgates bleiben erhalten.
+- Gezielte synthetische Python-/Vitest-Prüfungen dokumentieren Verhalten und Grenzen; unabhängiger Review und automatische PR-CI bleiben offen. Keine reale Quelle/Zielausführung, Bundleerzeugung, Übertragung, Restore, Integration oder Hub-Schreibwirkung.
+
+### 5.430 - 2026-10-05 — target02 Reviewkorrektur: PG-Erhaltung, dauerhafte Schreibgrenze, Zeitfenster
+
+- Unabhängige Important-Befunde auf `a933fe06e8109f19424f8bce937c56ab711db833`: eine ersetzte PG-Instanz bzw. ein anderes Datenvolume konnte nach Appstart einen Initial-Receipt erhalten; die First-write-Datei synchronisierte ihr Elternverzeichnis nicht; lange Prüfungen konnten das freigegebene Fenster vor einer Mutation überschreiten.
+- Korrekturstand bindet tatsächliche PG-Container-ID und vollständigen Datenmount in Restore-/First-write-Belegen und vergleicht sie vor Start und vor/nach Smoke erneut. Legitimer Inhaltsschreibfortschritt bleibt erlaubt. Exklusive Dateipublikation synchronisiert Datei und Elternverzeichnis, neue State-/Lockpfade auch ihren Elternpfad. Zeitfenster werden nach langen Prüfungen direkt vor Mutationen, Auth-Smoke und Receiptpublikation erneut geprüft.
+- Gezielte synthetische RED-/GREEN-Prüfungen und negative Kontrollen; unabhängige erneute Prüfung und exakte CI-Annahme bleiben offen. Keine Host-, Docker-, Daten- oder Deploymentausführung.
+
+### 5.431 - 2026-10-05 — Observer-Testkontext für explizite Zielbindung
+
+- Die automatische PR-CI belegte zwei Fehler im isolierten Preflight-Testfragment: der vollständige Caller bindet `target_id`, das Fixture stellte diesen Kontext noch nicht bereit. Das Fixture benennt jetzt explizit `catering-prod-1`; alle Pipe-/Dateideskriptor-Assertions und Produktionsprüfungen bleiben erhalten.
+- Beide Fehler lokal vor der Korrektur reproduziert. Betroffene lokale Prüfungen sowie unabhängiger Review und automatische CI sind am korrigierten Stand gesondert zu binden. Kein Hostkontakt oder Produktionslauf.
+
+### 5.432 - 2026-10-11 — explizite PG-/Edge-Index→amd64-Bindung
+
+- Der bisherige allgemeine OCI-Validator lehnte die offiziellen Runnable-Manifest-Annotationen und deren teilweise exportierte Multiplattformindizes ab. Außerdem konnte die Bootstrap-Infrastrukturprüfung eine gepinnte Index-ID nur mit M/C vergleichen. Ein eigener Infrastrukturpfad beweist nun die vollständige benötigte Hash-/Größenkette; fehlende fremde Zweige erhalten keine Verifikationsbehauptung. App-v4- und prod-1-Pfade behalten ihre strengen Verträge.
+- Load und Erstaufbau tragen die gleiche Bindung weiter: explizite Infrastruktur-Plattformauswahl, doppelte Docker-Index-/Plattformbeobachtung, gebundener Load-Beleg und PostgreSQL-M-Descriptorprüfung. Source-Fencing, 15 Inventarbereiche, Zeitfenster, Jobs-aus und dauerhafte Erstschreibgrenze bleiben erhalten.
+- Gezieltes RED/GREEN einschließlich unveränderter Originalarchive dokumentiert; technische Tests und lokale Grenzen siehe Snapshot. Annahme bleibt bis zum unabhängigen Delta-Review und exakter CI-/Commitbindung offen. Kein neuer Migrationspaketstand und keine Ausführungserlaubnis abgeleitet.
+
+### 5.433 - 2026-10-13 — vollständiger target02-Datenbankvergleich (Kandidat)
+
+- Der vorhandene Bootstrapvergleich wird auf `catering_agents`, `catering_agents_pre_cutover_20260920` und `catering_operator_probe_20260919` sowie vollständige Globals erweitert. Version-2-Eingaben verlangen drei getrennte geschützte Archive, ein exaktes Digestmapping, Quellprovenienz, einen eingabengebundenen Vergleichsschlüssel und das angenommene Manifest. Legacy-Ein-DB-Eingaben bleiben geschlossen.
+- Zielkatalog und PG-/Dumpclientversion werden geprüft; nach Lockübernahme werden Eingaben neu validiert. Alle Datenbankbytes werden vor der First-write-Grenze erneut verglichen, Restore-/Writebelege binden Version und vollständigen Vergleich. Nach legitimen Appwrites bleiben Version/Schema/Katalog und Instanz-/Mountbindung maßgeblich, nicht die früheren Dateninhalte.
+- Nur lokaler Entwicklungskandidat mit synthetischen Regressionen. Unabhängige Prüfung, Operationsintegration und neuer gebundener Paketstand stehen separat aus; kein Hostkontakt, Restore, Appstart, DNS-/Jobwrite oder angenommener Release aus diesem Eintrag abgeleitet.

@@ -12,6 +12,21 @@ import sys
 from pathlib import Path, PurePosixPath
 
 
+def _oci():
+    # Streamed execution preloads the trusted operations helper. Local execution
+    # resolves the versioned sibling rather than searching cwd or PYTHONPATH.
+    import importlib.util
+    if __file__ == "<stdin>":
+        module = sys.modules.get("catering_target_oci")
+        if module is None:
+            raise ValueError("trusted OCI helper is missing")
+        return module
+    spec = importlib.util.spec_from_file_location("catering_target_oci", Path(__file__).with_name("catering_target_oci.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 REPOSITORY = "AlexanderSmyslowski/catering-agents-platform"
 TARGET_ID = "catering-prod-1"
 DISCOVER_INSTALLED = "__CATERING_DISCOVER_INSTALLED__"
@@ -153,6 +168,7 @@ def _verify_manifest(
     expected_gid: int,
     *,
     allow_legacy_schema: bool = False,
+    target_id: str = TARGET_ID,
 ) -> None:
     _require(SHA256_RE.fullmatch(manifest_sha256) is not None)
     manifest_path = _regular_file(release / "manifest.json", 0o644, expected_uid, expected_gid)
@@ -167,7 +183,7 @@ def _verify_manifest(
         # Schema 1 is retained only so an existing installed release can be verified or rolled back.
         _require(allow_legacy_schema and set(manifest) == LEGACY_MANIFEST_KEYS)
     elif type(schema_version) is int and schema_version == 2:
-        _require(set(manifest) == CURRENT_MANIFEST_V2_KEYS)
+        _require(allow_legacy_schema and set(manifest) == CURRENT_MANIFEST_V2_KEYS)
         source_files = manifest.get("sourceFiles")
         _require(
             isinstance(source_files, dict)
@@ -179,8 +195,9 @@ def _verify_manifest(
         for relative, expected_sha256 in source_files.items():
             source_path = _regular_file(source / relative, 0o644, expected_uid, expected_gid)
             _require(_digest(source_path) == expected_sha256)
-    elif type(schema_version) is int and schema_version == 3:
-        _require(set(manifest) == CURRENT_MANIFEST_V3_KEYS)
+    elif type(schema_version) is int and schema_version in {3, 4}:
+        _require(schema_version == 4 or allow_legacy_schema)
+        _require(set(manifest) == CURRENT_MANIFEST_V3_KEYS | ({"migrationSource"} if target_id == "catering-prod-02" else set()))
         source_files = manifest.get("sourceFiles")
         _require(
             isinstance(source_files, dict)
@@ -202,11 +219,14 @@ def _verify_manifest(
         raise ReleaseBindingError("release state is not bound to the expected commit and artifacts")
     _require(
         manifest["repository"] == REPOSITORY
-        and manifest["targetId"] == TARGET_ID
+        and manifest["targetId"] == target_id
+        and target_id in {TARGET_ID, "catering-prod-02"}
         and manifest["platform"] == "linux/amd64"
         and manifest["productCommit"] == product_commit
         and manifest["operationsCommit"] == operations_commit
     )
+    if target_id == "catering-prod-02":
+        _require(schema_version == 4 and manifest.get("migrationSource") == {'targetId': 'catering-prod-1', 'operationsCommit': 'b1e3d44573bf6fe6d3c8e46861792a592535e856', 'manifestSha256': '9a0bb5c49fd09a9e64a99d00babf69ac771e66238ec5ae728eeedebe7ed79df0'})
     expected_images = {
         "runtime": {
             "imageId": runtime_image,
@@ -219,7 +239,18 @@ def _verify_manifest(
             "services": list(SERVICES["web"]),
         },
     }
-    _require(manifest["images"] == expected_images)
+    if schema_version == 4:
+        images = manifest['images']
+        _require(isinstance(images, dict) and set(images) == {"runtime", "web"})
+        for name, reference in (("runtime", runtime_image), ("web", web_image)):
+            image = images[name]
+            try:
+                _oci().verify_image(release / ARCHIVES[name], image)
+            except ValueError as exc:
+                raise ReleaseBindingError("release OCI image relation mismatch") from exc
+            _require(image['archive'] == ARCHIVES[name] and image['services'] == list(SERVICES[name]) and image['platformManifestDigest'] == reference)
+    else:
+        _require(manifest["images"] == expected_images)
     artifacts = manifest["artifacts"]
     _require(isinstance(artifacts, dict) and set(artifacts) == ARTIFACTS)
     for name in ARTIFACTS:
@@ -236,6 +267,7 @@ def _installed_receipt(
     web_image: str,
     expected_uid: int,
     expected_gid: int,
+    target_id: str = TARGET_ID,
 ) -> None:
     marker = _regular_file(release_root / "installed", 0o644, expected_uid, expected_gid)
     try:
@@ -254,6 +286,15 @@ def _installed_receipt(
         values[key] = value
     required = {"status", "commit", "runtime_image", "web_image", "installed_at"}
     optional = {"operations_commit", "manifest_sha256"}
+    if values.get("installation_kind") == "initial":
+        _require(target_id == "catering-prod-02")
+        proof = _regular_file(release / "bootstrap-verification.json", 0o600, expected_uid, expected_gid)
+        _require(values.get("bootstrap_evidence_sha256") == _digest(proof))
+        document = json.loads(proof.read_text())
+        _require(document.get("state") == "verified_initial_install" and document.get("targetId") == target_id)
+        _require(document.get("productCommit") == commit and document.get("operationsCommit") == values.get("operations_commit"))
+        _require(document.get("manifestSha256") == values.get("manifest_sha256"))
+        required |= {"installation_kind", "bootstrap_evidence_sha256"}
     _require(required.issubset(values) and not (set(values) - required - optional))
     _require((set(values) & optional) in (set(), optional))
     _require(
@@ -275,6 +316,7 @@ def _installed_receipt(
             expected_uid,
             expected_gid,
             allow_legacy_schema=True,
+            target_id=target_id,
         )
 
 
@@ -291,7 +333,9 @@ def inspect_release_binding(
     *,
     expected_uid: int = 0,
     expected_gid: int = 0,
+    target_id: str = TARGET_ID,
 ) -> dict[str, str]:
+    _require(target_id in {TARGET_ID, "catering-prod-02"})
     release_root = release_root_arg.absolute()
     _directory(release_root)
     _require(COMMIT_RE.fullmatch(bound_product_commit) is not None)
@@ -334,6 +378,7 @@ def inspect_release_binding(
             web_image,
             expected_uid,
             expected_gid,
+            target_id=target_id,
         )
     else:
         _installed_receipt(
@@ -344,6 +389,7 @@ def inspect_release_binding(
             web_image,
             expected_uid,
             expected_gid,
+            target_id=target_id,
         )
 
     return {"commit": commit, "runtime_image": runtime_image, "web_image": web_image}
@@ -359,7 +405,9 @@ def inspect_rollback_binding(
     *,
     expected_uid: int = 0,
     expected_gid: int = 0,
+    target_id: str = TARGET_ID,
 ) -> dict[str, str]:
+    _require(target_id in {TARGET_ID, "catering-prod-02"})
     _require(COMMIT_RE.fullmatch(previous_release) is not None)
     _require(COMMIT_RE.fullmatch(candidate_product_commit) is not None)
     _require(previous_release != candidate_product_commit)
@@ -382,11 +430,18 @@ def inspect_rollback_binding(
         "0" * 64,
         expected_uid=expected_uid,
         expected_gid=expected_gid,
+        target_id=target_id,
     )
 
 
 def main(argv: list[str] | None = None) -> int:
-    arguments = sys.argv[1:] if argv is None else argv
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    target_id = TARGET_ID
+    if len(arguments) >= 2 and arguments[-2] == "--target":
+        target_id = arguments[-1]
+        arguments = arguments[:-2]
+    if target_id not in {TARGET_ID, "catering-prod-02"}:
+        return 1
     if len(arguments) == 7 and arguments[0] == "/opt/catering-releases" and arguments[1] == "--rollback":
         try:
             binding = inspect_rollback_binding(
@@ -394,6 +449,7 @@ def main(argv: list[str] | None = None) -> int:
                 *arguments[2:],
                 expected_uid=0,
                 expected_gid=0,
+                target_id=target_id,
             )
         except (ReleaseBindingError, OSError, ValueError, TypeError, json.JSONDecodeError):
             print("operator rollback binding failed", file=sys.stderr)
@@ -409,6 +465,7 @@ def main(argv: list[str] | None = None) -> int:
             *arguments[1:],
             expected_uid=0,
             expected_gid=0,
+            target_id=target_id,
         )
     except (ReleaseBindingError, OSError, ValueError, TypeError, json.JSONDecodeError):
         print("operator release binding failed", file=sys.stderr)

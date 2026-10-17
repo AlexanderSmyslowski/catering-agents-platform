@@ -16,6 +16,21 @@ from pathlib import Path
 from typing import Any
 
 
+def _oci():
+    # Streamed execution preloads the trusted operations helper. Local execution
+    # resolves the versioned sibling rather than searching cwd or PYTHONPATH.
+    import importlib.util
+    if __file__ == "<stdin>":
+        module = sys.modules.get("catering_target_oci")
+        if module is None:
+            raise ValueError("trusted OCI helper is missing")
+        return module
+    spec = importlib.util.spec_from_file_location("catering_target_oci", Path(__file__).with_name("catering_target_oci.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 IMAGE_ID_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -28,7 +43,7 @@ MANIFEST_KEYS = {
     "images", "artifacts", "sourceFiles", "sourceTreeSha256",
 }
 RELEASE_FILES = {
-    "candidate-images.json", "runtime-image.tar.gz", "web-image.tar.gz", "manifest.json", "stage-binding.py",
+    "candidate-images.json", "runtime-image.tar.gz", "web-image.tar.gz", "manifest.json", "stage-binding.py", "catering_target_oci.py",
 }
 SERVICE_NAMES = {"intake", "offer", "production", "exports", "web"}
 
@@ -142,6 +157,18 @@ def _validate_install_receipt(release_dir: Path, values: dict[str, str], *, expe
         "operations_commit": values["operations_commit"],
         "manifest_sha256": values["manifest_sha256"],
     }
+    if observed.get("installation_kind") != "initial" and (release_dir / "bootstrap-verification.json").exists():
+        raise StageBindingError("bootstrap evidence requires an initial install receipt")
+    if observed.get("installation_kind") == "initial":
+        if values.get("target_id") != "catering-prod-02" or (release_dir / "previous-images.json").exists():
+            raise StageBindingError("initial install cannot invent a predecessor")
+        proof = _regular(release_dir, "bootstrap-verification.json", mode=0o600, uid=expected_uid, gid=expected_gid)
+        expected["installation_kind"] = "initial"
+        expected["bootstrap_evidence_sha256"] = _digest(proof)
+        document = json.loads(proof.read_text())
+        for key, value in {"targetId": "catering-prod-02", "productCommit": values["product_commit"], "operationsCommit": values["operations_commit"], "manifestSha256": values["manifest_sha256"], "state": "verified_initial_install"}.items():
+            if document.get(key) != value:
+                raise StageBindingError("initial install evidence mismatch")
     if (
         set(observed) != set(expected) | {"installed_at"}
         or any(observed.get(key) != value for key, value in expected.items())
@@ -165,7 +192,7 @@ def _verify_release_layout(
     _directory(release_dir, "", mode=0o755, uid=expected_uid, gid=expected_gid)
     names = {entry.name for entry in release_dir.iterdir()}
     required = RELEASE_FILES | {"source"}
-    optional = {"stage-receipt", "previous-images.json", "install-receipt"}
+    optional = {"stage-receipt", "previous-images.json", "install-receipt", "bootstrap-verification.json"}
     if not required.issubset(names) or names - required - optional:
         raise StageBindingError("stage release layout is invalid")
     if require_stage_receipt and "stage-receipt" not in names:
@@ -174,7 +201,9 @@ def _verify_release_layout(
         _regular(release_dir, "stage-receipt", mode=0o600, uid=expected_uid, gid=expected_gid)
     if "previous-images.json" in names:
         _validate_previous_images(release_dir, expected_uid=expected_uid, expected_gid=expected_gid)
-    if "install-receipt" in names and "previous-images.json" not in names:
+    if "bootstrap-verification.json" in names and "install-receipt" not in names:
+        raise StageBindingError("partial initial install requires manual recovery")
+    if "install-receipt" in names and "previous-images.json" not in names and "bootstrap-verification.json" not in names:
         raise StageBindingError("installed release state is incomplete")
     if "install-receipt" in names:
         _regular(release_dir, "install-receipt", mode=0o600, uid=expected_uid, gid=expected_gid)
@@ -189,6 +218,8 @@ def inspect_existing_release(
     runtime_image: str,
     web_image: str,
     stage_binding_sha256: str,
+    oci_sha256: str,
+    target_id: str = "catering-prod-1",
     require_production_release_root: bool = True,
     expected_uid: int | None = 0,
     expected_gid: int | None = 0,
@@ -212,6 +243,8 @@ def inspect_existing_release(
         runtime_image=runtime_image,
         web_image=web_image,
         stage_binding_sha256=stage_binding_sha256,
+        oci_sha256=oci_sha256,
+        target_id=target_id,
         require_production_release_root=require_production_release_root,
         expected_uid=expected_uid,
         expected_gid=expected_gid,
@@ -246,7 +279,7 @@ def _source_file_digests(
 
 
 def _validated_source_manifest(manifest: Any) -> dict[str, str]:
-    if not isinstance(manifest, dict) or manifest.get("schemaVersion") != 3 or set(manifest) != MANIFEST_KEYS:
+    if not isinstance(manifest, dict) or manifest.get("schemaVersion") != 4 or set(manifest) != MANIFEST_KEYS | ({"migrationSource"} if manifest.get("targetId") == "catering-prod-02" else set()):
         raise StageBindingError("stage manifest source binding is invalid")
     source_files = manifest.get("sourceFiles")
     if not isinstance(source_files, dict) or set(source_files) != set(SOURCE_COMPOSE_FILES):
@@ -286,16 +319,20 @@ def stage_values(
     runtime_image: str,
     web_image: str,
     stage_binding_sha256: str,
+    oci_sha256: str,
+    target_id: str = "catering-prod-1",
     require_production_release_root: bool = True,
     expected_uid: int | None = 0,
     expected_gid: int | None = 0,
 ) -> dict[str, str]:
+    if target_id not in {"catering-prod-1", "catering-prod-02"}:
+        raise StageBindingError("unknown target")
     release = str(release_dir)
     if require_production_release_root and not re.fullmatch(r"/opt/catering-releases/[0-9a-f]{40}", release):
         raise StageBindingError("stage release path is invalid")
     if Path(release).name != product_commit or not COMMIT_RE.fullmatch(product_commit) or not COMMIT_RE.fullmatch(operations_commit):
         raise StageBindingError("stage commit binding is invalid")
-    if not SHA256_RE.fullmatch(manifest_sha256) or not SHA256_RE.fullmatch(stage_binding_sha256):
+    if not SHA256_RE.fullmatch(manifest_sha256) or not SHA256_RE.fullmatch(stage_binding_sha256) or not SHA256_RE.fullmatch(oci_sha256):
         raise StageBindingError("stage digest binding is invalid")
     if not IMAGE_ID_RE.fullmatch(runtime_image) or not IMAGE_ID_RE.fullmatch(web_image):
         raise StageBindingError("stage image binding is invalid")
@@ -312,6 +349,9 @@ def stage_values(
     runtime_path = _regular(release_dir, "runtime-image.tar.gz", mode=0o644, uid=expected_uid, gid=expected_gid)
     web_path = _regular(release_dir, "web-image.tar.gz", mode=0o644, uid=expected_uid, gid=expected_gid)
     binding_path = _regular(release_dir, "stage-binding.py", mode=0o644, uid=expected_uid, gid=expected_gid)
+    oci_path = _regular(release_dir, "catering_target_oci.py", mode=0o644, uid=expected_uid, gid=expected_gid)
+    if _digest(oci_path) != oci_sha256:
+        raise StageBindingError("OCI helper tool digest mismatch")
     if _digest(binding_path) != stage_binding_sha256:
         raise StageBindingError("stage binding tool digest mismatch")
     if _digest(manifest_path) != manifest_sha256:
@@ -327,19 +367,28 @@ def stage_values(
     if source_tree_sha256(source_root, expected_uid=expected_uid, expected_gid=expected_gid) != tree_sha256:
         raise StageBindingError("stage source tree digest mismatch")
     if (
-        manifest.get("schemaVersion") != 3
+        manifest.get("schemaVersion") != 4
         or manifest.get("repository") != "AlexanderSmyslowski/catering-agents-platform"
-        or manifest.get("targetId") != "catering-prod-1"
+        or manifest.get("targetId") != target_id
         or manifest.get("platform") != "linux/amd64"
         or manifest.get("productCommit") != product_commit
         or manifest.get("operationsCommit") != operations_commit
     ):
         raise StageBindingError("stage manifest commit binding mismatch")
-    if manifest.get("images") != {
-        "runtime": {"imageId": runtime_image, "archive": "runtime-image.tar.gz", "services": ["intake", "offer", "production", "exports"]},
-        "web": {"imageId": web_image, "archive": "web-image.tar.gz", "services": ["web"]},
-    }:
-        raise StageBindingError("stage manifest image binding mismatch")
+    images = manifest.get("images")
+    if not isinstance(images, dict) or set(images) != {"runtime", "web"}:
+        raise StageBindingError("stage manifest image set mismatch")
+    for name, reference, path, services in (
+        ("runtime", runtime_image, runtime_path, ["intake", "offer", "production", "exports"]),
+        ("web", web_image, web_path, ["web"]),
+    ):
+        image = images[name]
+        try:
+            _oci().verify_image(path, image)
+        except ValueError as exc:
+            raise StageBindingError("stage OCI image relation mismatch") from exc
+        if image['platformManifestDigest'] != reference or image['archive'] != path.name or image['services'] != services:
+            raise StageBindingError("stage manifest image binding mismatch")
     digests = {
         "candidate-images.json": _digest(candidate_path),
         "runtime-image.tar.gz": _digest(runtime_path),
@@ -355,7 +404,7 @@ def stage_values(
     if json.loads(candidate_path.read_text(encoding="utf-8")) != expected_candidate:
         raise StageBindingError("stage candidate image binding mismatch")
     values = {
-        "schema_version": "2",
+        "schema_version": "4",
         "product_commit": product_commit,
         "operations_commit": operations_commit,
         "manifest_sha256": manifest_sha256,
@@ -366,11 +415,20 @@ def stage_values(
         "web_image": web_image,
         "source_tree_sha256": tree_sha256,
         "stage_binding_sha256": stage_binding_sha256,
+        "oci_sha256": oci_sha256,
+        **{f"{name}_{field}": image[key] for name, image in images.items()
+           for field, key in (("index_digest", "indexDigest"), ("platform_manifest_digest", "platformManifestDigest"), ("config_digest", "configDigest"))},
         **{
             SOURCE_COMPOSE_FILES[relative]: source_bindings[relative]
             for relative in SOURCE_COMPOSE_FILES
         },
     }
+    if target_id == "catering-prod-02":
+        if product_commit != "9ce4fbc96a5dd877f2cd2f00588a22be861306b9" or operations_commit == "b1e3d44573bf6fe6d3c8e46861792a592535e856":
+            raise StageBindingError("target02 migration commit mismatch")
+        if manifest.get("migrationSource") != {'targetId': 'catering-prod-1', 'operationsCommit': 'b1e3d44573bf6fe6d3c8e46861792a592535e856', 'manifestSha256': '9a0bb5c49fd09a9e64a99d00babf69ac771e66238ec5ae728eeedebe7ed79df0'}:
+            raise StageBindingError("migration source provenance mismatch")
+        values["target_id"] = target_id
     if (release_dir / "install-receipt").exists():
         _validate_install_receipt(release_dir, values, expected_uid=expected_uid, expected_gid=expected_gid)
     return values
@@ -415,6 +473,7 @@ def _main() -> int:
     actions = parser.add_subparsers(dest="action", required=True)
     for action in ("write", "verify", "inspect-existing"):
         receipt = actions.add_parser(action)
+        receipt.add_argument("--target", choices=("catering-prod-1", "catering-prod-02"), default="catering-prod-1")
         receipt.add_argument("release_dir", type=Path)
         receipt.add_argument("manifest_sha256")
         receipt.add_argument("product_commit")
@@ -422,6 +481,7 @@ def _main() -> int:
         receipt.add_argument("runtime_image")
         receipt.add_argument("web_image")
         receipt.add_argument("stage_binding_sha256")
+        receipt.add_argument("oci_sha256")
     source_check = actions.add_parser("verify-source")
     source_check.add_argument("source_root", type=Path)
     source_check.add_argument("manifest_path", type=Path)
@@ -434,22 +494,26 @@ def _main() -> int:
         if args.action == "inspect-existing":
             print(inspect_existing_release(
                 args.release_dir,
+                target_id=args.target,
                 manifest_sha256=args.manifest_sha256,
                 product_commit=args.product_commit,
                 operations_commit=args.operations_commit,
                 runtime_image=args.runtime_image,
                 web_image=args.web_image,
                 stage_binding_sha256=args.stage_binding_sha256,
+                oci_sha256=args.oci_sha256,
             ))
             return 0
         values = stage_values(
             args.release_dir,
+            target_id=args.target,
             manifest_sha256=args.manifest_sha256,
             product_commit=args.product_commit,
             operations_commit=args.operations_commit,
             runtime_image=args.runtime_image,
             web_image=args.web_image,
             stage_binding_sha256=args.stage_binding_sha256,
+                oci_sha256=args.oci_sha256,
         )
         if args.action == "write":
             write_receipt(args.release_dir, values)

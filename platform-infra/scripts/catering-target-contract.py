@@ -69,16 +69,17 @@ def _require(condition: bool) -> None:
         raise ContractError("target contract or inventory has invalid control values")
 
 
-def validate_control_data(contract: Any, inventory: Any) -> None:
+def validate_control_data(contract: Any, inventory: Any, target_id: str = "catering-prod-1") -> None:
     """Accept only the versioned values consumed as paths, names, or commands."""
-    _require(isinstance(contract, dict) and isinstance(inventory, dict))
+    _require(target_id in {"catering-prod-1", "catering-prod-02"})
+    _require(isinstance(contract, dict))
     _require(set(contract) == {
         "schemaVersion", "targetId", "deployPath", "edgePath", "releaseRoot",
         "repositorySourcePaths", "installedRuntime", "applicationServices", "databaseService",
         "requiredNetworks", "forbiddenNetworks", "protectedRemotePaths", "migrationPolicy",
     })
     _require(contract.get("schemaVersion") == 2)
-    _require(contract.get("targetId") == "catering-prod-1")
+    _require(contract.get("targetId") == target_id)
     _require(contract.get("deployPath") == "/opt/catering-agents-platform")
     _require(contract.get("edgePath") == "/opt/catering-edge")
     _require(contract.get("releaseRoot") == "/opt/catering-releases")
@@ -101,6 +102,12 @@ def validate_control_data(contract: Any, inventory: Any) -> None:
     ])
     _require(contract.get("migrationPolicy") == {"mode": "explicit-only", "supportedCommand": None})
 
+    # prod-02 has an intended contract, never a copy of the prod-1 observation.
+    # Installed state is checked live by the unchanged production preflight.
+    if target_id == "catering-prod-02":
+        _require(inventory is None)
+        return
+    _require(isinstance(inventory, dict))
     _require(set(inventory) == {
         "schemaVersion", "targetId", "observedAt", "observation", "platform", "edge",
         "legacyExpectedRemotePaths", "contractAlignment",
@@ -136,13 +143,13 @@ def validate_control_data(contract: Any, inventory: Any) -> None:
 
 
 def main() -> int:
-    if len(sys.argv) != 3:
+    if len(sys.argv) not in {3, 4}:
         print("target contract or inventory has invalid control values", file=sys.stderr)
         return 1
     try:
         contract = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-        inventory = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
-        validate_control_data(contract, inventory)
+        inventory = None if sys.argv[2] == "__unobserved__" else json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+        validate_control_data(contract, inventory, sys.argv[3] if len(sys.argv) == 4 else "catering-prod-1")
     except (OSError, UnicodeError, json.JSONDecodeError, ContractError, TypeError, AttributeError, IndexError, KeyError, ValueError):
         print("target contract or inventory has invalid control values", file=sys.stderr)
         return 1

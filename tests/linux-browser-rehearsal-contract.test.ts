@@ -497,7 +497,7 @@ describe("Linux browser rehearsal governance", () => {
       }
     ];
     const portalDocument = {
-      body: { innerText: "Catering-Agenten\nNeuen Auftrag beginnen\nFrühere Aufträge" },
+      body: { innerText: "CateringOS\nNeuen Auftrag beginnen\nFrühere Aufträge" },
       querySelectorAll: (selector: string) =>
         selector === "nav[aria-label='Startauswahl'] a" ? actionLinks : []
     };

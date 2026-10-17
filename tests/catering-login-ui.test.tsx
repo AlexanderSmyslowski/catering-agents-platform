@@ -131,6 +131,7 @@ describe("Catering session boundary", () => {
 
     const container = await renderApp();
 
+    expect(container.textContent).toContain("CateringOS");
     expect(container.querySelector("input[name='loginCode']")).not.toBeNull();
     expect(container.querySelector("input[name='pin']")).not.toBeNull();
     expect(container.textContent).not.toContain("Angebotsassistent");

@@ -1,8 +1,8 @@
 # CateringOS – eigenständiger Zielserver-Updateweg
 
-**Stand:** 2026-09-29
+**Stand:** 2026-10-03 (P4.1-Korrekturstand)
 **Ziel:** `catering-prod-1`  
-**Status:** Versionierter Mac-Operator mit getrennten Commit- und Artefaktbindungen. **P2-Reconciliation gegen #712 abgeschlossen; kein echter Zielserverlauf, kein Deployment-GO.**
+**Status:** Manifest v4 mit getrennten OCI-Identitäten und lokalem P4.1-Fix für Observer-Check und Preservationbindung. Unabhängiger Review, PR-CI und reguläre Annahme bleiben erforderlich; kein Betriebs-GO.
 
 ## Zweck und Grenze
 
@@ -72,9 +72,15 @@ python3 "$operator" verify \
 
 Die Betriebswerkzeug-Mindestannahme ist dieselbe überprüfbare Kombination: Integration in `origin/main` plus erfolgreicher `CI`-Pushlauf genau auf diesem SHA. Das belegt Herkunft und den erfolgreichen Push-CI-Nachweis. Es belegt weder menschliches Review noch eine reale Produktionsausführung dieses Betriebswerkzeug-Commits. Ein zusätzlicher Zertifizierungsdienst oder ein separates Draft-PR-Merkmal ist nicht Teil des Gates. Die historischen E1-/E2-Läufe vom 25.09. waren an #712 und dessen damaligen Head gebundene Nachweise; sie werden nicht als Freigabe für spätere Tool-SHAs wiederverwendet.
 
-`bundle` baut Runtime- und Web-Image für `linux/amd64`, exportiert nur getrackte Dateien des exakten Produktcommits und schließt damit ignorierte lokale Dateien wie `.env` aus dem Docker-Buildkontext aus. Manifest v3 bindet Repository, Ziel, Produktcommit, Betriebswerkzeug-Commit, Image-IDs, Anwendungsdienste, SHA-256-Werte von Images und Compose-Override, die beiden vom Ziel-Compose-Aufruf tatsächlich verwendeten Produkt-Compose-Dateien und einen kanonischen SHA-256 des vollständigen exportierten Source-Baums. Exportierte Verzeichnisse erhalten deterministisch Modus 0755; Dateien erhalten 0644 oder bei im Git-Tree ausführbaren Dateien 0755. `stage` prüft dieselben Bindungen vor Zielkontakt und hält sie im Stage-Receipt fest.
+`bundle` baut Runtime- und Web-Image für `linux/amd64`, exportiert nur getrackte Dateien des exakten Produktcommits und schließt damit ignorierte lokale Dateien wie `.env` aus dem Docker-Buildkontext aus. Manifest v4 bindet Repository, Ziel, Produktcommit, Betriebswerkzeug-Commit, die getrennten OCI-Identitäten R/M/C, Anwendungsdienste, Archiv-SHA-256 A und Compose-Override, die beiden vom Ziel-Compose-Aufruf tatsächlich verwendeten Produkt-Compose-Dateien und einen kanonischen SHA-256 des vollständigen exportierten Source-Baums. Exportierte Verzeichnisse erhalten deterministisch Modus 0755; Dateien erhalten 0644 oder bei im Git-Tree ausführbaren Dateien 0755. `stage` prüft dieselben Bindungen vor Zielkontakt und hält sie im Stage-Receipt fest.
 
-Der neue Operator verlangt Manifest v3 für Stage und Apply. Der Ziel-Release-Validator vergleicht die `sourceFiles`-Digests und beim v3-Stand zusätzlich den vollständigen Source-Tree-Digest, einschließlich Dateitypen, relativen Pfaden und normalisierten Modi. Bereits installierte v1-/v2-Releases bleiben für die bisherige Receipt-/Rollbackprüfung lesbar; das macht sie nicht zu zulässigen neuen Stage-Kandidaten.
+Neue Kandidaten verlangen Manifest v4. Pro Image gilt A (Archiv-SHA-256) → R (`indexDigest`, SHA-256 der exportierten `index.json`) → genau ein Linux/amd64-Manifest M (`platformManifestDigest`) → C (`configDigest`). Auch etwaige verschachtelte Index-, Config- und Layer-Descriptoren werden aus ihren tatsächlichen Bytes geprüft. M ist die einzige Runtime-Referenz in Overrides und laufenden Containerbindungen. Weder C, R noch Tags ersetzen M.
+
+Der Producer setzt `--provenance=false --sbom=false` ausdrücklich, damit der reale Build einen ausführbaren Manifest-Root exportiert. Der Archivprüfer unterstützt zusätzlich die eng geprüften BuildKit-Attestations und OCI-Referrer, die Docker-save auch bei abgeschalteter Neuerzeugung aus dem lokalen Store mit exportieren kann. Indexannotation, Subject-Descriptor und In-toto-Subject müssen dasselbe M binden; leere Config und Layer werden aus den Bytes geprüft. Kein Attestationsindex wird zur Runtime-Referenz. Path-Traversal, doppelte/zusätzliche Dateien, Plattform-/Variant-Abweichungen und eine widersprüchliche Docker-`manifest.json`-Sicht werden abgewiesen.
+
+Stage-Receipt v4 bindet R/M/C, den SHA-256 des OCI-Prüfwerkzeugs und die bestehenden Source-/Compose-/Layout-/Rechtebindungen. Nach Load muss M lokal adressierbar sein; der Runner prüft dessen Plattform und die erneut aus Docker-save abgeleitete M/C-Relation. Laufende Kandidaten müssen `.Image=M` zeigen. Ein vorhandener `ImageManifestDescriptor.digest` muss ebenfalls M sein. Alle Imageoperationen bleiben lokal und ohne Registry-Pull.
+
+Der Ziel-Release-Validator prüft weiterhin `sourceFiles` und den vollständigen Source-Baum einschließlich Dateitypen, Pfaden und normalisierten Modi. Bereits installierte v1/v2/v3-Releases bleiben ausschließlich für Install-/Rollbackprüfungen lesbar. Ihre beobachtete unveränderliche Runtime-Referenz wird unter Lock gebunden; ein fehlender v4-Nachweis wird nicht rückwirkend als Config-Bindung ausgegeben. Alte Stage-Receipts werden nicht zu v4 umgedeutet.
 
 Die freigebbaren Phasen bleiben getrennt:
 
@@ -86,6 +92,10 @@ Die freigebbaren Phasen bleiben getrennt:
 6. `verify`: read-only Postflight-, Health-, Install-Receipt-, Stage-/Manifest- und Commitprüfung des installierten Releases. Diese Phase führt keinen authentisierten Anwendungssmoke aus.
 
 Vor `stage` und `apply` werden Herkunfts-, CI- und Bundle-Gates mit begrenzten Git-/GitHub-Timeouts fail-closed abgeschlossen. Der Update-Lock wird während des Aktivierungslaufs gehalten. Vor dem Compose-Preflight im `apply` und unmittelbar vor `docker compose up` prüft ein Remote-Schritt im selben SSH-Aufruf erneut Stage-Receipt, Produkt-/Betriebswerkzeug-Commit, Manifest, Override, Image-Archive und beide konsumierten Compose-Quelldateien. Nach Beginn der Aktivierung verwenden Postflight, Smoke, Receipt, Rollback und die separate `verify`-Phase keine GitHub- oder Git-Netzabfrage. Jeder fehlende oder abweichende Commit, Lauf, Manifestwert, Digest oder Stage-Receipt stoppt vor der nächsten Phase.
+
+`apply` und der bestehende `--update`-Pfad binden PostgreSQL-Datenvolume und Edge-Image genau einmal aus dem letzten Preflight unter gehaltenem Update-Lock vor Image-Load und Aktivierung. Diese Erwartungswerte bleiben für den gesamten Lauf unveränderlich. Postflight und Rollback erfassen eigene aktuelle Beobachtungen und prüfen sie gegen denselben ursprünglichen Zustand; eine Abweichung im Postflight führt in den bestehenden Rückweg, eine Abweichung im Rollback hält den Lock für manuelle Recovery. Auch der anschließende Containervergleich verwendet die ursprünglichen Werte. Der Kandidat ersetzt weder diese Bindung noch den zuvor unter Lock beobachteten Vorgängerrelease.
+
+Die separate `verify`-Phase startet einen neuen Prozess und bindet ihre aktuelle Preflight-Beobachtung. Der bestehende Install-Receipt enthält keine historischen PostgreSQL-/Edge-Ausgangswerte; ein erfolgreicher separater Verify belegt daher deren aktuelle Konsistenz, keinen nachträglichen Preservationnachweis eines früheren Apply. Receipt- und Legacyverträge bleiben unverändert.
 
 `stage`, `apply` und `verify` sind Zielbefehle. P2 hat sie ausschließlich lokal bzw. mit synthetischen Ziel-Fixtures geprüft; kein echter Zielserver wurde kontaktiert. Die zwei bestehenden GitHub-Workflows `update-catering-target.yml` und `catering-target-preflight.yml` bleiben unverändert; sie sind nicht der neue Einstieg und dürfen bis zur gesonderten Entscheidung nicht ausgelöst werden. Für Kompatibilität bleibt der historische Workflow-Kontext `Update Catering target` technisch als einziger ungebundener `--update`-Aufrufer zugelassen: exakt dieses Repository, `workflow_dispatch`, `refs/heads/main`, die versionierte Workflow-Referenz, übereinstimmender Workflow-SHA, Event-Input `confirmation=UPDATE_CATERING_TARGET` und identischer `commit_sha`. Dieses Zulassen ist keine Auslösefreigabe; das Auslösen bleibt organisatorisch untersagt. Der Mac-Operator verwendet ausschließlich `stage` und `apply`. Der historische `Deploy production`-Workflow, `deploy-hetzner.sh` und `deploy-web-listener-hetzner.sh` gehören nicht zum neuen Pfad.
 
@@ -217,7 +227,9 @@ Die Gate-Namen beschreiben nur die fehlgeschlagene Prüfkategorie, z. B. `platfo
 
 Read-only bedeutet hier: Der Preflight legt **keinen** `/opt/catering-target-update.lock` an, verändert keine Container, Dateien, Firewall-, Netzwerk- oder Anwendungszustände und startet keinen Updatepfad.
 
-Der Backup-Observer darf bei `--check` zur konsistenten Beobachtung kurzzeitig einen exklusiven, nicht blockierenden `flock` auf seiner **bereits vorhandenen, read-only geöffneten** Observer-Lockdatei halten. Dieser Synchronisations-Lock ist kein Deployment-/Update-Lock. Laut Observer-Vertrag schreibt `--check` keinen Observerstatus und führt weder Docker, Restic, Dump, Restore noch Reparaturen aus.
+Der Backup-Observer erwirbt bei `--check` keinen Advisory-Lock, schreibt keinen Observerstatus und führt weder Docker, Restic, Dump, Restore noch Send oder Reparaturen aus. Er liest die vorhandene geschützte Lockdatei mit derselben Ownership-/Modus-/Symlink-/Generationsprüfung wie die übrigen Records. Ein gleichzeitig gehaltener Sender-Lock allein verhindert die Prüfung nicht; geänderte Record- oder Lockgenerationen führen fail-closed zum Abbruch. Der sendende Observer behält seinen exklusiven, nicht blockierenden Lock einschließlich Statepublikation und Send.
+
+Der Preflight transportiert Observer und identische Common-Validatoren aus dem gebundenen Operationscheckout im bestehenden trusted-template-Pfad und führt den Check ausschließlich im Speicher über isoliertes Remote-Python aus. Der Renderer erzeugt sicher shell-gequotete Variablen; Release-/OCI-/Observercode wird auf dem Ziel über `printf`-Pipes an Python übergeben. Aufgerufene Common-Reader verwenden identischen Pythoncode über `-B -c` und Record-/Metadateneingaben über `printf`-Prozesssubstitution, sodass diese Eingaben keine temporären Zieldateien benötigen. Die vorhandene installierte Observerdatei muss weiterhin eine reguläre Datei sein, wird für den Check aber nicht ausgeführt; auch ihr Common-Helper wird nicht geladen. Deshalb benötigt dieser Checkfix keine vorgelagerte Installation auf dem Ziel. Policy, State, Evidence und Service-/Frische-/Attestationsprüfungen bleiben verbindlich. Die Beobachtung ist nicht atomar: Änderungen während der erfassten Generation werden erkannt, Ereignisse nach dem letzten Read können nicht ausgeschlossen werden.
 
 
 ## Kanonisches Laufzeitinventar
@@ -364,3 +376,12 @@ Vor dem ersten echten Zielzugriff sind erneut erforderlich:
 6. ausdrückliche Betriebsfreigabe für genau diese Commit- und Bundlebindungen.
 
 Bis dahin gilt: **kein Dispatch, kein SSH-Live-Lauf, kein Deployment.**
+
+
+## Begrenzter Erstaufbau auf prod-02
+
+Der explizite Zielwechsel und die getrennte, isolierte Erstinstallation sind in
+[CATERING_TARGET02_BOOTSTRAP.md](CATERING_TARGET02_BOOTSTRAP.md) beschrieben.
+Ohne `--target catering-prod-02` bleibt der Operator auf prod-1. Das historische
+Runtimeinventar und bestehende Produktions-Preflight-Gates bleiben erhalten.
+Dieser Entwicklungsstand ist keine Operationsannahme oder Migrationsfreigabe.
