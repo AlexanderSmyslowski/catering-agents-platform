@@ -177,6 +177,7 @@ type ProductWorkspaceProps = {
   currentProductionDraft?: ProductionDraft;
   productionSourceDetail?: ProductionSourceDetail;
   currentApprovedProductionSpecId?: string;
+  currentProductionApprovalApplied?: boolean;
   currentProductionResultArtifactId?: string;
 };
 
@@ -403,7 +404,8 @@ function projectProductionWorkspace(product: ProductionProductShellData): Produc
     offerDrafts: [],
     productionPlans: product.data.currentPlan ? [product.data.currentPlan] : [],
     purchaseLists: product.data.currentPurchaseList ? [product.data.currentPurchaseList] : [],
-    recipes: product.data.referencedRecipes,
+    // Recipe candidates belong to the business library; case artifacts stay bound above.
+    recipes: product.recipes,
     auditEvents: product.auditEvents
   };
 }
@@ -431,6 +433,7 @@ function ProductWorkspaceView({
   currentProductionDraft,
   productionSourceDetail,
   currentApprovedProductionSpecId,
+  currentProductionApprovalApplied,
   currentProductionResultArtifactId
 }: ProductWorkspaceProps) {
   const [submitting, setSubmitting] = useState(false);
@@ -1377,7 +1380,14 @@ function ProductWorkspaceView({
       />
 
       {route === "offer" ? <OfferConversationalWorkbench {...offerWorkbenchState} /> : null}
-      {route === "production" ? <ProductionRouteMainLayout {...productionRouteMainLayoutState} /> : null}
+      {route === "production" ? <ProductionRouteMainLayout {...productionRouteMainLayoutState}
+        workbenchSummary={{
+          ...productionRouteMainLayoutState.workbenchSummary,
+          approvalState: currentApprovedProductionSpecId
+            ? currentProductionApprovalApplied === true ? "applied" : "approved"
+            : "pending"
+        }}
+      /> : null}
     </>
   );
 
@@ -1460,6 +1470,7 @@ function ProductRouteController({ route, shell, masthead }: ProductRouteControll
           currentProductionDraft={product.data.currentDraft}
           productionSourceDetail={buildProductionSnapshotSourceDetail(product.data)}
           currentApprovedProductionSpecId={product.data.approvedProductionSpec?.approvedProductionSpecId}
+          currentProductionApprovalApplied={product.data.approvedProductionSpec?.applied}
           currentProductionResultArtifactId={product.data.currentPlan?.planId ?? product.data.currentPurchaseList?.purchaseListId}
         />
       )}

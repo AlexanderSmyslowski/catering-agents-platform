@@ -535,6 +535,7 @@ footer { border-top: 1px solid #cbd5df; color: #52616f; margin-top: 24px; paddin
   h2, h3, .recipe-card > h3, .recipe-card > h3 + p { break-after: avoid-page; }
   thead { display: table-header-group; }
   tr { break-inside: avoid; page-break-inside: avoid; }
+  .kitchen-sheet { break-inside: avoid; page-break-inside: avoid; }
   .coverage-table { break-inside: avoid; page-break-inside: avoid; }
   .recipe-section, .purchase-section { break-before: page; page-break-before: always; }
   .recipe-card, .purchase-group { break-after: page; page-break-after: always; }

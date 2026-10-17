@@ -343,6 +343,41 @@ describe("independent product loader boundaries", () => {
     expect(container.textContent).not.toContain("Fall B");
   });
 
+  it("shows the business recipe library before any plan exists without exposing unbound case artifacts", async () => {
+    const data = productionProductData(undefined, undefined, "case-a");
+    data.acceptedSpecs = [acceptedSpecSentinel("spec-a", "Aktiver Produktionsauftrag")];
+    data.productionPlans = [{ ...productionPlan("unbound-plan", "unbound-spec"), schemaVersion: "1.0", readiness: { status: "complete", reasons: [] }, timeline: [], unresolvedItems: [] }];
+    data.recipes = [{ recipeId: "new-library-recipe", name: "Neu importiertes Küchenrezept",
+      schemaVersion: "1.0", source: { tier: "digitized_cookbook", originType: "approved_import", reference: "synthetic-test", retrievedAt: "", approvalState: "review_required", qualityScore: 0.5, fitScore: 0.5, extractionCompleteness: 0.5 },
+      baseYield: { servings: 10, unit: "servings" }, ingredients: [], steps: [], scalingRules: { defaultLossFactor: 1 }, allergens: [], dietTags: [] }];
+    vi.spyOn(api, "loadProductionProductData").mockResolvedValue(data);
+    const { container } = await renderAt("/produktion?productionCaseId=case-a");
+    const status = container.querySelector('[aria-label="Rezeptprüfung"]');
+    expect(status?.textContent).toContain("1 Rezepte insgesamt");
+    expect(container.innerHTML).not.toContain("unbound-plan");
+    const summary = [...container.querySelectorAll("summary")].find(item => item.textContent?.includes("Rezepte verwalten"));
+    expect(summary).toBeDefined();
+    await act(async () => { summary!.click(); await flush(); });
+    expect(container.textContent).toContain("Neu importiertes Küchenrezept");
+  });
+
+  it.each([
+    [undefined, "nicht erteilt"],
+    [false, "erteilt · Übernahme ausstehend"],
+    [true, "erteilt · übernommen"]
+  ])("shows the canonical internal approval state (applied=%s)", async (applied, label) => {
+    const data = productionProductData(undefined, undefined, "case-a");
+    data.acceptedSpecs = [acceptedSpecSentinel("spec-a", "Aktiver Produktionsauftrag")];
+    if (applied !== undefined) data.workspace.approvedProductionSpec = {
+      approvedProductionSpecId: "approved-current", sourceDraft: { draftId: "draft-a", revision: 2 }, applied
+    };
+    vi.spyOn(api, "loadProductionProductData").mockResolvedValue(data);
+    const { container } = await renderAt("/produktion?productionCaseId=case-a");
+    const facts = container.querySelector('[aria-label="Datenstand Produktionsauftrag"]');
+    expect(facts?.textContent).toContain("Interne Produktionsfreigabe:");
+    expect(facts?.textContent).toContain(label);
+  });
+
   it("does not project unbound production artifacts into the real app route", async () => {
     const loadProduct = vi.spyOn(api, "loadProductionProductData").mockResolvedValue(
       productionProductData(
@@ -1227,6 +1262,7 @@ describe("independent product loader boundaries", () => {
       if (url.endsWith("/api/production/v1/production/cases")) {
         return Response.json({ items: [] });
       }
+      if (url.endsWith("/api/production/v1/production/recipes")) return Response.json({ items: [] });
       if (url.endsWith("/api/production/health")) {
         return Response.json({ service: "production", status: "ok", timestamp: "", counts: {} });
       }

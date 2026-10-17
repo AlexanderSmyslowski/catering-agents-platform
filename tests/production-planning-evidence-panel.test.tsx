@@ -6,7 +6,7 @@ import * as api from "../backoffice-ui/src/api.js";
 import * as session from "../backoffice-ui/src/session-boundary.js";
 import { ProductionPlanningEvidencePanel } from "../backoffice-ui/src/production-planning-evidence-panel.js";
 
-const recipe = { recipeId: "test-recipe", name: "Synthetische Kaffeepause", source: { approvalState: "review_required", reference: "synthetic:test" }, baseYield: { servings: 10, unit: "servings" }, ingredients: [], steps: [], allergens: [], dietTags: [] };
+const recipe: Awaited<ReturnType<typeof api.loadProductionRecipeLibrary>>["items"][number] = { schemaVersion: "1.0", scalingRules: { defaultLossFactor: 1 }, recipeId: "test-recipe", name: "Synthetische Kaffeepause", source: { tier: "digitized_cookbook", originType: "approved_import", approvalState: "review_required", reference: "synthetic:test", retrievedAt: "2026-10-18T00:00:00Z", qualityScore: 0.5, fitScore: 0.5, extractionCompleteness: 0.5 }, baseYield: { servings: 10, unit: "servings" }, ingredients: [], steps: [], allergens: [], dietTags: [] };
 const planningRecipes = [{ recipe, recipeSnapshotHash: `sha256:${"a".repeat(64)}` }];
 function draft(recipeId: string | undefined = recipe.recipeId, revision = 1): api.ProductionDraft {
   return { draftId: `draft-${revision}`, revision, status: "pending_review", createdAt: "2026-09-19",

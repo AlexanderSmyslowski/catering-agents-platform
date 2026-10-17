@@ -662,9 +662,10 @@ export async function loadProductionProductData(
   activeCaseId?: string,
   _focusedSpecId?: string
 ): Promise<ProductionProductData> {
-  const [workspace, health] = await Promise.all([
+  const [workspace, health, recipeLibrary] = await Promise.all([
     loadProductionWorkspaceState(activeCaseId),
-    loadProductionWorkspaceHealth()
+    loadProductionWorkspaceHealth(),
+    activeCaseId ? loadProductionRecipeLibrary() : Promise.resolve({ items: [] })
   ]);
 
   const eventSpecSnapshot = workspace.currentDraft?.draftArtifacts?.eventSpec;
@@ -678,7 +679,7 @@ export async function loadProductionProductData(
     acceptedSpecs,
     productionPlans: workspace.currentPlan ? [workspace.currentPlan] : [],
     purchaseLists: workspace.currentPurchaseList ? [workspace.currentPurchaseList] : [],
-    recipes: workspace.referencedRecipes,
+    recipes: recipeLibrary.items,
     auditEvents: activeCaseId ? auditEntriesFromCaseEvents(workspace.activeEvents) : [],
     serviceHealth: serviceHealthStateFor("production", health)
   };
@@ -1069,7 +1070,7 @@ export async function loadProductionDrafts(caseId?: string) {
 }
 
 export async function loadProductionRecipeLibrary() {
-  return fetchJson<{ items: Array<Record<string, unknown>> }>("/api/production/v1/production/recipes", undefined);
+  return fetchJson<{ items: Array<Recipe & Record<string, unknown>> }>("/api/production/v1/production/recipes", undefined);
 }
 
 export async function decideProductionDraftReviewCard(

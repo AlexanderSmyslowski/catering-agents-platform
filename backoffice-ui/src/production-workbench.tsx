@@ -6,6 +6,7 @@ import { buildProductionMiniPilotCardState } from "./production-mini-pilot-card-
 import { buildProductionWorkbenchOutputAnchorState } from "./production-workbench-output-anchor-state.js";
 
 export type ProductionWorkbenchSummary = {
+  approvalState?: "pending" | "approved" | "applied";
   hasActiveContext?: boolean;
   activeSpecLabel: string;
   activeTechnicalContextLabel?: string;
@@ -96,6 +97,7 @@ function formatOperatorProductionObjects(productionObjectStatusLabel: string): s
 }
 
 function buildProductionSummaryFacts(input: {
+  approvalState?: ProductionWorkbenchSummary["approvalState"];
   readinessLabel: string;
   openVisibleQuestionCount: number;
   answeredQuestionCount: number;
@@ -125,8 +127,9 @@ function buildProductionSummaryFacts(input: {
       value: formatOperatorProductionObjects(input.productionObjectStatusLabel)
     },
     {
-      label: "Freigabe",
-      value: "nicht erteilt"
+      label: "Interne Produktionsfreigabe",
+      value: input.approvalState === "applied" ? "erteilt · übernommen"
+        : input.approvalState === "approved" ? "erteilt · Übernahme ausstehend" : "nicht erteilt"
     }
   ];
 }
@@ -186,6 +189,7 @@ export function ProductionConversationalWorkbench({
   const hasProductionResults = productionObjectCount > 0 || purchaseListCount > 0;
   const productionOutputAnchorId = "production-output-anchor";
   const summaryFacts = buildProductionSummaryFacts({
+    approvalState: summary.approvalState,
     readinessLabel,
     openVisibleQuestionCount,
     answeredQuestionCount,

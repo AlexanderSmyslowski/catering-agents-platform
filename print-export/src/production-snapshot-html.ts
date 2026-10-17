@@ -24,7 +24,7 @@ export function renderProductionKitchenSheets(plan: ProductionPlan): string {
   return `<section><h2>Küchenblätter</h2>${plan.kitchenSheets.map(sheet => {
     const batch = plan.productionBatches.find(item => item.componentId === sheet.componentId && item.recipeId === sheet.recipeId);
     const source = sheet.recipeSource ?? batch?.recipeSource;
-    return `<article><h3>${escapeHtml(sheet.title)}</h3><p>Gesamtmenge: ${escapeHtml(quantity(batch?.scaledYield ?? sheet.productionQty))}${batch ? ` · Chargen: ${escapeHtml(batch.batchCount)}` : ""}</p><p>Quelle: ${escapeHtml(recipeSourceOriginLabel(source))} · ${escapeHtml(recipeSourceReferenceLabel(source))} · Status: ${escapeHtml(formatRecipeApprovalStateLabel(source?.approvalState) ?? "Status offen")}</p><ul>${sheet.ingredients.map(ingredient => `<li>${escapeHtml(ingredient.name)}: ${escapeHtml(quantity(ingredient.quantity))}</li>`).join("")}</ul><ol>${sheet.steps.map(step => `<li>${escapeHtml(step.instruction)}</li>`).join("")}</ol></article>`;
+    return `<article class="kitchen-sheet"><h3>${escapeHtml(sheet.title)}</h3><p>Gesamtmenge: ${escapeHtml(quantity(batch?.scaledYield ?? sheet.productionQty))}${batch ? ` · Chargen: ${escapeHtml(batch.batchCount)}` : ""}</p><p>Quelle: ${escapeHtml(recipeSourceOriginLabel(source))} · ${escapeHtml(recipeSourceReferenceLabel(source))} · Status: ${escapeHtml(formatRecipeApprovalStateLabel(source?.approvalState) ?? "Status offen")}</p><ul>${sheet.ingredients.map(ingredient => `<li>${escapeHtml(ingredient.name)}: ${escapeHtml(quantity(ingredient.quantity))}</li>`).join("")}</ul><ol>${sheet.steps.map(step => `<li>${escapeHtml(step.instruction)}</li>`).join("")}</ol></article>`;
   }).join("")}</section>`;
 }
 
