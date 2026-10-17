@@ -1,6 +1,6 @@
 HANDOFF_PROMPT.md
 
-Ich moechte die Arbeit an der Catering Agents Platform in einem neuen Chatfenster, mit Hermes Agent oder mit Codex 5.4 mini nahtlos fortsetzen.
+Ich moechte die Arbeit an CateringOS in einem neuen Chatfenster, mit Hermes Agent oder mit Codex 5.4 mini nahtlos fortsetzen.
 
 Rolle
 
