@@ -538,7 +538,7 @@ export function OfferConversationalWorkbench({
               </div>
               <details className="nested-details">
                 <summary>Angebotstexte anzeigen</summary>
-                <pre className="detail-pre">{String(focusedDraft.customerFacingText ?? "")}</pre>
+                {focusedPricing?.calculation ? <pre className="detail-pre">{String(focusedDraft.customerFacingText ?? "")}</pre> : <p>Kein Kundentext freigegeben: Leistungsumfang und Preisaufstellung zuerst erfassen. Automatische Paketvorschläge sind keine bestätigten Leistungen.</p>}
                 <pre className="detail-pre">{String(focusedDraft.internalWorkingText ?? "")}</pre>
               </details>
             </div>

@@ -143,6 +143,7 @@ export function buildProductionRouteViewState({
 
   return {
     workbenchSummary: buildProductionWorkbenchSummaryState({
+      focusedProductionSpec,
       hasActiveContext: Boolean(focusedProductionSpec || selectedPlan),
       activeProductionContextLabel,
       activeProductionTechnicalContextLabel,

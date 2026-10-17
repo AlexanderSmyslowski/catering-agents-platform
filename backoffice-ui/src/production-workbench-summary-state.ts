@@ -1,3 +1,4 @@
+import { productionContextNotes } from "../../shared-core/src/production-clarification.js";
 import type { ProductionWorkbenchSummary } from "./production-workbench.js";
 import { countPurchaseListItems } from "./production-route-artifact-status-state.js";
 
@@ -8,6 +9,7 @@ type ClarificationStatusCounts = {
 
 export type ProductionWorkbenchSummaryStateInput = {
   hasActiveContext?: boolean;
+  focusedProductionSpec?: Record<string, unknown>;
   activeProductionContextLabel: string;
   activeProductionTechnicalContextLabel?: string;
   focusedSpecReadinessLabel: string;
@@ -22,6 +24,7 @@ export type ProductionWorkbenchSummaryStateInput = {
 
 export function buildProductionWorkbenchSummaryState({
   hasActiveContext,
+  focusedProductionSpec,
   activeProductionContextLabel,
   activeProductionTechnicalContextLabel,
   focusedSpecReadinessLabel,
@@ -33,8 +36,10 @@ export function buildProductionWorkbenchSummaryState({
   productionObjectStatusLabel,
   currentSpecPurchaseLists
 }: ProductionWorkbenchSummaryStateInput): ProductionWorkbenchSummary {
+  const productionNotes = productionContextNotes(focusedProductionSpec);
   return {
     ...(hasActiveContext === undefined ? {} : { hasActiveContext }),
+    ...(productionNotes.length ? { productionNotes } : {}),
     activeSpecLabel: activeProductionContextLabel,
     activeTechnicalContextLabel: activeProductionTechnicalContextLabel,
     readinessLabel: focusedSpecReadinessLabel,

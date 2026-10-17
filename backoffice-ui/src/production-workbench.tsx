@@ -7,6 +7,7 @@ import { buildProductionWorkbenchOutputAnchorState } from "./production-workbenc
 
 export type ProductionWorkbenchSummary = {
   approvalState?: "pending" | "approved" | "applied";
+  productionNotes?: string[];
   hasActiveContext?: boolean;
   activeSpecLabel: string;
   activeTechnicalContextLabel?: string;
@@ -47,7 +48,7 @@ type ProductionConversationalWorkbenchProps = {
 
 function formatQuestionStatus(questionCount: number): string {
   if (questionCount === 0) {
-    return "keine offenen Rückfragen";
+    return "keine strukturierten Rückfragen erfasst; Auftrags- und Küchenhinweise separat prüfen";
   }
   if (questionCount === 1) {
     return "1 offene Rückfrage";
@@ -244,11 +245,12 @@ export function ProductionConversationalWorkbench({
       {hasActiveContext ? (
         <>
           <aside className="production-calm-summary" aria-label="Kompakte Produktionszusammenfassung">
-            <p className="eyebrow">Bestandsdaten im Hintergrund</p>
+            <p className="eyebrow">{summary.hasActiveContext ? "Aktueller Produktionsauftrag" : "Bestandsdaten im Hintergrund"}</p>
             <strong>{activeSpecLabel}</strong>
             <p className="helper-text">
-              Kontext aus Demo, Bestand oder vorherigem Lauf. Starte oben mit einer Datei oder Texteingabe, wenn du einen neuen Auftrag prüfen willst.
+              {summary.hasActiveContext ? "Dieser Arbeitsstand gehört zum geöffneten Produktionsauftrag." : "Kontext aus Demo, Bestand oder vorherigem Lauf. Starte oben mit einer Datei oder Texteingabe, wenn du einen neuen Auftrag prüfen willst."}
             </p>
+            {summary.productionNotes?.length ? <section aria-label="Auftrags- und Küchenhinweise"><h4>Auftrags- und Küchenhinweise</h4><p>Vorgaben separat prüfen. Dies ist keine Sonderkost-, Allergen- oder Hygienefreigabe.</p><ul>{summary.productionNotes.map(note => <li key={note}>{note}</li>)}</ul></section> : null}
             <ul className="production-calm-summary__facts" aria-label="Datenstand Produktionsauftrag">
               {summaryFacts.map((fact) => (
                 <li key={fact.label}>

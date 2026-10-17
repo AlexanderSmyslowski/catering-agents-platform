@@ -1,6 +1,7 @@
 import { renderOfferPricingHtml } from "./offer-pricing-html.js";
 import {
   buildProductionClarificationQuestions,
+  productionContextNotes,
   checkPurchaseCoverage,
   formatEventTypeLabel,
   formatMetroGroupLabel,
@@ -242,10 +243,11 @@ function renderSection3(input: RenderProductionFolderInput): string {
       return `${question} → ${answer.answerText.value}`;
     });
   const entries = [...uncertaintyRows, ...answerRows];
+  const notes = productionContextNotes(input.spec);
 
   return `<section><h2>3. Rückfragen</h2>${
-    entries.length > 0 ? list(entries) : "<p>Keine blockierenden Rückfragen.</p>"
-  }</section>`;
+    entries.length > 0 ? list(entries) : "<p>Keine weiteren strukturierten Rückfragen erfasst. Auftrags- und Küchenhinweise sowie Freigaben separat prüfen.</p>"
+  }${notes.length ? "<h3>Auftrags- und Küchenhinweise</h3><p>Keine Sonderkost-, Allergen- oder Hygienefreigabe. Angefragte Sonderkost separat klären.</p>" + list(notes) : ""}</section>`;
 }
 
 function renderSection4(input: RenderProductionFolderInput): string {

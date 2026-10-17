@@ -215,4 +215,27 @@ describe("intake normalization robustness", () => {
     expect(spec.menuPlan.map((component) => component.label).join(" ")).not.toContain("Lunch am");
     expect(spec.menuPlan.map((component) => component.label).join(" ")).not.toContain("Lieferung");
   });
+  it("retains guest-subset special diets as open instructions without declaring the entire menu free-from", () => {
+    const request = createEventRequestFromText({ requestId: "subset-dietary", channel: "text", rawText: "Wissenschaftsabend am 12.11.2026 für 100 Gäste. 4 Gäste glutenfrei, 3 Schalenfruchtvermeidung. Empfang 18:00–19:00." });
+    const spec = normalizeEventRequestToSpec(request);
+    expect(spec.productionConstraints?.join(" ")).toContain("4 Gäste glutenfrei");
+    expect(spec.productionConstraints?.join(" ")).toContain("3 Schalenfruchtvermeidung");
+    expect(spec.productionConstraints).not.toContain("gluten_free");
+    expect(spec.uncertainties?.some(item => item.field === "productionConstraints")).toBe(true);
+    expect(spec.attendees.expected).toBe(100);
+  });
+
+  it.each([
+    { text: "Für 100 Gäste muss das komplette Buffet glutenfrei sein.", expected: ["gluten_free"] },
+    { text: "Das gesamte Buffet muss vegan sein und 4 Gäste benötigen glutenfrei.", expected: ["vegan"], excluded: "gluten_free" },
+    { text: "Für alle 100 Gäste glutenfrei.", expected: ["gluten_free"] },
+    { text: "Das Buffet muss glutenfrei sein und 4 Gäste benötigen glutenfrei.", expected: ["gluten_free"] },
+    { text: "4 Gäste glutenfrei und das gesamte Buffet muss glutenfrei sein.", expected: ["gluten_free"] }
+  ])("preserves explicit global requirements: $text", ({ text, expected, excluded }) => {
+    const request = createEventRequestFromText({ requestId: "global-dietary-scope", channel: "text", rawText: text });
+    const spec = normalizeEventRequestToSpec(request);
+    expect(spec.productionConstraints).toEqual(expect.arrayContaining(expected));
+    if (excluded) expect(spec.productionConstraints).not.toContain(excluded);
+  });
+
 });

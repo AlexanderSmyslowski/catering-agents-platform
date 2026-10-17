@@ -146,7 +146,7 @@ export function OfferPricingEditor({ draftId, revision, variants, menuPlan, pric
       <button type="button" className="secondary-button" disabled={disabled} onClick={begin}>Preisaufstellung bearbeiten</button>
     </> : <>
       {pricingSummary?.calculationRequired ? <p role="status">Menü geändert – Preisaufstellung veraltet. Vor Freigabe neu kalkulieren.</p> : null}
-      <p className="helper-text">Bisheriger Arbeitsbetrag: {pricingSummary ? money(Math.round(pricingSummary.subtotal.amount * 100)) : "offen"}. Keine vollständige Netto-/Steuer-/Leistungsaufteilung vorhanden.</p>
+      <p className="helper-text">Preis offen. Katalogrichtwerte sind keine geprüften Angebotspreise. Preisaufstellung mit Leistungsumfang, Quellen, Netto, Steuer und Brutto erfassen.</p>
       <button type="button" className="secondary-button" disabled={disabled} onClick={begin}>Preisaufstellung erfassen</button>
     </>}
     {error ? <p role="alert" tabIndex={-1} ref={errorRef}>{error}</p> : null}

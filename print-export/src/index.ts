@@ -13,6 +13,7 @@ import type {
   RecipeSourceExportMetadata
 } from "@catering/shared-core";
 import {
+  productionContextNotes,
   formatDocumentIngestionStatusLabel,
   formatDocumentIngestionWarningLabel,
   assertBusinessId,
@@ -187,6 +188,13 @@ function renderSourceAnchorsSection(record: Record<string, unknown>): string[] {
 
 export function renderOfferHtml(draft: OfferDraft): string {
   const publishApproved = draft.reviewStatus?.publishApproved === true;
+  if (!publishApproved && !draft.pricingSummary.calculation) {
+    return "<html><body><h1>Angebotsentwurf · Kalkulation offen</h1>"
+      + "<p>Interne Arbeitsunterlage. Keine bestätigten Leistungen oder Angebotspreise.</p>"
+      + "<p>Vor einem Angebot Leistungsumfang prüfen und eine Preisaufstellung mit Quellen sowie Netto, Steuer und Brutto erfassen.</p>"
+      + "<h2>Veranstaltungsdaten</h2><p>" + escapeHtml([draft.proposedEventSpec.event.title, draft.proposedEventSpec.event.date, draft.proposedEventSpec.attendees.expected ? draft.proposedEventSpec.attendees.expected + " Gäste" : "Gästezahl offen"].filter(Boolean).join(" · ")) + "</p>"
+      + "<h2>Offene Punkte</h2><ul>" + draft.openQuestions.map(item => "<li>" + escapeHtml(item) + "</li>").join("") + "</ul></body></html>";
+  }
   const openQuestionsSection =
     draft.openQuestions.length > 0
       ? [
@@ -250,6 +258,7 @@ export function renderProductionPlanHtml(plan: ProductionPlan, spec?: AcceptedEv
     "<html><body>",
     "<h1>Produktionsplan</h1>",
     renderAppliedProductionContext(appliedSnapshot),
+    ...((notes) => notes.length ? ["<section><h2>Auftrags- und Küchenhinweise</h2><p>Keine Sonderkost-, Allergen- oder Hygienefreigabe. Vorgaben separat prüfen.</p><ul>" + notes.map(note => "<li>" + escapeHtml(note) + "</li>").join("") + "</ul></section>"] : [])(productionContextNotes(spec)),
     `<p>Status: ${escapeHtml(formatProductionReadinessStatusLabel(plan.readiness.status))}</p>`,
     `<p>Rezeptauswahl: ${plan.recipeSelections.length}</p>`,
     ...renderSourceAnchorsSection(plan as unknown as Record<string, unknown>),

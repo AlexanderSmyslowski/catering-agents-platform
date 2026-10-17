@@ -134,4 +134,19 @@ describe("persisted offer price calculation", () => {
       expect(await store.getDraft({ businessId: "alpha" }, draft.draftId)).toEqual(draft);
     } finally { await app.close(); }
   });
+  it("does not export unpriced automatic package services or a catalogue total as an offer", async () => {
+    const { app, draft } = await harness();
+    try {
+      draft.serviceModules = [{ moduleId: "invented", label: "Aperitif und Schaumwein", category: "beverage" }];
+      draft.customerFacingText = "Flying Bites Auswahl; Gesamt: 940.00 EUR";
+      draft.pricingSummary = { subtotal: { amount: 940, currency: "EUR" } };
+      const html = renderOfferHtml(draft);
+      expect(html).toContain("Kalkulation offen");
+      expect(html).toContain("Keine bestätigten Leistungen oder Angebotspreise");
+      expect(html).not.toContain("940");
+      expect(html).not.toContain("Schaumwein");
+      expect(html).not.toContain("Flying Bites");
+    } finally { await app.close(); }
+  });
+
 });

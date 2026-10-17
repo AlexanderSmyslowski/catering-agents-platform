@@ -184,7 +184,24 @@ function isComponentScopedDietarySegment(segment: string, canonical: string): bo
   return dishContextPattern.test(segment) && !globalMenuDietaryScopePattern.test(segment);
 }
 
+
+function isGuestSubsetDietarySegment(segment: string, canonical: string): boolean {
+  if (canonical === "vegan" || canonical === "vegetarian") return false;
+  const pattern = DIETARY_PATTERNS.find(item => item.canonical === canonical);
+  if (!pattern) return false;
+  const match = new RegExp(String.raw`\b[0-9]+\s+(?:gäste|gaeste|personen|teilnehmer)(?:\s+(?:benötigen|benoetigen|brauchen|wünschen|wuenschen|essen|sind|müssen|muessen|bitte)){0,2}\s+(?:${pattern.regex.source})`, "i").exec(segment);
+  if (!match || /\balle\s*$/i.test(segment.slice(0, match.index))) return false;
+  const globalInSameClause = segment.split(/\b(?:und|aber|sowie)\b/i).some(clause =>
+    pattern.regex.test(clause) && (
+      /\b(?:gesamte[nmrs]?|komplette[nmrs]?|durchgehend|vollständig|vollstaendig|ausschließlich|ausschliesslich|alle)\b/i.test(clause)
+      || new RegExp(String.raw`(?:Buffet|Menü|Menu|Catering|Event|Veranstaltung|Essen)\s+(?:muss|soll|sollte|müssen|muessen|sollen)\s+(?:${pattern.regex.source})`, "i").test(clause)
+    )
+  );
+  return !globalInSameClause;
+}
+
 function shouldPromoteDietarySignalToConstraint(segment: string, canonical: string): boolean {
+  if (isGuestSubsetDietarySegment(segment, canonical)) return false;
   if (canonical === "vegan" || canonical === "vegetarian") {
     const diet = canonical === "vegan" ? "vegan(?:e|er|en|es)?" : "(?:vegetarisch(?:e|er|en|es)?|vegetarian)";
     const explicitGlobal = /\b(?:gesamte[nmrs]?|komplett|durchgehend|ausschließlich|ausschliesslich|vollständig|vollstaendig)\b/i.test(segment)
@@ -293,6 +310,17 @@ export function analyzeIntakeText(text: string): IntakeSignals {
       });
     }
 
+    const subsetDietary = DIETARY_PATTERNS.some(pattern => isGuestSubsetDietarySegment(segment, pattern.canonical));
+    if (subsetDietary || /schalenfrucht(?:vermeidung|allergie|frei)?/i.test(segment)) {
+      // A subset request is not a free-from claim for the complete menu.
+      addUniqueString(constraints, `Sonderkost angefragt; separat klären: ${segment}`);
+      addUniqueUncertainty(uncertainties, {
+        field: "productionConstraints",
+        message: "Angefragte Sonderkostfälle benötigen eine gesonderte fachliche Klärung.",
+        severity: "medium",
+        suggestedQuestion: "Welche Maßnahmen und Freigaben gelten für die angefragten Sonderkostfälle?"
+      });
+    }
     const dietary = extractDietarySignals(segment);
     for (const constraint of dietary.confirmed) {
       addUniqueString(extractedFacts, `constraint=${constraint}`);

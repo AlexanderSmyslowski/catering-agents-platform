@@ -611,4 +611,24 @@ describe("production folder export", () => {
     expect(html).toContain("&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;");
     expect(html).not.toContain("<script>");
   });
+  it("keeps recorded special-diet and delivery instructions visible without granting a kitchen approval", () => {
+    const input = fixture();
+    input.spec.event.schedule = [{ label: "Anlieferung", start: "16:30" }, { label: "Buffet", start: "19:00", end: "21:00" }];
+    input.spec.productionConstraints = ["4 Gäste glutenfrei; 3 Schalenfruchtvermeidung – separat klären"];
+    input.spec.menuPlan[0]!.productionDecision = { mode: "scratch", notes: "Sonderkost ungeklärt <script>unsafe</script>" };
+    input.spec.uncertainties = [];
+    const before = JSON.stringify(input);
+    const html = renderProductionFolderHtml({ plan: input.plan, spec: input.spec, recipes: [input.recipe], purchaseLists: [input.purchaseList] });
+    expect(html).toContain("4 Gäste glutenfrei");
+    expect(html).toContain("3 Schalenfruchtvermeidung");
+    expect(html).toContain("Anlieferung: 16:30");
+    expect(html).toContain("Buffet: 19:00–21:00");
+    expect(html).toContain("Vitello Tonnato: Sonderkost ungeklärt");
+    expect(html).toContain("Keine Sonderkost-, Allergen- oder Hygienefreigabe");
+    expect(html).not.toContain("Keine blockierenden Rückfragen");
+    expect(html).toContain("&lt;script&gt;unsafe&lt;/script&gt;");
+    expect(html).not.toContain("<script>");
+    expect(JSON.stringify(input)).toBe(before);
+  });
+
 });

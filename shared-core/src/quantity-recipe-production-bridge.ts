@@ -54,7 +54,7 @@ function validDateTime(value: string): boolean {
 }
 
 function normalizeAmount(value: number): number {
-  return Number(value.toFixed(6));
+  return Number(value.toPrecision(15));
 }
 
 export function evaluateQuantityRecipeProductionBridge(
