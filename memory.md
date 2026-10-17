@@ -1,9 +1,15 @@
 # memory.md
 
-version: 5.435
+version: 5.436
 date: 2026-10-18
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
+
+## Aktueller Produktstand — Version5.436 /18.10.2026
+
+Der konkrete CI-Lifecycle-Defekt ist im bestehenden Observer-Testharness geschlossen: asynchroner eigener POSIX-Prozessverbund statt blockierendem spawnSync, unveränderte180s-/2MiB-Grenzen, live Python-Testnamen und harter begrenzter Abbruch/Drain. Die bestehenden drei Python-Subprozessgrenzen sind auf30s begrenzt; strace -f verwendet zusätzlich das offiziell dokumentierte --kill-on-exit (PTRACE_O_EXITKILL), damit auch getrennte Observer-Helper-Sessions keine offenen Ausgabepipes hinterlassen. Bereits vorhandener CI-Tracer im alten echten Log Version6.8. Parser, Negativkontrolle und fachliche Sicherheitsprüfungen unverändert. Lokaler fokussierter Lauf: zwei Vitestfälle PASS einschließlich echter Nachfahren-/Pipe-Deadline-Regression; darin64 Python-Prüfungen in115,812s PASS. Build PASS, unabhängiger Harness-Review ohne materielle Befunde. Dies ist kein Beweis für die zuerst hängende Linuxoperation; neuer endlicher CI-Lauf muss sie bestätigen oder konkret benennen. Offizielle Quelle: https://github.com/strace/strace/blob/master/doc/strace.1.in . Belege tmp/product-pilot-20261018/observer-bounded-targeted.log und observer-harness-build.log.
+
+Tatsächliches unabhängiges Produktreview mit Modell claude-opus-5-5 über bestehende authentifizierte CLI gestartet. Eigene getrennte Browsersession catering-opus-product-20261018 bedient die lokale synthetische Oberfläche tatsächlich; gemeinsame AgenturOS-Leitlinie gelesen, vorhandener Auftrag/Angebotsexport bereits geöffnet. Keine Vollabnahme behauptet, Review läuft. Kein Zielserverkontakt und keine privaten Angebots-/Rechnungsdaten an das Modell. Gesamtziel ACTIVE; führender vollständiger lokaler Funktionsnachweis bleibt5.417, Nürnberger Betriebs- und reale Fachfreigaben offen.
 
 ## Aktueller Produktstand — 18.10.2026 / Version 5.435
 
@@ -2515,3 +2521,8 @@ Produktcommit 74bdc25, historische Angebotsgrundlagen wiedergefunden, gezielte u
 ### 5.435 — 18.10.2026: vollständiger lokaler synthetischer UI-Ablauf
 
 Neun Rezepte, 49 Zutatenbeiträge, 29 Einkaufspositionen, 55/25/20 und 2 g exakt; Produkt75d9f46, 104 Tests/9 Dateien, Build und unabhängige Prüfung PASS. Lokaler Neustart/CSV/18-Seiten-PDF bestätigt; CI, Opus-Endabnahme und Nürnberg offen.
+
+
+### 5.436 —18.10.2026: endliches Observer-Testharness
+
+Zwei gezielte Vitestfälle und64 Python-Prüfungen/Build PASS, unabhängig geprüft. Linux-CI und tatsächliches Opus-Produktreview weiterlaufend.
