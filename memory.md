@@ -1,9 +1,25 @@
 # memory.md
 
-version: 5.436
+**Korrektur der CI-Deutung, 18.10.2026 01:38 CEST:** Run39079338322 wurde vom Koordinator bei rund sechs Minuten voreilig abgebrochen. Das nun vollständige Log beweist regulären Fortschritt: unter anderem95 Operationsprüfungen in244s PASS; der Observer-Test war noch gar nicht gestartet. Der alte Run39075030417 hatte37 Minuten bis zum Abbruch regulär426 Dateien abgearbeitet; aus der fehlenden Observerausgabe allein ist weder sein Start noch ein tatsächlicher Hänger nachgewiesen. Die frühere Zuschreibung eines konkreten CI-Hängers zum Observer ist zurückgenommen. Das statisch belegte spawnSync-/Nachfahren-/Pipe-Risiko wurde lokal begrenzt und unabhängig geprüft, ist aber kein Nachweis der ursprünglichen CI-Ursache. Keine weitere Linux-Reparatur/Prüfarchitektur ohne Fehlerbeleg. Nach gebündelten tatsächlichen Opus-Produktbefunden einen erforderlichen Gesamt-CI-Lauf mit realistischer Dauer vollständig abwarten; keine manuellen unveränderten Vollsuiten und keine vorschnellen Abbrüche. Alle vier bisherigen CI-Runs sind CANCELLED, kein Full-Suite-PASS. Browser/Compose/macOS des letzten Heads waren PASS. Beleg tmp/product-pilot-20261018/ci-39079338322-build-cancelled.log.
+
+version: 5.437
 date: 2026-10-18
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
+
+## Aktueller Produktstand — Version5.437 /18.10.2026
+
+Vollständiger lokaler synthetischer100-Gäste-Ablauf aus5.417 erhalten: neun Rezepte/Batches,49 Zutatenbeiträge,29 Einkaufspositionen,55/25/20 und2gZimt exakt; CSV und18-seitigeA4-Mappe,Neustartnachweis. Tatsächliche unabhängige Produktprüfung mit Modell claude-opus-5-5 (canonicalModel/provider firstParty belegt) abgeschlossen; Bericht docs/product/OPUS_PRODUKTPRUEFUNG_20261018.md. Opus bediente vorhandenen Auftrag,Preis-/Mengenfehlerfälle,Desktop/Mobil undExporte selbst; Rezeptimporte/13Karten/Approval/Applywurden nur am gespeicherten Ergebnis geprüft, daher kein eigener vollständiger Opus-E2E-PASS.
+
+Drei priorisierte P1-Befunde gezielt in Produktcommit7c67497 repariert und unabhängig angenommen: bestehende gefrorene Sonderkost-/Zeit-/Logistiknotizen in UI/Produktionsplan/Mappe sichtbar; neue quantifizierte Allergen-Teilgruppen als offene Quellanforderung erhalten, globale Menü-/Veganpflichten bleiben vorrangig. Unpublishter unkalkulierter Angebotsexport enthält keine automatischen Paketleistungen und Kataloggesamtpreise; ungeprüfter Kundentext/Arbeitsbetrag wird in der UI nicht als Angebot ausgegeben. Bereits Publish-freigegebene historische Fassungen bleiben im bestehenden Pfad. Mengenpreview trennt bisherigen effektiven Wert von neuem Proportionalwert:55→60Portionen,6,6→7,2kg;15signifikanteStellen ohne gerundeten Zwischenfaktor,2g-Vorwert bleibt erhalten,Deutschkomma möglich. Neue Menge braucht neue Küchenfreigabe; bisher freigegebener Stand bleibt erhalten.
+
+Nachprüfung derselben drei P1 mit tatsächlichem claude-opus-5-5 in eigener BrowserSession catering-opus-p1-20261018: alle drei geschlossen,Session beendet. Kein neues Gesamt-/Pilot-PASS. Opus hat dabei einen weiteren ausdrücklich synthetischen offenen20-Gäste-Testauftrag angelegt; der Satz im Modellbericht „keine Daten geändert“ bezieht sich nicht auf diese Neuanlage. Zwei offene Opus-Testfälle bleiben erhalten,keine falsche Cleanupbehauptung. Originaler100-Gäste-Fall: alle13 Quellartefakte weiterhin bytegleich,9Batches/29Einkauf,0,002kgZimt unverändert nach Preview/Abbrechen. Küchen-PDF vollständig neu gerendert/als18Seiten-Kontaktbogen geprüft;Sonderkost/Anlieferung sichtbar,keine„KeineblockierendenRückfragen“-Scheingrünheit.
+
+Verifikation:61Core-/Serviceprüfungen in8Dateien,2UI-Previewprüfungen,86Kontext-/Preis-/Printprüfungen in9Dateien undnach gezieltenScopekorrekturen45Diet-/Mappeprüfungen in2Dateien PASS (teilweise überlappend,nicht additiv zählen). FinalerBuild/gitdiff--check PASS. Ein unabhängiger Reviewer deckte alle P1-Deltas; zwei konkrete Scopebefunde am Teilgruppenfilter wurden behoben und nur betroffene Korrekturen nachgeprüft. Keine neue Prüf-/Persistenz-/Autharchitektur. Belege im bisherigen ignorierten tmp/product-pilot-20261018/opus-*.log/jsonl,Ausgaben output/pdf.
+
+CI-Korrektur bleibt verbindlich: kein tatsächlicher Observer-Hänger belegt. LetzterRun39079338322 wurde nach6Minuten zu früh abgebrochen;seinLogzeigt95Operationsprüfungen in244s PASS,Observernoch nicht gestartet. Alle bisherigen RunsCANCELLED,keinFull-Suite-PASS. Statisch begrenztes Observer-Testharness aus2951e10 lokal/ unabhängig angenommen; keine weitere Linux-Ursachenbehauptung oder unbewiesene Reparatur. Jetzt einen gebündelten erforderlichen CI-Lauf vollständig mit realistischer Laufzeit abwarten,keineunveränderte lokaleVollsuite oder weitere vorschnelleAbbrüche.
+
+Nächste Produktpriorität nach Integration: wahrheitsgemäßer Übergabestatus unfreigegebener Entwürfe,findbareAuftragsnamen/Suche und fallgebundene Navigation;übrige konkrete P2s stehen im tatsächlichen Opusbericht,keine neueRoadmap. GesamtesAppzielACTIVE. Nürnberger Auslieferung dieses Inkrements, eigener Backup→Restore→Cleanup/Observer und reale Preis-/Steuer-/Küchen-/Allergen-/Lieferanten-/Temperaturfreigaben weiter offen;realerPilotNO-GO. HelsinkiOFFundvollständigerhalten;keineHost-/DNS-/Konto-/ADH-/Löschaktion. Angebotsunterlagen seit2022 sowie2025/2026sind Recherchegrundlage;vollständigerLexware-Rechnungsbestand im verbundenen Postfachweiter nicht nachgewiesen.
 
 ## Aktueller Produktstand — Version5.436 /18.10.2026
 
@@ -2526,3 +2542,8 @@ Neun Rezepte, 49 Zutatenbeiträge, 29 Einkaufspositionen, 55/25/20 und 2 g exakt
 ### 5.436 —18.10.2026: endliches Observer-Testharness
 
 Zwei gezielte Vitestfälle und64 Python-Prüfungen/Build PASS, unabhängig geprüft. Linux-CI und tatsächliches Opus-Produktreview weiterlaufend.
+
+
+### 5.437 —18.10.2026: tatsächliches Opusreview und drei behobene P1
+
+Produkt7c67497;gezielteunabhängigeCode-/Browsernachprüfungangenommen. RealePilot-/Nürnberg-/CIGatesoffen;GesamtzielACTIVE.
