@@ -6,7 +6,7 @@ function escapeHtml(value: string | number): string {
 }
 
 function quantity(value: { amount: number; unit: string } | undefined): string {
-  return value ? `${value.amount.toLocaleString("de-DE", { maximumFractionDigits: 6 })} ${value.unit === "servings" ? "Portionen" : value.unit}` : "offen";
+  return value ? `${value.amount.toLocaleString("de-DE", { maximumSignificantDigits: 15 })} ${value.unit === "servings" ? "Portionen" : value.unit}` : "offen";
 }
 
 export function renderAppliedProductionContext(snapshot?: AppliedProductionSnapshot): string {

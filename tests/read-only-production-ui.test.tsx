@@ -163,6 +163,13 @@ afterEach(() => {
 });
 
 describe("Gate B production read-only UI", () => {
+  it("retains small positive ingredient and purchase amounts in the read-only view", async () => {
+    const plan=productionPlan();plan.kitchenSheets[0]!.ingredients[0]!.quantity={amount:0.000002,unit:"kg"};
+    const purchase=purchaseList();purchase.items[0]!.purchaseQty=0.000002;
+    const container=await renderReader({access:{canOperateProduction:false},productionPlans:[plan] as never,purchaseLists:[purchase] as never});
+    expect(container.textContent?.match(/0,000002 kg/g)).toHaveLength(2);
+  });
+
   it("loads only projected plans and purchase lists for read-only access", async () => {
     const calls: BrowserCall[] = [];
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {

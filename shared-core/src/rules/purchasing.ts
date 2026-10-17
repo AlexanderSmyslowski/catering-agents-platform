@@ -44,10 +44,10 @@ function purchaseUnitFor(amount: number, unit: string): string {
 
 function purchaseQtyFor(amount: number, unit: string): number {
   if (unit === "g" && amount >= 1000) {
-    return Number((amount / 1000).toFixed(5));
+    return Number((amount / 1000).toPrecision(15));
   }
 
-  return Number(amount.toFixed(2));
+  return Number(amount.toPrecision(15));
 }
 
 function normalizePurchaseArticleName(value: string): string {
@@ -74,7 +74,7 @@ function aggregatePurchaseItem(
   aggregate.set(key, {
     ingredientId: existing?.ingredientId ?? item.ingredientId,
     displayName: existing?.displayName ?? item.displayName,
-    normalizedQty: Number(normalizedQty.toFixed(2)),
+    normalizedQty: Number(normalizedQty.toPrecision(15)),
     normalizedUnit: item.normalizedUnit,
     purchaseQty: purchaseQtyFor(normalizedQty, item.normalizedUnit),
     purchaseUnit: purchaseUnitFor(normalizedQty, item.normalizedUnit),

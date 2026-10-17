@@ -47,12 +47,16 @@ function formatUnit(unit: string): string {
   return unit === "servings" ? "Portionen" : unit;
 }
 
+function formatQuantityNumber(value: number): string {
+  return value.toLocaleString("de-DE", { maximumSignificantDigits: 15 });
+}
+
 function formatQuantity(quantity?: { amount: number; unit: string }): string {
   if (!quantity) {
     return "offen";
   }
 
-  return `${formatNumber(quantity.amount)} ${formatUnit(quantity.unit)}`;
+  return `${formatQuantityNumber(quantity.amount)} ${formatUnit(quantity.unit)}`;
 }
 
 function formatMoney(value?: { amount: number; currency: string }): string | undefined {
@@ -291,7 +295,7 @@ function renderSection6(input: RenderProductionFolderInput, recipeById: Map<stri
     const recipe = source.recipeId ? recipeById.get(source.recipeId) : undefined;
     const total = productionQuantityFor("productionQty" in source ? source : undefined, batch);
     const perPerson = pax && total
-      ? `${formatNumber(total.amount / pax)} ${formatUnit(total.unit)} p. P.`
+      ? `${formatQuantityNumber(total.amount / pax)} ${formatUnit(total.unit)} p. P.`
       : "offen";
     const lossFactor = recipe?.scalingRules.defaultLossFactor ?? batch?.lossFactor ?? 1;
     const lossNote = lossFactor > 1 ? `Verlustfaktor ${formatNumber(lossFactor)}` : "";
@@ -402,7 +406,7 @@ function renderSection8(
 
   const content = groups.map(({ group, items }) =>
     `<article class="purchase-group"><h3>${escapeHtml(formatMetroGroupLabel(group))}</h3><table><thead><tr><th>Artikel</th><th>Menge</th><th>Einkaufshinweis</th><th>Verwendung</th></tr></thead><tbody>${items.map((item) =>
-      `<tr><td>${escapeHtml(item.displayName)}</td><td>${escapeHtml(`${formatNumber(item.purchaseQty)} ${item.purchaseUnit}`)}</td><td>${escapeHtml(item.supplierHint ?? "")}</td><td>${escapeHtml(purchaseItemUsage(item, recipeById, spec))}</td></tr>`
+      `<tr><td>${escapeHtml(item.displayName)}</td><td>${escapeHtml(`${formatQuantityNumber(item.purchaseQty)} ${item.purchaseUnit}`)}</td><td>${escapeHtml(item.supplierHint ?? "")}</td><td>${escapeHtml(purchaseItemUsage(item, recipeById, spec))}</td></tr>`
     ).join("")}</tbody></table></article>`
   ).join("");
 

@@ -2,7 +2,8 @@ import type { IngredientLine, ProductionBatch, Quantity, Recipe, RecipeStep } fr
 import { recipeSourceExportMetadataForRecipe } from "../export-source-metadata.js";
 
 function roundQuantity(amount: number): number {
-  return Number(amount.toFixed(2));
+  // Keep small ingredient quantities; fixed decimal places would erase spices in kg.
+  return Number(amount.toPrecision(15));
 }
 
 export interface ScaledRecipeResult {
