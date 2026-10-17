@@ -1,5 +1,9 @@
 HANDOFF_PROMPT.md
 
+## Produktfortsetzung 18.10.2026
+
+Produktcommit 74bdc25: persistierte Angebotskalkulation mit Quellen und expliziter Steuer, unveränderlichen Fassungen, Approval-Sperren und geprüftem UI-Weg bis Handoff/Wiederöffnen. Siehe aktuellen Abschnitt memory.md 5.434 und docs/product/PRODUKTZIEL_CATERING_AGENTS_PLATFORM.md. Hauptcheckout memory.md / Runbook 5.416 führen den tatsächlichen Betriebs-/Migrationsstand; historische Kandidaten unten nicht als Iststand ausführen. Vollständiger 100-Gäste-Produktions-/Einkaufsneulauf, endgültige Opus-5.5-Produktprüfung und eigene Nürnberger Betriebsnachweise bleiben offen.
+
 Ich moechte die Arbeit an CateringOS in einem neuen Chatfenster, mit Hermes Agent oder mit Codex 5.4 mini nahtlos fortsetzen.
 
 Rolle

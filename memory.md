@@ -1,9 +1,27 @@
 # memory.md
 
-version: 5.433
-date: 2026-10-13
+version: 5.434
+date: 2026-10-18
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
+
+## Aktueller Produktstand — 18.10.2026 / Version 5.434
+
+Das aktive Produktziel wird weiterverfolgt. Neuer Produktcommit 74bdc251bda55cb675d10beb1c3f4f7d0a705995 im bestehenden Produktworktree: persistierte Preisaufstellung über bestehende Angebotsrevision, serverseitige exakte Cent-/Steuergruppenrechnung, Speisenpaket für das vollständige Menü plus Personal/Logistik/Zusätze, Quellen und bewusste synthetische Kennzeichnung. Keine Steuer vorbelegt, fehlende Steuer sperrt Approval. Menüänderung invalidiert die Berechnung und verlangt eine neue Kalkulation; alte freigegebene Fassungen bleiben unverändert. Preis-/Steuer-/Allergen-/Hygiene-/Publish-Prüfungen werden nicht automatisch erteilt.
+
+Alexanders Quellenhinweis umgesetzt: vorhandenen App-Transfer angebote_portfolio_2026-06-01 mit Angebotsrechner 0.6.0, Katalog, generischen Referenzrechnungen und Uni-Rahmenvertragsdokumenten ausgewertet. Drive-Zugang bestätigt: Angebotswurzel mit 2022–2026 vorhanden. Diese Bestände sind historische Arbeitsgrundlagen, keine pauschale aktuelle Preis-/Steuerfreigabe. Uni-Personalansatz 42,02 gegenüber späteren 45,55 EUR/h bleibt konkret beleggesteuert offen. Gmail-Zugang commcats.de bestätigt; direkte Senderabfrage versand@belege.lexware.de 2025/2026 auch in:anywhere ohne Treffer, breitere Lexware-/Lexoffice-/Domainabfrage ergibt zwei weitergeleitete Nachrichten. Keine vollständige Rechnungsarchivprüfung behauptet, keine privaten Rohangebote/Rechnungen/Links nach Git oder Opus exportiert.
+
+Wesentliche UI-Ausarbeitung tatsächlich mit claude-opus-5-5 über vorhandene authentifizierte Claude-CLI; Modellkennung im lokalen Ergebnis nachgewiesen. Das war Gestaltungsinput, keine vollständige Opus-Produktabnahme. Gemeinsame AgenturOS-Leitlinie verwendet; Desktop/Mobil im Browser visuell geprüft. Preisabschnitt bei 390px ohne horizontalen Überlauf, Quellen/Prüfvorbehalte sichtbar.
+
+Unabhängige Implementierungs-/Anforderungsprüfung /root/menu_repair_review angenommen, einschließlich drei gezielt geschlossener Befunde: Approval-Sperre nach Menüänderung, strikt typisierte Quellenart, Schutz vor verloren gehenden Editiereingaben. Tatsächlicher Browserbefund zusätzlich repariert: Neufall lädt den gespeicherten Entwurf direkt über explizite weiterhin aktive Fallkennung; veraltete Antworten bleiben verworfen. Druck trennt geplante von tatsächlich bepreisten Leistungen. 239 gezielte Tests in 13 Dateien; zusätzlich 14 Refresh-/Boundarytests und 11 betroffene Druck-/Revisionstests bestanden (teilweise überlappend). Finaler Build nach kleiner reiner Testfixture-Typkorrektur bestanden; keine wiederholte Vollsuite.
+
+Tatsächlicher lokaler synthetischer Browserablauf: Anfrage für 100 Gäste → 55/25/20-Menü → Preisaufstellung speichern → interne Variantenentscheidung → Angebots-HTML/Browser-PDF → Produktionsübergabe mit richtiger Fall-ID → Neustart des eigenen lokalen Stacks → Auftrag aus Historie wiederöffnen. 7.163,20 EUR netto / 1.361,01 EUR ausdrücklich synthetische 19%-Teststeuer / 8.524,21 EUR brutto separat per Decimal bestätigt; zehn eingebettete Kalkulationen identisch. Alle 61 vorherigen JSON-Dateien nach Neustart unverändert; drei zusätzliche reguläre Store-Locktickets, keine Geschäftsdatenänderung. Produktionsentwurf öffnet, verlangt weiterhin Herstellungs-/Kategorie-/Rezeptprüfungen; in diesem lokalen Test noch kein fertiger Produktions-/Einkaufsplan und kein 2g-Zimt-Neulauf. Belege im ignorierten tmp/product-pilot-20261018, visuelle Ausgaben output/playwright. Nur eigener Testbrowser und fünf eigene lokale Dienste beendet/reaped; synthetischer Datenstand erhalten.
+
+Aktuelle Namensbereinigung in e0e0400/d51c0dd: CateringOS in aktuellen README-/Produktziel-/Memory-/Handoff-Passagen; technische IDs und historische Abnahmen erhalten. Öffentlicher Zielabruf liefert erwartetes 401; kein neuer Credentialbedarf oder Livebrandingbeleg abgeleitet.
+
+Nächster ausführbarer Produktschritt: dieses angenommene Kalkulationsinkrement über den bestehenden PR-/CI-Weg integrieren; anschließend vorhandene Rezept-/Herstellungs- und Freigabeschritte im normalen UI am vollständigen 100-Gäste-Fall schließen. Kein Live-Deployment, kein neuer Nürnberg-Praxiserfolg oder abschließendes Opus-Review behauptet. Reale Pilotentscheidung bleibt NO-GO: fachliche Sonderkost-/Allergen-/Lieferanten-/Temperaturfreigaben und eigener Nürnberger Backup→Restore→Cleanup-/Observernachweis offen. Helsinki bleibt OFF und erhalten, Erinnerung unverändert, alle drei Datenbanken/Konten/Dateien erhalten; keine DNS-/Host-/Lösch-/ADH-Aktion.
+
+Führender aktueller Betriebs-/Migrationsstand: Hauptcheckout memory.md und Runbook 5.416; die nachstehenden älteren Entwicklungskandidaten sind historische Vorstufen.
 
 ## Entwicklungskandidat — vollständiger target02-Datenbankvergleich (2026-10-13)
 
@@ -2476,3 +2494,7 @@ Quelle: `8de2e96c8604f12da2ec14c39b187db04dfb61cf`. Der folgende Betriebsbericht
 - Der vorhandene Bootstrapvergleich wird auf `catering_agents`, `catering_agents_pre_cutover_20260920` und `catering_operator_probe_20260919` sowie vollständige Globals erweitert. Version-2-Eingaben verlangen drei getrennte geschützte Archive, ein exaktes Digestmapping, Quellprovenienz, einen eingabengebundenen Vergleichsschlüssel und das angenommene Manifest. Legacy-Ein-DB-Eingaben bleiben geschlossen.
 - Zielkatalog und PG-/Dumpclientversion werden geprüft; nach Lockübernahme werden Eingaben neu validiert. Alle Datenbankbytes werden vor der First-write-Grenze erneut verglichen, Restore-/Writebelege binden Version und vollständigen Vergleich. Nach legitimen Appwrites bleiben Version/Schema/Katalog und Instanz-/Mountbindung maßgeblich, nicht die früheren Dateninhalte.
 - Nur lokaler Entwicklungskandidat mit synthetischen Regressionen. Unabhängige Prüfung, Operationsintegration und neuer gebundener Paketstand stehen separat aus; kein Hostkontakt, Restore, Appstart, DNS-/Jobwrite oder angenommener Release aus diesem Eintrag abgeleitet.
+
+### 5.434 - 2026-10-18 — persistierte Angebotskalkulation und normaler UI-Weg
+
+Produktcommit 74bdc25, historische Angebotsgrundlagen wiedergefunden, gezielte unabhängige Prüfung und lokaler synthetischer Browsernachweis bis Handoff/Neustart/Wiederöffnen. Details und unveränderte Ausschlüsse im aktuellen Produktstand oben; noch keine Release-/Nürnberg-/Pilotabnahme.
