@@ -284,6 +284,7 @@ export interface ProductionRouteAccessData {
 
 export interface WorkspaceRefreshOptions {
   focusedSpecId?: string;
+  focusedOfferCaseId?: string;
 }
 
 const MINI_PILOT_RESULT_STORAGE_KEY = "catering.miniPilotRawResult";
@@ -1313,5 +1314,11 @@ export async function reviseOfferMenu(draftId: string, revision: number, menuPla
   return fetchJson<OfferDraft>(`/api/offers/v1/offers/drafts/${encodeURIComponent(draftId)}/menu`, {
     method: "POST",
     body: JSON.stringify({ revision, menuPlan })
+  });
+}
+
+export async function reviseOfferPricing(draftId: string, revision: number, variantId: string, lines: import("@catering/shared-core").OfferCalculationLineInput[]) {
+  return fetchJson<OfferDraft>("/api/offers/v1/offers/drafts/" + encodeURIComponent(draftId) + "/pricing", {
+    method: "POST", body: JSON.stringify({ revision, variantId, calculation: { lines } })
   });
 }

@@ -216,7 +216,37 @@ export interface ServiceModule {
   notes?: string[];
 }
 
+
+export interface OfferCalculationLineInput {
+  id: string;
+  label: string;
+  category: "food" | "staff" | "logistics" | "equipment" | "drinks" | "other";
+  quantity: string;
+  unit: "guest" | "hour" | "flat" | "piece";
+  unitNetCents: number;
+  taxRateBps?: number;
+  taxReason?: string;
+  zeroPriceReason?: string;
+  sourceKind: "app_transfer" | "operator" | "synthetic";
+  sourceReference: string;
+}
+
+export interface OfferCalculation {
+  version: 1;
+  roundingPolicy: "net-line-tax-group-half-up-v1";
+  guestCount: number;
+  containsSynthetic: boolean;
+  lines: Array<OfferCalculationLineInput & { netCents: number }>;
+  netCents: number;
+  taxGroups: Array<{ rateBps: number; netCents: number; taxCents: number }>;
+  missingTaxLineIds: string[];
+  taxCents?: number;
+  grossCents?: number;
+}
+
 export interface PricingSummary {
+  calculationRequired?: true;
+  calculation?: OfferCalculation;
   subtotal: Money;
   perPerson?: Money;
   notes?: string[];

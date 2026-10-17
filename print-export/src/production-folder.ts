@@ -1,3 +1,4 @@
+import { renderOfferPricingHtml } from "./offer-pricing-html.js";
 import {
   buildProductionClarificationQuestions,
   checkPurchaseCoverage,
@@ -263,8 +264,8 @@ function renderSection5(spec: AcceptedEventSpec): string {
   const budget = spec.budgetContext;
   const priceRows = budget
     ? [
-        row("Speisenpreis pro Person", formatMoney(budget.pricingSummary?.perPerson)),
-        row("Speisenpreis gesamt", formatMoney(budget.pricingSummary?.subtotal)),
+        row(budget.pricingSummary?.calculation ? "Angebot netto je Gast" : "Speisenpreis pro Person", formatMoney(budget.pricingSummary?.perPerson)),
+        row(budget.pricingSummary?.calculation ? "Angebot netto gesamt" : "Speisenpreis gesamt", formatMoney(budget.pricingSummary?.subtotal)),
         row("Zielbudget", formatMoney(budget.targetBudget))
       ].join("")
     : "";
@@ -273,7 +274,7 @@ function renderSection5(spec: AcceptedEventSpec): string {
     row("Personen", spec.attendees.expected ? String(spec.attendees.expected) : "offen"),
     priceRows,
     row("Wirtschaftliche Plausibilität", "manuell zu bewerten — prüfbedürftig")
-  ].join("")}</tbody></table></section>`;
+  ].join("")}</tbody></table>${budget?.pricingSummary ? renderOfferPricingHtml(budget.pricingSummary, false) : ""}</section>`;
 }
 
 function renderSection6(input: RenderProductionFolderInput, recipeById: Map<string, Recipe>): string {

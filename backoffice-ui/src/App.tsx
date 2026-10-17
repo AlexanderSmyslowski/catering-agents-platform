@@ -571,6 +571,9 @@ function ProductWorkspaceView({
   };
 
   const handleHistoryCopy = async (caseId: string) => {
+    if (route === "offer" && offerMenuEditingRef.current) {
+      setError("Bitte Angebotsbearbeitung zuerst speichern oder abbrechen."); return;
+    }
     const copied = route === "offer"
       ? await copyOfferCase(caseId)
       : await copyProductionCase(caseId);
@@ -1203,7 +1206,7 @@ function ProductWorkspaceView({
       setSelectedVariantId(undefined);
       setSelectedDraftId(draftId);
       await refreshDashboard();
-      if (offerFocusRef.current.caseId === activeOfferCaseId) setNotice("Menü als neue Angebotsfassung gespeichert. Bitte erneut prüfen.");
+      if (offerFocusRef.current.caseId === activeOfferCaseId) setNotice("Neue Angebotsfassung gespeichert. Bitte erneut prüfen.");
     },
     setSelectedDraftId,
     selectedVariantId,
@@ -1282,7 +1285,7 @@ function ProductWorkspaceView({
 
   async function runNextAction(action: CaseNextAction): Promise<void> {
     if (route === "offer" && offerMenuEditingRef.current && (action.kind === "approve_offer" || action.kind === "send_handoff")) {
-      setError("Bitte Menübearbeitung zuerst speichern oder abbrechen."); return;
+      setError("Bitte Angebotsbearbeitung zuerst speichern oder abbrechen."); return;
     }
     const focus = (selector: string) => {
       const element = document.querySelector<HTMLElement>(selector);
@@ -1352,6 +1355,9 @@ function ProductWorkspaceView({
         search={historySearch}
         onSearchChange={(value) => void handleHistorySearchChange(value)}
         onOpen={(caseId) => {
+          if (route === "offer" && offerMenuEditingRef.current) {
+            setError("Bitte Angebotsbearbeitung zuerst speichern oder abbrechen."); return;
+          }
           if (route === "offer") {
             setActiveOfferCaseId(caseId);
           } else {

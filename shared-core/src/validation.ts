@@ -1,3 +1,4 @@
+import { validOfferPricingCalculation } from "./offer-calculation.js";
 import { validPurchasedQuantities } from "./purchased-quantities.js";
 import Ajv2020Module from "ajv/dist/2020.js";
 import addFormatsModule from "ajv-formats";
@@ -87,6 +88,8 @@ const ajv = new Ajv2020({
 // Validate the cross-field mapping wherever the shared component schema is embedded.
 ajv.addKeyword({ keyword: "validPurchasedQuantities", type: "object", schemaType: "boolean",
   validate: (_schema: boolean, value: unknown) => validPurchasedQuantities(value), errors: false });
+ajv.addKeyword({ keyword: "validOfferPricingCalculation", type: "object", schemaType: "boolean",
+  validate: (_schema: boolean, value: unknown) => validOfferPricingCalculation(value), errors: false });
 addFormats(ajv);
 for (const schema of schemaBundle) {
   ajv.addSchema(schema);

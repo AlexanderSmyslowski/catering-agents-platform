@@ -1,3 +1,4 @@
+import type { WorkspaceRefreshOptions } from "./api.js";
 import { formatSubmitErrorMessage } from "./submit-error-message.js";
 
 export type OfferTextSubmitActionInput = {
@@ -11,7 +12,7 @@ export type OfferTextSubmitActionInput = {
   setSubmitting: (submitting: boolean) => void;
   clearMessages: () => void;
   setSelectedDraftId: (draftId: string) => void;
-  refreshDashboard: () => Promise<void>;
+  refreshDashboard: (options?: WorkspaceRefreshOptions) => Promise<void>;
   setNotice: (message: string) => void;
   setError: (message: string) => void;
 };
@@ -50,7 +51,7 @@ export function buildOfferTextSubmitAction({
       if (createdDraftId) {
         setSelectedDraftId(createdDraftId);
       }
-      await refreshDashboard();
+      await refreshDashboard({ focusedOfferCaseId: caseId });
       completeOfferRequestId(requestId);
       setNotice("Angebotsentwurf wurde erstellt.");
     } catch (submitError) {

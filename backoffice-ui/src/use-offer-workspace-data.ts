@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   loadOfferProductData,
   type OfferWorkspaceState,
+  type WorkspaceRefreshOptions,
   type ServiceHealthState
 } from "./api.js";
 import { emptyServiceHealthState } from "./app-shell-state.js";
@@ -21,8 +22,10 @@ export function useOfferWorkspaceData(activeCaseId?: string) {
   const loadedCaseId = useRef<string | undefined>(undefined);
   requestedCaseId.current = activeCaseId;
 
-  const refresh = useCallback(async () => {
-    const requestedActiveCaseId = activeCaseId;
+  const refresh = useCallback(async (options?: WorkspaceRefreshOptions) => {
+    // A text submission can create its case after capturing this callback.
+    // Its explicit case must still be active; stale loads never change the view.
+    const requestedActiveCaseId = options?.focusedOfferCaseId ?? activeCaseId;
     if (requestedCaseId.current !== requestedActiveCaseId) {
       return;
     }

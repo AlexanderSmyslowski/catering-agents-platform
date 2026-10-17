@@ -1,3 +1,4 @@
+import { validOfferPricingCalculation } from "./offer-calculation.js";
 import type {
   OfferReviewStatus,
   PricingSummary,
@@ -193,7 +194,8 @@ const validMoney = (value: unknown): boolean => {
 const validPricingSummary = (value: unknown): value is PricingSummary => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const candidate = value as Record<string, unknown>;
-  return Object.keys(candidate).every((key) => key === "subtotal" || key === "perPerson" || key === "notes")
+  return Object.keys(candidate).every((key) => key === "subtotal" || key === "perPerson" || key === "notes" || key === "calculation" || key === "calculationRequired")
+    && validOfferPricingCalculation(candidate)
     && validMoney(candidate.subtotal)
     && (candidate.perPerson === undefined || validMoney(candidate.perPerson))
     && (candidate.notes === undefined || (Array.isArray(candidate.notes) && candidate.notes.every((note) => nonEmpty(note))));
@@ -293,7 +295,16 @@ function issueValidatedEvidenceToken(
   acceptedBy: string,
   acceptedAt: string
 ): ProductionReferenceValidatedEvidence {
+  const calculation = pricingSummary.calculation;
+  const immutableCalculation = calculation ? Object.freeze({
+    ...calculation,
+    lines: Object.freeze(calculation.lines.map(line => Object.freeze({ ...line }))),
+    taxGroups: Object.freeze(calculation.taxGroups.map(group => Object.freeze({ ...group }))),
+    missingTaxLineIds: Object.freeze([...calculation.missingTaxLineIds])
+  }) : undefined;
   const immutablePricingSummary = Object.freeze({
+    ...(pricingSummary.calculationRequired ? { calculationRequired: true } : {}),
+    ...(immutableCalculation ? { calculation: immutableCalculation } : {}),
     subtotal: Object.freeze({ ...pricingSummary.subtotal }),
     ...(pricingSummary.perPerson
       ? { perPerson: Object.freeze({ ...pricingSummary.perPerson }) }

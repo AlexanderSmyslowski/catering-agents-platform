@@ -75,6 +75,7 @@ describe("offer text submit action", () => {
 
     await submitOfferText();
 
+    expect(actionInput.refreshDashboard).toHaveBeenCalledWith({ focusedOfferCaseId: "offer-case-1" });
     expect(actionInput.setError).not.toHaveBeenCalled();
     expect(calls).toEqual([
       "setSubmitting:true",
@@ -95,6 +96,7 @@ describe("offer text submit action", () => {
 
     await submitOfferText();
 
+    expect(actionInput.refreshDashboard).toHaveBeenCalledWith({ focusedOfferCaseId: "offer-case-existing" });
     expect(actionInput.createOfferCase).not.toHaveBeenCalled();
     expect(actionInput.setActiveOfferCaseId).not.toHaveBeenCalled();
     expect(actionInput.createOfferFromText).toHaveBeenCalledWith(

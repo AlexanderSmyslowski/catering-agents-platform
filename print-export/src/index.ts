@@ -1,3 +1,4 @@
+import { renderOfferPricingHtml } from "./offer-pricing-html.js";
 import Fastify from "fastify";
 import { IntakeStore } from "@catering/intake-service";
 import { OfferStore } from "@catering/offer-service";
@@ -226,10 +227,14 @@ export function renderOfferHtml(draft: OfferDraft): string {
       const portions = component.servings === undefined ? "Portionszahl offen" : `${escapeHtml(component.servings)} Portionen`;
       return `<li>${escapeHtml(component.label)}: ${portions}${dietary ? ` · ${escapeHtml(dietary)}` : ""}</li>`;
     }),
+    ...(draft.pricingSummary.calculation
+      ? ["</ul><h2>Weitere Leistungsplanung · Umfang prüfen</h2><p>Diese Planung ist kein Nachweis enthaltener Leistungen. Maßgeblich sind die erfassten Preispositionen; Abweichungen vor Freigabe klären.</p><ul>"]
+      : []),
     ...draft.serviceModules.filter(module => module.category !== "food" || !draft.proposedEventSpec.menuPlan?.length)
       .map((module) => `<li>${escapeHtml(module.label)}</li>`),
     "</ul>",
-    `<p>Gesamt: ${draft.pricingSummary.subtotal.amount.toFixed(2)} ${escapeHtml(draft.pricingSummary.subtotal.currency)}</p>`,
+    ...(!draft.pricingSummary.calculation ? [`<p>Gesamt: ${draft.pricingSummary.subtotal.amount.toFixed(2)} ${escapeHtml(draft.pricingSummary.subtotal.currency)}</p>`] : []),
+    renderOfferPricingHtml(draft.pricingSummary, !publishApproved),
     ...reviewStatusSection,
     ...customerTextSection,
     "</body></html>"

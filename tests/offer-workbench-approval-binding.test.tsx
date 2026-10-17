@@ -150,6 +150,29 @@ function ApprovalBindingHarness() {
 
 describe("offer workbench approval binding", () => {
 
+  it("keeps the focused draft and pending pricing inputs until saving or discarding", async () => {
+    const setSelectedDraftId = vi.fn();
+    const root = createRoot(document.body.appendChild(document.createElement("div")));
+    await act(async () => root.render(createElement(OfferConversationalWorkbench, props({
+      onMenuSaved: async () => undefined, setSelectedDraftId
+    }))));
+    const begin = Array.from(document.querySelectorAll("button")).find(button => button.textContent === "Preisaufstellung erfassen");
+    expect(begin).toBeDefined();
+    await act(async () => begin?.click());
+    const otherDraft = Array.from(document.querySelectorAll("button")).find(button => button.querySelector("strong")?.textContent === "Angebot B");
+    expect(otherDraft?.disabled).toBe(true);
+    await act(async () => otherDraft?.click());
+    expect(setSelectedDraftId).not.toHaveBeenCalled();
+    const newDraft = Array.from(document.querySelectorAll("button")).find(button => button.textContent === "Entwurf aus Text erstellen");
+    expect(newDraft?.disabled).toBe(true);
+    expect(document.body.textContent).toContain("Vor dem Export Änderungen speichern oder verwerfen.");
+    const discard = Array.from(document.querySelectorAll("button")).find(button => button.textContent === "Verwerfen");
+    await act(async () => discard?.click());
+    expect(otherDraft?.disabled).toBe(false);
+    await act(async () => root.unmount());
+  });
+
+
   it("resolves a persisted handoff before reopening production instead of navigating with only a draft ID", async () => {
     const openProductionHandoff = vi.fn(async (_handoffId: string) => undefined);
     const binding = buildOfferApprovalBinding(

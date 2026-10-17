@@ -273,10 +273,13 @@ export const commonSchema = {
       }
     },
     pricingSummary: {
+      validOfferPricingCalculation: true,
       type: "object",
       additionalProperties: false,
       required: ["subtotal"],
       properties: {
+        calculationRequired: { const: true },
+        calculation: { type: "object" },
         subtotal: { $ref: "#/$defs/money" },
         perPerson: { $ref: "#/$defs/money" },
         notes: {

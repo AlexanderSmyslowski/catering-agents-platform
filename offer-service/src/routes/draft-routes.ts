@@ -1,3 +1,4 @@
+import { reviseOfferPricing } from "../offer-pricing-revision.js";
 import { createHash } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import {
@@ -398,17 +399,27 @@ export function registerOfferDraftRoutes(
         });
         if (new Set(menuPlan.map((item) => item.componentId)).size !== menuPlan.length) throw new Error("Doppelte Menüposition.");
         const draftId = `draft-menu-${createHash("sha256").update(JSON.stringify([actor.businessId, caseId, source.draftId, source.revision, menuPlan])).digest("hex")}`;
-        const proposedEventSpec = { ...source.proposedEventSpec, menuPlan };
+        // A menu revision keeps the old quote as history, never as a priced
+        // statement about the changed menu. The existing amount is only a working reference.
+        const withoutCalculation = (summary: typeof source.pricingSummary) => {
+          const { calculation: _oldCalculation, ...working } = summary;
+          return { ...working, ...(_oldCalculation || working.calculationRequired ? { calculationRequired: true as const } : {}),
+            notes: [...(working.notes ?? []), "Preisaufstellung nach Menüänderung erneut erfassen und prüfen."] };
+        };
+        const pricingSummary = withoutCalculation(source.pricingSummary);
+        const proposedEventSpec = { ...source.proposedEventSpec, menuPlan,
+          budgetContext: { ...source.proposedEventSpec.budgetContext, pricingSummary } };
         const serviceModules = [
           ...menuPlan.map((item) => ({ moduleId: item.componentId, label: item.label, category: "food", quantity: item.servings })),
           ...source.serviceModules.filter((item) => item.category !== "food")
         ];
         revised = validateOfferDraft({
-          ...source, draftId, revision: 1, proposedEventSpec, serviceModules,
+          ...source, draftId, revision: 1, proposedEventSpec, serviceModules, pricingSummary,
           variantSet: source.variantSet.map((variant) => ({
             ...variant,
             moduleIds: serviceModules.map((item) => item.moduleId),
-            proposedEventSpec: { ...variant.proposedEventSpec, menuPlan, servicePlan: { ...variant.proposedEventSpec.servicePlan, modules: serviceModules } }
+            proposedEventSpec: { ...variant.proposedEventSpec, menuPlan, servicePlan: { ...variant.proposedEventSpec.servicePlan, modules: serviceModules },
+              budgetContext: { ...variant.proposedEventSpec.budgetContext, pricingSummary: withoutCalculation(variant.proposedEventSpec.budgetContext?.pricingSummary ?? source.pricingSummary) } }
           })),
           customerFacingText: [
             source.eventSummary, "Menü und Portionszahlen:",
@@ -429,6 +440,44 @@ export function registerOfferDraftRoutes(
         action: "offer.menu_revised", entityType: "OfferDraft", entityId: revised.draftId, actor,
         idempotencyKey: `menu-revised:${revised.draftId}`, summary: "Menü als neue Angebotsfassung gespeichert.",
         details: { sourceDraftId: source.draftId, sourceRevision: source.revision, caseId, menuItems: revised.proposedEventSpec.menuPlan.length }
+      });
+      return reply.code(201).send(revised);
+    }
+  );
+
+  app.post<{ Params: { draftId: string }; Body: { revision?: unknown; variantId?: unknown; calculation?: unknown } }>(
+    "/v1/offers/drafts/:draftId/pricing", async (request, reply) => {
+      const forbidden = requireOfferOperator(request, reply, trustedActorSecret, allowDevActorHeader);
+      if (forbidden) return forbidden;
+      const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+      const source = await store.getDraft(actor, request.params.draftId);
+      if (!source) return reply.code(404).send({ message: "Angebotsentwurf nicht gefunden." });
+      if (sourceDocumentReader && !source.sourceAcceptedEventSpecSnapshot) {
+        return reply.code(409).send({ message: "Für diese ältere Fassung fehlt der gespeicherte Anfrageursprung. Bitte die Originalanfrage im selben Auftrag als neue Textfassung erfassen." });
+      }
+      const body = request.body;
+      if (!body || typeof body !== "object" || Array.isArray(body)
+        || Object.keys(body).some(key => !["revision", "variantId", "calculation"].includes(key))
+        || !Number.isInteger(body.revision) || body.revision !== source.revision
+        || typeof body.variantId !== "string") {
+        return reply.code(422).send({ message: "Aktuelle Revision, gewählte Variante und Preisaufstellung erforderlich." });
+      }
+      const caseId = await store.findCaseIdForDraft(actor, source.draftId, source.revision);
+      if (!caseId) return reply.code(409).send({ message: "Entwurf ist keinem eindeutigen Auftrag zugeordnet." });
+      let revised;
+      try {
+        revised = reviseOfferPricing(source, caseId, body.variantId, body.calculation);
+      } catch (cause) {
+        return reply.code(422).send({ message: cause instanceof Error ? cause.message : "Preisaufstellung ungültig." });
+      }
+      const result = await store.saveDraftForCase(actor, caseId, revised, [], { draftId: source.draftId, revision: source.revision });
+      if (result !== "saved") return reply.code(409).send({ message: "Der Auftrag wurde inzwischen bearbeitet. Ihre Eingaben bleiben erhalten; bitte aktuelle Fassung öffnen." });
+      await auditLog.logFor(actor, {
+        action: "offer.pricing_revised", entityType: "OfferDraft", entityId: revised.draftId, actor,
+        idempotencyKey: "pricing-revised:" + revised.draftId, summary: "Preisaufstellung als neue Angebotsfassung gespeichert.",
+        details: { sourceDraftId: source.draftId, sourceRevision: source.revision, caseId, variantId: body.variantId,
+          containsSynthetic: revised.pricingSummary.calculation!.containsSynthetic,
+          taxComplete: revised.pricingSummary.calculation!.grossCents !== undefined }
       });
       return reply.code(201).send(revised);
     }
