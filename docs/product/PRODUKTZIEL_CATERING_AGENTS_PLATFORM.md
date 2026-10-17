@@ -1,4 +1,4 @@
-# PRODUKTZIEL_CATERING_AGENTS_PLATFORM.md
+# Produktziel CateringOS
 
 ## Verbindliches Arbeitsziel — 18.10.2026: intern nutzbarer CateringOS-Pilot
 
@@ -31,7 +31,7 @@ Alexander hat die weitere Arbeit am eigentlichen Produkt und ein autonom verfolg
 
 ## Zweck
 
-Dieses Dokument beschreibt das eigentliche Ziel der Catering Agents Platform in knapper, pruefbarer Form.
+Dieses Dokument beschreibt das eigentliche Ziel der CateringOS in knapper, pruefbarer Form.
 
 Es dient als Zielanker fuer Codex-/Hermes-Reviews, Produktentscheidungen, Scope-Kontrolle und weitere kleine Umsetzungsslices. Es ersetzt nicht `memory.md`, `README.md` oder die Detaildokumente, sondern fasst die Zielrichtung zusammen.
 
@@ -53,7 +53,7 @@ Der aktuelle Zielbetrieb ist ein kontrollierter interner MVP-/Beta-Korridor. Ext
 
 ## Produktziel
 
-Die Catering Agents Platform soll den operativen Catering-Prozess schrittweise entlasten:
+Die CateringOS soll den operativen Catering-Prozess schrittweise entlasten:
 
 - Catering-Anfragen und Dokumente werden erfasst und in strukturierte Event-Spezifikationen ueberfuehrt.
 - Der Angebotsagent unterstuetzt Angebotsentwurf, Varianten, Uebergabe und Angebots-HTML-Export.

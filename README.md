@@ -1,4 +1,4 @@
-# Catering Agents Platform
+# CateringOS
 
 MVP-Monorepo fuer eine interne Catering-Plattform mit zwei spezialisierten Agenten: Angebotsagent fuer Angebotserstellung und Produktionsagent fuer Rezepte, Produktionsplanung und Einkaufslisten.
 
