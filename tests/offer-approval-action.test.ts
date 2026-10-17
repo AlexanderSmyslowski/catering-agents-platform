@@ -30,7 +30,7 @@ describe("offer approval action", () => {
         handoffId?: string;
         productionDraftId?: string;
       }) => calls.push(`binding:${JSON.stringify(binding)}`),
-      openProductionEntry: (draftId: string) => calls.push(`open:${draftId}`),
+      openProductionEntry: (draftId: string, productionCaseId?: string) => calls.push(`open:${draftId}:${productionCaseId}`),
       setSubmitting: () => undefined,
       clearMessages: () => undefined,
       refreshDashboard: async () => undefined,
@@ -64,7 +64,7 @@ describe("offer approval action", () => {
       "production:production-case-1:handoff-1",
       'binding:{"offerDraftId":"draft-1","offerDraftRevision":2,"approvedOfferId":"offer-1","handoffId":"handoff-1","productionDraftId":"production-draft-1"}',
       "clear-offer-case",
-      "open:production-draft-1"
+      "open:production-draft-1:production-case-1"
     ]);
   });
 

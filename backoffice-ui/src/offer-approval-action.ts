@@ -72,7 +72,7 @@ export type OfferApprovalActionInput = {
   setNotice: (message: string) => void;
   setError: (message: string) => void;
   setApprovalBinding?: (binding: OfferApprovalBinding) => void;
-  openProductionEntry: (draftId: string) => void;
+  openProductionEntry: (draftId: string, productionCaseId?: string) => void;
 };
 
 export function buildOfferApprovalAction(input: OfferApprovalActionInput) {
@@ -112,7 +112,7 @@ export function buildOfferApprovalAction(input: OfferApprovalActionInput) {
       });
       input.clearActiveOfferCaseId();
       input.setNotice("Freigegebenes Angebot wurde an die Produktion übergeben.");
-      input.openProductionEntry(productionResult.draft.draftId);
+      input.openProductionEntry(productionResult.draft.draftId, productionCase.case.caseId);
     }, "Produktionsübergabe konnte nicht erstellt werden.")
   };
 }

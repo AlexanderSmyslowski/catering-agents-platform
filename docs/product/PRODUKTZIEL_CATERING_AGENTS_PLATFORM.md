@@ -1,5 +1,32 @@
 # PRODUKTZIEL_CATERING_AGENTS_PLATFORM.md
 
+## Verbindliches Arbeitsziel — 18.10.2026: intern nutzbarer CateringOS-Pilot
+
+Alexander hat die weitere Arbeit am eigentlichen Produkt und ein autonom verfolgbares Ziel ausdrücklich beauftragt. Der vorhandene Nürnberger Stand 5.413 wird übernommen. Dieses konkrete Arbeitsziel setzt das bestehende Pflichtenheft für den nächsten nutzbaren Stand um; dessen Produktgrenzen bleiben erhalten.
+
+**Ziel:** Ein berechtigter Mitarbeiter kann einen Cateringauftrag in der normalen Oberfläche von der Anfrage über ein nachvollziehbar kalkuliertes und bearbeitbares Angebot bis zu freigegebenen Produktions-, Rezept-, Einkaufs- und Druckunterlagen führen. Dafür ist keine Terminal-/API-Handarbeit im Fachablauf nötig.
+
+**Nachweis der Zielerreichung:** Der vorhandene 100-Gäste-Referenzauftrag wird als neue dauerhafte Fassung mit 55/25/20 Hauptgerichten, vollständigem Menü und 2 g Zimt regulär in der App verarbeitet. Speichern, Wiederöffnen, Änderungen, Freigaben, Produktionsübergabe und Exporte stimmen überein. Preisbestandteile einschließlich Personal/Logistik sowie Netto/Steuer/Brutto sind nachvollziehbar; fehlende Belege werden sichtbar als offen behandelt und sperren eine fachliche Freigabe. Küchenunterlagen enthalten die tatsächlich benötigten Mengen, Zubereitung, Zeit-/Logistikangaben, Ernährungs-/Allergenhinweise und nachvollziehbare offene Sonderkostprüfungen. Reale Küchen-/Lieferantenfreigaben werden vom Menschen bestätigt.
+
+**Arbeitsreihenfolge, keine neue Architektur-Roadmap:**
+1. Vorhandenen Produktstand stabilisieren: ausgelieferte Fixes in den führenden Code-/CI-Weg übernehmen; die im echten Test belegten Übergabe-/Statusprobleme schließen und einen brauchbaren Bürozugang über die bestehende Rollenverwaltung klären.
+2. Bestehende Angebots-/Kalkulationsfunktionen bis zu einer prüfbaren Leistungs- und Preisaufstellung schließen. Nur belegte Unternehmenspreise oder bewusst eingegebene Testannahmen verwenden; keine Preise, Steuersätze, Margen oder Freigaben erfinden.
+3. Bestehende Rezept-/Produktions-/Einkaufswege auf tatsächlich nutzbare Büro- und Küchenunterlagen ausrichten und den Referenzauftrag dauerhaft im Backoffice abschließen.
+4. Vor realem Pilotbetrieb die noch offenen Nürnberger Backup→Restore→Cleanup-/Monitoringnachweise und die menschlichen fachlichen Freigaben schließen; anschließend belastbar über Pilot-GO entscheiden.
+
+**Verbindliche unabhängige Produktabnahme mit Opus 5.5:** Nach dem umgesetzten nutzbaren Produktstand lässt Alexander ausdrücklich Opus 5.5 Funktionalität, UX und UI auf Herz und Nieren prüfen. Das Review muss den vollständigen Referenzauftrag und relevante Änderungen/Fehlerfälle in der tatsächlichen Oberfläche sowie Küchen-/Einkaufs-/Angebotsdruck beurteilen. Erwartet werden reproduzierbare Befunde nach Alltagsauswirkung, belegte Mengen-/Preis-/Freigabekonsistenz, Verständlichkeit für Büro/Küche und eine ehrliche Pilotempfehlung. Kein bloßes Code- oder Screenshotreview als vollständiger Praxistest ausgeben. Nur synthetische Testdaten und berechtigte Testzugänge; keine Secrets oder echten Kundenbestände an den Reviewer weitergeben. Tatsächliche Modellkennung claude-opus-5-5 nachweisen; bei Zugangs-/Toolgrenzen genau diese benennen und keine Ersatzmodell-Abnahme behaupten. Materielle Befunde im beauftragten Umfang beheben und gezielt nachprüfen.
+
+**Helsinki-Kostenentscheidung nach Abnahme:** Auf Alexanders ausdrücklichen Wunsch ist die stündliche, rein lesende Erinnerung cateringos-helsinki-kosten-nach-produktabnahme-beenden aktiv. Bei unverändertem Stand bleibt sie still. Sie legt nach erfolgreichem Produktablauf, tatsächlicher Opus-5.5-Abnahme und eigenständigem Nürnberger Backup-/Restore-/Cleanup-Nachweis die konkrete Löschentscheidung vor. Helsinki ist bereits ausgeschaltet, aber weiter kostenpflichtig; eine endgültige Löschung einschließlich separat berechneter entbehrlicher Ressourcen braucht eine konkrete gesonderte Freigabe. Sicherungen aller drei Datenbanken, Konten, erforderlichen Dateien und der unabhängige Wiederherstellungs-/Rückfallweg bleiben erhalten. Die Erinnerung führt keinerlei Betriebs- oder Löschaktion aus. Offizielle Abrechnungsgrundlage: https://docs.hetzner.com/cloud/billing/faq/
+
+**Autonom ausführbar:** Code lesen/verbessern, relevante Regressionen/Builds, sichere lokale Tests mit synthetischen Daten, unabhängige Prüfung wesentlicher Änderungen, konkrete Integrations-/Releasevorbereitung und Fortschrittsführung in diesen bestehenden Projektdateien. Aktuelle Nutzerfreigaben und strengere Release-/Betriebsvorgaben bleiben maßgeblich. Menschliche Anmeldung, echte Unternehmens-/Preis-/Küchenfestlegungen und fehlende externe Ausführungsbefugnis gezielt anfragen; unabhängige Arbeiten weiterführen.
+
+**Erhaltungsgrenzen:** Alle drei Datenbanken, Konten, erforderlichen Dateien und historischen Freigaben erhalten. Keine Änderung echter Kundenaufträge, keine neue Persistenz-/Auth-/Prüfplattform, keine ADH-Reaktivierung, keine fremden Locks, keine Helsinki-Löschung oder neue DNS- oder Änderungen fremder Projekte. Synthetische Testergebnisse sind keine echte Küchenfreigabe.
+
+**Aktueller Fortschritt:** Codebasis a26430d, neuer Branch codex/catering-product-pilot-20261018 im vorhandenen isolierten Produktworktree. Die fehlende productionCaseId bei der normalen Angebotsübergabe ist gezielt repariert: Die Navigation verwendet die bereits vom Server zurückgegebene Fallkennung. Regression vor der Korrektur reproduziert; 20 gezielte Tests in vier Dateien und Build bestanden, unabhängige Prüfung ohne materielle Befunde angenommen. Noch nicht auf Nürnberg ausgeliefert. Der gesonderte Wiederöffnen-Link bleibt offen. Kalkulation derzeit nur Katalog-/Paketarbeitsband; belastbare Einzelkalkulation, dauerhafte Zugangszuordnung und echte fachliche Nachweise offen. Vorhandene Claude-Code-Anmeldung und frühere tatsächliche Modellkennung claude-opus-5-5 sind lokal bestätigt; ein neues Produktreview wurde noch nicht ausgeführt.
+
+**Zielverwaltung:** Die technische Neuanlage eines App-Ziels wurde abgewiesen, weil das ältere Migrationsziel im Chat noch pausiert ist. Dieses wird wegen offener Betriebsnachweise nicht als vollständig erreicht markiert. Bis zur Klärung bleibt diese Datei der führende Produktzielanker; kein neues App-Ziel oder automatischer Hintergrundlauf wird behauptet.
+
+
 ## Zweck
 
 Dieses Dokument beschreibt das eigentliche Ziel der Catering Agents Platform in knapper, pruefbarer Form.
