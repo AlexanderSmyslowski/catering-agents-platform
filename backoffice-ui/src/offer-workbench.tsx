@@ -1,7 +1,6 @@
 import { OfferMenuEditor } from "./offer-menu-editor.js";
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { offerExportUrl, type IntakeDocumentChannel } from "./api.js";
-import { productionDraftEntryUrl } from "./production-entry-focus.js";
 import { MiniPilotCheckPanel } from "./mini-pilot-check-panel.js";
 import type { MiniPilotCheckReportState } from "./mini-pilot-check-report-state.js";
 import { shouldShowMiniPilotPanel } from "./mini-pilot-panel-gate.js";
@@ -79,6 +78,7 @@ export type OfferWorkbenchProps = {
   onMenuEditingChange?: (editing: boolean) => void;
   onMenuSaved?: (draftId: string) => Promise<void>;
   approvalBinding?: OfferApprovalBinding;
+  openProductionHandoff?: (handoffId: string) => Promise<void>;
   createHandoff?: (offerDraftId: string, offerDraftRevision: number, approvedOfferId: string) => Promise<void>;
   filteredSpecs: Array<Record<string, unknown>>;
   activeSpec?: Record<string, unknown>;
@@ -202,6 +202,7 @@ export function OfferConversationalWorkbench({
   setSelectedVariantId = () => undefined,
   approveDraft,
   approvalBinding,
+  openProductionHandoff,
   onMenuSaved,
   onMenuEditingChange,
   createHandoff,
@@ -227,6 +228,7 @@ export function OfferConversationalWorkbench({
     && approvalBinding.offerDraftRevision === focusedDraftRevision
     ? approvalBinding
     : undefined;
+  const focusedHandoffId = focusedApprovalBinding?.handoffId;
   const focusedDraftLabel = renderDraftFocusLabel(focusedDraft);
   const focusedDraftSpec = getDraftProposedSpec(focusedDraft);
   const focusedDraftSource = formatDraftSourceLineage(focusedDraftSpec);
@@ -505,10 +507,14 @@ export function OfferConversationalWorkbench({
                     An Produktion übergeben
                   </button>
                 ) : null}
-                {focusedApprovalBinding?.productionDraftId ? (
-                  <a className="ghost-link" href={productionDraftEntryUrl(focusedApprovalBinding.productionDraftId)}>
+                {focusedHandoffId && openProductionHandoff ? (
+                  <button
+                    className="secondary-button"
+                    disabled={submitting || editingMenu}
+                    onClick={() => void openProductionHandoff(focusedHandoffId)}
+                  >
                     Produktionsentwurf öffnen
-                  </a>
+                  </button>
                 ) : null}
               </div>
               <details className="nested-details">

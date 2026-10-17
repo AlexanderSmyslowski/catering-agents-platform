@@ -70,6 +70,7 @@ export function buildAppOfferRouteState(input: AppOfferRouteStateInput): AppOffe
       setSelectedVariantId: input.setSelectedVariantId,
       approveDraft: input.approveDraft,
       approvalBinding: input.approvalBinding,
+      openProductionHandoff: input.openProductionHandoff,
       onMenuSaved: input.onMenuSaved,
       onMenuEditingChange: input.onMenuEditingChange,
       createHandoff: input.createHandoff,

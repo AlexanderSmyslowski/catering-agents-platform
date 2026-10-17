@@ -244,6 +244,7 @@ export type ProductWorkspaceNextActionContext = {
   activeOfferDraft?: OfferDraft;
   openProductionEntry?: (draftId: string, productionCaseId?: string) => void;
   resolveProductionCaseFromHandoff?: (handoffId: string) => Promise<{ caseId: string }>;
+  isCurrentOfferContext?: () => boolean;
   setSelectedDraftId?: (draftId: string) => void;
   decideProductionDraft?: (draftId: string, decision: "approved" | "rejected") => Promise<unknown>;
   reviseProductionDraft?: (draftId: string) => Promise<unknown>;
@@ -317,7 +318,14 @@ export async function runProductWorkspaceNextAction(
       if (!input.resolveProductionCaseFromHandoff) {
         throw new Error("Produktionsfall der Übergabe konnte nicht aufgelöst werden.");
       }
-      const productionCase = await input.resolveProductionCaseFromHandoff(action.handoffId);
+      let productionCase: { caseId: string };
+      try {
+        productionCase = await input.resolveProductionCaseFromHandoff(action.handoffId);
+      } catch (cause) {
+        if (input.isCurrentOfferContext?.() === false) return;
+        throw cause;
+      }
+      if (input.isCurrentOfferContext?.() === false) return;
       input.setNotice(`Übergabe ${action.handoffId} wurde geöffnet.`);
       input.openProductionEntry?.(productionDraftIdForHandoff(action.handoffId), productionCase.caseId);
       return;
@@ -469,6 +477,15 @@ function ProductWorkspaceView({
     : undefined;
   const effectiveOfferApprovalBinding = currentOfferApprovalBinding ??
     (persistedApprovalDataPresent ? undefined : localBindingForCurrentDraft);
+  const offerActionContextKey = JSON.stringify([
+    activeOfferCaseId, activeOfferDraftId, selectedDraftId,
+    effectiveOfferApprovalBinding?.offerDraftRevision,
+    effectiveOfferApprovalBinding?.approvedOfferId, effectiveOfferApprovalBinding?.handoffId
+  ]);
+  const offerActionContextRef = useRef({ key: offerActionContextKey, generation: 0 });
+  if (offerActionContextRef.current.key !== offerActionContextKey) {
+    offerActionContextRef.current = { key: offerActionContextKey, generation: offerActionContextRef.current.generation + 1 };
+  }
   const approvalBindingState = route === "offer"
     ? currentOfferApprovalBinding
       ? "valid"
@@ -1175,6 +1192,10 @@ function ProductWorkspaceView({
      activeDraft: activeOfferDraft ? buildRecordView(activeOfferDraft) : undefined,
      selectedDraft: selectedDraft ? buildRecordView(selectedDraft) : undefined,
     approvalBinding: effectiveOfferApprovalBinding,
+    openProductionHandoff: async (handoffId) => {
+      await runNextAction({ kind: "inspect_handoff", label: "Übergabe öffnen", handoffId })
+        .catch((cause) => setError(formatSubmitErrorMessage(cause, "Produktionsentwurf konnte nicht geöffnet werden.")));
+    },
     onMenuEditingChange: (editing) => { offerMenuEditingRef.current = editing; setOfferMenuEditing(editing); },
     onMenuSaved: async (draftId) => {
       if (offerFocusRef.current.caseId !== activeOfferCaseId || offerFocusRef.current.draftId !== activeOfferDraftId) return;
@@ -1276,6 +1297,7 @@ function ProductWorkspaceView({
       action.kind === "apply_approved" ||
       (action.kind === "request_revision" && route === "production");
 
+    const offerActionGeneration = offerActionContextRef.current.generation;
     await nextActionRunner.run(mutating, async () => {
       await runProductWorkspaceNextAction({
         route,
@@ -1285,6 +1307,7 @@ function ProductWorkspaceView({
         activeOfferDraft,
         openProductionEntry: openProductionDraftEntry,
         resolveProductionCaseFromHandoff,
+        isCurrentOfferContext: () => offerActionContextRef.current.generation === offerActionGeneration,
         setSelectedDraftId,
         decideProductionDraft,
         reviseProductionDraft,

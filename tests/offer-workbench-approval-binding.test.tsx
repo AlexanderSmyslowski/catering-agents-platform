@@ -9,6 +9,7 @@ import {
 } from "../backoffice-ui/src/offer-workbench.js";
 import {
   buildOfferApprovalAction,
+  buildOfferApprovalBinding,
   type OfferApprovalBinding
 } from "../backoffice-ui/src/offer-approval-action.js";
 
@@ -72,6 +73,7 @@ function props(overrides: Partial<OfferWorkbenchProps> = {}): OfferWorkbenchProp
     setSelectedDraftId: () => undefined,
     approveDraft: async () => undefined,
     createHandoff: async () => undefined,
+    openProductionHandoff: async () => undefined,
     filteredSpecs: [],
     activeSpec: draftA.proposedEventSpec,
     completeSpecCount: 1,
@@ -147,6 +149,46 @@ function ApprovalBindingHarness() {
 }
 
 describe("offer workbench approval binding", () => {
+
+  it("resolves a persisted handoff before reopening production instead of navigating with only a draft ID", async () => {
+    const openProductionHandoff = vi.fn(async (_handoffId: string) => undefined);
+    const binding = buildOfferApprovalBinding(
+      { approvedOfferId: "approved-a", sourceDraft: { draftId: "draft-a", revision: 1 } },
+      { handoffId: "handoff-a", approvedOfferId: "approved-a", source: { draftId: "draft-a", revision: 1, selectedVariantId: "classic" } }
+    );
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(createElement(OfferConversationalWorkbench, props({ approvalBinding: binding, openProductionHandoff })));
+    });
+
+    const openButton = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent === "Produktionsentwurf öffnen"
+    );
+    expect(openButton).toBeDefined();
+    expect(container.querySelector('a[href*="productionDraftId="]')).toBeNull();
+
+    await act(async () => {
+      openButton?.click();
+      await flushPromises();
+    });
+    expect(openProductionHandoff).toHaveBeenCalledExactlyOnceWith("handoff-a");
+
+    await act(async () => {
+      root.render(createElement(OfferConversationalWorkbench, props({ approvalBinding: binding, openProductionHandoff, submitting: true })));
+    });
+    const busyButton = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent === "Produktionsentwurf öffnen"
+    );
+    expect(busyButton?.disabled).toBe(true);
+    await act(async () => busyButton?.click());
+    expect(openProductionHandoff).toHaveBeenCalledTimes(1);
+
+    await act(async () => root.unmount());
+  });
+
   it.each(["", " \n\t "])(
     "disables text draft creation for blank offer input while keeping meaningful text available",
     (offerText) => {
@@ -187,7 +229,7 @@ describe("offer workbench approval binding", () => {
       handoffButton?.click();
       await flushPromises();
     });
-    expect(Array.from(document.querySelectorAll("a")).some((link) =>
+    expect(Array.from(document.querySelectorAll("button")).some((link) =>
       link.textContent === "Produktionsentwurf öffnen"
     )).toBe(true);
 
@@ -201,7 +243,7 @@ describe("offer workbench approval binding", () => {
     expect(Array.from(document.querySelectorAll("button")).some((button) =>
       button.textContent === "An Produktion übergeben"
     )).toBe(false);
-    expect(Array.from(document.querySelectorAll("a")).some((link) =>
+    expect(Array.from(document.querySelectorAll("button")).some((link) =>
       link.textContent === "Produktionsentwurf öffnen"
     )).toBe(false);
     expect(document.body.textContent ?? "").not.toContain("approved-a");

@@ -12,6 +12,10 @@ Interne Catering-Operatoren, Angebotsbearbeiter und Produktionsverantwortliche. 
 
 Das Backoffice führt von Angebot oder Produktionsquelle zu prüfbaren Entwürfen, Rückfragen, Produktionsplanung und Exporten. Erfolg heißt: Der Einstieg ist klar, KI-Ergebnisse bleiben draft-only und überprüfbar, und die Oberfläche führt zum nächsten sinnvollen Arbeitsschritt statt interne Datenstrukturen zu zeigen.
 
+## Gemeinsame AgenturOS-Designsprache
+
+Verbindlich ist Alexanders gemeinsame Gestaltungsleitlinie vom 17.10.2026: /Users/alexandersmyslowski/.codex/design/AGENTUROS-DESIGNSPRACHE.md. CateringOS entwickelt die ruhige klassische Apple-like-Gestaltung des Verbunds weiter. Gemeinsame Komponenten und Zustände bleiben konsistent; Fachzuständigkeit und offene Freigaben bleiben erkennbar. Wesentliche neue Oberflächen mit Opus 5.5 ausarbeiten, mit impeccable prüfen und im Browser bedienen. Die spätere unabhängige Produktabnahme bewertet Funktion, UX und UI auch gegen diese gemeinsame Referenz.
+
 ## Brand Personality
 
 Ruhig, präzise, vertrauenswürdig. Die Oberfläche soll eher wie ein konzentrierter Apple-artiger Arbeitsassistent wirken als wie ein Admin-Dashboard.
