@@ -484,9 +484,23 @@ def configuration_index():
     return result
 
 
+def environment_binding(entries):
+    require(isinstance(entries, list), "NUE_ENV_LIST_REQUIRED")
+    values = {}
+    for entry in entries:
+        require(isinstance(entry, str) and "\0" not in entry, "NUE_ENV_ENTRY_REQUIRED")
+        name, separator, value = entry.partition("=")
+        require(separator == "=" and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name) and name not in values,
+                "NUE_ENV_UNIQUE_NAME_REQUIRED")
+        values[name] = value
+    # Compose can reorder ENV entries on recreation; preserve every key and value,
+    # while rejecting duplicate names whose effective value would depend on order.
+    return hashlib.sha256(canonical(values)).hexdigest()
+
+
 def container_binding(row, with_id=True):
     host = row["HostConfig"]
-    result = {"image": row["Image"], "mounts": row["Mounts"], "restart": host["RestartPolicy"], "ports": host.get("PortBindings") or {}, "networks": sorted(row["NetworkSettings"]["Networks"]), "environmentSha256": hashlib.sha256(canonical(row["Config"].get("Env"))).hexdigest()}
+    result = {"image": row["Image"], "mounts": row["Mounts"], "restart": host["RestartPolicy"], "ports": host.get("PortBindings") or {}, "networks": sorted(row["NetworkSettings"]["Networks"]), "environmentFormat": "unique-key-map-v1", "environmentSha256": environment_binding(row["Config"].get("Env"))}
     if with_id:
         result["id"] = row["Id"]
     return result

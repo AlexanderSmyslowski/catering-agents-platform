@@ -60,6 +60,61 @@ class NueTests(unittest.TestCase):
             with patch.multiple(nue, OPERATOR_SIGNING_KEY=key, OPERATOR_PUBLIC_KEY=public, OPERATOR_KEY_FINGERPRINT=fingerprint):
                 yield key
 
+    def environment_row(self, entries):
+        return {"Id": "synthetic", "Image": "old", "Mounts": [],
+                "HostConfig": {"RestartPolicy": {"Name": "unless-stopped", "MaximumRetryCount": 0}, "PortBindings": {}},
+                "NetworkSettings": {"Networks": {"private": {}}}, "Config": {"Env": entries}}
+
+    def test_container_binding_preserves_values_independently_of_env_order(self):
+        original = ["A=one", "EMPTY=", "TOKEN=left=right", "B=two"]
+        self.assertEqual(nue.container_binding(self.environment_row(original)),
+                         nue.container_binding(self.environment_row(list(reversed(original)))))
+        baseline = nue.container_binding(self.environment_row(original))
+        for changed in (["A=changed", *original[1:]], original[:-1], [*original, "EXTRA=new"]):
+            with self.subTest(changed=changed):
+                self.assertNotEqual(nue.container_binding(self.environment_row(changed)), baseline)
+
+    def test_container_binding_rejects_ambiguous_or_invalid_environment(self):
+        for entries in (None, {}, ["A=one", "A=one"], ["A=one", "A=two"], ["NO_EQUALS"],
+                        ["=empty_name"], ["A\0=bad"], ["A=bad\0value"], [42]):
+            with self.subTest(entries=entries), self.assertRaisesRegex(RuntimeError, "NUE_ENV_"):
+                nue.container_binding(self.environment_row(entries))
+
+    def test_reordered_environment_passes_runtime_preservation_but_real_changes_hold(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            compose = Path(temporary) / "compose.json"; compose.write_bytes(b"candidate-compose")
+            original = self.environment_row(["A=one", "B=two"])
+            baseline = {"containers": {"platform-infra-offer-1": nue.container_binding(original)},
+                        "files": {str(compose): {"sha256": "original", "mode": 0o600}},
+                        "networks": ["private"], "volumes": ["data"], "catalogue": {"schema": 3}}
+            current_row = {**original, "Id": "candidate", "Image": "new", "Config": {"Env": ["B=two", "A=one"]}}
+            current = {**baseline, "containers": {"platform-infra-offer-1": nue.container_binding(current_row)},
+                       "files": {str(compose): {"sha256": "candidate", "mode": 0o600}}}
+            with patch.object(nue, "COMPOSE", compose), patch.object(nue, "snapshot", return_value=current), patch.object(nue, "health"):
+                nue.verify_runtime(baseline, {"offer": "new"}, b"candidate-compose")
+                current["containers"]["platform-infra-offer-1"] = nue.container_binding({**current_row, "Config": {"Env": ["B=changed", "A=one"]}})
+                with self.assertRaisesRegex(RuntimeError, "NUE_CONTAINER_PRESERVATION"):
+                    nue.verify_runtime(baseline, {"offer": "new"}, b"candidate-compose")
+
+    def test_reverse_pause_accepts_reordered_values_and_blocks_drift_before_mutation(self):
+        rows = [{**self.environment_row(["A=one", "B=two"]), "Id": service,
+                 "Name": "/platform-infra-" + service + "-1", "State": {"Running": True}}
+                for service in nue.SERVICES]
+        baseline = {"containers": {row["Name"].lstrip("/"): nue.container_binding(row) for row in rows}}
+        candidates = [{**row, "Id": row["Id"] + "-new", "Image": "new", "Config": {"Env": ["B=two", "A=one"]}}
+                      for row in rows]
+        inspected = iter([candidates] + [item for row in candidates for item in ([row], [{**row, "State": {"Running": False}}])])
+        calls = []
+        with patch.object(nue, "inspect", side_effect=lambda names: next(inspected)), patch.object(nue, "owned"), patch.object(nue, "command", side_effect=lambda argv, **kw: calls.append(argv)):
+            nue.pause_applications(baseline, {"old", "new"}, set(), "own-token")
+        self.assertEqual(len(calls), 10)
+        self.assertTrue(all(call[:3] == ["docker", "update", "--restart=no"] for call in calls[:5]))
+        candidates[-1]["Config"]["Env"] = ["B=changed", "A=one"]
+        with patch.object(nue, "inspect", return_value=candidates), patch.object(nue, "command") as command:
+            with self.assertRaisesRegex(RuntimeError, "NUE_PAUSE_CONTAINER_DRIFT"):
+                nue.pause_applications(baseline, {"old", "new"}, set(), "own-token")
+            command.assert_not_called()
+
     def test_compose_changes_only_five_image_values(self):
         services = {s: {"image": "old", "restart": "unless-stopped", "environment": {"EXAMPLE": "value"}, "networks": ["private"]} for s in nue.SERVICES}
         original = {"name": "platform-infra", "services": services, "networks": {"private": {"external": True}}, "volumes": {"untouched": {"external": True}}}
