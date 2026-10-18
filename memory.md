@@ -2,10 +2,18 @@
 
 **Korrektur der CI-Deutung, 18.10.2026 01:38 CEST:** Run39079338322 wurde vom Koordinator bei rund sechs Minuten voreilig abgebrochen. Das nun vollständige Log beweist regulären Fortschritt: unter anderem95 Operationsprüfungen in244s PASS; der Observer-Test war noch gar nicht gestartet. Der alte Run39075030417 hatte37 Minuten bis zum Abbruch regulär426 Dateien abgearbeitet; aus der fehlenden Observerausgabe allein ist weder sein Start noch ein tatsächlicher Hänger nachgewiesen. Die frühere Zuschreibung eines konkreten CI-Hängers zum Observer ist zurückgenommen. Das statisch belegte spawnSync-/Nachfahren-/Pipe-Risiko wurde lokal begrenzt und unabhängig geprüft, ist aber kein Nachweis der ursprünglichen CI-Ursache. Keine weitere Linux-Reparatur/Prüfarchitektur ohne Fehlerbeleg. Nach gebündelten tatsächlichen Opus-Produktbefunden einen erforderlichen Gesamt-CI-Lauf mit realistischer Dauer vollständig abwarten; keine manuellen unveränderten Vollsuiten und keine vorschnellen Abbrüche. Alle vier bisherigen CI-Runs sind CANCELLED, kein Full-Suite-PASS. Browser/Compose/macOS des letzten Heads waren PASS. Beleg tmp/product-pilot-20261018/ci-39079338322-build-cancelled.log.
 
-version: 5.443
+version: 5.444
 date: 2026-10-18
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
+
+## 5.444 — 18.10.2026: expliziter NUE-Image-only-Workflow und offene Issuerbindung
+
+Der getrennte NUE-Image-only-Pfad ist lokal in da9c1c9 und d50b5a79b926a4dd06418c53367374eff7124ae8 implementiert und unabhängig lokal angenommen: vollständiger getrackter Produktbaum samt Lockfile, eigene NUE-Source-/OCI-Bindung, Stage/Apply/Verify, aktuelle Sieben-Container-/Fünf-Volume-/Drei-DB-Baseline, Restore-/Cleanup- und Schema-No-Drift-Gates, sanfte Writerpause, verifizierter Compose-/Image-Rückweg. Die historischen prod-1-/P4-Migrationswege bleiben unverändert. 24 fokussierte NUE-Prüfungen und 48 bestehende Operatorprüfungen sowie Syntax/diffcheck bestanden; keine unveränderte Gesamtsuite manuell wiederholt.
+
+Die lokale Maczulassung wiederholt vor Stage und Apply die exakten main-Push-CI-/Commit-/Source-/Opshelperprüfungen; der Kandidat verlangt bereits vor Writerpause das bestehende strikte OCI-M-Gate. PR728 bleibt vor Integration gesperrt: ein neuer konkreter GitHubreviewbefund weist zurecht darauf hin, dass öffentlicher runpy-Aufruf plus frei erklärbarer Admissiondigest den authentischen Macissuer nicht beweist. Zwei Reviewthreads sind noch offen. Die bisherige lokale Annahme ersetzt weder diese externe Reviewauflösung noch die erforderliche CI des später korrigierten Heads. Eine kleine Bindung über vorhandene OpenSSH-Signaturmittel wird geprüft; sie ist noch nicht implementiert oder angenommen.
+
+Kein Merge, Release, NUE-Hostlauf, installierter Produktstand, eigener erfolgreicher Offhost→Restorelauf oder Pilot-GO wird durch dieses lokale Workflowinkrement belegt. Exakt vorhandene Buildbasen, aktuelle Zugangs-/Backup-/Restore-/Cleanupbelege und reale Betriebs-/Fachgates bleiben Ausführungsgrenzen. Führende Betriebsfortschreibung bleibt das bestehende Runbook, keine neue Statusablage.
 
 ## 5.443 — 18.10.2026: Release-Audit geschlossen und Nürnberger Betriebsbestand tatsächlich gelesen
 
@@ -2660,3 +2668,8 @@ Eingefrorene Küchenangaben vollständig erhalten, Allergenvorbehalt/Faktor-Meta
 ### 5.443 — 18.10.2026: kompatible Sicherheitskorrekturen und tatsächlicher Zielbestand
 
 Vier betroffene Pakete korrigiert, JWT-Regression vor/nach nachgewiesen, gezielte Prüfungen/Build/beide Audits und unabhängiger Delta-Review bestanden. Erste vollständige Gesamt-CI am älteren fae8969 grün; neuer Head benötigt eigene CI. Nürnberg rein lesend geprüft: Backup-/Observerinstallation tatsächlich fehlt. Kein Deployment oder Pilot-GO.
+
+
+### 5.444 — 18.10.2026: NUE-Workflow lokal implementiert, Issuerreview weiter offen
+
+NUE-Image-only-Pfad bis d50b5a7 lokal unabhängig angenommen; fokussierte Prüfungen bestanden. Authentischer Macissuer bleibt konkreter offener GitHubreviewbefund vor Integration; keine korrigierte CI-, Merge- oder Hostabnahme behauptet.

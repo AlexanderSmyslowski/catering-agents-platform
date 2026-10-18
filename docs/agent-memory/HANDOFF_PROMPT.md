@@ -1,3 +1,13 @@
+# Aktueller Operationsstand — Version 5.444 / 18.10.2026
+
+## 5.444 — 18.10.2026: expliziter NUE-Image-only-Workflow und offene Issuerbindung
+
+Der getrennte NUE-Image-only-Pfad ist lokal in da9c1c9 und d50b5a79b926a4dd06418c53367374eff7124ae8 implementiert und unabhängig lokal angenommen: vollständiger getrackter Produktbaum samt Lockfile, eigene NUE-Source-/OCI-Bindung, Stage/Apply/Verify, aktuelle Sieben-Container-/Fünf-Volume-/Drei-DB-Baseline, Restore-/Cleanup- und Schema-No-Drift-Gates, sanfte Writerpause, verifizierter Compose-/Image-Rückweg. Die historischen prod-1-/P4-Migrationswege bleiben unverändert. 24 fokussierte NUE-Prüfungen und 48 bestehende Operatorprüfungen sowie Syntax/diffcheck bestanden; keine unveränderte Gesamtsuite manuell wiederholt.
+
+Die lokale Maczulassung wiederholt vor Stage und Apply die exakten main-Push-CI-/Commit-/Source-/Opshelperprüfungen; der Kandidat verlangt bereits vor Writerpause das bestehende strikte OCI-M-Gate. PR728 bleibt vor Integration gesperrt: ein neuer konkreter GitHubreviewbefund weist zurecht darauf hin, dass öffentlicher runpy-Aufruf plus frei erklärbarer Admissiondigest den authentischen Macissuer nicht beweist. Zwei Reviewthreads sind noch offen. Die bisherige lokale Annahme ersetzt weder diese externe Reviewauflösung noch die erforderliche CI des später korrigierten Heads. Eine kleine Bindung über vorhandene OpenSSH-Signaturmittel wird geprüft; sie ist noch nicht implementiert oder angenommen.
+
+Kein Merge, Release, NUE-Hostlauf, installierter Produktstand, eigener erfolgreicher Offhost→Restorelauf oder Pilot-GO wird durch dieses lokale Workflowinkrement belegt. Exakt vorhandene Buildbasen, aktuelle Zugangs-/Backup-/Restore-/Cleanupbelege und reale Betriebs-/Fachgates bleiben Ausführungsgrenzen. Führende Betriebsfortschreibung bleibt das bestehende Runbook, keine neue Statusablage.
+
 # Aktueller Produktstand — Version 5.443 / 18.10.2026
 
 ## 5.443 — 18.10.2026: Release-Audit geschlossen und Nürnberger Betriebsbestand tatsächlich gelesen
