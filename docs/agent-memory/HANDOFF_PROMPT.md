@@ -1,3 +1,11 @@
+# Aktueller Operationsstand — Version 5.448 / 18.10.2026
+
+## 5.448 — 18.10.2026: exakt gebundener Web-Snippetimport
+
+Der tatsächliche NUE-Buildpreflight auf main8f2b8e6 hielt vor Bundle-/Alias-/Imageänderungen, weil die bestehende catering-target.caddy den im Image definierten catering_app_routes-Snippet importiert und selbst keine root-Zeile benötigt. Ausschließlich diese rootlose Site ist nun beim exakten vollständigen Image-/Site-Hashpaar und exakt dieser Zweidateimenge zulässig. Die bestehende /srv-Prüfung für Inline-Konfigurationen, Mount-/Command-/M-Bindung und vollständige Vorher-/Nachherbeobachtung bleiben erhalten; keine neue Caddyinterpretation oder allgemeine rootlos-Erlaubnis.
+
+RED am bisherigen Code reproduziert; 38 gezielte NUE-Prüfungen unter Python3.11.15 bestanden, darunter geänderte Imports/Umleitungen/Snippets/Roots und zusätzliche Sites weiterhin HOLD. Keine unveränderte Gesamtsuite wiederholt. Dieser lokale Kandidat benötigt die unabhängige Delta-Review und reguläre PR-/main-CI; erfolgreicher Livebuild, Installation und fachlicher Pilot bleiben gesondert nachzuweisen. Keine Hostausführung oder Änderung bestehender Konfiguration/Daten durch diesen Fix.
+
 # Aktueller Operationsstand — Version 5.447 / 18.10.2026
 
 ## 5.447 — 18.10.2026: ausgelassenes leeres Web-Entrypointfeld korrekt behandeln
