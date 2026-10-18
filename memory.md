@@ -2,10 +2,23 @@
 
 **Korrektur der CI-Deutung, 18.10.2026 01:38 CEST:** Run39079338322 wurde vom Koordinator bei rund sechs Minuten voreilig abgebrochen. Das nun vollständige Log beweist regulären Fortschritt: unter anderem95 Operationsprüfungen in244s PASS; der Observer-Test war noch gar nicht gestartet. Der alte Run39075030417 hatte37 Minuten bis zum Abbruch regulär426 Dateien abgearbeitet; aus der fehlenden Observerausgabe allein ist weder sein Start noch ein tatsächlicher Hänger nachgewiesen. Die frühere Zuschreibung eines konkreten CI-Hängers zum Observer ist zurückgenommen. Das statisch belegte spawnSync-/Nachfahren-/Pipe-Risiko wurde lokal begrenzt und unabhängig geprüft, ist aber kein Nachweis der ursprünglichen CI-Ursache. Keine weitere Linux-Reparatur/Prüfarchitektur ohne Fehlerbeleg. Nach gebündelten tatsächlichen Opus-Produktbefunden einen erforderlichen Gesamt-CI-Lauf mit realistischer Dauer vollständig abwarten; keine manuellen unveränderten Vollsuiten und keine vorschnellen Abbrüche. Alle vier bisherigen CI-Runs sind CANCELLED, kein Full-Suite-PASS. Browser/Compose/macOS des letzten Heads waren PASS. Beleg tmp/product-pilot-20261018/ci-39079338322-build-cancelled.log.
 
-version: 5.438
+version: 5.439
 date: 2026-10-18
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
+
+## 5.439 —18.10.2026: eigener Opus-Volllauf und Quellen-P1 geschlossen
+
+Ein tatsächlicher neuer100-Gäste-Auftrag wurde durch claude-opus-5-5 selbst vollständig über die normale lokale Oberfläche bearbeitet: Anfrage/Kalkulation/Reload/Freigabe/Handoff,9Rezeptzuweisungen/Planungsnachweise,13Prüfkarten/Produktionsfreigabe/Übernahme,Mappe/Blatt/CSV/Wiederöffnung.9Batches,49Zutatenbeiträge,29Positionen,55/25/20 und2gZimt eigenständig nachgerechnet;synthetische8043,20netto/1528,21Steuer/9571,41brutto. Runtime canonicalModel=claude-opus-5-5,provider=firstParty,118Turns,CLIexit0. NeuerSpec e6bc48db…;13Originalquellen unverändert,Rezepte weiterhin review_required.
+
+Der neue Ablauf fand zusätzlich verlorene„glutenfreie Sonderkost“ und Detailzeiten. Enger Quellenfix: Flexion nur im Gast-Teilgruppenmatcher, globalerFreeFrom-Matcher unverändert; benannteZeit-/Logistiksegmente als ungeprüfter Originalwortlaut über vorhandeneproductionConstraints erhalten. Keine automatische Fachfreigabe,keinSchemawechsel,keine historischen Fassungen umgeschrieben.89relevanteTests/7Dateien (35Normalisierung,18Druck,9Handoff,27angrenzende),Build/gitdiffcheck und unabhängigerCodeReviewPASS. Neue Testassertions200→bestehende201 korrigiert,keine Produktregeländerung.
+
+Gezielte tatsächliche Opus-Nachprüfung an genau einem neuen20-Gäste-Fall bis Übernahme/beidenA4-Drucken/Reload: beideSonderkostgruppen undalle5Zeit-/Logistikeinträge erhalten,ungeprüft,keineglobaleGlutenfrei-Zusage.16Turns,gleichesModell/Provider,exit0. BeideSessions geschlossen;keinCleanup behauptet. Originalberichte/Restbefunde:docs/product/OPUS_PRODUKTPRUEFUNG_20261018.md. Belege tmp/product-pilot-20261018/opus-full-e2e-*,opus-source-p1-*,new-request-context-*;PDF/CSV output/playwright.
+
+Ein konkretesDrive-Angebot2026 belegt45,55€/h„Logistik,Service&Küchencrew“(6,5h→296,08€),nurangebotsspezifisch;geschützteProvenienzactual-2026-offer-rate-source.private.json(0600,ignoriert),keinKundenrohtext. KeinallgemeinerTarif/Steuerfestlegung abgeleitet;vollständigesLexware-Archivweiternichtnachgewiesen.
+
+Gesamtziel ACTIVE,realerPilotNO-GO. NächstekonkreteP2:unterscheidbareAuftragsnamen/Suche und widerspruchsfreieZustände nachÜbernahme/Reopen;übrigeDruck-/Quellen-/CSV-/PlanungsbefundeimOpusbericht. KleineHinweisdopplungdurchSatzsegmentierungoffen,keineRohinformationverloren. AutomatischeGesamt-CI,Integration/Release/NürnbergerAuslieferung,eigeneNürnbergerBackup→Restore→Cleanup/Monitoring und echteFachentscheidungenweiteroffen. HelsinkiOFF/erhalten;keineHost-/DNS-/ADH-/Löschaktion.
+
 
 ## 5.438 — 18.10.2026: ehrlicher Übergabestatus und aktuelle Produktionswiederöffnung
 
@@ -2563,3 +2576,7 @@ Produkt7c67497;gezielteunabhängigeCode-/Browsernachprüfungangenommen. RealePil
 ### 5.438 —18.10.2026: Übergabestatus und aktuelle Fallwiederöffnung
 
 Datenvollständigkeit/Freigabe/Handoff getrennt, alte Entwurfswarnung durch servergebundene aktuelle Fallwiederöffnung behoben, Historienlink wirksam. Gezielte Tests/Build und unabhängige Prüfung PASS; normaler Browserweg zum vorhandenen100-Gäste-Plan bestätigt,13 Originalquellen unverändert. Gesamt-CI/Release und Gesamtziel weiterhin offen.
+
+### 5.439 —18.10.2026: tatsächlicher voller Opus-UI-Ablauf und Quellen-P1
+
+EigenständigerOpus100GästeAblauf/Preis/Mengen/Druck/Reopenbelegt;neuaufgedeckterQuellenverlustgezieltgeschlossenundvonOpusnachgeprüft.89gezielte/angrenzendeTests,BuildundunabhängigerCodeReviewPASS;Gesamtziel/CI/Release/Nürnberg/Fachgatesweiteroffen.

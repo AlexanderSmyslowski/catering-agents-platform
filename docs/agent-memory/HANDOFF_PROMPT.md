@@ -1,3 +1,18 @@
+# Aktuelle Übergabe —Version5.439 /18.10.2026
+
+## 5.439 —18.10.2026: eigener Opus-Volllauf und Quellen-P1 geschlossen
+
+Ein tatsächlicher neuer100-Gäste-Auftrag wurde durch claude-opus-5-5 selbst vollständig über die normale lokale Oberfläche bearbeitet: Anfrage/Kalkulation/Reload/Freigabe/Handoff,9Rezeptzuweisungen/Planungsnachweise,13Prüfkarten/Produktionsfreigabe/Übernahme,Mappe/Blatt/CSV/Wiederöffnung.9Batches,49Zutatenbeiträge,29Positionen,55/25/20 und2gZimt eigenständig nachgerechnet;synthetische8043,20netto/1528,21Steuer/9571,41brutto. Runtime canonicalModel=claude-opus-5-5,provider=firstParty,118Turns,CLIexit0. NeuerSpec e6bc48db…;13Originalquellen unverändert,Rezepte weiterhin review_required.
+
+Der neue Ablauf fand zusätzlich verlorene„glutenfreie Sonderkost“ und Detailzeiten. Enger Quellenfix: Flexion nur im Gast-Teilgruppenmatcher, globalerFreeFrom-Matcher unverändert; benannteZeit-/Logistiksegmente als ungeprüfter Originalwortlaut über vorhandeneproductionConstraints erhalten. Keine automatische Fachfreigabe,keinSchemawechsel,keine historischen Fassungen umgeschrieben.89relevanteTests/7Dateien (35Normalisierung,18Druck,9Handoff,27angrenzende),Build/gitdiffcheck und unabhängigerCodeReviewPASS. Neue Testassertions200→bestehende201 korrigiert,keine Produktregeländerung.
+
+Gezielte tatsächliche Opus-Nachprüfung an genau einem neuen20-Gäste-Fall bis Übernahme/beidenA4-Drucken/Reload: beideSonderkostgruppen undalle5Zeit-/Logistikeinträge erhalten,ungeprüft,keineglobaleGlutenfrei-Zusage.16Turns,gleichesModell/Provider,exit0. BeideSessions geschlossen;keinCleanup behauptet. Originalberichte/Restbefunde:docs/product/OPUS_PRODUKTPRUEFUNG_20261018.md. Belege tmp/product-pilot-20261018/opus-full-e2e-*,opus-source-p1-*,new-request-context-*;PDF/CSV output/playwright.
+
+Ein konkretesDrive-Angebot2026 belegt45,55€/h„Logistik,Service&Küchencrew“(6,5h→296,08€),nurangebotsspezifisch;geschützteProvenienzactual-2026-offer-rate-source.private.json(0600,ignoriert),keinKundenrohtext. KeinallgemeinerTarif/Steuerfestlegung abgeleitet;vollständigesLexware-Archivweiternichtnachgewiesen.
+
+Gesamtziel ACTIVE,realerPilotNO-GO. NächstekonkreteP2:unterscheidbareAuftragsnamen/Suche und widerspruchsfreieZustände nachÜbernahme/Reopen;übrigeDruck-/Quellen-/CSV-/PlanungsbefundeimOpusbericht. KleineHinweisdopplungdurchSatzsegmentierungoffen,keineRohinformationverloren. AutomatischeGesamt-CI,Integration/Release/NürnbergerAuslieferung,eigeneNürnbergerBackup→Restore→Cleanup/Monitoring und echteFachentscheidungenweiteroffen. HelsinkiOFF/erhalten;keineHost-/DNS-/ADH-/Löschaktion.
+
+
 # Aktuelle Übergabe — Version5.438 /18.10.2026
 
 ## 5.438 — 18.10.2026: ehrlicher Übergabestatus und aktuelle Produktionswiederöffnung

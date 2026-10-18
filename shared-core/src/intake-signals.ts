@@ -189,7 +189,10 @@ function isGuestSubsetDietarySegment(segment: string, canonical: string): boolea
   if (canonical === "vegan" || canonical === "vegetarian") return false;
   const pattern = DIETARY_PATTERNS.find(item => item.canonical === canonical);
   if (!pattern) return false;
-  const match = new RegExp(String.raw`\b[0-9]+\s+(?:gäste|gaeste|personen|teilnehmer)(?:\s+(?:benötigen|benoetigen|brauchen|wünschen|wuenschen|essen|sind|müssen|muessen|bitte)){0,2}\s+(?:${pattern.regex.source})`, "i").exec(segment);
+  // Preserve German inflections in guest instructions without broadening
+  // the canonical matcher that can assert a requirement for the whole menu.
+  const guestDiet = pattern.regex.source.replaceAll(String.raw`frei\b`, String.raw`frei(?:e[nmrs]?)?\b`);
+  const match = new RegExp(String.raw`\b[0-9]+\s+(?:gäste|gaeste|personen|teilnehmer)(?:\s+(?:benötigen|benoetigen|brauchen|wünschen|wuenschen|essen|sind|müssen|muessen|bitte)){0,2}\s+(?:${guestDiet})`, "i").exec(segment);
   if (!match || /\balle\s*$/i.test(segment.slice(0, match.index))) return false;
   const globalInSameClause = segment.split(/\b(?:und|aber|sowie)\b/i).some(clause =>
     pattern.regex.test(clause) && (
@@ -308,6 +311,13 @@ export function analyzeIntakeText(text: string): IntakeSignals {
         severity: "low",
         suggestedQuestion: "Wie lautet das verbindliche Zeitfenster?"
       });
+    }
+
+    const labelledSchedule = /\b(?:Anlieferung|Lieferung|Aufbau|Abbau|Empfang|Abendbuffet|Buffet|Service|Beginn|Start|Ende|Abfahrt)\b/i.test(segment);
+    if (labelledSchedule && (timeHint || /\b(?:[01]?\d|2[0-3]):[0-5]\d\b/.test(segment))) {
+      // Keep the source wording through handoff and frozen snapshots;
+      // parsing a clock time is not an agreed operational schedule.
+      addUniqueString(constraints, `Zeit-/Logistikangabe aus Anfrage (ungeprüft): ${segment}`);
     }
 
     const subsetDietary = DIETARY_PATTERNS.some(pattern => isGuestSubsetDietarySegment(segment, pattern.canonical));

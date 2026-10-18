@@ -1,11 +1,13 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { IntakeStore } from "@catering/intake-service";
-import { buildPrintExportApp, renderProductionFolderHtml } from "@catering/print-export";
+import { buildPrintExportApp, renderProductionFolderHtml, renderProductionPlanHtml } from "@catering/print-export";
 import { ProductionStore } from "@catering/production-service";
 import {
+  createEventRequestFromText,
+  normalizeEventRequestToSpec,
   RecipeLibrary,
   SCHEMA_VERSION,
   type AcceptedEventSpec,
@@ -611,6 +613,26 @@ describe("production folder export", () => {
     expect(html).toContain("&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;");
     expect(html).not.toContain("<script>");
   });
+  it("prints normalized new-request diet and logistics instructions in both kitchen documents as unapproved context", () => {
+    const input = fixture();
+    const text = readFileSync(new URL("./fixtures/synthetic-100-guest-request.txt", import.meta.url), "utf8");
+    const normalized = normalizeEventRequestToSpec(createEventRequestFromText({ requestId: "print-source-context", channel: "text", rawText: text }));
+    input.spec.productionConstraints = normalized.productionConstraints;
+    input.spec.uncertainties = normalized.uncertainties;
+    const before = JSON.stringify(input);
+    const documents = [
+      renderProductionPlanHtml(input.plan, input.spec),
+      renderProductionFolderHtml({ plan: input.plan, spec: input.spec, recipes: [input.recipe], purchaseLists: [input.purchaseList] })
+    ];
+    for (const html of documents) {
+      for (const detail of ["4 Gäste benötigen glutenfreie Sonderkost", "3 Gäste Schalenfruchtvermeidung", "Empfang 18:00–19:00", "Abendbuffet 19:00–21:00", "Anlieferung 16:30", "Aufbau 17:45", "Abbau 21:00"]) expect(html).toContain(detail);
+      expect(html).toContain("ungeprüft");
+      expect(html).toContain("Keine Sonderkost-, Allergen- oder Hygienefreigabe");
+      expect(html).not.toContain("Keine blockierenden Rückfragen");
+    }
+    expect(JSON.stringify(input)).toBe(before);
+  });
+
   it("keeps recorded special-diet and delivery instructions visible without granting a kitchen approval", () => {
     const input = fixture();
     input.spec.event.schedule = [{ label: "Anlieferung", start: "16:30" }, { label: "Buffet", start: "19:00", end: "21:00" }];

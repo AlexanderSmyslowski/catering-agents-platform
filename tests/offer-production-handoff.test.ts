@@ -102,6 +102,29 @@ describe("offer production handoff", () => {
     expect(read.json()).toEqual({ handoff });
   });
 
+  it("freezes the exact new 100-guest source instructions into the approved offer handoff", async () => {
+    const rootDir = mkdtempSync(path.join(tmpdir(), "catering-source-context-"));
+    const app = buildOfferApp({ rootDir, trustedActorSecret: trustedSecret });
+    try {
+      const caseId = await createOfferCase(app);
+      const text = readFileSync(new URL("./fixtures/synthetic-100-guest-request.txt", import.meta.url), "utf8");
+      const created = await app.inject({ method: "POST", url: "/v1/offers/from-text", headers: trustedHeaders, payload: { caseId, text } });
+      expect(created.statusCode).toBe(201);
+      const draft = created.json<OfferDraft>();
+      const approval = await app.inject({ method: "POST", url: `/v1/offers/drafts/${draft.draftId}/decision`, headers: trustedHeaders,
+        payload: { decision: "approved", revision: draft.revision, variantId: draft.variantSet[0]!.variantId } });
+      expect(approval.statusCode).toBe(201);
+      const response = await app.inject({ method: "POST", url: `/v1/offers/approved/${approval.json().approvedOffer.approvedOfferId}/handoffs`, headers: trustedHeaders, payload: {} });
+      expect(response.statusCode).toBe(201);
+      const snapshot = response.json().handoff.eventSpecSnapshot;
+      const notes = snapshot.productionConstraints.join("\n");
+      for (const detail of ["4 Gäste benötigen glutenfreie Sonderkost", "3 Gäste Schalenfruchtvermeidung", "Empfang 18:00–19:00", "Abendbuffet 19:00–21:00", "Anlieferung 16:30", "Aufbau 17:45", "Abbau 21:00"]) expect(notes).toContain(detail);
+      expect(snapshot.productionConstraints).not.toContain("gluten_free");
+      expect(snapshot.uncertainties.some((item: { field: string }) => item.field === "productionConstraints")).toBe(true);
+      expect(snapshot.productionConstraints).toEqual(draft.variantSet[0]!.proposedEventSpec.productionConstraints);
+    } finally { await app.close(); }
+  });
+
   it("snapshots the selected variant pricing in both approved artifacts", async () => {
     const rootDir = mkdtempSync(path.join(tmpdir(), "catering-offer-pricing-"));
     const app = buildOfferApp({ rootDir, trustedActorSecret: trustedSecret });

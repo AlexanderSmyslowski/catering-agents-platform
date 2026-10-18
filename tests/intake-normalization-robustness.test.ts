@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   createEventRequestFromText,
@@ -215,6 +216,35 @@ describe("intake normalization robustness", () => {
     expect(spec.menuPlan.map((component) => component.label).join(" ")).not.toContain("Lunch am");
     expect(spec.menuPlan.map((component) => component.label).join(" ")).not.toContain("Lieferung");
   });
+  it("retains the exact synthetic 100-guest request's special diets and labelled schedule as unapproved source instructions", () => {
+    const text = readFileSync(new URL("./fixtures/synthetic-100-guest-request.txt", import.meta.url), "utf8");
+    const request = createEventRequestFromText({ requestId: "exact-source-context", channel: "text", rawText: text });
+    const spec = normalizeEventRequestToSpec(request);
+    const notes = spec.productionConstraints?.join("\n") ?? "";
+    for (const detail of ["4 Gäste benötigen glutenfreie Sonderkost", "3 Gäste Schalenfruchtvermeidung", "Empfang 18:00–19:00", "Abendbuffet 19:00–21:00", "Anlieferung 16:30", "Aufbau 17:45", "Abbau 21:00"]) {
+      expect(notes).toContain(detail);
+    }
+    expect(spec.productionConstraints).not.toContain("gluten_free");
+    expect(spec.productionConstraints).not.toContain("nut_free");
+    expect(spec.uncertainties?.some(item => item.field === "productionConstraints")).toBe(true);
+    expect(spec.uncertainties?.some(item => item.field === "event.schedule")).toBe(true);
+    expect(spec.attendees.expected).toBe(100);
+  });
+
+  it.each(["glutenfreie", "glutenfreies", "laktosefreie", "milchfreie", "nussfreie"])(
+    "retains inflected guest-subset instructions without creating a global free-from claim: %s", word => {
+      const text = `4 Gäste benötigen ${word} Sonderkost.`;
+      const request = createEventRequestFromText({ requestId: "inflected-subset", channel: "text", rawText: text });
+      expect(request.constraints?.join(" ")).toContain(text);
+      expect(request.constraints?.filter(value => ["gluten_free", "lactose_free", "milk_free", "nut_free"].includes(value))).toEqual([]);
+    }
+  );
+
+  it("does not turn unscoped gluten-free options into a whole-menu requirement", () => {
+    const request = createEventRequestFromText({ requestId: "free-from-options", channel: "text", rawText: "Bitte glutenfreie Optionen zum Buffet anbieten." });
+    expect(request.constraints ?? []).not.toContain("gluten_free");
+  });
+
   it("retains guest-subset special diets as open instructions without declaring the entire menu free-from", () => {
     const request = createEventRequestFromText({ requestId: "subset-dietary", channel: "text", rawText: "Wissenschaftsabend am 12.11.2026 für 100 Gäste. 4 Gäste glutenfrei, 3 Schalenfruchtvermeidung. Empfang 18:00–19:00." });
     const spec = normalizeEventRequestToSpec(request);
