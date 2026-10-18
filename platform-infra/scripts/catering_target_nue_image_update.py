@@ -355,8 +355,9 @@ def current_base_gate(oci, runtime_m, web_m):
             require(not row["Mounts"], "NUE_CURRENT_RUNTIME_MOUNTS")
             command(["docker", "exec", row["Id"], "sh", "-ec", "test ! -e /catering-product && test ! -L /catering-product"])
         else:
-            require(config["Cmd"] == ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"] and not config["Entrypoint"] and config["WorkingDir"] == "/srv", "NUE_CURRENT_WEB_COMMAND")
-            require(config["Cmd"] == image_rows["web"]["Config"]["Cmd"] and config["Entrypoint"] == image_rows["web"]["Config"]["Entrypoint"], "NUE_CURRENT_WEB_IMAGE_COMMAND")
+            # Docker may omit an empty Web Entrypoint; absence and null mean the same thing.
+            require(config["Cmd"] == ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"] and not config.get("Entrypoint") and config["WorkingDir"] == "/srv", "NUE_CURRENT_WEB_COMMAND")
+            require(config["Cmd"] == image_rows["web"]["Config"]["Cmd"] and config.get("Entrypoint") == image_rows["web"]["Config"].get("Entrypoint"), "NUE_CURRENT_WEB_IMAGE_COMMAND")
             require(all(not any(m["Destination"] == root or root.startswith(m["Destination"].rstrip("/") + "/") or m["Destination"].startswith(root + "/") for root in ("/srv", "/catering-public", "/catering-previous-public")) for m in row["Mounts"]), "NUE_CURRENT_WEB_ROOT_MOUNT")
             command(["docker", "exec", row["Id"], "sh", "-ec", "test -d /srv && test ! -L /srv && test ! -e /catering-public && test ! -L /catering-public && test ! -e /catering-previous-public && test ! -L /catering-previous-public"])
             image_config = command(["docker", "exec", row["Id"], "cat", "/etc/caddy/Caddyfile"])
@@ -371,7 +372,7 @@ def current_base_gate(oci, runtime_m, web_m):
                 roots = re.findall(rb"(?m)^\s*root\s+(?:\*\s+)?([^\s{}]+)\s*$", content)
                 require(roots and all(root == b"/srv" for root in roots) and b"/catering-previous-public" not in content, "NUE_CURRENT_WEB_SERVING_ROOT")
             observations["caddyConfiguration"] = {name: hashlib.sha256(content).hexdigest() for name, content in configurations.items()}
-        observations[row["Name"]] = {"binding": container_binding(row), "cmd": config["Cmd"], "entrypoint": config["Entrypoint"], "workingDir": config["WorkingDir"]}
+        observations[row["Name"]] = {"binding": container_binding(row), "cmd": config["Cmd"], "entrypoint": config.get("Entrypoint"), "workingDir": config["WorkingDir"]}
     observations["composeSha256"] = digest(COMPOSE)
     return observations
 
