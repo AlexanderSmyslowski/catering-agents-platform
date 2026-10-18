@@ -312,6 +312,53 @@ describe("production folder export", () => {
     }
   });
 
+  it("renders a printable production sheet with grounded event facts and no duplicate recipe steps", () => {
+    const input = fixture();
+    const html = renderProductionPlanHtml(input.plan, input.spec);
+    expect(html).toContain('<html lang="de">');
+    expect(html).toContain("<title>CateringOS · Produktionsblatt</title>");
+    expect(html).toContain("size: A4; margin: 18mm");
+    expect(html).toContain("Datum: 2026-06-14 · Gäste: 45");
+    expect(html).toContain("Kunde: Köpff Testkunde");
+    expect(html).toContain("keine Zusicherung von Allergenfreiheit");
+    const instruction = input.plan.kitchenSheets[0]!.steps[0]!.instruction;
+    expect(html.split(instruction)).toHaveLength(2);
+  });
+
+  it("retains frozen batch station and every instruction when a matching sheet has empty or different steps", () => {
+    const input = fixture();
+    input.plan.productionBatches[0]!.station = "SYNTHETISCHER KALTPOSTEN";
+    input.plan.productionBatches[0]!.steps = [{ index: 1, instruction: "BATCH-ANWEISUNG behalten." }];
+    input.plan.kitchenSheets[0]!.steps = [];
+    const empty = renderProductionPlanHtml(input.plan, input.spec);
+    expect(empty).toContain("Station: SYNTHETISCHER KALTPOSTEN");
+    expect(empty).toContain("BATCH-ANWEISUNG behalten.");
+    input.plan.kitchenSheets[0]!.steps = [{ index: 1, instruction: "SHEET-ZUSATZ behalten." }];
+    const additional = renderProductionPlanHtml(input.plan, input.spec);
+    expect(additional).toContain("BATCH-ANWEISUNG behalten.");
+    expect(additional).toContain("SHEET-ZUSATZ behalten.");
+  });
+
+  it("uses the frozen batch factor rather than a changed live recipe factor", () => {
+    const input = fixture();
+    input.recipe.scalingRules.defaultLossFactor = 9.99;
+    const html = renderProductionFolderHtml({ plan: input.plan, spec: input.spec, recipes: [input.recipe] });
+    expect(html).toContain("Faktor 1,2 (Metadatum)");
+    expect(html).not.toContain("Faktor 9,99");
+  });
+
+  it("rejects unknown CSV modes after checking the existing operator boundary", async () => {
+    const dataRoot = createDataRoot(); dataRoots.push(dataRoot);
+    const app = buildPrintExportApp({ rootDir: dataRoot, trustedActorSecret: TRUSTED_SECRET, env: { CATERING_DEV_AUTH: "1" } });
+    try {
+      const invalid = await app.inject({ method: "GET", url: "/v1/exports/purchase-lists/missing/csv?format=unsafe", headers: trustedHeaders });
+      expect(invalid.statusCode).toBe(400);
+      const forbidden = await app.inject({ method: "GET", url: "/v1/exports/purchase-lists/missing/csv?format=excel-de",
+        headers: { ...trustedHeaders, "x-catering-actor-name": "Unbekannt" } });
+      expect(forbidden.statusCode).toBe(403);
+    } finally { await app.close(); }
+  });
+
   it("renders all 9 section headings in order", () => {
     const input = fixture();
     const html = renderProductionFolderHtml({
@@ -386,7 +433,8 @@ describe("production folder export", () => {
     expect(html).toContain("45 Personen");
     expect(html).toContain("1,2 Portionen p. P.");
     expect(html).toContain("54 Portionen");
-    expect(html).toContain("Verlustfaktor 1,2");
+    expect(html).toContain("Faktor 1,2 (Metadatum)");
+    expect(html).toContain("kein Nachweis eines eingerechneten Zuschlags");
     expect(html).not.toContain("defaultLossFactor");
     expect(html).not.toContain("servings");
     expect(html).not.toContain("PAX");
@@ -432,6 +480,8 @@ describe("production folder export", () => {
     });
 
     expect(html).toContain("<strong>Allergene:</strong> Keine ausgewiesenen Allergene");
+    expect(html).toContain("keine Zusicherung von Allergenfreiheit");
+    expect(html).toContain("Lieferantendeklaration und Kreuzkontakt gesondert prüfen");
     expect(html).not.toContain("<strong>Allergene:</strong> Milch");
   });
 
@@ -510,7 +560,8 @@ describe("production folder export", () => {
     expect(html).toContain('<section class="purchase-section">');
     expect(html.match(/<article class="purchase-group">/g)).toHaveLength(3);
     expect(html).toMatch(/\.recipe-section, \.purchase-section\s*{\s*break-before:\s*page;\s*page-break-before:\s*always;/);
-    expect(html).toMatch(/\.recipe-card, \.purchase-group\s*{\s*break-after:\s*page;\s*page-break-after:\s*always;/);
+    expect(html).toMatch(/\.purchase-group\s*{\s*break-after:\s*page;\s*page-break-after:\s*always;/);
+    expect(html).not.toMatch(/\.recipe-card[^}]*break-after:\s*page/);
   });
 
   it("covers every recipe ingredient in the purchase list", () => {

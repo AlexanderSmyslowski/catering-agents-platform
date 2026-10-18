@@ -19,7 +19,7 @@ import {
   type RecipeStep
 } from "@catering/shared-core";
 import type { AppliedProductionSnapshot } from "./applied-production-snapshot.js";
-import { renderAppliedProductionContext, renderProductionKitchenSheets } from "./production-snapshot-html.js";
+import { renderAppliedProductionContext, renderFrozenKitchenAllergens, renderProductionKitchenSheets } from "./production-snapshot-html.js";
 
 export interface RenderProductionFolderInput {
   plan: ProductionPlan;
@@ -142,31 +142,6 @@ function stepsFor(
   return sheet?.steps ?? [];
 }
 
-const KITCHEN_ALLERGEN_LABELS: Record<string, string> = {
-  egg: "Ei",
-  mustard: "Senf",
-  milk: "Milch",
-  nuts: "Nüsse",
-  gluten: "Gluten"
-};
-
-function renderRecipeAllergens(
-  sheet: ProductionPlan["kitchenSheets"][number] | undefined
-): string {
-  // The kitchen sheet is the plan-frozen, reviewed projection. A missing or
-  // empty snapshot is surfaced explicitly; live recipe data is never a
-  // fallback and no recipe text is reparsed here.
-  const allergens = sheet?.allergens;
-  const rendered = allergens === undefined
-    ? "Allergene nicht hinterlegt – vor Produktion prüfen"
-    : allergens.length === 0
-      ? "Keine ausgewiesenen Allergene"
-      : [...new Set(allergens.map((allergen) =>
-        KITCHEN_ALLERGEN_LABELS[allergen.toLowerCase()] ?? allergen
-      ))].join(", ");
-
-  return `<p class="recipe-allergens"><strong>Allergene:</strong> ${escapeHtml(rendered)}</p>`;
-}
 
 function batchFor(
   plan: ProductionPlan,
@@ -300,13 +275,13 @@ function renderSection6(input: RenderProductionFolderInput, recipeById: Map<stri
     const perPerson = pax && total
       ? `${formatQuantityNumber(total.amount / pax)} ${formatUnit(total.unit)} p. P.`
       : "offen";
-    const lossFactor = recipe?.scalingRules.defaultLossFactor ?? batch?.lossFactor ?? 1;
-    const lossNote = lossFactor > 1 ? `Verlustfaktor ${formatNumber(lossFactor)}` : "";
+    const lossFactor = batch?.lossFactor ?? recipe?.scalingRules.defaultLossFactor;
+    const lossNote = lossFactor === undefined ? "nicht hinterlegt" : `Faktor ${formatNumber(lossFactor)} (Metadatum)`;
 
     return `<tr><td>${escapeHtml(componentLabel(input.spec, source.componentId))}</td><td>${escapeHtml(linkedRecipeLabel(recipeById, source.recipeId))}</td><td>${escapeHtml(perPerson)}</td><td>${escapeHtml(formatQuantity(total))}</td><td>${escapeHtml(lossNote)}</td></tr>`;
   });
 
-  return `<section><h2>6. Mengenkalkulation je Gericht</h2><table><thead><tr><th>Gericht</th><th>Rezept</th><th>Menge pro Person</th><th>Gesamtmenge</th><th>Verlustfaktor</th></tr></thead><tbody>${rows.join("")}</tbody></table></section>`;
+  return `<section><h2>6. Mengenkalkulation je Gericht</h2><p>Der hinterlegte Faktor ist kein Nachweis eines eingerechneten Zuschlags. Maßgeblich sind die ausgewiesenen Zutatenmengen; Verluste und Sicherheitsmengen separat prüfen.</p><table><thead><tr><th>Gericht</th><th>Rezept</th><th>Menge pro Person</th><th>Gesamtmenge</th><th>Faktor-Metadatum</th></tr></thead><tbody>${rows.join("")}</tbody></table></section>`;
 }
 
 function renderIngredientRows(ingredients: IngredientLine[]): string {
@@ -344,7 +319,7 @@ function renderSection7(input: RenderProductionFolderInput, recipeById: Map<stri
 
     const approvalStateLabel = formatRecipeApprovalStateLabel(recipe.source.approvalState) ?? "Status offen";
 
-    return [`<article class="recipe-card"><h3>${escapeHtml(recipe.name)}</h3><p>Quelle: ${escapeHtml(recipe.source.reference)} · Status: ${escapeHtml(approvalStateLabel)}</p>${renderRecipeAllergens(sheet)}<table><thead><tr><th>Zutat</th><th>Menge</th><th>Warengruppe</th></tr></thead><tbody>${renderIngredientRows(ingredients)}</tbody></table>${renderSteps(stepsFor(recipe, sheet, batch))}</article>`];
+    return [`<article class="recipe-card"><h3>${escapeHtml(recipe.name)}</h3><p>Quelle: ${escapeHtml(recipe.source.reference)} · Status: ${escapeHtml(approvalStateLabel)}</p>${renderFrozenKitchenAllergens(sheet)}<table><thead><tr><th>Zutat</th><th>Menge</th><th>Warengruppe</th></tr></thead><tbody>${renderIngredientRows(ingredients)}</tbody></table>${renderSteps(stepsFor(recipe, sheet, batch))}</article>`];
   });
   const missingRecipeIds = linkedRecipeIds.filter((recipeId) => !recipeById.has(recipeId));
 
@@ -540,7 +515,8 @@ footer { border-top: 1px solid #cbd5df; color: #52616f; margin-top: 24px; paddin
   .kitchen-sheet { break-inside: avoid; page-break-inside: avoid; }
   .coverage-table { break-inside: avoid; page-break-inside: avoid; }
   .recipe-section, .purchase-section { break-before: page; page-break-before: always; }
-  .recipe-card, .purchase-group { break-after: page; page-break-after: always; }
+  .recipe-card { break-inside: avoid-page; page-break-inside: avoid; }
+  .purchase-group { break-after: page; page-break-after: always; }
 }
 </style></head><body><header class="document-header"><h1>Produktionsmappe – Rezeptkarten und aufsummierte Einkaufsliste</h1><p>${escapeHtml(headerMeta(input.spec))}</p></header>${[
     renderAppliedProductionContext(input.appliedSnapshot),

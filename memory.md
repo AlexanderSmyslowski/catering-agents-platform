@@ -2,10 +2,26 @@
 
 **Korrektur der CI-Deutung, 18.10.2026 01:38 CEST:** Run39079338322 wurde vom Koordinator bei rund sechs Minuten voreilig abgebrochen. Das nun vollständige Log beweist regulären Fortschritt: unter anderem95 Operationsprüfungen in244s PASS; der Observer-Test war noch gar nicht gestartet. Der alte Run39075030417 hatte37 Minuten bis zum Abbruch regulär426 Dateien abgearbeitet; aus der fehlenden Observerausgabe allein ist weder sein Start noch ein tatsächlicher Hänger nachgewiesen. Die frühere Zuschreibung eines konkreten CI-Hängers zum Observer ist zurückgenommen. Das statisch belegte spawnSync-/Nachfahren-/Pipe-Risiko wurde lokal begrenzt und unabhängig geprüft, ist aber kein Nachweis der ursprünglichen CI-Ursache. Keine weitere Linux-Reparatur/Prüfarchitektur ohne Fehlerbeleg. Nach gebündelten tatsächlichen Opus-Produktbefunden einen erforderlichen Gesamt-CI-Lauf mit realistischer Dauer vollständig abwarten; keine manuellen unveränderten Vollsuiten und keine vorschnellen Abbrüche. Alle vier bisherigen CI-Runs sind CANCELLED, kein Full-Suite-PASS. Browser/Compose/macOS des letzten Heads waren PASS. Beleg tmp/product-pilot-20261018/ci-39079338322-build-cancelled.log.
 
-version: 5.441
+version: 5.442
 date: 2026-10-18
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
+
+## 5.442 — 18.10.2026: nutzbare Küchenausgaben und deutsches Excel-CSV
+
+Produktionsblatt und Produktionsmappe verwenden ausschließlich eingefrorene Plan-/Apply-Daten für Küchenmengen, Allergene, Station, Vorbereitung und Anweisungen. Identische Anweisungen aus Batch und Küchenblatt erscheinen einmal; zusätzliche Batchanweisungen und Zutaten bei leerem Küchenblatt bleiben erhalten. Allergenangaben tragen ausdrücklich den Vorbehalt zu Lieferantendeklaration/Kreuzkontakt, keine neue Fachfreigabe. Der gefrorene Batch-Verlustfaktor hat Vorrang vor später geänderten Rezeptmetadaten und ist klar als Metadatum ohne behaupteten eingerechneten Zuschlag bezeichnet. Mengen und Kalkulation bleiben unverändert.
+
+Der vorhandene CSV-Endpunkt erhält optional format=excel-de: UTF-8-BOM, Semikolon, Dezimalkomma, elf beschriftete Spalten, präzise Mengen und zusätzliche Küchenumrechnung (0,002 kg = 2 g). Die normale Oberfläche einschließlich archivierter Aufträge verwendet dieses Format. Der bisherige Standard-CSV-Vertrag bleibt erhalten. Excel-Zellen mit formelauslösenden Präfixen werden neutralisiert; Operator-/Geschäfts-/Apply-Snapshotgrenzen bleiben wirksam, unbekannte Formate werden abgewiesen.
+
+Tatsächliche lokale UI-Nachprüfung am ursprünglichen abgeschlossenen 100-Gäste-Referenzfall (01:05:39): Historie geöffnet, Produktionsblatt, Produktionsmappe und Einkaufsliste über ihre normalen Links exportiert. Neun Küchenblätter/neun Rezeptkarten, 55/25/20 Portionen und 2 g Zimt erhalten. Alle 29 CSV-Positionen mit elf Spalten unabhängig mittels Python-csv/Decimal gegen die eingefrorenen normalisierten/Einkaufsmengen und Rezept-IDs verglichen. Alle13 ursprünglichen Referenzquellen bytegleich. Browser-PDFs mit CSS-A4: Produktionsblatt fünf Seiten, Mappe13 statt zuvor18 Seiten; alle18 gerenderten Seiten auf Kontaktbögen visuell geprüft, keine abgeschnittenen Überschriften/Tabellen oder fehlenden Rezeptkarten beobachtet. Kurze Rezeptkarten teilen Seiten. Historische fehlende Kundenkennung wird nicht nachträglich erfunden.
+
+Gezielte Prüfungen wiederverwendet: ursprüngliche sechs betroffene Dateien 54 Fälle; die konkreten Zähler-/URL-Erwartungen korrigiert und betroffene Applied-Snapshot-/Routen-/UI-Zustandsgruppen nachgeprüft. 26 von27 Fällen im Zwischenlauf bestanden, einzige verbliebene URL-Erwartung danach in allen vier Zustandsfällen bestanden. Nach unabhängig gefundenem Stations-/Anweisungsverlust 35 betroffene Druck-/XSS-/Präzisionstests bestanden. Gruppen überlappen und werden nicht addiert. Finaler Build und git diff --check PASS. Unabhängige Review nahm CSV-/Allergen-/Faktor-/Zugriffsdelta sowie die konkrete consequential Druckkorrektur ohne verbleibende materielle Befunde an. Keine neue vollständige Produktreviewrunde.
+
+Belege im bestehenden ignorierten tmp/product-pilot-20261018/kitchen-exports-*, insbesondere browser-proof.json, gezielte Logs und finaler Build. Sichtbare synthetische Unterlagen output/playwright/CateringOS-SYNTHETISCH-100-Produktionsblatt.pdf und CateringOS-SYNTHETISCH-100-Produktionsmappe-kompakt.pdf. Tatsächliches Opus-5.5-Gesamtreview aus5.439 bleibt gültig; dieses begrenzte Folgeinkrement ist unabhängig geprüft.
+
+CI-Korrektur:39083127291/c408b72 endete regulär nach rund38 Minuten mit denselben neun bereits im späteren fae8969 korrigierten Regressionen; kein Hänger.39084476486/fae8969 läuft beim Abgleich weiterhin, Browser/Compose/macOS PASS. Das lokale7c84ff6 und dieses verwandte Druck-/CSV-Inkrement werden einmal gemeinsam gepusht; maßgeblich bleibt anschließend die erforderliche automatische CI des tatsächlichen neuen Heads. Kein Gesamt-CI-PASS, Merge oder Nürnberg-Deployment behauptet.
+
+Gesamtziel ACTIVE, realer Pilot NO-GO. Nächster Schritt ist der gebündelte Push mit vollständigem CI-Ergebnis, anschließend zulässige Integration/Auslieferung. Offene Mengenempfehlungs-/Stations-/T-1-/Lieferantenentscheidungen und reale Preis-/Steuer-/Küchen-/Allergen-/Temperaturfreigaben bleiben sichtbar; eigener Nürnberger Backup→Restore→Cleanup-/Monitoringnachweis offen. Historische Angebote und Lexwarequellen bleiben die Recherchegrundlage, kein vollständiges Rechnungsarchiv behauptet. Helsinki OFF/erhalten; keine Host-, DNS-, ADH- oder Löschaktion.
 
 ## 5.441 — 18.10.2026: widerspruchsfreie Produktionsübernahme und lesbare Quellnachweise
 
@@ -2618,3 +2634,7 @@ Normaler Textanfrage→Freigabe→Handoff→Historien-/Suchweg nachgewiesen; off
 ### 5.441 — 18.10.2026: Produktionsübernahme und Quellnachweise
 
 Übernahme/Unverfügbarkeit getrennt, doppelte Reviewinstanz entfernt, ABA-Antworten entwertet, Neuberechnungsgrenzen und lesbare Quellrevisionen bestätigt. Gezielte Tests/Build/Review und tatsächlicher UI-Apply/Reopen PASS; noch kein Release/Pilot-GO.
+
+### 5.442 — 18.10.2026: Küchenunterlagen und Excel-Einkauf
+
+Eingefrorene Küchenangaben vollständig erhalten, Allergenvorbehalt/Faktor-Metadatum präzisiert, deutsches CSV mit exakter 2-g-Umrechnung. Gezielte Tests, finaler Build, unabhängige Review und tatsächliche lokale UI-Exporte/29-Positionen-Vergleich/18-Seiten-Sichtprüfung PASS; CI/Release/Nürnberg und Gesamtziel offen.

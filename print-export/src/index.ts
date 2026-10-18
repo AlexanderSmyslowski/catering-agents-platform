@@ -271,15 +271,21 @@ export function renderProductionPlanHtml(plan: ProductionPlan, spec?: AcceptedEv
       ? [`<section><h2>Offene Punkte</h2><ul>${plan.unresolvedItems.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></section>`]
       : [];
   return [
-    "<html><body>",
-    "<h1>Produktionsplan</h1>",
+    '<!doctype html><html lang="de"><head><meta charset="utf-8"><title>CateringOS · Produktionsblatt</title><style>',
+    "@page { size: A4; margin: 18mm; } body { color: #1f2933; font-family: Arial, sans-serif; font-size: 12px; line-height: 1.45; margin: 0; } h1 { font-size: 22px; margin: 0 0 8px; } h2 { font-size: 16px; margin: 22px 0 8px; } h3 { font-size: 14px; margin: 16px 0 6px; } p { margin: 6px 0; } header { border-bottom: 1px solid #cbd5df; padding-bottom: 12px; } section { margin: 16px 0; } li { overflow-wrap: anywhere; } .kitchen-sheet { margin-bottom: 20px; } .allergen-caution { font-size: 11px; } footer { border-top: 1px solid #cbd5df; padding-top: 8px; margin-top: 20px; } @media print { h2,h3 { break-after: avoid-page; } .kitchen-sheet { break-inside: avoid-page; } }",
+    "</style></head><body><header><p>CateringOS · Internes Arbeitsdokument</p><h1>Produktionsplan</h1>",
+    `<p>Datum: ${escapeHtml(spec?.event?.date ?? "offen")} · Gäste: ${escapeHtml(spec?.attendees?.expected ?? "offen")}</p>`,
+    ...(spec?.customer?.name ? [`<p>Kunde: ${escapeHtml(spec.customer.name)}</p>`] : []),
+    "</header>",
     renderAppliedProductionContext(appliedSnapshot),
     ...((notes) => notes.length ? ["<section><h2>Auftrags- und Küchenhinweise</h2><p>Keine Sonderkost-, Allergen- oder Hygienefreigabe. Vorgaben separat prüfen.</p><ul>" + notes.map(note => "<li>" + escapeHtml(note) + "</li>").join("") + "</ul></section>"] : [])(productionContextNotes(spec)),
     `<p>Status: ${escapeHtml(formatProductionReadinessStatusLabel(plan.readiness.status))}</p>`,
     `<p>Rezeptauswahl: ${plan.recipeSelections.length}</p>`,
     ...renderSourceAnchorsSection(plan as unknown as Record<string, unknown>),
     ...unresolvedSection,
-    ...plan.productionBatches.map(
+    ...plan.productionBatches.filter(batch => !plan.kitchenSheets.some(sheet =>
+      sheet.componentId === batch.componentId && sheet.recipeId === batch.recipeId
+    )).map(
       (batch) => {
         const kitchenSheet = plan.kitchenSheets.find((sheet) =>
           sheet.componentId === batch.componentId && sheet.recipeId === batch.recipeId
@@ -298,7 +304,26 @@ export function renderProductionPlanHtml(plan: ProductionPlan, spec?: AcceptedEv
   ].join("");
 }
 
-export function renderPurchaseListCsv(list: PurchaseList): string {
+export function renderPurchaseListCsv(list: PurchaseList, format: "standard" | "excel-de" = "standard"): string {
+  if (format === "excel-de") {
+    const decimal = (amount: number) => amount.toLocaleString("de-DE", { useGrouping: false, maximumSignificantDigits: 15 });
+    const kitchenQuantity = (amount: number, unit: string) => unit === "kg" && amount > 0 && amount < 1
+      ? `${decimal(Number((amount * 1000).toPrecision(15)))} g` : `${decimal(amount)} ${unit}`;
+    // Quoting CSV syntax alone does not stop Excel from executing a cell formula.
+    const cell = (value: string) => escapeCsv(/^[\s\uFEFF]*[=+@-]/u.test(value) ? `'${value}` : value);
+    const rows = [
+      ["Warengruppe", "Artikel", "Normalisierte Menge", "Normalisierte Einheit", "Einkaufsmenge", "Einkaufseinheit",
+        "Küchenmenge (Umrechnung)", "Lieferantenhinweis", "Quellrezepte", "Rezeptherkunft", "Quellenreferenzen"],
+      ...list.items.map(item => [
+        formatMetroGroupLabel(item.group), item.displayName, decimal(item.normalizedQty), item.normalizedUnit,
+        decimal(item.purchaseQty), item.purchaseUnit, kitchenQuantity(item.purchaseQty, item.purchaseUnit), item.supplierHint ?? "",
+        item.sourceRecipes.join("; "),
+        (item.sourceRecipeMetadata?.length ? item.sourceRecipeMetadata.map(recipeSourceOriginLabel) : [recipeSourceOriginLabel()]).join("; "),
+        (item.sourceRecipeMetadata?.length ? item.sourceRecipeMetadata.map(recipeSourceReferenceLabel) : [recipeSourceReferenceLabel()]).join("; ")
+      ])
+    ];
+    return "\uFEFF" + rows.map(row => row.map(cell).join(";")).join("\r\n");
+  }
   const header = [
     "group",
     "item",
@@ -563,7 +588,7 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
     }
   );
 
-  app.get<{ Params: { purchaseListId: string } }>(
+  app.get<{ Params: { purchaseListId: string }; Querystring: { format?: string } }>(
     "/v1/exports/purchase-lists/:purchaseListId/csv",
     async (request, reply) => {
       const forbidden = requireProductionOperator(request, reply, trustedActorSecret, allowDevActorHeader);
@@ -571,6 +596,10 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
         return forbidden;
       }
 
+      const format = request.query.format;
+      if (format !== undefined && format !== "excel-de") {
+        return reply.code(400).send({ message: "Unbekanntes Einkaufslistenformat." });
+      }
       const actor = actorForRequest(request);
       const list = await productionStore.getPurchaseList(actor, request.params.purchaseListId);
       if (!list) {
@@ -580,11 +609,11 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
 
       reply.header(
         "content-disposition",
-        `attachment; filename=\"${request.params.purchaseListId}.csv\"`
+        `attachment; filename=\"${request.params.purchaseListId}${format === "excel-de" ? "-excel-de" : ""}.csv\"`
       );
       return reply
         .type("text/csv; charset=utf-8")
-        .send(renderPurchaseListCsv(appliedSnapshot?.approvedSpec.artifacts.purchaseList ?? list));
+        .send(renderPurchaseListCsv(appliedSnapshot?.approvedSpec.artifacts.purchaseList ?? list, format === "excel-de" ? "excel-de" : "standard"));
     }
   );
 

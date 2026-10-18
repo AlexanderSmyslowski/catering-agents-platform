@@ -1295,8 +1295,8 @@ export function productionFolderExportUrl(planId: string): string {
   return `/api/exports/v1/exports/production-folders/${planId}/html`;
 }
 
-export function purchaseListExportUrl(purchaseListId: string): string {
-  return `/api/exports/v1/exports/purchase-lists/${purchaseListId}/csv`;
+export function purchaseListExportUrl(purchaseListId: string, format?: "excel-de"): string {
+  return `/api/exports/v1/exports/purchase-lists/${purchaseListId}/csv${format === "excel-de" ? "?format=excel-de" : ""}`;
 }
 
 export type OfferMenuEditItem = {

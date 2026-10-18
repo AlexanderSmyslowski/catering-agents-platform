@@ -118,12 +118,12 @@ describe("applied canonical snapshots", () => {
       expect((await fixture.apply()).statusCode).toBe(200);
       const manifest = (await fixture.store.getApplyManifest(context, fixture.approvedId))!;
       enforceTransactionReads = true;
-      for (const url of [`/v1/exports/production-plans/${manifest.planId}/html`, `/v1/exports/production-folders/${manifest.planId}/html`, `/v1/exports/purchase-lists/${manifest.purchaseListId}/csv`]) {
+      for (const url of [`/v1/exports/production-plans/${manifest.planId}/html`, `/v1/exports/production-folders/${manifest.planId}/html`, `/v1/exports/purchase-lists/${manifest.purchaseListId}/csv`, `/v1/exports/purchase-lists/${manifest.purchaseListId}/csv?format=excel-de`]) {
         const response = await exports.inject({ method: "GET", url, headers });
         expect(response.statusCode, response.body).toBe(200);
         expect(response.body).toContain("soup ingredient");
       }
-      expect(exportCommits).toBe(3);
+      expect(exportCommits).toBe(4);
     } finally { await exports.close(); await fixture.app.close(); await base.end(); }
   });
 
@@ -131,7 +131,7 @@ describe("applied canonical snapshots", () => {
     const fixture = await approvedDescendant();
     const exports = buildPrintExportApp({ rootDir: fixture.rootDir, trustedActorSecret: secret, env: { CATERING_DEV_AUTH: "1" } });
     const approved = (await fixture.store.getApprovedProductionSpec(context, fixture.approvedId))!;
-    const urls = [`/v1/exports/production-plans/${approved.artifacts.productionPlan.planId}/html`, `/v1/exports/production-folders/${approved.artifacts.productionPlan.planId}/html`, `/v1/exports/purchase-lists/${approved.artifacts.purchaseList.purchaseListId}/csv`];
+    const urls = [`/v1/exports/production-plans/${approved.artifacts.productionPlan.planId}/html`, `/v1/exports/production-folders/${approved.artifacts.productionPlan.planId}/html`, `/v1/exports/purchase-lists/${approved.artifacts.purchaseList.purchaseListId}/csv`, `/v1/exports/purchase-lists/${approved.artifacts.purchaseList.purchaseListId}/csv?format=excel-de`];
     let auditEntered!: () => void;
     const paused = new Promise<void>(resolve => { auditEntered = resolve; });
     let releaseAudit!: () => void;
@@ -257,7 +257,7 @@ describe("applied canonical snapshots", () => {
     try {
       expect((await fixture.apply()).statusCode).toBe(200);
       const manifest = (await fixture.store.getApplyManifest(context, fixture.approvedId))!;
-      const urls = [`/v1/exports/production-plans/${manifest.planId}/html`, `/v1/exports/production-folders/${manifest.planId}/html`, `/v1/exports/purchase-lists/${manifest.purchaseListId}/csv`];
+      const urls = [`/v1/exports/production-plans/${manifest.planId}/html`, `/v1/exports/production-folders/${manifest.planId}/html`, `/v1/exports/purchase-lists/${manifest.purchaseListId}/csv`, `/v1/exports/purchase-lists/${manifest.purchaseListId}/csv?format=excel-de`];
       const assertStatuses = async (status: number, requestHeaders = headers) => {
         for (const url of urls) {
           const response = await exports.inject({ method: "GET", url, headers: requestHeaders });

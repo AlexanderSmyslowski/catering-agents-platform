@@ -257,6 +257,7 @@ describe("backoffice API session requests", () => {
   it("keeps export links on the read-only export service paths", () => {
     expect(offerExportUrl("draft-ops-1")).toBe("/api/exports/v1/exports/offers/draft-ops-1/html");
     expect(productionExportUrl("plan-ops-1")).toBe("/api/exports/v1/exports/production-plans/plan-ops-1/html");
+    expect(purchaseListExportUrl("purchase-ops-1", "excel-de")).toBe("/api/exports/v1/exports/purchase-lists/purchase-ops-1/csv?format=excel-de");
     expect(purchaseListExportUrl("purchase-ops-1")).toBe(
       "/api/exports/v1/exports/purchase-lists/purchase-ops-1/csv"
     );

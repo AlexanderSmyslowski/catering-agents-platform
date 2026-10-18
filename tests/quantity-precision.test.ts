@@ -14,6 +14,30 @@ function batch(recipe = model(), servings = 20, componentId = "compote"): Produc
 }
 
 describe("quantity precision through production, purchasing and print", () => {
+  it("exports precise German Excel quantities while preserving the original CSV contract", () => {
+    const list = aggregatePurchaseList("excel-precision", [batch(model(), 20)]);
+    const original = renderPurchaseListCsv(list);
+    const excel = renderPurchaseListCsv(list, "excel-de");
+    expect(original).toContain('"0.002","kg","0.002","kg"');
+    expect(original).not.toContain("Küchenmenge");
+    expect(excel.startsWith("\uFEFF")).toBe(true);
+    expect(excel).toContain('"Warengruppe";"Artikel";"Normalisierte Menge"');
+    expect(excel).toContain('"0,002";"kg";"0,002";"kg";"2 g"');
+    expect(excel.split("\r\n")).toHaveLength(2);
+    expect(list.items[0]!.purchaseQty).toBe(0.002);
+  });
+
+  it("keeps formula-looking and quoted source text inert in the Excel export", () => {
+    const list = aggregatePurchaseList("excel-inert-text", [batch(model(), 20)]);
+    list.items[0]!.displayName = '=SUM(1;1)';
+    list.items[0]!.supplierHint = '\t@SUM(1+1)';
+    list.items[0]!.sourceRecipes = ['Quelle "A"; zweite Zeile\nmit Text'];
+    const excel = renderPurchaseListCsv(list, "excel-de");
+    expect(excel).toContain(`"'=SUM(1;1)"`);
+    expect(excel).toContain(`"'\t@SUM(1+1)"`);
+    expect(excel).toContain('"Quelle ""A""; zweite Zeile\nmit Text"');
+  });
+
   it("retains2g in kg and exact fractional ingredients without a percentage surcharge", () => {
     expect(scaleRecipe(model(),20).ingredients[0]!.quantity.amount).toBe(0.002);
     expect(scaleRecipe(model(0.15,"l"),55).ingredients[0]!.quantity.amount).toBe(0.825);
