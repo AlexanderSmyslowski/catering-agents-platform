@@ -7,6 +7,7 @@ never infers access approval, manufactures historical release receipts, or migra
 from __future__ import annotations
 
 import argparse
+import base64
 import datetime
 import gzip
 import hashlib
@@ -23,6 +24,7 @@ import stat
 import subprocess
 import sys
 import tarfile
+import tempfile
 import time
 import uuid
 
@@ -39,6 +41,14 @@ RELEASES = Path("/opt/catering-nue-image-updates")
 SHA = re.compile(r"^[0-9a-f]{64}$")
 IMAGE = re.compile(r"^sha256:[0-9a-f]{64}$")
 RECOVERING = False
+SSH_KEYGEN = "/usr/bin/ssh-keygen"
+OPERATOR_SIGNING_KEY = Path("/Users/alexandersmyslowski/.ssh/codex_hetzner_review")
+OPERATOR_PUBLIC_KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIABJPlMZ355FFNi5V3ZPbSXyDzkXAfA+amXA0STPkzc8"
+OPERATOR_KEY_FINGERPRINT = "SHA256:Sp5f1SkjF/Wi3Qs0IJ1+JKwCHpY5hcrYqjd59D0dnas"
+SIGNATURE_NAMESPACE = "catering-nue-image-update@catering-agents-platform"
+SIGNER_IDENTITY = "catering-nue-operator"
+ADMISSION_LIMIT = 32768
+SIGNATURE_LIMIT = 8192
 
 
 def require(value, reason):
@@ -97,12 +107,46 @@ def read_bound(path, expected):
     return json.loads(Path(path).read_bytes())
 
 
-def make_admission(manifest, manifest_sha, phase, remote_bundle, remote_admission, parameters):
-    """Return only a fixed invocation for the existing admitted SSH caller.
+def read_bounded_bytes(path, expected_sha, limit):
+    require(SHA.fullmatch(expected_sha or ""), "NUE_SIGNED_INPUT_DIGEST")
+    fd = os.open(protected(path), os.O_RDONLY | os.O_NOFOLLOW)
+    with os.fdopen(fd, "rb") as source:
+        info = os.fstat(source.fileno())
+        require(stat.S_ISREG(info.st_mode) and info.st_nlink == 1 and 0 < info.st_size <= limit, "NUE_SIGNED_INPUT_SIZE")
+        body = source.read(limit + 1)
+    require(0 < len(body) <= limit and hashlib.sha256(body).hexdigest() == expected_sha, "NUE_SIGNED_INPUT_BINDING")
+    return body
 
-    This is the caller's short-lived local gate result, not a remote CI assertion.
-    Its digest must reach the target through that caller's trusted command channel.
-    """
+
+def verify_admission_signature(body, signature):
+    require(0 < len(body) <= ADMISSION_LIMIT and 0 < len(signature) <= SIGNATURE_LIMIT, "NUE_SIGNED_INPUT_SIZE")
+    public_blob = base64.b64decode(OPERATOR_PUBLIC_KEY.split()[1], validate=True)
+    fingerprint = "SHA256:" + base64.b64encode(hashlib.sha256(public_blob).digest()).decode("ascii").rstrip("=")
+    require(fingerprint == OPERATOR_KEY_FINGERPRINT, "NUE_PINNED_OPERATOR_KEY_INVALID")
+    # Trust only the public key in this accepted helper. Neither the admission nor
+    # a target-owned allowed_signers file can select the authenticating issuer.
+    with tempfile.TemporaryDirectory(prefix="catering-nue-signature-") as temporary:
+        root = Path(temporary); root.chmod(0o700)
+        allowed = root / "allowed_signers"; signed = root / "admission.sig"
+        put(allowed, (SIGNER_IDENTITY + ' namespaces="' + SIGNATURE_NAMESPACE + '" ' + OPERATOR_PUBLIC_KEY + "\n").encode("ascii"))
+        put(signed, signature)
+        result = subprocess.run([SSH_KEYGEN, "-Y", "verify", "-f", str(allowed), "-I", SIGNER_IDENTITY, "-n", SIGNATURE_NAMESPACE, "-s", str(signed)], input=body, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
+        require(result.returncode == 0, "NUE_AUTHENTIC_MAC_SIGNATURE_REQUIRED")
+
+
+def sign_admission(body):
+    require(0 < len(body) <= ADMISSION_LIMIT, "NUE_SIGNED_INPUT_SIZE")
+    info = OPERATOR_SIGNING_KEY.lstat()
+    require(stat.S_ISREG(info.st_mode) and info.st_uid == os.getuid() and info.st_nlink == 1 and not info.st_mode & 0o077, "NUE_LOCAL_SIGNING_KEY_METADATA")
+    # Only ssh-keygen opens the existing protected private key, on the Mac.
+    result = subprocess.run([SSH_KEYGEN, "-Y", "sign", "-f", str(OPERATOR_SIGNING_KEY), "-n", SIGNATURE_NAMESPACE, "-"], input=body, capture_output=True, timeout=30)
+    require(result.returncode == 0, "NUE_LOCAL_ADMISSION_SIGN_FAILED")
+    verify_admission_signature(body, result.stdout)
+    return result.stdout
+
+
+def make_admission(manifest, manifest_sha, phase, remote_bundle, remote_admission, parameters):
+    """Sign the accepted Mac gate result using the existing local SSH key."""
     require(phase in ("stage", "apply"), "NUE_ADMISSION_PHASE")
     for path in (remote_bundle, remote_admission, *[value for key, value in parameters.items() if not key.endswith("Sha256")]):
         require(isinstance(path, str) and Path(path).is_absolute() and str(Path(path)) == path and ".." not in Path(path).parts, "NUE_ADMISSION_PATH")
@@ -114,31 +158,42 @@ def make_admission(manifest, manifest_sha, phase, remote_bundle, remote_admissio
                  "productCommit": manifest["productCommit"], "operationsCommit": manifest["operationsCommit"], "sourceTreeSha256": manifest["sourceTreeSha256"],
                  "helpers": manifest["helpers"], "manifestSha256": manifest_sha, "remoteBundleDir": remote_bundle,
                  "parameters": parameters, "issuedAt": datetime.datetime.now(datetime.timezone.utc).isoformat(), "nonce": uuid.uuid4().hex}
-    admission_sha = hashlib.sha256(canonical(admission)).hexdigest()
+    body = canonical(admission)
+    admission_sha = hashlib.sha256(body).hexdigest()
+    signature = sign_admission(body)
+    signature_sha = hashlib.sha256(signature).hexdigest()
+    signature_path = remote_admission + ".sig"
     argv = ["python3", "-I", remote_bundle + "/tools/catering_target_nue_image_update.py", phase,
-            "--bundle-dir", remote_bundle, "--manifest-sha256", manifest_sha, "--admission", remote_admission, "--admission-sha256", admission_sha]
+            "--bundle-dir", remote_bundle, "--manifest-sha256", manifest_sha, "--admission", remote_admission, "--admission-sha256", admission_sha,
+            "--admission-signature", signature_path, "--admission-signature-sha256", signature_sha]
     flags = {"expectedBaseline": "--expected-baseline", "expectedBaselineSha256": "--expected-baseline-sha256", "backupProof": "--backup-proof", "backupProofSha256": "--backup-proof-sha256", "protectedSmoke": "--protected-smoke", "protectedSmokeSha256": "--protected-smoke-sha256"}
     for key, value in parameters.items(): argv.extend((flags[key], value))
     argv.extend(("--confirm", "STAGE_NUE_IMAGE_ONLY" if phase == "stage" else "ACTIVATE_NUE_IMAGE_ONLY"))
-    # The accepted caller transports this exact code and digest from the Mac.
-    # Static host CLI flags alone cannot create a fresh operator authorization.
-    invocation = "import runpy,sys; module=runpy.run_path(sys.argv[1]); raise SystemExit(module['main'](sys.argv[2:], trusted_admission_sha='" + admission_sha + "'))"
-    return {"admission": admission, "admissionBody": canonical(admission).decode("ascii"), "admissionSha256": admission_sha, "remoteAdmissionPath": remote_admission,
-            "argv": ["python3", "-I", "-c", invocation, argv[2], *argv[3:]]}
+    return {"admission": admission, "admissionBody": body.decode("ascii"), "admissionSha256": admission_sha, "remoteAdmissionPath": remote_admission,
+            "signatureBody": signature.decode("ascii"), "signatureSha256": signature_sha, "remoteSignaturePath": signature_path, "argv": argv}
 
 
-def require_admission(path, expected_sha, manifest, manifest_sha, phase, bundle, parameters):
+def require_admission(path, expected_sha, manifest, manifest_sha, phase, bundle, parameters, signature_path=None, signature_sha=None):
     require(path is not None and expected_sha is not None, "NUE_FRESH_MAC_ADMISSION_REQUIRED")
-    admission = read_bound(protected(path), expected_sha)
+    require(signature_path is not None and signature_sha is not None, "NUE_SIGNED_MAC_ADMISSION_REQUIRED")
+    body = read_bounded_bytes(path, expected_sha, ADMISSION_LIMIT)
+    signature = read_bounded_bytes(signature_path, signature_sha, SIGNATURE_LIMIT)
+    verify_admission_signature(body, signature)
+    admission = json.loads(body)
+    require(body == canonical(admission), "NUE_CANONICAL_ADMISSION_REQUIRED")
     require(set(admission) == {"schemaVersion", "mode", "targetId", "hostAddress", "phase", "productCommit", "operationsCommit", "sourceTreeSha256", "helpers", "manifestSha256", "remoteBundleDir", "parameters", "issuedAt", "nonce"}, "NUE_ADMISSION_SHAPE")
     require(admission["schemaVersion"] == 1 and admission["mode"] == "nue-image-only" and admission["targetId"] == "catering-prod-02" and admission["hostAddress"] == "2.28.200.16" and admission["phase"] == phase, "NUE_ADMISSION_TARGET_PHASE")
-    for field in ("productCommit", "operationsCommit", "sourceTreeSha256", "helpers"):
-        require(admission[field] == manifest[field], "NUE_ADMISSION_ACCEPTED_BINDING")
+    if manifest is not None: bind_admission_manifest(admission, manifest)
     require(admission["manifestSha256"] == manifest_sha and admission["remoteBundleDir"] == str(bundle) and admission["parameters"] == parameters, "NUE_ADMISSION_CALL_BINDING")
     require(re.fullmatch(r"[0-9a-f]{32}", admission["nonce"]), "NUE_ADMISSION_NONCE")
     age = (datetime.datetime.now(datetime.timezone.utc) - datetime.datetime.fromisoformat(admission["issuedAt"])).total_seconds()
     require(0 <= age <= 900, "NUE_MAC_ADMISSION_EXPIRED")
     return admission
+
+
+def bind_admission_manifest(admission, manifest):
+    for field in ("productCommit", "operationsCommit", "sourceTreeSha256", "helpers"):
+        require(admission[field] == manifest[field], "NUE_ADMISSION_ACCEPTED_BINDING")
 
 
 def schema_binding(files):
@@ -415,12 +470,14 @@ def candidate_compose(old, images):
     return (json.dumps(value, indent=2) + "\n").encode()
 
 
-def stage(bundle, manifest_sha, expected_path, expected_sha, proof_path, proof_sha, admission_path=None, admission_sha=None):
+def stage(bundle, manifest_sha, expected_path, expected_sha, proof_path, proof_sha, admission_path=None, admission_sha=None, signature_path=None, signature_sha=None):
     host_identity()
     protected(bundle, directory=True)
+    admission = require_admission(admission_path, admission_sha, None, manifest_sha, "stage", bundle,
+                      {"expectedBaseline": str(expected_path), "expectedBaselineSha256": expected_sha, "backupProof": str(proof_path), "backupProofSha256": proof_sha}, signature_path, signature_sha)
+    # Authenticate the locally accepted manifest before loading any bundled helper.
     manifest = verify_bundle(bundle, manifest_sha)
-    require_admission(admission_path, admission_sha, manifest, manifest_sha, "stage", bundle,
-                      {"expectedBaseline": str(expected_path), "expectedBaselineSha256": expected_sha, "backupProof": str(proof_path), "backupProofSha256": proof_sha})
+    bind_admission_manifest(admission, manifest)
     expected = read_bound(protected(expected_path), expected_sha)
     proof = read_bound(protected(proof_path), proof_sha)
     token = own_lock()
@@ -552,13 +609,14 @@ def interrupted(signum, frame):
     if not RECOVERING: raise RuntimeError("NUE_INTERRUPTED:" + str(signum))
 
 
-def apply(bundle, manifest_sha, smoke, smoke_sha, admission_path=None, admission_sha=None):
+def apply(bundle, manifest_sha, smoke, smoke_sha, admission_path=None, admission_sha=None, signature_path=None, signature_sha=None):
     global RECOVERING
     host_identity(); bundle = protected(bundle, directory=True)
     require(bundle == RELEASES / manifest_sha, "NUE_STAGED_PATH_BINDING")
+    admission = require_admission(admission_path, admission_sha, None, manifest_sha, "apply", bundle,
+                      {"protectedSmoke": str(smoke), "protectedSmokeSha256": smoke_sha}, signature_path, signature_sha)
     manifest = verify_bundle(bundle, manifest_sha)
-    require_admission(admission_path, admission_sha, manifest, manifest_sha, "apply", bundle,
-                      {"protectedSmoke": str(smoke), "protectedSmokeSha256": smoke_sha})
+    bind_admission_manifest(admission, manifest)
     oci = load_module("nue_bound_oci", bundle / "tools/catering_target_oci.py")
     receipt = json.loads(protected(bundle / "stage.json").read_bytes())
     require(receipt["manifestSha256"] == manifest_sha and receipt["mode"] == "nue-image-only", "NUE_STAGE_BINDING")
@@ -597,7 +655,7 @@ def apply(bundle, manifest_sha, smoke, smoke_sha, admission_path=None, admission
         # Disable autonomous restarts before the first writer stop. Never SIGKILL a
         # database writer on an arbitrary Docker stop deadline.
         require_admission(admission_path, admission_sha, manifest, manifest_sha, "apply", bundle,
-                          {"protectedSmoke": str(smoke), "protectedSmokeSha256": smoke_sha})
+                          {"protectedSmoke": str(smoke), "protectedSmokeSha256": smoke_sha}, signature_path, signature_sha)
         mutated = True
         pause_applications(baseline, {row["image"] for row in baseline["containers"].values()}, pending, token)
         active = command(["docker", "exec", "platform-infra-postgres-1", "psql", "-X", "-U", "catering", "-d", "catering_agents", "-Atc", "SELECT count(*) FROM pg_stat_activity WHERE backend_type='client backend' AND pid<>pg_backend_pid()"])
@@ -651,13 +709,15 @@ def verify(bundle, manifest_sha):
     return {"status": "NUE_IMAGE_ONLY_VERIFIED", "observerInstalled": False, "automaticBackupRestoreChainAccepted": False}
 
 
-def main(argv=None, *, trusted_admission_sha=None):
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("phase", choices=("build", "stage", "apply", "verify"))
     parser.add_argument("--bundle-dir", type=Path, required=True)
     parser.add_argument("--manifest-sha256", required=True)
     parser.add_argument("--admission", type=Path)
     parser.add_argument("--admission-sha256")
+    parser.add_argument("--admission-signature", type=Path)
+    parser.add_argument("--admission-signature-sha256")
     parser.add_argument("--expected-baseline", type=Path)
     parser.add_argument("--expected-baseline-sha256")
     parser.add_argument("--backup-proof", type=Path)
@@ -671,16 +731,16 @@ def main(argv=None, *, trusted_admission_sha=None):
     args = parser.parse_args(argv)
     try:
         if args.phase in ("stage", "apply"):
-            require(trusted_admission_sha is not None and trusted_admission_sha == args.admission_sha256, "NUE_TRUSTED_MAC_CALLER_REQUIRED")
+            require(args.admission_signature is not None and args.admission_signature_sha256 is not None, "NUE_SIGNED_MAC_ADMISSION_REQUIRED")
         if args.phase == "build":
             require(args.confirm == "BUILD_NUE_IMAGE_ONLY" and args.output_dir is not None, "NUE_BUILD_CONFIRMATION")
             result = {"status": "NUE_IMAGE_ONLY_BUNDLE_BUILT", "manifestSha256": build_prepared(args.bundle_dir, args.manifest_sha256, args.output_dir, args.node_base, args.caddy_base)}
         elif args.phase == "stage":
             require(args.confirm == "STAGE_NUE_IMAGE_ONLY", "NUE_STAGE_CONFIRMATION")
-            result = stage(args.bundle_dir, args.manifest_sha256, args.expected_baseline, args.expected_baseline_sha256, args.backup_proof, args.backup_proof_sha256, args.admission, args.admission_sha256)
+            result = stage(args.bundle_dir, args.manifest_sha256, args.expected_baseline, args.expected_baseline_sha256, args.backup_proof, args.backup_proof_sha256, args.admission, args.admission_sha256, args.admission_signature, args.admission_signature_sha256)
         elif args.phase == "apply":
             require(args.confirm == "ACTIVATE_NUE_IMAGE_ONLY", "NUE_APPLY_CONFIRMATION")
-            result = apply(args.bundle_dir, args.manifest_sha256, args.protected_smoke, args.protected_smoke_sha256, args.admission, args.admission_sha256)
+            result = apply(args.bundle_dir, args.manifest_sha256, args.protected_smoke, args.protected_smoke_sha256, args.admission, args.admission_sha256, args.admission_signature, args.admission_signature_sha256)
         else: result = verify(args.bundle_dir, args.manifest_sha256)
         print(json.dumps(result)); return 0
     except BaseException as error:

@@ -2,10 +2,18 @@
 
 **Korrektur der CI-Deutung, 18.10.2026 01:38 CEST:** Run39079338322 wurde vom Koordinator bei rund sechs Minuten voreilig abgebrochen. Das nun vollständige Log beweist regulären Fortschritt: unter anderem95 Operationsprüfungen in244s PASS; der Observer-Test war noch gar nicht gestartet. Der alte Run39075030417 hatte37 Minuten bis zum Abbruch regulär426 Dateien abgearbeitet; aus der fehlenden Observerausgabe allein ist weder sein Start noch ein tatsächlicher Hänger nachgewiesen. Die frühere Zuschreibung eines konkreten CI-Hängers zum Observer ist zurückgenommen. Das statisch belegte spawnSync-/Nachfahren-/Pipe-Risiko wurde lokal begrenzt und unabhängig geprüft, ist aber kein Nachweis der ursprünglichen CI-Ursache. Keine weitere Linux-Reparatur/Prüfarchitektur ohne Fehlerbeleg. Nach gebündelten tatsächlichen Opus-Produktbefunden einen erforderlichen Gesamt-CI-Lauf mit realistischer Dauer vollständig abwarten; keine manuellen unveränderten Vollsuiten und keine vorschnellen Abbrüche. Alle vier bisherigen CI-Runs sind CANCELLED, kein Full-Suite-PASS. Browser/Compose/macOS des letzten Heads waren PASS. Beleg tmp/product-pilot-20261018/ci-39079338322-build-cancelled.log.
 
-version: 5.444
+version: 5.445
 date: 2026-10-18
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
+
+## 5.445 — 18.10.2026: authentische Maczulassung über vorhandene OpenSSH-Signaturen
+
+Der konkrete Issuerbefund zu d50b5a7 ist eng lokal korrigiert: nach den unveränderten exakten main-CI-/Commit-/Source-/Opshelpergates signiert ausschließlich ssh-keygen die kanonischen Admissionbytes mit dem bestehenden geschützten Mac-SSH-Key. Der Hostprüfer verwendet ausschließlich den im angenommenen Helper gebundenen öffentlichen Schlüssel samt geprüftem Fingerprint, feste Identity und Namespace sowie eigene temporäre Verifikationsdateien. Ein selbst erklärter Digest oder öffentlicher runpy-Aufruf ersetzt die Signatur nicht mehr. Private Schlüsselwerte wurden weder gelesen/ausgegeben noch übertragen; kein neuer Keystore, Agentforwarding oder Authframework.
+
+28 fokussierte NUE-Prüfungen bestanden, einschließlich echter synthetischer Signaturen und negativer Fremdkey-/Namespace-/Bitflip-/Unsigned-/Phase-/Parameter-/Ablauf- und Tempcleanupfälle. Tests verwenden ausschließlich neu erzeugte synthetische Schlüssel. Die bestehende 15-Minuten-/Manifest-/Aufrufbindung wird vor Stage/Apply-Lock und vor erster Writeränderung weiter geprüft. Der unveränderte angenommene Prüfer authentisiert die Maczulassung; beliebiger kompromittierter Root, der den Prüfer ersetzt, liegt außerhalb dieser Zusicherung.
+
+Die Signaturkorrektur ist implementiert, benötigt noch ihre gezielte unabhängige Folgeabnahme und die CI des tatsächlich neuen Heads. Offene GitHubreviewthreads, Integration, reale Buildbasen, frische Zugangs-/Backup-/Restore-/Cleanupbelege und Hostausführung bleiben beim Koordinator; kein Merge, Deployment, erfolgreicher NUE-Lauf oder Pilot-GO behauptet.
 
 ## 5.444 — 18.10.2026: expliziter NUE-Image-only-Workflow und offene Issuerbindung
 
@@ -2673,3 +2681,8 @@ Vier betroffene Pakete korrigiert, JWT-Regression vor/nach nachgewiesen, gezielt
 ### 5.444 — 18.10.2026: NUE-Workflow lokal implementiert, Issuerreview weiter offen
 
 NUE-Image-only-Pfad bis d50b5a7 lokal unabhängig angenommen; fokussierte Prüfungen bestanden. Authentischer Macissuer bleibt konkreter offener GitHubreviewbefund vor Integration; keine korrigierte CI-, Merge- oder Hostabnahme behauptet.
+
+
+### 5.445 — 18.10.2026: bestehender Mac-SSH-Key authentisiert Admission
+
+OpenSSH-sign/verify statt selbstdeklarierter runpy-/SHA-Zulassung lokal implementiert; 28 gezielte synthetische Prüfungen bestanden. Gezielte Folgeabnahme, neuer Head-CI und reale Ausführung weiter offen.

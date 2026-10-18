@@ -1,3 +1,13 @@
+# Aktueller Operationsstand — Version 5.445 / 18.10.2026
+
+## 5.445 — 18.10.2026: authentische Maczulassung über vorhandene OpenSSH-Signaturen
+
+Der konkrete Issuerbefund zu d50b5a7 ist eng lokal korrigiert: nach den unveränderten exakten main-CI-/Commit-/Source-/Opshelpergates signiert ausschließlich ssh-keygen die kanonischen Admissionbytes mit dem bestehenden geschützten Mac-SSH-Key. Der Hostprüfer verwendet ausschließlich den im angenommenen Helper gebundenen öffentlichen Schlüssel samt geprüftem Fingerprint, feste Identity und Namespace sowie eigene temporäre Verifikationsdateien. Ein selbst erklärter Digest oder öffentlicher runpy-Aufruf ersetzt die Signatur nicht mehr. Private Schlüsselwerte wurden weder gelesen/ausgegeben noch übertragen; kein neuer Keystore, Agentforwarding oder Authframework.
+
+28 fokussierte NUE-Prüfungen bestanden, einschließlich echter synthetischer Signaturen und negativer Fremdkey-/Namespace-/Bitflip-/Unsigned-/Phase-/Parameter-/Ablauf- und Tempcleanupfälle. Tests verwenden ausschließlich neu erzeugte synthetische Schlüssel. Die bestehende 15-Minuten-/Manifest-/Aufrufbindung wird vor Stage/Apply-Lock und vor erster Writeränderung weiter geprüft. Der unveränderte angenommene Prüfer authentisiert die Maczulassung; beliebiger kompromittierter Root, der den Prüfer ersetzt, liegt außerhalb dieser Zusicherung.
+
+Die Signaturkorrektur ist implementiert, benötigt noch ihre gezielte unabhängige Folgeabnahme und die CI des tatsächlich neuen Heads. Offene GitHubreviewthreads, Integration, reale Buildbasen, frische Zugangs-/Backup-/Restore-/Cleanupbelege und Hostausführung bleiben beim Koordinator; kein Merge, Deployment, erfolgreicher NUE-Lauf oder Pilot-GO behauptet.
+
 # Aktueller Operationsstand — Version 5.444 / 18.10.2026
 
 ## 5.444 — 18.10.2026: expliziter NUE-Image-only-Workflow und offene Issuerbindung

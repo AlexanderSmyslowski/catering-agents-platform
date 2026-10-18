@@ -456,19 +456,31 @@ main-Push-CI-/Gitprüfungen und vergleichen den Bundle-Sourcebaum mit einem neue
 Export des akzeptierten Produktcommits und sämtliche Helperbytes mit dem
 akzeptierten Operationscheckout. Ein selbstkonsistentes Bundle reicht nicht.
 
-Das Gate liefert eine feste `argv`-Liste und exakte `admissionBody`-Bytes samt
-separatem Digest. Ausschließlich der bereits zugelassene geschützte Caller
-überträgt die lokalen Admissionbytes und führt **diese unveränderte Liste** über
-seinen vertrauenswürdigen SSH-Kanal aus. Er übernimmt weder hostseitig erzeugte
-Admissionen noch einen vom Host ersetzten Digest/Aufruf. Das ist eine höchstens
-15 Minuten gültige, an Phase, Ziel, Commits, Manifest und sämtliche Aufrufparameter
-gebundene lokale Zulassung; keine vom Ziel selbst behauptete CI-Attestation.
-Der Admissiondigest ist literal in den lokalen Aufrufbytes eingebunden. Ein
-direkter Host-CLI-Aufruf kann die interne Callerbindung nicht per Flag setzen
-und bricht auch mit selbstdeklarierter Admission vor dem Update-Lock ab. Vor der ersten Writeränderung
-wird die Zulassung nochmals geprüft; nach Writerpause und während Recovery gibt
-es keine GitHubabhängigkeit. Die folgenden Befehle laufen am Mac; der geschützte
-Caller führt danach ausschließlich die vom Gate gelieferte `argv` aus.
+Nach diesen Gates signiert ausschließlich `/usr/bin/ssh-keygen -Y sign` die
+kanonischen Admissionbytes über STDIN mit dem bereits vorhandenen geschützten
+Mac-SSH-Key. Der private Schlüssel wird weder gelesen/exportiert noch übertragen;
+es gibt kein Agentforwarding. Das Gate liefert eine feste `argv`-Liste,
+`admissionBody` und `signatureBody` samt separaten Digests und Remote-Dateipfaden.
+Der bereits zugelassene geschützte Caller überträgt beide Bodies unverändert und
+führt die gelieferte normale Host-CLI aus.
+
+Der unveränderte angenommene Hosthelper prüft die Signatur mit dem dort fest
+gebundenen ED25519-Public-Key und Fingerprint, der festen Identity
+`catering-nue-operator` und dem Namespace
+`catering-nue-image-update@catering-agents-platform`. Admission und Signatur werden
+jeweils einmal begrenzt gelesen; exakt diese Admissionbytes gehen an
+`ssh-keygen -Y verify`. Der Prüfer erzeugt und bereinigt seine eigenen temporären
+allowed_signers-/Signaturdateien. Eine vom Host frei erklärte SHA, ein anderer
+Schlüssel oder ein fremder Namespace ersetzt die Macsignatur nicht. Es gibt
+keinen runpy-/trusted-SHA-Ersatz für diese Prüfung.
+
+Die höchstens 15 Minuten gültige Zulassung bleibt an Phase, Ziel, Commits,
+Manifest und sämtliche Aufrufparameter gebunden. Signatur und Bindung werden vor
+Stage-/Apply-Lock und erneut vor der ersten Writeränderung geprüft; nach
+Writerpause und während Recovery gibt es keine GitHubabhängigkeit. Dies
+authentisiert die Maczulassung im unveränderten angenommenen Prüfer; es schützt
+nicht gegen beliebigen kompromittierten Root, der den Prüfer ersetzt. Die
+folgenden Befehle laufen am Mac.
 
 ```bash
 python3 platform-infra/scripts/catering-target-operator.py nue-stage-gate \

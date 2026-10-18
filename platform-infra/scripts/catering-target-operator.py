@@ -877,7 +877,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.phase in {"nue-stage-gate", "nue-apply-gate"}:
             try:
                 print(json.dumps(nue_admission(operations, product, args), sort_keys=True))
-            except (RuntimeError, OSError, ValueError) as exc:
+            except (RuntimeError, OSError, ValueError, subprocess.SubprocessError) as exc:
                 raise OperatorError("NUE admission failed: " + type(exc).__name__) from None
             return 0
         if args.phase == "nue-prepare":

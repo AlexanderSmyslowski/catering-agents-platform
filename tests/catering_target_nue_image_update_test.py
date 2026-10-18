@@ -1,5 +1,6 @@
 """Focused postmigration NUE image-only boundaries; no live Docker or host access."""
 import datetime
+import base64
 import importlib.util
 import json
 import hashlib
@@ -12,7 +13,7 @@ import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
-from contextlib import redirect_stderr
+from contextlib import contextmanager, redirect_stderr
 import io
 from unittest.mock import patch
 
@@ -22,6 +23,16 @@ nue = importlib.util.module_from_spec(SPEC); SPEC.loader.exec_module(nue)
 
 
 class NueTests(unittest.TestCase):
+    @contextmanager
+    def synthetic_issuer(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            key = Path(temporary) / "synthetic-issuer"
+            subprocess.run([nue.SSH_KEYGEN, "-q", "-t", "ed25519", "-N", "", "-f", str(key)], check=True, capture_output=True)
+            public = " ".join(Path(str(key) + ".pub").read_text().split()[:2])
+            fingerprint = "SHA256:" + base64.b64encode(hashlib.sha256(base64.b64decode(public.split()[1])).digest()).decode().rstrip("=")
+            with patch.multiple(nue, OPERATOR_SIGNING_KEY=key, OPERATOR_PUBLIC_KEY=public, OPERATOR_KEY_FINGERPRINT=fingerprint):
+                yield key
+
     def test_compose_changes_only_five_image_values(self):
         services = {s: {"image": "old", "restart": "unless-stopped", "environment": {"EXAMPLE": "value"}, "networks": ["private"]} for s in nue.SERVICES}
         original = {"name": "platform-infra", "services": services, "networks": {"private": {"external": True}}, "volumes": {"untouched": {"external": True}}}
@@ -109,7 +120,7 @@ class NueTests(unittest.TestCase):
             if "psql" in argv: return b"0"
             return b""
         verify_results = [RuntimeError("CANDIDATE_HEALTH_FAIL"), RuntimeError("ROLLBACK_FAIL") if recovery_fails else {}]
-        with patch.multiple(nue, RELEASES=tmp, COMPOSE=compose), patch.object(nue, "host_identity"), patch.object(nue, "protected", side_effect=lambda p, **kw: Path(p)), patch.object(nue, "require_admission"), patch.object(nue, "verify_bundle", return_value=manifest), patch.object(nue, "read_bound", side_effect=lambda p, sha: baseline if Path(p).name == "baseline.json" else {}), patch.object(nue, "backup_gate"), patch.object(nue, "own_lock", return_value="token"), patch.object(nue, "owned"), patch.object(nue, "snapshot", return_value={} if preflight_fails else baseline), patch.object(nue, "runtime_schema", return_value={}), patch.object(nue, "command", side_effect=run), patch.object(nue, "load_module", side_effect=lambda name, path: oci if str(path).endswith("catering_target_oci.py") else SimpleNamespace(_inspect_archive=lambda p: binding)), patch.object(nue, "replace_compose", side_effect=lambda body, meta, token: compose.write_bytes(body)), patch.object(nue, "pause_applications") as pause, patch.object(nue, "compose_up") as up, patch.object(nue, "set_policies"), patch.object(nue, "verify_runtime", side_effect=verify_results), patch.object(nue, "unlock") as unlock:
+        with patch.multiple(nue, RELEASES=tmp, COMPOSE=compose), patch.object(nue, "host_identity"), patch.object(nue, "protected", side_effect=lambda p, **kw: Path(p)), patch.object(nue, "require_admission"), patch.object(nue, "bind_admission_manifest"), patch.object(nue, "verify_bundle", return_value=manifest), patch.object(nue, "read_bound", side_effect=lambda p, sha: baseline if Path(p).name == "baseline.json" else {}), patch.object(nue, "backup_gate"), patch.object(nue, "own_lock", return_value="token"), patch.object(nue, "owned"), patch.object(nue, "snapshot", return_value={} if preflight_fails else baseline), patch.object(nue, "runtime_schema", return_value={}), patch.object(nue, "command", side_effect=run), patch.object(nue, "load_module", side_effect=lambda name, path: oci if str(path).endswith("catering_target_oci.py") else SimpleNamespace(_inspect_archive=lambda p: binding)), patch.object(nue, "replace_compose", side_effect=lambda body, meta, token: compose.write_bytes(body)), patch.object(nue, "pause_applications") as pause, patch.object(nue, "compose_up") as up, patch.object(nue, "set_policies"), patch.object(nue, "verify_runtime", side_effect=verify_results), patch.object(nue, "unlock") as unlock:
             expected_error = self.assertRaises(ValueError) if loaded_mutation else self.assertRaisesRegex(RuntimeError, "NUE_BASELINE_CHANGED|CANDIDATE_HEALTH_FAIL")
             with expected_error:
                 nue.apply(bundle, sha, smoke, hashlib.sha256(smoke.read_bytes()).hexdigest())
@@ -172,26 +183,74 @@ class NueTests(unittest.TestCase):
             args = [phase, "--bundle-dir", "/bundle", "--manifest-sha256", "a" * 64, "--admission", "/forged-admission", "--admission-sha256", "b" * 64]
             with self.subTest(phase=phase), patch.object(nue, "stage") as stage, patch.object(nue, "apply") as apply, redirect_stderr(io.StringIO()) as error:
                 self.assertEqual(nue.main(args), 1)
-                self.assertIn("NUE_TRUSTED_MAC_CALLER_REQUIRED", error.getvalue())
+                self.assertIn("NUE_SIGNED_MAC_ADMISSION_REQUIRED", error.getvalue())
                 stage.assert_not_called(); apply.assert_not_called()
 
     def test_admission_binds_phase_params_commits_and_short_expiry(self):
         manifest = {"productCommit": "1" * 40, "operationsCommit": "2" * 40, "sourceTreeSha256": "3" * 64, "helpers": {"payload": "4" * 64}}
         params = {"protectedSmoke": "/smoke", "protectedSmokeSha256": "5" * 64}
         bundle = nue.RELEASES / ("a" * 64)
-        gate = nue.make_admission(manifest, "a" * 64, "apply", str(bundle), "/admission.json", params)
-        with tempfile.TemporaryDirectory() as tmp:
+        with self.synthetic_issuer(), tempfile.TemporaryDirectory() as tmp:
+            gate = nue.make_admission(manifest, "a" * 64, "apply", str(bundle), "/admission.json", params)
             path = Path(tmp) / "admission.json"
             path.write_bytes(nue.canonical(gate["admission"]))
-            with patch.object(nue, "protected", return_value=path):
-                nue.require_admission(path, gate["admissionSha256"], manifest, "a" * 64, "apply", bundle, params)
+            signature = Path(tmp) / "admission.sig"; signature.write_text(gate["signatureBody"])
+            with patch.object(nue, "protected", side_effect=lambda p, **kw: Path(p)):
+                nue.require_admission(path, gate["admissionSha256"], manifest, "a" * 64, "apply", bundle, params, signature, gate["signatureSha256"])
                 for phase, parameters in (("stage", params), ("apply", {**params, "protectedSmoke": "/changed"})):
                     with self.assertRaisesRegex(RuntimeError, "NUE_ADMISSION_"):
-                        nue.require_admission(path, gate["admissionSha256"], manifest, "a" * 64, phase, bundle, parameters)
+                        nue.require_admission(path, gate["admissionSha256"], manifest, "a" * 64, phase, bundle, parameters, signature, gate["signatureSha256"])
                 changed = dict(gate["admission"], issuedAt=(datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=16)).isoformat())
                 path.write_bytes(nue.canonical(changed))
+                signature.write_bytes(nue.sign_admission(path.read_bytes()))
                 with self.assertRaisesRegex(RuntimeError, "NUE_MAC_ADMISSION_EXPIRED"):
-                    nue.require_admission(path, nue.digest(path), manifest, "a" * 64, "apply", bundle, params)
+                    nue.require_admission(path, nue.digest(path), manifest, "a" * 64, "apply", bundle, params, signature, nue.digest(signature))
+
+    def test_real_signature_rejects_wrong_key_namespace_and_changed_bytes(self):
+        with self.synthetic_issuer() as key, tempfile.TemporaryDirectory() as temporary:
+            body = b'{"accepted":"synthetic"}\n'
+            signature = nue.sign_admission(body)
+            nue.verify_admission_signature(body, signature)
+            other = Path(temporary) / "synthetic-other"
+            subprocess.run([nue.SSH_KEYGEN, "-q", "-t", "ed25519", "-N", "", "-f", str(other)], check=True, capture_output=True)
+            for signer, namespace, message, expected in ((other, nue.SIGNATURE_NAMESPACE, body, body), (key, nue.SIGNATURE_NAMESPACE + "-wrong", body, body), (key, nue.SIGNATURE_NAMESPACE, body, body.replace(b"accepted", b"rejectxx"))):
+                forged = subprocess.run([nue.SSH_KEYGEN, "-Y", "sign", "-f", str(signer), "-n", namespace, "-"], input=message, check=True, capture_output=True).stdout
+                with self.subTest(signer=signer.name, namespace=namespace, changed=message != expected), self.assertRaisesRegex(RuntimeError, "NUE_AUTHENTIC_MAC_SIGNATURE_REQUIRED"):
+                    nue.verify_admission_signature(expected, forged)
+            with self.assertRaisesRegex(RuntimeError, "NUE_AUTHENTIC_MAC_SIGNATURE_REQUIRED"):
+                nue.verify_admission_signature(body, b"self-declared-signature")
+
+    def test_same_host_forged_admission_digest_cannot_open_stage_lock(self):
+        with self.synthetic_issuer(), tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary); admission = root / "forged.json"; signature = root / "forged.sig"
+            admission.write_bytes(b'{"issuedAt":"self-declared"}\n'); signature.write_bytes(b"unsigned")
+            with patch.object(nue, "host_identity"), patch.object(nue, "protected", side_effect=lambda p, **kw: Path(p)), patch.object(nue, "verify_bundle", return_value={}) as verify_bundle, patch.object(nue, "own_lock") as lock:
+                with self.assertRaisesRegex(RuntimeError, "NUE_AUTHENTIC_MAC_SIGNATURE_REQUIRED"):
+                    nue.stage(root, "a" * 64, root / "baseline", "b" * 64, root / "proof", "c" * 64, admission, nue.digest(admission), signature, nue.digest(signature))
+                lock.assert_not_called()
+                verify_bundle.assert_not_called()
+
+    def test_signature_verifier_cleans_its_own_temporary_files_on_rejection(self):
+        temporary_directory = tempfile.TemporaryDirectory
+        with self.synthetic_issuer(), temporary_directory() as parent:
+            created = []
+            def own_temp(**kwargs):
+                context = temporary_directory(dir=parent, **kwargs); created.append(Path(context.name)); return context
+            with patch.object(nue.tempfile, "TemporaryDirectory", side_effect=own_temp):
+                with self.assertRaisesRegex(RuntimeError, "NUE_AUTHENTIC_MAC_SIGNATURE_REQUIRED"):
+                    nue.verify_admission_signature(b"synthetic", b"unsigned")
+            self.assertTrue(created)
+            self.assertTrue(all(not path.exists() for path in created))
+
+    def test_signature_inputs_are_bounded_and_fingerprint_is_pinned(self):
+        public_blob = base64.b64decode(nue.OPERATOR_PUBLIC_KEY.split()[1], validate=True)
+        self.assertEqual("SHA256:" + base64.b64encode(hashlib.sha256(public_blob).digest()).decode().rstrip("="), nue.OPERATOR_KEY_FINGERPRINT)
+        with self.synthetic_issuer(), tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "oversized"; path.write_bytes(b"x" * (nue.ADMISSION_LIMIT + 1))
+            with patch.object(nue, "protected", side_effect=lambda p: p), self.assertRaisesRegex(RuntimeError, "NUE_SIGNED_INPUT_SIZE"):
+                nue.read_bounded_bytes(path, nue.digest(path), nue.ADMISSION_LIMIT)
+            with patch.object(nue, "OPERATOR_KEY_FINGERPRINT", "wrong"), self.assertRaisesRegex(RuntimeError, "NUE_PINNED_OPERATOR_KEY_INVALID"):
+                nue.verify_admission_signature(b"synthetic", b"unsigned")
 
     def gate_args(self, operator, phase="stage"):
         argv = ["nue-" + phase + "-gate", "--target", "catering-prod-02", "--product-commit", "1" * 40, "--operations-commit", "2" * 40, "--product-source", "/product", "--bundle-dir", "/bundle", "--manifest-sha256", "a" * 64, "--remote-bundle-dir", "/remote-bundle" if phase == "stage" else str(nue.RELEASES / ("a" * 64)), "--remote-admission-path", "/admission.json"]
