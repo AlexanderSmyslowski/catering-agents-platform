@@ -475,14 +475,26 @@ class NueTests(unittest.TestCase):
             self.assertEqual(len([key for key in first if key.startswith("/platform-infra-")]), 5)
             self.assertTrue(all(call[:3] in (["docker", "image", "inspect"], ["docker", "exec", call[2]]) for call in state["calls"]))
 
+    def test_current_web_optional_empty_entrypoint_can_be_omitted(self):
+        oci = nue.load_module("nue_current_empty_entrypoint_oci", ROOT / "platform-infra/scripts/catering_target_oci.py")
+        for omitted in ("image", "container", "both"):
+            with self.subTest(omitted=omitted), self.synthetic_current_host() as state:
+                expected = nue.current_base_gate(oci, nue.CURRENT_RUNTIME_M, nue.CURRENT_WEB_M)
+                if omitted in ("image", "both"): state["images"][nue.CURRENT_WEB_M]["Config"].pop("Entrypoint")
+                if omitted in ("container", "both"): state["rows"][-1]["Config"].pop("Entrypoint")
+                self.assertEqual(nue.current_base_gate(oci, nue.CURRENT_RUNTIME_M, nue.CURRENT_WEB_M), expected)
+
     def test_current_base_gate_rejects_image_root_command_mount_and_compose_drift(self):
         oci = nue.load_module("nue_current_negative_oci", ROOT / "platform-infra/scripts/catering_target_oci.py")
-        for mutation in ("config-id", "index", "container", "command", "cwd", "mount", "site", "collision", "compose"):
+        for mutation in ("config-id", "index", "container", "command", "cwd", "mount", "site", "collision", "compose", "backend-entrypoint", "web-entrypoint", "web-image-entrypoint"):
             with self.subTest(mutation=mutation), self.synthetic_current_host() as state:
                 if mutation == "config-id": state["images"][nue.CURRENT_RUNTIME_M]["Id"] = "sha256:" + "a" * 64
                 if mutation == "index": state["images"][nue.CURRENT_WEB_M]["Descriptor"]["mediaType"] = "application/vnd.oci.image.index.v1+json"
                 if mutation == "container": state["rows"][0]["ImageManifestDescriptor"]["digest"] = "sha256:" + "a" * 64
                 if mutation == "command": state["rows"][0]["Config"]["Cmd"] = ["npm", "run", "other"]
+                if mutation == "backend-entrypoint": state["rows"][0]["Config"]["Entrypoint"] = None
+                if mutation == "web-entrypoint": state["rows"][-1]["Config"]["Entrypoint"] = ["unexpected-entrypoint"]
+                if mutation == "web-image-entrypoint": state["images"][nue.CURRENT_WEB_M]["Config"]["Entrypoint"] = ["unexpected-entrypoint"]
                 if mutation == "cwd": state["rows"][0]["Config"]["WorkingDir"] = "/unexpected"
                 if mutation == "mount": state["rows"][-1]["Mounts"].append({"Type": "bind", "Destination": "/srv", "Source": "/old-assets", "RW": False})
                 if mutation == "site": (state["sites"] / "accepted.caddy").write_text("root * /catering-previous-public\n")

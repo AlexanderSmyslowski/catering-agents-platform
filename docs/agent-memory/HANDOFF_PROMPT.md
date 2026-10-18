@@ -1,3 +1,11 @@
+# Aktueller Operationsstand — Version 5.447 / 18.10.2026
+
+## 5.447 — 18.10.2026: ausgelassenes leeres Web-Entrypointfeld korrekt behandeln
+
+Der tatsächliche NUE-Buildpreflight des angenommenen main-Operationsstands e6818440c24bcd13ad072014d6cf33d04b2d4289 scheiterte vor jeglicher Imageänderung mit KeyError Entrypoint. Docker lässt den optionalen leeren Web-Entrypoint in der Image-Config tatsächlich weg. Der enge Fix behandelt ausschließlich diese fehlende optionale Darstellung wie None: Webcommandprüfung, Image-/Containerrelation und gebundene Beobachtung bleiben erhalten; die explizite Backendforderung und alle übrigen Betriebs-/OCI-/Schema-/Signatur-/Backup-/Rollback-Gates bleiben unverändert.
+
+Die neue Regression reproduzierte den Fehler am bisherigen Code tatsächlich für ausgelassenes Image-, Container- und beiderseitiges Feld, beim Image genau an Zeile359. Nach der Korrektur bestehen 36 gezielte NUE-Prüfungen unter vorhandenem Python3.11.15, einschließlich identischer Beobachtungsbindung sowie weiterhin gesperrter nichtleerer Web-/Image-Entrypoints und fehlender Backend-Entrypoints. Keine unveränderte Gesamtsuite wiederholt. Unabhängige Review/PR-/neuer main-CI-Nachweis und tatsächlicher erfolgreicher NUE-Build bleiben separate Folgegrenzen; kein Bundle, Deployment oder neuer Hostnachweis aus diesem lokalen Fix abgeleitet.
+
 # Aktueller Operationsstand — Version 5.446 / 18.10.2026
 
 ## 5.446 — 18.10.2026: eng gebundene bestehende NUE-Basen und echte Loopback-ACL
