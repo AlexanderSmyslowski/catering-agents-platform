@@ -323,6 +323,14 @@ def _oci():
     return module
 
 
+def _nue():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("catering_target_nue_image_update", Path(__file__).with_name("catering_target_nue_image_update.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def verify_bundle(
     bundle_arg: Path,
     product_commit: str,
@@ -754,6 +762,16 @@ def _arguments() -> argparse.ArgumentParser:
     bound_inputs(bundle)
     bundle.add_argument("--output-dir", type=Path, required=True)
 
+    nue_bundle = subparsers.add_parser("nue-bundle", help="build a separate postmigration NUE image-only bundle with exact local base images")
+    bound_inputs(nue_bundle)
+    nue_bundle.add_argument("--output-dir", type=Path, required=True)
+    nue_bundle.add_argument("--node-base", required=True)
+    nue_bundle.add_argument("--caddy-base", required=True)
+
+    nue_prepare = subparsers.add_parser("nue-prepare", help="export a commit/CI-bound NUE build input without requiring local Docker")
+    bound_inputs(nue_prepare)
+    nue_prepare.add_argument("--output-dir", type=Path, required=True)
+
     reuse = subparsers.add_parser("reuse-migration-bundle", help="copy verified P4 archives into a new target02 operations binding")
     bound_inputs(reuse)
     reuse.add_argument("--source-bundle", type=Path, required=True)
@@ -803,7 +821,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         ops_root = repository_root()
         product_sha = args.product_commit
         operations_sha = args.operations_commit
-        validate_target(args.target, product_sha, operations_sha)
+        if args.phase in {"nue-bundle", "nue-prepare"}:
+            if args.target != "catering-prod-02":
+                raise OperatorError("NUE image-only bundle requires explicit catering-prod-02")
+        else:
+            validate_target(args.target, product_sha, operations_sha)
         if args.phase == "bundle" and args.target != TARGET_ID:
             raise OperatorError("target02 migration must reuse P4 archives; image build is forbidden")
         if args.phase in {"verify", "_bundle-bindings-local"}:
@@ -818,6 +840,20 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.product_source,
                 product_sha,
             )
+        if args.phase == "nue-prepare":
+            try:
+                digest = _nue().prepare(sys.modules[__name__], product, product_sha, operations_sha, args.output_dir.expanduser().absolute())
+            except (RuntimeError, OSError, ValueError) as exc:
+                raise OperatorError("NUE build-input preparation failed: " + type(exc).__name__) from None
+            print(f"CATERING_NUE_BUILD_INPUT_OK target=catering-prod-02 request_sha256={digest}")
+            return 0
+        if args.phase == "nue-bundle":
+            try:
+                digest = _nue().create_bundle(sys.modules[__name__], product, product_sha, operations_sha, args.output_dir.expanduser().absolute(), args.node_base, args.caddy_base)
+            except (RuntimeError, OSError, subprocess.SubprocessError, ValueError) as exc:
+                raise OperatorError("NUE image-only bundle failed: " + type(exc).__name__) from None
+            print(f"CATERING_NUE_IMAGE_BUNDLE_OK target=catering-prod-02 manifest_sha256={digest}")
+            return 0
         if args.phase == "reuse-migration-bundle":
             if args.target != "catering-prod-02":
                 raise OperatorError("archive reuse requires explicit target02")

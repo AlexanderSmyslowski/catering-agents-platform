@@ -385,3 +385,109 @@ Der explizite Zielwechsel und die getrennte, isolierte Erstinstallation sind in
 Ohne `--target catering-prod-02` bleibt der Operator auf prod-1. Das historische
 Runtimeinventar und bestehende Produktions-Preflight-Gates bleiben erhalten.
 Dieser Entwicklungsstand ist keine Operationsannahme oder Migrationsfreigabe.
+
+## Expliziter NUE-Image-only-Pfad nach der Migration
+
+Der manuell migrierte Nürnberger Bestand benötigt einen eigenen Einstieg. `nue-prepare`
+und `nue-bundle` am vorhandenen Mac-Operator binden direkt `catering-prod-02` und
+`mode=nue-image-only`; der bisherige v4-/P4-Migrationspfad bleibt unverändert
+auf das historische Migrationsprodukt beschränkt. Ein normales prod-1-Bundle wird
+weder umbenannt noch als NUE-Release ausgegeben. Die neuen Hilfsdateien und der
+Betriebscommit benötigen vor Ausführung dieselbe unabhängige Annahme, Integration
+und erfolgreiche exakte main-Push-CI wie der Produktcommit.
+
+`nue-prepare` benötigt keinen lokalen Docker-Daemon. Es exportiert den vollständigen
+getrackten Produktbaum einschließlich `package-lock.json` sowie die gebundenen
+Betriebshilfen. Beispiel am autorisierten Mac, mit vollständigen bereits
+angenommenen Commit-SHAs und getrennten sauberen detached Checkouts:
+
+```bash
+python3 platform-infra/scripts/catering-target-operator.py nue-prepare \
+  --target catering-prod-02 --product-commit "$product" \
+  --operations-commit "$operations" --product-source "$product_source" \
+  --output-dir "$nue_input"
+```
+
+Die ausgegebene `request_sha256` bindet `build-input.json`, Source-Tree und
+Hilfsdateien. Transport und aktuelle Provider-/Firewall-/Operator-IP-/Hostkey-/
+Schlüsselzulassung erfolgen über den bereits angenommenen geschützten
+Operatorzugang. Dieser Pfad richtet keinen weiteren SSH-/Credentialkanal ein.
+
+Auf dem zugelassenen NUE-Dockerhost darf `tools/catering_target_nue_image_update.py`
+den vorbereiteten Input bauen. `--bundle-dir` ist hier der geschützte Inputpfad;
+`--manifest-sha256` ist die explizite Requestbindung. Beide Basen müssen vorher
+lokal vorhanden, linux/amd64 und als `repository@sha256:<Manifest>` gebunden sein.
+Ungebundene FROM-Tags werden abgewiesen. Fehlt eine solche Basis, bleibt der Build
+an dieser Grenze stehen; kein Tag-Pull, Versionsupgrade oder neuer Dockerstack.
+`npm ci` verwendet den vollständigen gebundenen Lockfile. Der Build ändert keine
+laufenden Anwendungen. Der eigene gemeinsame Update-Lock verhindert eine
+überlappende Backup-/Aktivierungsausführung.
+
+```bash
+python3 -I "$nue_input/tools/catering_target_nue_image_update.py" build \
+  --bundle-dir "$nue_input" --manifest-sha256 "$request_sha" \
+  --output-dir "$nue_bundle" --node-base "$exact_local_node" \
+  --caddy-base "$exact_local_caddy" --confirm BUILD_NUE_IMAGE_ONLY
+```
+
+Ein vorhandener autorisierter Mac-Dockerbestand kann alternativ `nue-bundle` mit
+denselben Produkt-/Operations-/Quellparametern, `--output-dir`, `--node-base` und
+`--caddy-base` verwenden. Jeder neue Bundleaufbau bindet direkt die tatsächlichen
+NUE-Ziel-/Source-/OCI-Identitäten. Das fertige Manifest bindet getrennt R/M/C und
+Archiv-SHA256, vollständigen Sourcebaum, Hilfsdateien, exakte Basen und das
+bestehende Schema-/DDL-No-Drift-Verfahren.
+
+Stage ist ein eigener Hostschritt vor Apply. Es verlangt die expliziten Digests der
+aktuellen sieben Container-/Image-/Mount-/Restartbelege und eines höchstens sechs
+Stunden alten erfolgreichen eigenen Offhost→Restore→Cleanup-Nachweises. Dabei
+werden zusätzlich die dauerhaften ursprünglichen Container- und Capture-/Restore-/
+Cleanupbelege desselben Backup-Runs auf dem Host geprüft. Alle drei Datenbanken,
+Globals, 16 Komponenten, acht Dateibäume, isolierte Probeentfernung und vollständige
+Workspacebereinigung sind Pflicht. Ein Ergebnis ohne diese Belege öffnet Apply nicht.
+
+```bash
+python3 -I "$nue_bundle/tools/catering_target_nue_image_update.py" stage \
+  --bundle-dir "$nue_bundle" --manifest-sha256 "$nue_manifest_sha" \
+  --expected-baseline "$current_nue_inventory" \
+  --expected-baseline-sha256 "$current_inventory_sha" \
+  --backup-proof "$current_offhost_restore_proof" \
+  --backup-proof-sha256 "$current_proof_sha" --confirm STAGE_NUE_IMAGE_ONLY
+```
+
+Stage erzeugt einen neuen Pfad `/opt/catering-nue-image-updates/<Manifest-SHA256>`.
+Vorhandene oder teilweise Stages werden nicht überschrieben. Compose-, Env- und
+Edgebytes einschließlich UID/GID/Modi, alle sieben Container, fünf Volumes,
+Netze, Ports und Drei-DB-/Schemastand werden dort als echte aktuelle Baseline
+gebunden. Unbekannte Runtime-DDL-/Schemaabweichung führt zu HOLD.
+
+Apply verwendet ausschließlich dieses Stage. Der getrennt geschützte Smoke ist
+ein root-owned ausführbarer Aufrufer des vorhandenen authentifizierten
+Operatorsmokes; dessen Secrets bleiben in der bestehenden geschützten Umgebung.
+Sein vollständiger Dateidigest wird explizit übergeben. Der Aufrufer darf keine
+Kunden-/Credentialausgaben erzeugen und muss bei fehlgeschlagenem Smoke ungleich
+null enden.
+
+```bash
+stage=/opt/catering-nue-image-updates/$nue_manifest_sha
+python3 -I "$stage/tools/catering_target_nue_image_update.py" apply \
+  --bundle-dir "$stage" --manifest-sha256 "$nue_manifest_sha" \
+  --protected-smoke "$protected_smoke" \
+  --protected-smoke-sha256 "$protected_smoke_sha" --confirm ACTIVATE_NUE_IMAGE_ONLY
+python3 -I "$stage/tools/catering_target_nue_image_update.py" verify \
+  --bundle-dir "$stage" --manifest-sha256 "$nue_manifest_sha"
+```
+
+Apply erhält die ursprünglichen Composebytes und Images als wirklichen Vorgänger.
+Es deaktiviert App-Restartpolicies vor der Writerpause und verwendet ausschließlich
+`docker stop --timeout -1`, danach `compose up -d --no-deps --pull never` für die
+fünf Appdienste. Unklare Stopantworten müssen vor Resume positiv aufgelöst werden.
+PG, Edge, Env, Netz- und Volumendefinitionen bleiben erhalten; es gibt keine
+Datenmigration. Vier Healths, localhost:18081, TLS und der geschützte Smoke sind
+vor Erfolg Pflicht. Bei Fehler pausiert Recovery auch bereits gestartete
+Kandidaten und prüft den echten Compose-/Image-/Restart-/Health-/Smoke-Rückweg;
+aktuelle Daten werden nicht zurückgesetzt. Unklare Recovery behält den eigenen
+Update-Lock und einen Recovery-HOLD-Beleg. Fremde Locks werden nie übernommen.
+
+Dieser Imagepfad installiert weder Backup-/Restore-Timer noch Observer und meldet
+diese weiterhin ausdrücklich als offen. Lokale synthetische Tests belegen kein
+ausgeführtes NUE-Update oder reales Pilot-GO.
