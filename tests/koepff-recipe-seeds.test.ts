@@ -229,7 +229,7 @@ describe("Köpff recipe seeds", () => {
     expect(ingredientAmount(
       { ...vitello, ingredients: scaleRecipe(vitello, 30).ingredients },
       "Kalbsnuss, roh"
-    )).toBe(2133.33);
+    )).toBeCloseTo(3200 * 30 / 45, 11);
   });
 
   it("sums the same Metro article across recipe-local ingredient ids", () => {

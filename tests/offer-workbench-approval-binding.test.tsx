@@ -173,6 +173,24 @@ describe("offer workbench approval binding", () => {
     expect(doc.body.textContent).toContain("Erfasste Veranstaltungsdaten");
   });
 
+  it("offers customer entry for a new text request and hides it in a bound case", async () => {
+    const setCustomerName = vi.fn();
+    const root = createRoot(document.body.appendChild(document.createElement("div")));
+    const unbound = props({ activeDraft: undefined, selectedDraft: undefined, filteredOfferDrafts: [] });
+    unbound.manualActions = { ...unbound.manualActions, setCustomerName };
+    await act(async () => root.render(createElement(OfferConversationalWorkbench, unbound)));
+    const customer = document.querySelector<HTMLInputElement>('input[autocomplete="organization"]')!;
+    expect(customer).not.toBeNull();
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(customer, "SYNTHETISCHER Kunde");
+      customer.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(setCustomerName).toHaveBeenCalledWith("SYNTHETISCHER Kunde");
+    await act(async () => root.render(createElement(OfferConversationalWorkbench, { ...unbound, hasActiveOfferCase: true })));
+    expect(document.querySelector('input[autocomplete="organization"]')).toBeNull();
+    await act(async () => root.unmount());
+  });
+
   it("keeps the focused draft and pending pricing inputs until saving or discarding", async () => {
     const setSelectedDraftId = vi.fn();
     const root = createRoot(document.body.appendChild(document.createElement("div")));

@@ -191,7 +191,7 @@ describe("PA8 read-path auth hardening", () => {
       });
       expect(trustedExport.statusCode).toBe(200);
       expect(trustedExport.headers["content-type"]).toContain("text/html");
-      expect(trustedExport.body).toContain("<h1>Angebot</h1>");
+      expect(trustedExport.body).toContain("<h1>Angebotsentwurf · Kalkulation offen</h1>");
       expect(trustedExport.body).not.toContain(draftId);
 
       const health = await app.inject({ method: "GET", url: "/health" });

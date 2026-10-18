@@ -18,6 +18,12 @@ function productLabel(product: CaseProduct): string {
   return product === "offer" ? "Angebots" : "Produktions";
 }
 
+function caseCreatedLabel(createdAt: string): string {
+  const date = new Date(createdAt);
+  if (!Number.isFinite(date.getTime())) return "Anlagezeit unbekannt";
+  return `Angelegt ${new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "medium" }).format(date)}`;
+}
+
 export function CaseHistoryPanel({
   product,
   items,
@@ -97,6 +103,7 @@ export function CaseHistoryPanel({
                       onClick={() => onOpen(item.caseId)}
                     >
                       <strong>{item.displayName}</strong>
+                      <span>{caseCreatedLabel(item.createdAt)}</span>
                       <span>{{ open: "Offen", completed: "Abgeschlossen", archived: "Archiviert" }[item.status]}{active ? " · geöffnet" : ""}</span>
                     </button>
                     <button

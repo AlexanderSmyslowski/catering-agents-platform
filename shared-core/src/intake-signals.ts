@@ -9,6 +9,14 @@ export interface IntakeSignals {
   eventDate?: string;
 }
 
+// Only an explicit labelled line supplies a customer identity; greetings,
+// email signatures and dish descriptions are not reliable customer records.
+export function extractLabeledCustomerName(text: string): string | undefined {
+  const match = /^[ \t]*(?:Kunde|Kundenname|Auftraggeber)[ \t]*:[ \t]*([^\r\n]*)$/im.exec(text);
+  const name = match?.[1]?.normalize("NFKC").replace(/\s+/gu, " ").trim();
+  return name && name.length <= 320 ? name : undefined;
+}
+
 function addUniqueString(values: string[], value: string | undefined): void {
   if (!value) {
     return;

@@ -1,3 +1,7 @@
+# Gezielte Weiterarbeit nach Opus — 18.10.2026
+
+Kundenkennungen sind jetzt für neue Textanfragen über Angebot und Handoff bis zur Produktionshistorie erhalten und in beiden Auftragssuchen auffindbar. Altaufträge erhalten unterscheidbare lokale Anlagezeiten, keine erfundenen Namen. Die widersprüchliche innere Auftragszählung ist als fallbezogene Entwurfsliste korrigiert. Der offene Angebotsexport zeigt wieder die angefragten Menüpositionen/Portionen und interne Prüfgrenzen, ohne erfundene Paketpreise/-leistungen. Falsch typisierte Draft-/Approval-/Handoff-Abfragen als Intake-Specs entfallen. Gezielte Tests und normale lokale Browsernachprüfung bestanden, substanzielles Delta unabhängig angenommen. Dies ist eine Koordinator-Nachprüfung, kein neuer Opus-Volllauf und keine Pilot-/Releaseabnahme. Details/Belege: memory.md 5.440. Die datierten Originalberichte bleiben unverändert.
+
 # Aktuelle Einordnung —18.10.2026
 
 Der neue vollständige eigenständige Opus100-Gäste-UI-Ablauf ist belegt. Sein zusätzlicher Quellen-P1 wurde anschließend eng repariert und von Opus gezielt bis in beide Drucke/Reload geschlossen. Noch kein Pilot-/Nürnberg-/Gesamtziel-GO: konkreteP2-Produktbefunde sowie Release-,Betriebs- und echteFachgates bleiben offen. Die folgenden datierten Originalberichte bleiben unverändert als Verlauf erhalten; die jüngsten zwei Abschnitte sind maßgeblich.

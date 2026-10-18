@@ -611,7 +611,8 @@ describe("Hosted Session E2E mit drei echten Catering-Rollen", () => {
     const offerSubtotal = offer.json<{ pricingSummary: { subtotal: { amount: number } } }>()
       .pricingSummary.subtotal.amount;
     expect(offerSubtotal).toBeGreaterThan(0);
-    expect(offerExport.body).toContain(`Gesamt: ${offerSubtotal.toFixed(2)} EUR`);
+    expect(offerExport.body).toContain("Kalkulation offen");
+    expect(offerExport.body).not.toContain(`Gesamt: ${offerSubtotal.toFixed(2)} EUR`);
     expect(plan.body).toContain(commercialSentinel);
     expect(plan.body).toContain("9876.54");
     expect(purchase.body).toContain(commercialSentinel);

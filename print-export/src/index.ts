@@ -188,13 +188,6 @@ function renderSourceAnchorsSection(record: Record<string, unknown>): string[] {
 
 export function renderOfferHtml(draft: OfferDraft): string {
   const publishApproved = draft.reviewStatus?.publishApproved === true;
-  if (!publishApproved && !draft.pricingSummary.calculation) {
-    return "<html><body><h1>Angebotsentwurf · Kalkulation offen</h1>"
-      + "<p>Interne Arbeitsunterlage. Keine bestätigten Leistungen oder Angebotspreise.</p>"
-      + "<p>Vor einem Angebot Leistungsumfang prüfen und eine Preisaufstellung mit Quellen sowie Netto, Steuer und Brutto erfassen.</p>"
-      + "<h2>Veranstaltungsdaten</h2><p>" + escapeHtml([draft.proposedEventSpec.event.title, draft.proposedEventSpec.event.date, draft.proposedEventSpec.attendees.expected ? draft.proposedEventSpec.attendees.expected + " Gäste" : "Gästezahl offen"].filter(Boolean).join(" · ")) + "</p>"
-      + "<h2>Offene Punkte</h2><ul>" + draft.openQuestions.map(item => "<li>" + escapeHtml(item) + "</li>").join("") + "</ul></body></html>";
-  }
   const openQuestionsSection =
     draft.openQuestions.length > 0
       ? [
@@ -218,6 +211,33 @@ export function renderOfferHtml(draft: OfferDraft): string {
         "</ul>",
         "</section>"
       ];
+  const menuRows = (draft.proposedEventSpec.menuPlan ?? []).map((component) => {
+    const dietary = component.dietaryTags?.map(tag => tag === "vegetarian" ? "vegetarisch" : tag).join(", ");
+    const portions = component.servings === undefined ? "Portionszahl offen" : `${escapeHtml(component.servings)} Portionen`;
+    return `<li>${escapeHtml(component.label)}: ${portions}${dietary ? ` · ${escapeHtml(dietary)}` : ""}</li>`;
+  });
+
+  if (!publishApproved && !draft.pricingSummary.calculation) {
+    const spec = draft.proposedEventSpec;
+    const eventDetails = [
+      spec.event?.title,
+      spec.event?.date,
+      spec.attendees?.expected ? `${spec.attendees.expected} Gäste` : "Gästezahl offen"
+    ].filter(Boolean).join(" · ");
+    return [
+      "<html><body><h1>Angebotsentwurf · Kalkulation offen</h1>",
+      "<p>Interne Arbeitsunterlage. Keine bestätigten Leistungen oder Angebotspreise.</p>",
+      "<p>Vor einem Angebot Leistungsumfang prüfen und eine Preisaufstellung mit Quellen sowie Netto, Steuer und Brutto erfassen.</p>",
+      `<h2>Veranstaltungsdaten</h2><p>${escapeHtml(eventDetails)}</p>`,
+      `<p>Varianten: ${draft.variantSet.length}</p>`,
+      `<p>Offene Punkte: ${draft.openQuestions.length}</p>`,
+      ...(menuRows.length ? ["<h2>Erfasste Menüplanung · vor Angebot prüfen</h2><ul>", ...menuRows, "</ul>"] : []),
+      ...openQuestionsSection,
+      ...reviewStatusSection,
+      "</body></html>"
+    ].join("");
+  }
+
   const customerTextSection = publishApproved
     ? ["<pre>", escapeHtml(draft.customerFacingText), "</pre>"]
     : [];
@@ -230,11 +250,7 @@ export function renderOfferHtml(draft: OfferDraft): string {
     `<p>Offene Punkte: ${draft.openQuestions.length}</p>`,
     ...openQuestionsSection,
     "<ul>",
-    ...(draft.proposedEventSpec.menuPlan ?? []).map((component) => {
-      const dietary = component.dietaryTags?.map(tag => tag === "vegetarian" ? "vegetarisch" : tag).join(", ");
-      const portions = component.servings === undefined ? "Portionszahl offen" : `${escapeHtml(component.servings)} Portionen`;
-      return `<li>${escapeHtml(component.label)}: ${portions}${dietary ? ` · ${escapeHtml(dietary)}` : ""}</li>`;
-    }),
+    ...menuRows,
     ...(draft.pricingSummary.calculation
       ? ["</ul><h2>Weitere Leistungsplanung · Umfang prüfen</h2><p>Diese Planung ist kein Nachweis enthaltener Leistungen. Maßgeblich sind die erfassten Preispositionen; Abweichungen vor Freigabe klären.</p><ul>"]
       : []),

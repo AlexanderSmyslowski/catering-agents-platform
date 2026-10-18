@@ -86,6 +86,22 @@ describe("case history panel", () => {
     expect(details.open).toBe(false);
   });
 
+  it("distinguishes legacy duplicate names by their creation time and opens the chosen case", async () => {
+    const root = createRoot(document.body.appendChild(document.createElement("div")));
+    const onOpen = vi.fn();
+    await act(async () => root.render(createElement(CaseHistoryPanel, {
+      product: "offer", search: "", onSearchChange: vi.fn(), onCopy: vi.fn(async () => undefined), onOpen,
+      items: [item, { ...item, caseId: "case-b", createdAt: "2026-07-12T10:00:00.000Z" }]
+    })));
+    const buttons = [...document.querySelectorAll<HTMLButtonElement>('button[data-action="open-case"]')];
+    expect(buttons[0]!.querySelector("strong")?.textContent).toBe(buttons[1]!.querySelector("strong")?.textContent);
+    expect(buttons[0]!.textContent).toContain("Angelegt");
+    expect(buttons[0]!.textContent).not.toBe(buttons[1]!.textContent);
+    await act(async () => buttons[1]!.click());
+    expect(onOpen).toHaveBeenCalledExactlyOnceWith("case-b");
+    await act(async () => root.unmount());
+  });
+
   it("reports a copy failure without changing the active selection", async () => {
     const onCopy = vi.fn(async () => {
       throw new Error("Kopie konnte nicht angelegt werden.");

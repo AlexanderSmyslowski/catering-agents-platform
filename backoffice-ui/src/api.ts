@@ -619,11 +619,7 @@ export async function loadOfferProductData(activeCaseId?: string): Promise<Offer
   const activeSpecIds = new Set(
     [
       workspace.currentDraft?.proposedEventSpec?.specId,
-      workspace.handoff?.eventSpecSnapshot.specId,
-      ...workspace.activeEvents.flatMap((event) => [
-        event.artifactId,
-        event.revisionRef?.artifactId
-      ])
+      workspace.handoff?.eventSpecSnapshot.specId
     ].filter((specId): specId is string => Boolean(specId?.trim()))
   );
   const [intakeRequests, acceptedSpecs] = await Promise.all([

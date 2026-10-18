@@ -4,6 +4,7 @@ import {
   createOfferCase,
   createOfferDraftFromRequest,
   createOfferFromText,
+  loadOfferProductData,
   createProductionCase,
   createProductionDraftFromAcceptedEventSpec,
   createProductionDraftFromDocument,
@@ -59,6 +60,33 @@ afterEach(() => {
 });
 
 describe("backoffice API session requests", () => {
+  it("loads intake specs only from typed snapshots, never from unrelated case artifacts", async () => {
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      calls.push(url);
+      if (url === "/api/offers/health") return Response.json({ service: "offers", status: "ok", timestamp: "", counts: {} });
+      if (url === "/api/offers/v1/offers/cases") return Response.json({ items: [] });
+      if (url === "/api/offers/v1/offers/cases/case-a") return Response.json({
+        case: { caseId: "case-a", product: "offer" },
+        currentDraft: { draftId: "draft-a", proposedEventSpec: { specId: "spec-a" } },
+        handoff: { eventSpecSnapshot: { specId: "spec-a" } },
+        events: [
+          { caseId: "case-a", kind: "draft_created", revisionRef: { artifactType: "OfferDraft", artifactId: "draft-a", revision: 1 } },
+          { caseId: "case-a", kind: "approval", artifactId: "approval-a" },
+          { caseId: "case-a", kind: "result", artifactId: "handoff-a" },
+          { caseId: "case-b", kind: "result", artifactId: "foreign-artifact" }
+        ]
+      });
+      if (url === "/api/intake/v1/intake/specs/spec-a") return Response.json({ specId: "spec-a" });
+      throw new Error("Unexpected fetch: " + url);
+    }));
+    const data = await loadOfferProductData("case-a");
+    expect(data.acceptedSpecs).toEqual([{ specId: "spec-a" }]);
+    expect(data.offerDrafts[0]?.draftId).toBe("draft-a");
+    expect(calls.filter((url) => url.includes("/intake/specs/"))).toEqual(["/api/intake/v1/intake/specs/spec-a"]);
+  });
+
   it("uses same-origin cookies without browser-supplied identity for mutating UI helpers", async () => {
     const calls = installFetchSpy();
 

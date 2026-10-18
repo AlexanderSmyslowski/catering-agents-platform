@@ -48,6 +48,7 @@ export function buildAppOfferRouteState(input: AppOfferRouteStateInput): AppOffe
     offerSpecEditActions,
     offerWorkbenchState: buildOfferWorkbenchState({
       submitting: input.submitting,
+      hasActiveOfferCase: input.hasActiveOfferCase,
       latestSourceLabel: input.latestSourceLabel,
       offerText: input.offerText,
       setOfferText: input.setOfferText,

@@ -150,6 +150,15 @@ describe("intake normalization robustness", () => {
     }
   );
 
+  it("carries an explicit customer line through normalization without guessing a greeting or consuming the next line", () => {
+    const spec = normalizeEventRequestToSpec(createEventRequestFromText({ requestId: "named-source", channel: "text",
+      rawText: "Kunde: SYNTHETISCHES Wissenschaftsforum\nEmpfang für 100 Gäste am 12.11.2026." }));
+    expect(spec.customer?.name).toBe("SYNTHETISCHES Wissenschaftsforum");
+    for (const rawText of ["Hallo Frau Beispiel, wir planen einen Empfang.", "Kunde:\nEmpfang für 100 Gäste.", `Kunde: ${"x".repeat(321)}`]) {
+      expect(createEventRequestFromText({ requestId: "unknown-customer", channel: "text", rawText }).customer).toBeUndefined();
+    }
+  });
+
   it("keeps dish-level vegan and vegetarian labels out of global production constraints", () => {
     const request = createEventRequestFromText({
       requestId: "mixed-diet-menu-1",

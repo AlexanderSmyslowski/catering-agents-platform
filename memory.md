@@ -2,10 +2,26 @@
 
 **Korrektur der CI-Deutung, 18.10.2026 01:38 CEST:** Run39079338322 wurde vom Koordinator bei rund sechs Minuten voreilig abgebrochen. Das nun vollständige Log beweist regulären Fortschritt: unter anderem95 Operationsprüfungen in244s PASS; der Observer-Test war noch gar nicht gestartet. Der alte Run39075030417 hatte37 Minuten bis zum Abbruch regulär426 Dateien abgearbeitet; aus der fehlenden Observerausgabe allein ist weder sein Start noch ein tatsächlicher Hänger nachgewiesen. Die frühere Zuschreibung eines konkreten CI-Hängers zum Observer ist zurückgenommen. Das statisch belegte spawnSync-/Nachfahren-/Pipe-Risiko wurde lokal begrenzt und unabhängig geprüft, ist aber kein Nachweis der ursprünglichen CI-Ursache. Keine weitere Linux-Reparatur/Prüfarchitektur ohne Fehlerbeleg. Nach gebündelten tatsächlichen Opus-Produktbefunden einen erforderlichen Gesamt-CI-Lauf mit realistischer Dauer vollständig abwarten; keine manuellen unveränderten Vollsuiten und keine vorschnellen Abbrüche. Alle vier bisherigen CI-Runs sind CANCELLED, kein Full-Suite-PASS. Browser/Compose/macOS des letzten Heads waren PASS. Beleg tmp/product-pilot-20261018/ci-39079338322-build-cancelled.log.
 
-version: 5.439
+version: 5.440
 date: 2026-10-18
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
+
+## 5.440 — 18.10.2026: erkennbare Kundenaufträge, brauchbarer offener Export und konkrete CI-Korrekturen
+
+Neue Textanfragen haben ein ausdrücklich beschriftetes Kundenfeld. Die Kennung wird sichtbar als „Kunde:“ zur Quellanfrage ergänzt und über die vorhandenen EventRequest-/Snapshot-Felder bis zur Produktionsübergabe erhalten. Bereits gebundene Aufträge übernehmen keine fremde Formulareingabe; Wiederholung nach verlorener Antwort behält Anfrage-ID und annotierten Quelltext. Nur explizite Kunden-/Auftraggeberzeilen werden gelesen, keine Signatur- oder Begrüßungsheuristik. Keine neue API, kein Schema, keine historischen Datenänderungen. Beide Historien zeigen zusätzlich die lokale Anlagezeit; die innere Liste heißt korrekt „Angebotsentwürfe dieses Auftrags“ statt eine zweite widersprüchliche Auftragszählung zu behaupten.
+
+Der unkalkulierte interne Angebotsexport erhält strukturierte Menüpositionen/Portionen, neutrale Varianten-/Rückfragenzähler und die bestehenden internen Prüfgrenzen. Ungeprüfter Kundentext, automatische Paketleistungen und Kataloggesamtpreise bleiben ausgeschlossen; bereits Publish-freigegebene Altstände behalten ihren Pfad. Escaping und Geschäfts-/Rollenprüfungen bleiben erhalten. Die wiederholten fünf 404 beim Wiederöffnen waren falsche Intake-Abfragen für Draft-/Approval-/Handoff-IDs; der vorhandene Leser verwendet jetzt ausschließlich die typisierten Spec-IDs der aktuellen Snapshots.
+
+Normale lokale Browsernachprüfung: ein neuer klar synthetischer 20-Gäste-Auftrag mit Kundenkennung, offener Menüexport, synthetische Kalkulation 1.160,00 € netto / 220,40 € Steuer / 1.380,40 € brutto, interne Variantenfreigabe, reguläre Produktionsübergabe, Kundenname in beiden Historien/Suchwegen und Wiederöffnung bestätigt. Desktop und 390-px-Mobilansicht ohne horizontales Überlaufen visuell geprüft. Nach Reload/Wiederöffnung keine neuen falschen 404. Die Küchenfreigabe dieses neuen Identitätstestfalls bleibt offen, Testdaten erhalten. Alle 13 ursprünglichen Referenzquellen weiterhin bytegleich; der vollständige Opus-100-Gäste-Nachweis aus 5.439 wird wiederverwendet.
+
+Verifikation: 114 betroffene CI-Regressionstests in neun Dateien nach gezielten Korrekturen bestanden; 75 Kundenidentitäts-/Handofftests in sechs Dateien bestanden; anschließend 27 betroffene UI-Tests und 38 API-/Shelltests bestanden (Gruppen überlappen, nicht additiv zählen). Der neue typisierte Spec-Lesetest zeigt den konkreten Fehler zuvor und die Korrektur danach. Finaler Build und git diff --check PASS. Ein unabhängiger Reviewer nahm das substanzielle Kundenidentitäts-/Exportdelta einschließlich Anforderungen und Geschäftsgrenzen ohne materielle Befunde an; keine zusätzliche Vollreviewrunde.
+
+Die erste vollständig ausgelaufene Gesamt-CI 39080927362/1ea955e endete nach 37 Minuten regulär mit neun Fehlern in acht Dateien, 3.538 bestandenen Tests; Observer selbst PASS (zwei Tests, rund 145 s), kein Hänger. 39081623970/51ca799 zeigte dieselben Regressionsfamilien. Die Korrekturen erhalten Schutztests: neue ehrliche Exporttitel/Status, präziser ungerundeter Rezeptwert und veröffentlichungsgebundener Kundentext statt veralteter Erwartungen. Gesamt-CI auf c408b72 (39083127291) läuft separat; Browser/Compose/macOS bestanden. Für den gebündelten neuen Head ist dessen eigene automatische CI maßgeblich. Kein Gesamt-CI-PASS, Merge oder Nürnberg-Deployment behauptet.
+
+Belege im bisherigen ignorierten tmp/product-pilot-20261018: ci-regressions-*, customer-identity-*, customer-ui-polish-tests.log, typed-spec-read-{red,green}.log; Screenshots output/playwright/customer-identity-*.png. Nächste Produktarbeit: widerspruchsfreie Zustände nach Produktionsübernahme/Wiederöffnung, anschließend die konkret belegten Druck-/CSV-/Planungslücken im Opusbericht. Bestehende Angebote seit 2022 und die genannten Lexware-Mails 2025/2026 bleiben Recherchequellen; angebotsspezifischer 45,55-€/h-Beleg ist geschützt gesichert, vollständiges Rechnungsarchiv weiter nicht nachgewiesen. Keine pauschalen Unternehmenspreise oder Steuerentscheidungen erfunden.
+
+Gesamtziel ACTIVE; realer Pilot NO-GO. Release/Nürnberger Auslieferung, eigener Backup→Restore→Cleanup-/Monitoringnachweis und echte Preis-/Steuer-/Küchen-/Allergen-/Lieferanten-/Temperaturfreigaben bleiben offen. Helsinki OFF und erhalten; keine Host-, DNS-, ADH- oder Löschaktion.
 
 ## 5.439 —18.10.2026: eigener Opus-Volllauf und Quellen-P1 geschlossen
 
@@ -2580,3 +2596,7 @@ Datenvollständigkeit/Freigabe/Handoff getrennt, alte Entwurfswarnung durch serv
 ### 5.439 —18.10.2026: tatsächlicher voller Opus-UI-Ablauf und Quellen-P1
 
 EigenständigerOpus100GästeAblauf/Preis/Mengen/Druck/Reopenbelegt;neuaufgedeckterQuellenverlustgezieltgeschlossenundvonOpusnachgeprüft.89gezielte/angrenzendeTests,BuildundunabhängigerCodeReviewPASS;Gesamtziel/CI/Release/Nürnberg/Fachgatesweiteroffen.
+
+### 5.440 — 18.10.2026: Kundenidentität und gezielte CI-Korrekturen
+
+Normaler Textanfrage→Freigabe→Handoff→Historien-/Suchweg nachgewiesen; offener Export mit Menü/Prüfgrenzen, falsch typisierte Intake-Lesezugriffe behoben. Gezielte Tests, Build und unabhängige Prüfung des substanziellen Deltas bestanden. Automatische CI/Release/Nürnberg und Gesamtziel bleiben offen.

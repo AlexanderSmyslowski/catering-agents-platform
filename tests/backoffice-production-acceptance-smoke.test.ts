@@ -1143,10 +1143,10 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Fehlgeschlagenen Demo-Upload ausblenden");
     expect(content).toContain("Datei hier ablegen");
     expect(content).toContain("Downloadbereich");
-    expect(content).toContain("Bestandsdaten im Hintergrund");
-    expect(content).toContain("Kontext aus Demo, Bestand oder vorherigem Lauf.");
+    expect(content).toContain("Aktueller Produktionsauftrag");
+    expect(content).toContain("Dieser Arbeitsstand gehört zum geöffneten Produktionsauftrag.");
     expect(content.indexOf("Angebot hochladen oder Produktionsauftrag beschreiben")).toBeLessThan(
-      content.indexOf("Bestandsdaten im Hintergrund")
+      content.indexOf("Aktueller Produktionsauftrag")
     );
     expect(content.indexOf("Kundenanfrage übernehmen")).toBeLessThan(content.indexOf("Nächster Schritt"));
     expect(content.indexOf("Kundenanfrage übernehmen")).toBeLessThan(content.indexOf("Produktionsblatt exportieren"));

@@ -4,6 +4,7 @@ export type OfferWorkbenchStateInput = OfferWorkbenchProps;
 
 export function buildOfferWorkbenchState({
   submitting,
+  hasActiveOfferCase,
   latestSourceLabel,
   offerText,
   setOfferText,
@@ -43,6 +44,7 @@ export function buildOfferWorkbenchState({
 }: OfferWorkbenchStateInput): OfferWorkbenchProps {
   return {
     submitting,
+    hasActiveOfferCase,
     latestSourceLabel,
     offerText,
     setOfferText,

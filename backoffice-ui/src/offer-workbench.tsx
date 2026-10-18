@@ -56,6 +56,7 @@ type SpecEditActions = {
 
 export type OfferWorkbenchProps = {
   submitting: boolean;
+  hasActiveOfferCase?: boolean;
   latestSourceLabel: string;
   offerText: string;
   setOfferText: (value: string) => void;
@@ -188,6 +189,7 @@ function getSpecRequestId(spec: Record<string, unknown>): string {
 
 export function OfferConversationalWorkbench({
   submitting,
+  hasActiveOfferCase,
   latestSourceLabel,
   offerText,
   setOfferText,
@@ -271,6 +273,22 @@ export function OfferConversationalWorkbench({
             Die App erstellt einen prüfbaren Angebotsentwurf. Eine Variante wird erst intern freigegeben und anschließend ausdrücklich an die Produktion übergeben.
           </p>
         </header>
+        {!hasActiveOfferCase && !focusedDraft ? (
+          <div className="field-label">
+            <label htmlFor="offer-customer-name">Kunde / Auftraggeber für die Textanfrage</label>
+            <input
+              id="offer-customer-name"
+              aria-describedby="offer-customer-help"
+              value={manualInput.customerName}
+              onChange={(event) => manualActions.setCustomerName(event.target.value)}
+              maxLength={320}
+              disabled={submitting}
+              placeholder="Organisation oder Testkennung"
+              autoComplete="organization"
+            />
+            <span id="offer-customer-help" className="helper-text">Damit du den Auftrag später in Angebot und Produktion wiederfindest.</span>
+          </div>
+        ) : null}
         <textarea
           className="offer-composer__textarea"
           aria-label="Kundenanfrage als Text"
@@ -307,40 +325,42 @@ export function OfferConversationalWorkbench({
         </div>
       </article>
 
-      <details className="panel secondary-workspace offer-history-details">
-        <summary>
-          <span className="eyebrow">Aufträge</span>
-          <span className="subsection-title">Frühere Angebotsaufträge öffnen</span>
-          <span className="helper-text">
-            {filteredOfferDrafts.length === 1 ? "1 Auftrag" : `${filteredOfferDrafts.length} Aufträge`}
-          </span>
-        </summary>
-        <div className="secondary-workspace__content">
-          <input
-            className="search"
-            aria-label="Frühere Angebotsaufträge durchsuchen"
-            placeholder="Kunde, Anlass, Datum oder Personen suchen"
-            value={historySearch}
-            onChange={(event) => setHistorySearch(event.target.value)}
-          />
-          <ul className="quiet-list">
-            {visibleOfferDrafts.map((draft) => (
-              <li key={String(draft.draftId)}>
-                <button
-                  type="button"
-                  className="quiet-list__button"
-                  disabled={submitting || editingMenu || editingPricing}
-                  onClick={() => setSelectedDraftId(String(draft.draftId))}
-                >
-                  <strong>{renderDraftFocusLabel(draft)}</strong>
-                  <span>{renderDraftSummary(draft)}</span>
-                </button>
-              </li>
-            ))}
-            {visibleOfferDrafts.length === 0 ? <li>Keine passenden Aufträge gefunden.</li> : null}
-          </ul>
-        </div>
-      </details>
+      {hasActiveOfferCase || focusedDraft || filteredOfferDrafts.length > 0 ? (
+        <details className="panel secondary-workspace offer-history-details">
+          <summary>
+            <span className="eyebrow">Aktueller Auftrag</span>
+            <span className="subsection-title">Angebotsentwürfe dieses Auftrags</span>
+            <span className="helper-text">
+              {filteredOfferDrafts.length === 1 ? "1 Entwurf" : `${filteredOfferDrafts.length} Entwürfe`}
+            </span>
+          </summary>
+          <div className="secondary-workspace__content">
+            <input
+              className="search"
+              aria-label="Angebotsentwürfe durchsuchen"
+              placeholder="Kunde, Anlass, Datum oder Personen suchen"
+              value={historySearch}
+              onChange={(event) => setHistorySearch(event.target.value)}
+            />
+            <ul className="quiet-list">
+              {visibleOfferDrafts.map((draft) => (
+                <li key={String(draft.draftId)}>
+                  <button
+                    type="button"
+                    className="quiet-list__button"
+                    disabled={submitting || editingMenu || editingPricing}
+                    onClick={() => setSelectedDraftId(String(draft.draftId))}
+                  >
+                    <strong>{renderDraftFocusLabel(draft)}</strong>
+                    <span>{renderDraftSummary(draft)}</span>
+                  </button>
+                </li>
+              ))}
+              {visibleOfferDrafts.length === 0 ? <li>Keine passenden Entwürfe gefunden.</li> : null}
+            </ul>
+          </div>
+        </details>
+      ) : null}
 
       {focusedDraft ? (
         <>
