@@ -2,10 +2,36 @@
 
 **Korrektur der CI-Deutung, 18.10.2026 01:38 CEST:** Run39079338322 wurde vom Koordinator bei rund sechs Minuten voreilig abgebrochen. Das nun vollständige Log beweist regulären Fortschritt: unter anderem95 Operationsprüfungen in244s PASS; der Observer-Test war noch gar nicht gestartet. Der alte Run39075030417 hatte37 Minuten bis zum Abbruch regulär426 Dateien abgearbeitet; aus der fehlenden Observerausgabe allein ist weder sein Start noch ein tatsächlicher Hänger nachgewiesen. Die frühere Zuschreibung eines konkreten CI-Hängers zum Observer ist zurückgenommen. Das statisch belegte spawnSync-/Nachfahren-/Pipe-Risiko wurde lokal begrenzt und unabhängig geprüft, ist aber kein Nachweis der ursprünglichen CI-Ursache. Keine weitere Linux-Reparatur/Prüfarchitektur ohne Fehlerbeleg. Nach gebündelten tatsächlichen Opus-Produktbefunden einen erforderlichen Gesamt-CI-Lauf mit realistischer Dauer vollständig abwarten; keine manuellen unveränderten Vollsuiten und keine vorschnellen Abbrüche. Alle vier bisherigen CI-Runs sind CANCELLED, kein Full-Suite-PASS. Browser/Compose/macOS des letzten Heads waren PASS. Beleg tmp/product-pilot-20261018/ci-39079338322-build-cancelled.log.
 
-version: 5.443
+version: 5.446
 date: 2026-10-18
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
+
+## 5.446 — 18.10.2026: eng gebundene bestehende NUE-Basen und echte Loopback-ACL
+
+Der tatsächlich fehlgeschlagene Operations-CI39111770163/e456db7 scheiterte am Import des NUE-Testharness unter Python3.12: mehr als 20 statisch verschachtelte Kontextblöcke. Derselbe Fehler wurde mit vorhandenem Python3.11.15 lokal reproduziert. ExitStack erhält sämtliche ursprünglichen Mockausdrücke in gleicher Reihenfolge und die unveränderten Assertions; der ursprüngliche Block wurde zusätzlich per AST verglichen. Kein Produktfehler oder Produktgesamttest wird daraus abgeleitet.
+
+Der explizite Host-Buildmodus local-current bindet jetzt ausschließlich die tatsächlich belegten vier Backend-Ms und das bestehende Web-M. Vor/nach Build werden aktuelle Container-/Command-/CWD-/Mount-/Compose-/Caddy-/Sitebelege identisch geprüft; eigene lokale Aliases werden vor jedem Build und danach exakt gegen M geprüft. Keine erfundenen RepoDigests, kein neuer Basispull oder Edge-Caddyupgrade. Vollständiger getrackter Produktbaum und Lockfile/npm ci entstehen in frischem /catering-product. Nur im Kandidatenimage wird altes /srv nach /catering-previous-public verschoben und /srv auf den frischen symlinkfreien /catering-public-Baum verlinkt; gebundene Hostsites bleiben erhalten. Der Kandidatenpostflight prüft neue Runtimewurzel und Servierbaum.
+
+HTTP18081 verlangt weiter 200/401 mit begrenzter Readiness. Der tatsächliche ursprüngliche Edge verweigert Loopback absichtlich mit TLS403; ausschließlich sein fest gebundener Originalhash mit unveränderter Datei-/UID-/GID-/Mode-Stagebaseline erlaubt diesen Zertifikat-/ACL-Nachweis. Unbekannte 403, Dateidrift und Zertifikatfehler bleiben gesperrt. Dies ist keine Anmeldung; der geschützte authentifizierte Smoke bleibt zwingend, sein Fehler erzwingt weiterhin Recovery.
+
+35 fokussierte NUE-Prüfungen unter Python3.11.15 bestanden, einschließlich normaler und local-current-Bundles, vor/nach-Buildbindung, falscher M-/Descriptor-/Command-/Root-/Mountbelege, frischem Servierbaum/Pfadkollisionen, TLS-/HTTP-/Zertifikatnegativen und weiterhin erzwungenem Smoke. Python3.12 ist lokal nicht vorhanden; tatsächlicher neuer CI-Nachweis bleibt offen. Keine unveränderte Gesamtsuite wiederholt. Dieser Stand ist uncommitted und benötigt die gezielte unabhängige Review vor gebündelter Integration; keine Live-Build-, Backup-/Restore-, Hostinstallations- oder Pilotabnahme durch diese lokale Umsetzung behauptet.
+
+## 5.445 — 18.10.2026: authentische Maczulassung über vorhandene OpenSSH-Signaturen
+
+Der konkrete Issuerbefund zu d50b5a7 ist eng lokal korrigiert: nach den unveränderten exakten main-CI-/Commit-/Source-/Opshelpergates signiert ausschließlich ssh-keygen die kanonischen Admissionbytes mit dem bestehenden geschützten Mac-SSH-Key. Der Hostprüfer verwendet ausschließlich den im angenommenen Helper gebundenen öffentlichen Schlüssel samt geprüftem Fingerprint, feste Identity und Namespace sowie eigene temporäre Verifikationsdateien. Ein selbst erklärter Digest oder öffentlicher runpy-Aufruf ersetzt die Signatur nicht mehr. Private Schlüsselwerte wurden weder gelesen/ausgegeben noch übertragen; kein neuer Keystore, Agentforwarding oder Authframework.
+
+28 fokussierte NUE-Prüfungen bestanden, einschließlich echter synthetischer Signaturen und negativer Fremdkey-/Namespace-/Bitflip-/Unsigned-/Phase-/Parameter-/Ablauf- und Tempcleanupfälle. Tests verwenden ausschließlich neu erzeugte synthetische Schlüssel. Die bestehende 15-Minuten-/Manifest-/Aufrufbindung wird vor Stage/Apply-Lock und vor erster Writeränderung weiter geprüft. Der unveränderte angenommene Prüfer authentisiert die Maczulassung; beliebiger kompromittierter Root, der den Prüfer ersetzt, liegt außerhalb dieser Zusicherung.
+
+Die Signaturkorrektur ist implementiert, benötigt noch ihre gezielte unabhängige Folgeabnahme und die CI des tatsächlich neuen Heads. Offene GitHubreviewthreads, Integration, reale Buildbasen, frische Zugangs-/Backup-/Restore-/Cleanupbelege und Hostausführung bleiben beim Koordinator; kein Merge, Deployment, erfolgreicher NUE-Lauf oder Pilot-GO behauptet.
+
+## 5.444 — 18.10.2026: expliziter NUE-Image-only-Workflow und offene Issuerbindung
+
+Der getrennte NUE-Image-only-Pfad ist lokal in da9c1c9 und d50b5a79b926a4dd06418c53367374eff7124ae8 implementiert und unabhängig lokal angenommen: vollständiger getrackter Produktbaum samt Lockfile, eigene NUE-Source-/OCI-Bindung, Stage/Apply/Verify, aktuelle Sieben-Container-/Fünf-Volume-/Drei-DB-Baseline, Restore-/Cleanup- und Schema-No-Drift-Gates, sanfte Writerpause, verifizierter Compose-/Image-Rückweg. Die historischen prod-1-/P4-Migrationswege bleiben unverändert. 24 fokussierte NUE-Prüfungen und 48 bestehende Operatorprüfungen sowie Syntax/diffcheck bestanden; keine unveränderte Gesamtsuite manuell wiederholt.
+
+Die lokale Maczulassung wiederholt vor Stage und Apply die exakten main-Push-CI-/Commit-/Source-/Opshelperprüfungen; der Kandidat verlangt bereits vor Writerpause das bestehende strikte OCI-M-Gate. PR728 bleibt vor Integration gesperrt: ein neuer konkreter GitHubreviewbefund weist zurecht darauf hin, dass öffentlicher runpy-Aufruf plus frei erklärbarer Admissiondigest den authentischen Macissuer nicht beweist. Zwei Reviewthreads sind noch offen. Die bisherige lokale Annahme ersetzt weder diese externe Reviewauflösung noch die erforderliche CI des später korrigierten Heads. Eine kleine Bindung über vorhandene OpenSSH-Signaturmittel wird geprüft; sie ist noch nicht implementiert oder angenommen.
+
+Kein Merge, Release, NUE-Hostlauf, installierter Produktstand, eigener erfolgreicher Offhost→Restorelauf oder Pilot-GO wird durch dieses lokale Workflowinkrement belegt. Exakt vorhandene Buildbasen, aktuelle Zugangs-/Backup-/Restore-/Cleanupbelege und reale Betriebs-/Fachgates bleiben Ausführungsgrenzen. Führende Betriebsfortschreibung bleibt das bestehende Runbook, keine neue Statusablage.
 
 ## 5.443 — 18.10.2026: Release-Audit geschlossen und Nürnberger Betriebsbestand tatsächlich gelesen
 
@@ -2660,3 +2686,18 @@ Eingefrorene Küchenangaben vollständig erhalten, Allergenvorbehalt/Faktor-Meta
 ### 5.443 — 18.10.2026: kompatible Sicherheitskorrekturen und tatsächlicher Zielbestand
 
 Vier betroffene Pakete korrigiert, JWT-Regression vor/nach nachgewiesen, gezielte Prüfungen/Build/beide Audits und unabhängiger Delta-Review bestanden. Erste vollständige Gesamt-CI am älteren fae8969 grün; neuer Head benötigt eigene CI. Nürnberg rein lesend geprüft: Backup-/Observerinstallation tatsächlich fehlt. Kein Deployment oder Pilot-GO.
+
+
+### 5.444 — 18.10.2026: NUE-Workflow lokal implementiert, Issuerreview weiter offen
+
+NUE-Image-only-Pfad bis d50b5a7 lokal unabhängig angenommen; fokussierte Prüfungen bestanden. Authentischer Macissuer bleibt konkreter offener GitHubreviewbefund vor Integration; keine korrigierte CI-, Merge- oder Hostabnahme behauptet.
+
+
+### 5.445 — 18.10.2026: bestehender Mac-SSH-Key authentisiert Admission
+
+OpenSSH-sign/verify statt selbstdeklarierter runpy-/SHA-Zulassung lokal implementiert; 28 gezielte synthetische Prüfungen bestanden. Gezielte Folgeabnahme, neuer Head-CI und reale Ausführung weiter offen.
+
+
+### 5.446 — 18.10.2026: bestehende NUE-M-Basen, frische Pfade und gebundener TLS403
+
+ExitStack schließt reproduzierten älteren Python-Nestingfehler. Enger local-current-Build und ausschließlich originalgebundene Loopback-TLS403-Readiness lokal umgesetzt; 35 gezielte Tests bestanden. Unabhängige Review, tatsächliche neue CI und Liveausführung offen.

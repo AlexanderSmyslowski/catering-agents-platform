@@ -385,3 +385,197 @@ Der explizite Zielwechsel und die getrennte, isolierte Erstinstallation sind in
 Ohne `--target catering-prod-02` bleibt der Operator auf prod-1. Das historische
 Runtimeinventar und bestehende Produktions-Preflight-Gates bleiben erhalten.
 Dieser Entwicklungsstand ist keine Operationsannahme oder Migrationsfreigabe.
+
+## Expliziter NUE-Image-only-Pfad nach der Migration
+
+Der manuell migrierte Nürnberger Bestand benötigt einen eigenen Einstieg. `nue-prepare`
+und `nue-bundle` am vorhandenen Mac-Operator binden direkt `catering-prod-02` und
+`mode=nue-image-only`; der bisherige v4-/P4-Migrationspfad bleibt unverändert
+auf das historische Migrationsprodukt beschränkt. Ein normales prod-1-Bundle wird
+weder umbenannt noch als NUE-Release ausgegeben. Die neuen Hilfsdateien und der
+Betriebscommit benötigen vor Ausführung dieselbe unabhängige Annahme, Integration
+und erfolgreiche exakte main-Push-CI wie der Produktcommit.
+
+`nue-prepare` benötigt keinen lokalen Docker-Daemon. Es exportiert den vollständigen
+getrackten Produktbaum einschließlich `package-lock.json` sowie die gebundenen
+Betriebshilfen. Beispiel am autorisierten Mac, mit vollständigen bereits
+angenommenen Commit-SHAs und getrennten sauberen detached Checkouts:
+
+```bash
+python3 platform-infra/scripts/catering-target-operator.py nue-prepare \
+  --target catering-prod-02 --product-commit "$product" \
+  --operations-commit "$operations" --product-source "$product_source" \
+  --output-dir "$nue_input"
+```
+
+Die ausgegebene `request_sha256` bindet `build-input.json`, Source-Tree und
+Hilfsdateien. Transport und aktuelle Provider-/Firewall-/Operator-IP-/Hostkey-/
+Schlüsselzulassung erfolgen über den bereits angenommenen geschützten
+Operatorzugang. Dieser Pfad richtet keinen weiteren SSH-/Credentialkanal ein.
+
+Auf dem zugelassenen NUE-Dockerhost darf `tools/catering_target_nue_image_update.py`
+den vorbereiteten Input bauen. `--bundle-dir` ist hier der geschützte Inputpfad;
+`--manifest-sha256` ist die explizite Requestbindung. Beide Basen müssen vorher
+lokal vorhanden, linux/amd64 und als `repository@sha256:<Manifest>` gebunden sein.
+Ungebundene FROM-Tags werden abgewiesen. Fehlt eine solche Basis, bleibt der Build
+an dieser Grenze stehen; kein Tag-Pull, Versionsupgrade oder neuer Dockerstack.
+`npm ci` verwendet den vollständigen gebundenen Lockfile. Der Build ändert keine
+laufenden Anwendungen. Der eigene gemeinsame Update-Lock verhindert eine
+überlappende Backup-/Aktivierungsausführung.
+
+```bash
+python3 -I "$nue_input/tools/catering_target_nue_image_update.py" build \
+  --bundle-dir "$nue_input" --manifest-sha256 "$request_sha" \
+  --output-dir "$nue_bundle" --node-base "$exact_local_node" \
+  --caddy-base "$exact_local_caddy" --confirm BUILD_NUE_IMAGE_ONLY
+```
+
+Für den tatsächlich vorgefundenen NUE-Bestand ohne offizielle RepoDigests gibt es
+den ausdrücklich getrennten Host-Buildmodus `--base-mode local-current`. Er
+akzeptiert ausschließlich die im Helper gebundenen aktuellen vier Backend-Ms
+und das bestehende Web-M, niemals das abweichende Edge-Caddyimage. Er prüft die
+laufenden fünf Container, linux/amd64-M-/Descriptorbindungen, Commands/CWD,
+Mounts, Compose-Workingdirs, Image-Caddyfile und gebundene Sites vor und nach dem
+Build identisch. Unklassifizierte Webcommands oder belegte Pfadkollisionen
+führen zu HOLD. Eigene lokale Aliases werden aus diesen bereits vorhandenen Ms
+gebildet und vor jedem Build sowie danach exakt auf M geprüft; es wird kein
+offizieller RepoDigest erfunden und kein Registry-Pull als Ersatz zugelassen.
+
+```bash
+python3 -I "$nue_input/tools/catering_target_nue_image_update.py" build \
+  --bundle-dir "$nue_input" --manifest-sha256 "$request_sha" \
+  --output-dir "$nue_bundle" --base-mode local-current \
+  --runtime-base sha256:fb26fe510fade286bbfa02c981a8abb910ef8624a802d26822db662d81befdeb \
+  --web-base sha256:b2ffe4694b983e4b4c1859676bf24df344900dfeaf8f2f7c07ad1ee23cbce25d \
+  --confirm BUILD_NUE_IMAGE_ONLY
+```
+
+Der vollständige getrackte Produktbaum samt Lockfile und `npm ci` entsteht in
+frischem `/catering-product`; die bestehenden relativen Backendcommands starten
+dort. Der Webbuild kopiert ausschließlich den frischen, symlinkfreien Vite-Output
+nach `/catering-public`. Nur im Kandidatenimage wird bisheriges `/srv` nach
+`/catering-previous-public` verschoben und `/srv` mit dem frischen Baum verlinkt.
+So behalten Image-Caddyfile und unveränderte gebundene Sites ihre `/srv`-Root,
+ohne alte Assets auszuliefern. Hostdateien werden weder geändert noch gelöscht.
+Postflight prüft den neuen Backend-CWD/Schemaquellpfad und den frischen
+Webservierbaum. Der normale `repository@M`-Modus und historische Wege bleiben
+unverändert; Backup-/Stage-/signierte Apply-Gates werden dadurch nicht ersetzt.
+
+Ein vorhandener autorisierter Mac-Dockerbestand kann alternativ `nue-bundle` mit
+denselben Produkt-/Operations-/Quellparametern, `--output-dir`, `--node-base` und
+`--caddy-base` verwenden. Jeder neue Bundleaufbau bindet direkt die tatsächlichen
+NUE-Ziel-/Source-/OCI-Identitäten. Das fertige Manifest bindet getrennt R/M/C und
+Archiv-SHA256, vollständigen Sourcebaum, Hilfsdateien, exakte Basen und das
+bestehende Schema-/DDL-No-Drift-Verfahren.
+
+Stage ist ein eigener Hostschritt vor Apply. Es verlangt die expliziten Digests der
+aktuellen sieben Container-/Image-/Mount-/Restartbelege und eines höchstens sechs
+Stunden alten erfolgreichen eigenen Offhost→Restore→Cleanup-Nachweises. Dabei
+werden zusätzlich die dauerhaften ursprünglichen Container- und Capture-/Restore-/
+Cleanupbelege desselben Backup-Runs auf dem Host geprüft. Alle drei Datenbanken,
+Globals, 16 Komponenten, acht Dateibäume, isolierte Probeentfernung und vollständige
+Workspacebereinigung sind Pflicht. Ein Ergebnis ohne diese Belege öffnet Apply nicht.
+
+Unmittelbar vor Stage **und erneut vor Apply** muss der vorhandene Macoperator
+`nue-stage-gate` beziehungsweise `nue-apply-gate` ausführen. Beide verlangen die
+üblichen `--target catering-prod-02`, Produkt-/Operationscommit- und separaten
+Produktcheckoutparameter sowie `--bundle-dir`, `--manifest-sha256`,
+`--remote-bundle-dir` und `--remote-admission-path`. Das Stagegate erhält zusätzlich
+die vier folgenden Baseline-/Backup-Proofparameter; das Applygate erhält die
+beiden folgenden Smokeparameter. Diese Gates wiederholen die echten exakten
+main-Push-CI-/Gitprüfungen und vergleichen den Bundle-Sourcebaum mit einem neuen
+Export des akzeptierten Produktcommits und sämtliche Helperbytes mit dem
+akzeptierten Operationscheckout. Ein selbstkonsistentes Bundle reicht nicht.
+
+Nach diesen Gates signiert ausschließlich `/usr/bin/ssh-keygen -Y sign` die
+kanonischen Admissionbytes über STDIN mit dem bereits vorhandenen geschützten
+Mac-SSH-Key. Der private Schlüssel wird weder gelesen/exportiert noch übertragen;
+es gibt kein Agentforwarding. Das Gate liefert eine feste `argv`-Liste,
+`admissionBody` und `signatureBody` samt separaten Digests und Remote-Dateipfaden.
+Der bereits zugelassene geschützte Caller überträgt beide Bodies unverändert und
+führt die gelieferte normale Host-CLI aus.
+
+Der unveränderte angenommene Hosthelper prüft die Signatur mit dem dort fest
+gebundenen ED25519-Public-Key und Fingerprint, der festen Identity
+`catering-nue-operator` und dem Namespace
+`catering-nue-image-update@catering-agents-platform`. Admission und Signatur werden
+jeweils einmal begrenzt gelesen; exakt diese Admissionbytes gehen an
+`ssh-keygen -Y verify`. Der Prüfer erzeugt und bereinigt seine eigenen temporären
+allowed_signers-/Signaturdateien. Eine vom Host frei erklärte SHA, ein anderer
+Schlüssel oder ein fremder Namespace ersetzt die Macsignatur nicht. Es gibt
+keinen runpy-/trusted-SHA-Ersatz für diese Prüfung.
+
+Die höchstens 15 Minuten gültige Zulassung bleibt an Phase, Ziel, Commits,
+Manifest und sämtliche Aufrufparameter gebunden. Signatur und Bindung werden vor
+Stage-/Apply-Lock und erneut vor der ersten Writeränderung geprüft; nach
+Writerpause und während Recovery gibt es keine GitHubabhängigkeit. Dies
+authentisiert die Maczulassung im unveränderten angenommenen Prüfer; es schützt
+nicht gegen beliebigen kompromittierten Root, der den Prüfer ersetzt. Die
+folgenden Befehle laufen am Mac.
+
+```bash
+python3 platform-infra/scripts/catering-target-operator.py nue-stage-gate \
+  --target catering-prod-02 --product-commit "$product" \
+  --operations-commit "$operations" --product-source "$product_source" \
+  --bundle-dir "$local_nue_bundle" --manifest-sha256 "$nue_manifest_sha" \
+  --remote-bundle-dir "$remote_nue_bundle" --remote-admission-path "$remote_stage_admission" \
+  --expected-baseline "$current_nue_inventory" \
+  --expected-baseline-sha256 "$current_inventory_sha" \
+  --backup-proof "$current_offhost_restore_proof" \
+  --backup-proof-sha256 "$current_proof_sha"
+```
+
+Stage erzeugt einen neuen Pfad `/opt/catering-nue-image-updates/<Manifest-SHA256>`.
+Vorhandene oder teilweise Stages werden nicht überschrieben. Compose-, Env- und
+Edgebytes einschließlich UID/GID/Modi, alle sieben Container, fünf Volumes,
+Netze, Ports und Drei-DB-/Schemastand werden dort als echte aktuelle Baseline
+gebunden. Unbekannte Runtime-DDL-/Schemaabweichung führt zu HOLD.
+
+Apply verwendet ausschließlich dieses Stage. Der getrennt geschützte Smoke ist
+ein root-owned ausführbarer Aufrufer des vorhandenen authentifizierten
+Operatorsmokes; dessen Secrets bleiben in der bestehenden geschützten Umgebung.
+Sein vollständiger Dateidigest wird explizit übergeben. Der Aufrufer darf keine
+Kunden-/Credentialausgaben erzeugen und muss bei fehlgeschlagenem Smoke ungleich
+null enden.
+
+```bash
+stage=/opt/catering-nue-image-updates/$nue_manifest_sha
+python3 platform-infra/scripts/catering-target-operator.py nue-apply-gate \
+  --target catering-prod-02 --product-commit "$product" \
+  --operations-commit "$operations" --product-source "$product_source" \
+  --bundle-dir "$local_nue_bundle" --manifest-sha256 "$nue_manifest_sha" \
+  --remote-bundle-dir "$stage" --remote-admission-path "$remote_apply_admission" \
+  --protected-smoke "$protected_smoke" \
+  --protected-smoke-sha256 "$protected_smoke_sha"
+```
+
+Die anschließende rein lesende Hostprüfung benötigt keine neue GitHubzulassung:
+
+```bash
+python3 -I "$stage/tools/catering_target_nue_image_update.py" verify \
+  --bundle-dir "$stage" --manifest-sha256 "$nue_manifest_sha"
+```
+
+Apply erhält die ursprünglichen Composebytes und Images als wirklichen Vorgänger.
+Es deaktiviert App-Restartpolicies vor der Writerpause und verwendet ausschließlich
+`docker stop --timeout -1`, danach `compose up -d --no-deps --pull never` für die
+fünf Appdienste. Unklare Stopantworten müssen vor Resume positiv aufgelöst werden.
+PG, Edge, Env, Netz- und Volumendefinitionen bleiben erhalten; es gibt keine
+Datenmigration. Vier Healths, localhost:18081, TLS und der geschützte Smoke sind
+vor Erfolg Pflicht. Bei Fehler pausiert Recovery auch bereits gestartete
+Kandidaten und prüft den echten Compose-/Image-/Restart-/Health-/Smoke-Rückweg;
+aktuelle Daten werden nicht zurückgesetzt. Unklare Recovery behält den eigenen
+Update-Lock und einen Recovery-HOLD-Beleg. Fremde Locks werden nie übernommen.
+
+Die begrenzte HTTP-Readiness verlangt auf localhost:18081 weiterhin 200/401.
+TLS prüft das echte Zertifikat unverändert. Die tatsächlich ursprüngliche
+Loopback-ACL antwortet absichtlich mit 403 vor Authentifizierung; ausschließlich
+bei exakt dem gebundenen ursprünglichen Edge-Caddyfile-SHA256 und unveränderten
+UID/GID/Modi derselben Stagebaseline wird dieser Fall als TLS-/ACL-Nachweis
+anerkannt. Unbekannte 403, Konfigurationsdrift und Zertifikatfehler bleiben HOLD.
+Dieser Nachweis bezeichnet ausdrücklich keine erfolgreiche Anmeldung und ersetzt
+den weiterhin zwingenden geschützten authentifizierten Smoke nicht.
+
+Dieser Imagepfad installiert weder Backup-/Restore-Timer noch Observer und meldet
+diese weiterhin ausdrücklich als offen. Lokale synthetische Tests belegen kein
+ausgeführtes NUE-Update oder reales Pilot-GO.

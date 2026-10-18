@@ -323,6 +323,32 @@ def _oci():
     return module
 
 
+def _nue():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("catering_target_nue_image_update", Path(__file__).with_name("catering_target_nue_image_update.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def nue_admission(operations: Path, product: Path, args: argparse.Namespace) -> dict[str, Any]:
+    """Bind a fresh Mac gate decision to one protected caller's exact remote call."""
+    nue = _nue()
+    manifest = nue.verify_bundle(args.bundle_dir, args.manifest_sha256)
+    if manifest["productCommit"] != args.product_commit or manifest["operationsCommit"] != args.operations_commit:
+        raise OperatorError("NUE bundle commits differ from the accepted checkouts")
+    if manifest["sourceTreeSha256"] != _bound_product_source_tree_digest(product, args.product_commit):
+        raise OperatorError("NUE bundle source is not the exact accepted product commit")
+    for name, expected in manifest["helpers"].items():
+        if _file_sha256(_regular_file(operations, "platform-infra/scripts/" + name)) != expected:
+            raise OperatorError("NUE helper bytes differ from the accepted operations commit")
+    phase = args.phase.removeprefix("nue-").removesuffix("-gate")
+    parameters = ({"expectedBaseline": args.expected_baseline, "expectedBaselineSha256": args.expected_baseline_sha256,
+                   "backupProof": args.backup_proof, "backupProofSha256": args.backup_proof_sha256} if phase == "stage" else
+                  {"protectedSmoke": args.protected_smoke, "protectedSmokeSha256": args.protected_smoke_sha256})
+    return nue.make_admission(manifest, args.manifest_sha256, phase, args.remote_bundle_dir, args.remote_admission_path, parameters)
+
+
 def verify_bundle(
     bundle_arg: Path,
     product_commit: str,
@@ -754,6 +780,32 @@ def _arguments() -> argparse.ArgumentParser:
     bound_inputs(bundle)
     bundle.add_argument("--output-dir", type=Path, required=True)
 
+    nue_bundle = subparsers.add_parser("nue-bundle", help="build a separate postmigration NUE image-only bundle with exact local base images")
+    bound_inputs(nue_bundle)
+    nue_bundle.add_argument("--output-dir", type=Path, required=True)
+    nue_bundle.add_argument("--node-base", required=True)
+    nue_bundle.add_argument("--caddy-base", required=True)
+
+    nue_prepare = subparsers.add_parser("nue-prepare", help="export a commit/CI-bound NUE build input without requiring local Docker")
+    bound_inputs(nue_prepare)
+    nue_prepare.add_argument("--output-dir", type=Path, required=True)
+
+    for phase in ("stage", "apply"):
+        gate = subparsers.add_parser("nue-" + phase + "-gate", help="fresh main/CI and exact source/helper admission for the protected NUE caller")
+        bound_inputs(gate)
+        gate.add_argument("--bundle-dir", type=Path, required=True)
+        gate.add_argument("--manifest-sha256", required=True)
+        gate.add_argument("--remote-bundle-dir", required=True)
+        gate.add_argument("--remote-admission-path", required=True)
+        if phase == "stage":
+            gate.add_argument("--expected-baseline", required=True)
+            gate.add_argument("--expected-baseline-sha256", required=True)
+            gate.add_argument("--backup-proof", required=True)
+            gate.add_argument("--backup-proof-sha256", required=True)
+        else:
+            gate.add_argument("--protected-smoke", required=True)
+            gate.add_argument("--protected-smoke-sha256", required=True)
+
     reuse = subparsers.add_parser("reuse-migration-bundle", help="copy verified P4 archives into a new target02 operations binding")
     bound_inputs(reuse)
     reuse.add_argument("--source-bundle", type=Path, required=True)
@@ -803,7 +855,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         ops_root = repository_root()
         product_sha = args.product_commit
         operations_sha = args.operations_commit
-        validate_target(args.target, product_sha, operations_sha)
+        if args.phase in {"nue-bundle", "nue-prepare", "nue-stage-gate", "nue-apply-gate"}:
+            if args.target != "catering-prod-02":
+                raise OperatorError("NUE image-only bundle requires explicit catering-prod-02")
+        else:
+            validate_target(args.target, product_sha, operations_sha)
         if args.phase == "bundle" and args.target != TARGET_ID:
             raise OperatorError("target02 migration must reuse P4 archives; image build is forbidden")
         if args.phase in {"verify", "_bundle-bindings-local"}:
@@ -818,6 +874,26 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.product_source,
                 product_sha,
             )
+        if args.phase in {"nue-stage-gate", "nue-apply-gate"}:
+            try:
+                print(json.dumps(nue_admission(operations, product, args), sort_keys=True))
+            except (RuntimeError, OSError, ValueError, subprocess.SubprocessError) as exc:
+                raise OperatorError("NUE admission failed: " + type(exc).__name__) from None
+            return 0
+        if args.phase == "nue-prepare":
+            try:
+                digest = _nue().prepare(sys.modules[__name__], product, product_sha, operations_sha, args.output_dir.expanduser().absolute())
+            except (RuntimeError, OSError, ValueError) as exc:
+                raise OperatorError("NUE build-input preparation failed: " + type(exc).__name__) from None
+            print(f"CATERING_NUE_BUILD_INPUT_OK target=catering-prod-02 request_sha256={digest}")
+            return 0
+        if args.phase == "nue-bundle":
+            try:
+                digest = _nue().create_bundle(sys.modules[__name__], product, product_sha, operations_sha, args.output_dir.expanduser().absolute(), args.node_base, args.caddy_base)
+            except (RuntimeError, OSError, subprocess.SubprocessError, ValueError) as exc:
+                raise OperatorError("NUE image-only bundle failed: " + type(exc).__name__) from None
+            print(f"CATERING_NUE_IMAGE_BUNDLE_OK target=catering-prod-02 manifest_sha256={digest}")
+            return 0
         if args.phase == "reuse-migration-bundle":
             if args.target != "catering-prod-02":
                 raise OperatorError("archive reuse requires explicit target02")

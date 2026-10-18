@@ -46,6 +46,7 @@ jobs:
           python3 -B tests/catering_target_operator_test.py
           python3 -B tests/catering_target02_test.py
           python3 -B -m unittest discover -s tests -p 'catering_target_v4_test.py'
+          python3 -B -m unittest discover -s tests -p 'catering_target_nue_image_update_test.py'
           python3 -B tests/catering_infrastructure_oci_test.py
           bash -n platform-infra/scripts/catering-target-production-update.sh
           node --check platform-infra/scripts/catering-target-operator-smoke.mjs
@@ -64,6 +65,7 @@ jobs:
           python3 -B tests/catering_target_operator_test.py
           python3 -B tests/catering_target02_test.py
           python3 -B -m unittest discover -s tests -p 'catering_target_v4_test.py'
+          python3 -B -m unittest discover -s tests -p 'catering_target_nue_image_update_test.py'
           python3 -B tests/catering_infrastructure_oci_test.py
 
   browser-rehearsal:
