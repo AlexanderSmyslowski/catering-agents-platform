@@ -445,13 +445,41 @@ Cleanupbelege desselben Backup-Runs auf dem Host geprüft. Alle drei Datenbanken
 Globals, 16 Komponenten, acht Dateibäume, isolierte Probeentfernung und vollständige
 Workspacebereinigung sind Pflicht. Ein Ergebnis ohne diese Belege öffnet Apply nicht.
 
+Unmittelbar vor Stage **und erneut vor Apply** muss der vorhandene Macoperator
+`nue-stage-gate` beziehungsweise `nue-apply-gate` ausführen. Beide verlangen die
+üblichen `--target catering-prod-02`, Produkt-/Operationscommit- und separaten
+Produktcheckoutparameter sowie `--bundle-dir`, `--manifest-sha256`,
+`--remote-bundle-dir` und `--remote-admission-path`. Das Stagegate erhält zusätzlich
+die vier folgenden Baseline-/Backup-Proofparameter; das Applygate erhält die
+beiden folgenden Smokeparameter. Diese Gates wiederholen die echten exakten
+main-Push-CI-/Gitprüfungen und vergleichen den Bundle-Sourcebaum mit einem neuen
+Export des akzeptierten Produktcommits und sämtliche Helperbytes mit dem
+akzeptierten Operationscheckout. Ein selbstkonsistentes Bundle reicht nicht.
+
+Das Gate liefert eine feste `argv`-Liste und exakte `admissionBody`-Bytes samt
+separatem Digest. Ausschließlich der bereits zugelassene geschützte Caller
+überträgt die lokalen Admissionbytes und führt **diese unveränderte Liste** über
+seinen vertrauenswürdigen SSH-Kanal aus. Er übernimmt weder hostseitig erzeugte
+Admissionen noch einen vom Host ersetzten Digest/Aufruf. Das ist eine höchstens
+15 Minuten gültige, an Phase, Ziel, Commits, Manifest und sämtliche Aufrufparameter
+gebundene lokale Zulassung; keine vom Ziel selbst behauptete CI-Attestation.
+Der Admissiondigest ist literal in den lokalen Aufrufbytes eingebunden. Ein
+direkter Host-CLI-Aufruf kann die interne Callerbindung nicht per Flag setzen
+und bricht auch mit selbstdeklarierter Admission vor dem Update-Lock ab. Vor der ersten Writeränderung
+wird die Zulassung nochmals geprüft; nach Writerpause und während Recovery gibt
+es keine GitHubabhängigkeit. Die folgenden Befehle laufen am Mac; der geschützte
+Caller führt danach ausschließlich die vom Gate gelieferte `argv` aus.
+
 ```bash
-python3 -I "$nue_bundle/tools/catering_target_nue_image_update.py" stage \
-  --bundle-dir "$nue_bundle" --manifest-sha256 "$nue_manifest_sha" \
+python3 platform-infra/scripts/catering-target-operator.py nue-stage-gate \
+  --target catering-prod-02 --product-commit "$product" \
+  --operations-commit "$operations" --product-source "$product_source" \
+  --bundle-dir "$local_nue_bundle" --manifest-sha256 "$nue_manifest_sha" \
+  --remote-bundle-dir "$remote_nue_bundle" --remote-admission-path "$remote_stage_admission" \
   --expected-baseline "$current_nue_inventory" \
   --expected-baseline-sha256 "$current_inventory_sha" \
   --backup-proof "$current_offhost_restore_proof" \
-  --backup-proof-sha256 "$current_proof_sha" --confirm STAGE_NUE_IMAGE_ONLY
+  --backup-proof-sha256 "$current_proof_sha"
 ```
 
 Stage erzeugt einen neuen Pfad `/opt/catering-nue-image-updates/<Manifest-SHA256>`.
@@ -469,10 +497,18 @@ null enden.
 
 ```bash
 stage=/opt/catering-nue-image-updates/$nue_manifest_sha
-python3 -I "$stage/tools/catering_target_nue_image_update.py" apply \
-  --bundle-dir "$stage" --manifest-sha256 "$nue_manifest_sha" \
+python3 platform-infra/scripts/catering-target-operator.py nue-apply-gate \
+  --target catering-prod-02 --product-commit "$product" \
+  --operations-commit "$operations" --product-source "$product_source" \
+  --bundle-dir "$local_nue_bundle" --manifest-sha256 "$nue_manifest_sha" \
+  --remote-bundle-dir "$stage" --remote-admission-path "$remote_apply_admission" \
   --protected-smoke "$protected_smoke" \
-  --protected-smoke-sha256 "$protected_smoke_sha" --confirm ACTIVATE_NUE_IMAGE_ONLY
+  --protected-smoke-sha256 "$protected_smoke_sha"
+```
+
+Die anschließende rein lesende Hostprüfung benötigt keine neue GitHubzulassung:
+
+```bash
 python3 -I "$stage/tools/catering_target_nue_image_update.py" verify \
   --bundle-dir "$stage" --manifest-sha256 "$nue_manifest_sha"
 ```

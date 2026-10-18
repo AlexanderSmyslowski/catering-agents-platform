@@ -97,6 +97,50 @@ def read_bound(path, expected):
     return json.loads(Path(path).read_bytes())
 
 
+def make_admission(manifest, manifest_sha, phase, remote_bundle, remote_admission, parameters):
+    """Return only a fixed invocation for the existing admitted SSH caller.
+
+    This is the caller's short-lived local gate result, not a remote CI assertion.
+    Its digest must reach the target through that caller's trusted command channel.
+    """
+    require(phase in ("stage", "apply"), "NUE_ADMISSION_PHASE")
+    for path in (remote_bundle, remote_admission, *[value for key, value in parameters.items() if not key.endswith("Sha256")]):
+        require(isinstance(path, str) and Path(path).is_absolute() and str(Path(path)) == path and ".." not in Path(path).parts, "NUE_ADMISSION_PATH")
+    for key, value in parameters.items():
+        if key.endswith("Sha256"): require(SHA.fullmatch(value or ""), "NUE_ADMISSION_DIGEST")
+    require(SHA.fullmatch(manifest_sha), "NUE_ADMISSION_DIGEST")
+    if phase == "apply": require(remote_bundle == str(RELEASES / manifest_sha), "NUE_ADMISSION_STAGED_PATH")
+    admission = {"schemaVersion": 1, "mode": "nue-image-only", "targetId": "catering-prod-02", "hostAddress": "2.28.200.16", "phase": phase,
+                 "productCommit": manifest["productCommit"], "operationsCommit": manifest["operationsCommit"], "sourceTreeSha256": manifest["sourceTreeSha256"],
+                 "helpers": manifest["helpers"], "manifestSha256": manifest_sha, "remoteBundleDir": remote_bundle,
+                 "parameters": parameters, "issuedAt": datetime.datetime.now(datetime.timezone.utc).isoformat(), "nonce": uuid.uuid4().hex}
+    admission_sha = hashlib.sha256(canonical(admission)).hexdigest()
+    argv = ["python3", "-I", remote_bundle + "/tools/catering_target_nue_image_update.py", phase,
+            "--bundle-dir", remote_bundle, "--manifest-sha256", manifest_sha, "--admission", remote_admission, "--admission-sha256", admission_sha]
+    flags = {"expectedBaseline": "--expected-baseline", "expectedBaselineSha256": "--expected-baseline-sha256", "backupProof": "--backup-proof", "backupProofSha256": "--backup-proof-sha256", "protectedSmoke": "--protected-smoke", "protectedSmokeSha256": "--protected-smoke-sha256"}
+    for key, value in parameters.items(): argv.extend((flags[key], value))
+    argv.extend(("--confirm", "STAGE_NUE_IMAGE_ONLY" if phase == "stage" else "ACTIVATE_NUE_IMAGE_ONLY"))
+    # The accepted caller transports this exact code and digest from the Mac.
+    # Static host CLI flags alone cannot create a fresh operator authorization.
+    invocation = "import runpy,sys; module=runpy.run_path(sys.argv[1]); raise SystemExit(module['main'](sys.argv[2:], trusted_admission_sha='" + admission_sha + "'))"
+    return {"admission": admission, "admissionBody": canonical(admission).decode("ascii"), "admissionSha256": admission_sha, "remoteAdmissionPath": remote_admission,
+            "argv": ["python3", "-I", "-c", invocation, argv[2], *argv[3:]]}
+
+
+def require_admission(path, expected_sha, manifest, manifest_sha, phase, bundle, parameters):
+    require(path is not None and expected_sha is not None, "NUE_FRESH_MAC_ADMISSION_REQUIRED")
+    admission = read_bound(protected(path), expected_sha)
+    require(set(admission) == {"schemaVersion", "mode", "targetId", "hostAddress", "phase", "productCommit", "operationsCommit", "sourceTreeSha256", "helpers", "manifestSha256", "remoteBundleDir", "parameters", "issuedAt", "nonce"}, "NUE_ADMISSION_SHAPE")
+    require(admission["schemaVersion"] == 1 and admission["mode"] == "nue-image-only" and admission["targetId"] == "catering-prod-02" and admission["hostAddress"] == "2.28.200.16" and admission["phase"] == phase, "NUE_ADMISSION_TARGET_PHASE")
+    for field in ("productCommit", "operationsCommit", "sourceTreeSha256", "helpers"):
+        require(admission[field] == manifest[field], "NUE_ADMISSION_ACCEPTED_BINDING")
+    require(admission["manifestSha256"] == manifest_sha and admission["remoteBundleDir"] == str(bundle) and admission["parameters"] == parameters, "NUE_ADMISSION_CALL_BINDING")
+    require(re.fullmatch(r"[0-9a-f]{32}", admission["nonce"]), "NUE_ADMISSION_NONCE")
+    age = (datetime.datetime.now(datetime.timezone.utc) - datetime.datetime.fromisoformat(admission["issuedAt"])).total_seconds()
+    require(0 <= age <= 900, "NUE_MAC_ADMISSION_EXPIRED")
+    return admission
+
+
 def schema_binding(files):
     """Use the existing operator's migration-region and literal-DDL no-drift contract."""
     source = files["shared-core/src/persistence.ts"].decode()
@@ -371,10 +415,12 @@ def candidate_compose(old, images):
     return (json.dumps(value, indent=2) + "\n").encode()
 
 
-def stage(bundle, manifest_sha, expected_path, expected_sha, proof_path, proof_sha):
+def stage(bundle, manifest_sha, expected_path, expected_sha, proof_path, proof_sha, admission_path=None, admission_sha=None):
     host_identity()
     protected(bundle, directory=True)
     manifest = verify_bundle(bundle, manifest_sha)
+    require_admission(admission_path, admission_sha, manifest, manifest_sha, "stage", bundle,
+                      {"expectedBaseline": str(expected_path), "expectedBaselineSha256": expected_sha, "backupProof": str(proof_path), "backupProofSha256": proof_sha})
     expected = read_bound(protected(expected_path), expected_sha)
     proof = read_bound(protected(proof_path), proof_sha)
     token = own_lock()
@@ -478,7 +524,7 @@ def health():
         require(code in ("200", "401"), "NUE_HTTP_TLS_HEALTH")
 
 
-def verify_runtime(baseline, images, compose_bytes):
+def verify_runtime(baseline, images, compose_bytes, candidate_oci=None):
     current = snapshot()
     require(COMPOSE.read_bytes() == compose_bytes, "NUE_COMPOSE_BYTES")
     for key in ("networks", "volumes", "catalogue"):
@@ -494,6 +540,10 @@ def verify_runtime(baseline, images, compose_bytes):
             expected.pop("id"); now = dict(now); now.pop("id")
         else: expected = previous
         require(now == expected, "NUE_CONTAINER_PRESERVATION")
+    if candidate_oci is not None:
+        for row in inspect(["platform-infra-" + s + "-1" for s in SERVICES]):
+            service = row["Name"].removeprefix("/platform-infra-").removesuffix("-1")
+            candidate_oci.check_running_container(row, images[service])
     health()
     return current
 
@@ -502,11 +552,14 @@ def interrupted(signum, frame):
     if not RECOVERING: raise RuntimeError("NUE_INTERRUPTED:" + str(signum))
 
 
-def apply(bundle, manifest_sha, smoke, smoke_sha):
+def apply(bundle, manifest_sha, smoke, smoke_sha, admission_path=None, admission_sha=None):
     global RECOVERING
     host_identity(); bundle = protected(bundle, directory=True)
     require(bundle == RELEASES / manifest_sha, "NUE_STAGED_PATH_BINDING")
     manifest = verify_bundle(bundle, manifest_sha)
+    require_admission(admission_path, admission_sha, manifest, manifest_sha, "apply", bundle,
+                      {"protectedSmoke": str(smoke), "protectedSmokeSha256": smoke_sha})
+    oci = load_module("nue_bound_oci", bundle / "tools/catering_target_oci.py")
     receipt = json.loads(protected(bundle / "stage.json").read_bytes())
     require(receipt["manifestSha256"] == manifest_sha and receipt["mode"] == "nue-image-only", "NUE_STAGE_BINDING")
     baseline = read_bound(protected(bundle / "baseline.json"), receipt["baselineSha256"])
@@ -526,7 +579,7 @@ def apply(bundle, manifest_sha, smoke, smoke_sha):
             owned(token)
             command(["docker", "load", "--input", str(bundle / (role + "-image.tar.gz"))], timeout=180)
             row = json.loads(command(["docker", "image", "inspect", binding["platformManifestDigest"]]))[0]
-            require(row["Id"] in (binding["platformManifestDigest"], binding["configDigest"]) and row["Os"] == "linux" and row["Architecture"] == "amd64", "NUE_LOADED_IMAGE_BINDING")
+            oci.check_loaded_image(row, binding["platformManifestDigest"])
             loaded = bundle / (role + ".loaded.tar")
             require(not os.path.lexists(loaded), "NUE_LOADED_PROBE_EXISTS")
             command(["docker", "save", "--output", str(loaded), binding["platformManifestDigest"]], timeout=300)
@@ -543,6 +596,8 @@ def apply(bundle, manifest_sha, smoke, smoke_sha):
         put(bundle / "compose.candidate.json", candidate)
         # Disable autonomous restarts before the first writer stop. Never SIGKILL a
         # database writer on an arbitrary Docker stop deadline.
+        require_admission(admission_path, admission_sha, manifest, manifest_sha, "apply", bundle,
+                          {"protectedSmoke": str(smoke), "protectedSmokeSha256": smoke_sha})
         mutated = True
         pause_applications(baseline, {row["image"] for row in baseline["containers"].values()}, pending, token)
         active = command(["docker", "exec", "platform-infra-postgres-1", "psql", "-X", "-U", "catering", "-d", "catering_agents", "-Atc", "SELECT count(*) FROM pg_stat_activity WHERE backend_type='client backend' AND pid<>pg_backend_pid()"])
@@ -550,7 +605,7 @@ def apply(bundle, manifest_sha, smoke, smoke_sha):
         owned(token); require(COMPOSE.read_bytes() == old, "NUE_COMPOSE_CHANGED_BEFORE_REPLACE")
         replace_compose(candidate, baseline["files"][str(COMPOSE)], token)
         compose_up(); set_policies(baseline, token)
-        verify_runtime(baseline, images, candidate)
+        verify_runtime(baseline, images, candidate, candidate_oci=oci)
         command([str(smoke)], timeout=180)
         put(bundle / "installed.json", {"status": "NUE_IMAGE_ONLY_INSTALLED", "manifestSha256": manifest_sha, "composeSha256": hashlib.sha256(candidate).hexdigest(), "images": images, "smokeSha256": smoke_sha, "observerInstalled": False, "automaticBackupRestoreChainAccepted": False})
         safe = True
@@ -591,15 +646,18 @@ def verify(bundle, manifest_sha):
     require(hashlib.sha256(candidate).hexdigest() == installed["composeSha256"], "NUE_INSTALLED_COMPOSE_BINDING")
     images = {s: manifest["images"]["web" if s == "web" else "runtime"]["platformManifestDigest"] for s in SERVICES}
     require(images == installed["images"] and installed["status"] == "NUE_IMAGE_ONLY_INSTALLED", "NUE_INSTALLED_IMAGE_BINDING")
-    verify_runtime(baseline, images, candidate)
+    oci = load_module("nue_verify_oci", bundle / "tools/catering_target_oci.py")
+    verify_runtime(baseline, images, candidate, candidate_oci=oci)
     return {"status": "NUE_IMAGE_ONLY_VERIFIED", "observerInstalled": False, "automaticBackupRestoreChainAccepted": False}
 
 
-def main(argv=None):
+def main(argv=None, *, trusted_admission_sha=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("phase", choices=("build", "stage", "apply", "verify"))
     parser.add_argument("--bundle-dir", type=Path, required=True)
     parser.add_argument("--manifest-sha256", required=True)
+    parser.add_argument("--admission", type=Path)
+    parser.add_argument("--admission-sha256")
     parser.add_argument("--expected-baseline", type=Path)
     parser.add_argument("--expected-baseline-sha256")
     parser.add_argument("--backup-proof", type=Path)
@@ -612,15 +670,17 @@ def main(argv=None):
     parser.add_argument("--caddy-base")
     args = parser.parse_args(argv)
     try:
+        if args.phase in ("stage", "apply"):
+            require(trusted_admission_sha is not None and trusted_admission_sha == args.admission_sha256, "NUE_TRUSTED_MAC_CALLER_REQUIRED")
         if args.phase == "build":
             require(args.confirm == "BUILD_NUE_IMAGE_ONLY" and args.output_dir is not None, "NUE_BUILD_CONFIRMATION")
             result = {"status": "NUE_IMAGE_ONLY_BUNDLE_BUILT", "manifestSha256": build_prepared(args.bundle_dir, args.manifest_sha256, args.output_dir, args.node_base, args.caddy_base)}
         elif args.phase == "stage":
             require(args.confirm == "STAGE_NUE_IMAGE_ONLY", "NUE_STAGE_CONFIRMATION")
-            result = stage(args.bundle_dir, args.manifest_sha256, args.expected_baseline, args.expected_baseline_sha256, args.backup_proof, args.backup_proof_sha256)
+            result = stage(args.bundle_dir, args.manifest_sha256, args.expected_baseline, args.expected_baseline_sha256, args.backup_proof, args.backup_proof_sha256, args.admission, args.admission_sha256)
         elif args.phase == "apply":
             require(args.confirm == "ACTIVATE_NUE_IMAGE_ONLY", "NUE_APPLY_CONFIRMATION")
-            result = apply(args.bundle_dir, args.manifest_sha256, args.protected_smoke, args.protected_smoke_sha256)
+            result = apply(args.bundle_dir, args.manifest_sha256, args.protected_smoke, args.protected_smoke_sha256, args.admission, args.admission_sha256)
         else: result = verify(args.bundle_dir, args.manifest_sha256)
         print(json.dumps(result)); return 0
     except BaseException as error:

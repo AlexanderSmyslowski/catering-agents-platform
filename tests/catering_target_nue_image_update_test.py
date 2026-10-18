@@ -12,6 +12,8 @@ import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
+from contextlib import redirect_stderr
+import io
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -86,7 +88,7 @@ class NueTests(unittest.TestCase):
     def proof(self):
         return {"capture": {"sourceResumed": True, "files": list(range(17)), "manifestSha256": "c" * 64}, "restore": {"status": "ALL_THREE_DATABASES_GLOBALS_AND_REQUIRED_FILES_IDENTICAL", "databases": 3, "fileTrees": 8, "probeContainerRemoved": True, "runId": "a" * 32}, "captureCleanup": {"status": "OWN_TMPFS_UNMOUNTED", "runId": "a" * 32}, "finalHealth": {"status": "ORIGINAL_SEVEN_CONTAINERS_POLICIES_DATABASE_SCOPE_AND_HTTPS_HEALTHY"}, "snapshotId": "b" * 64, "manifestSha256": "c" * 64, "at": datetime.datetime.now(datetime.timezone.utc).isoformat(), "runId": "a" * 32}
 
-    def run_apply_failure(self, tmp, recovery_fails=False, preflight_fails=False):
+    def run_apply_failure(self, tmp, recovery_fails=False, preflight_fails=False, loaded_mutation=None):
         sha = "a" * 64; bundle = tmp / sha; bundle.mkdir()
         compose = tmp / "compose.json"
         old = json.dumps({"services": {s: {"image": "old"} for s in nue.SERVICES}}).encode(); compose.write_bytes(old)
@@ -96,15 +98,20 @@ class NueTests(unittest.TestCase):
         manifest = {"schemaBinding": {}, "images": {r: dict(binding) for r in ("runtime", "web")}}
         (bundle / "stage.json").write_text(json.dumps({"manifestSha256": sha, "mode": "nue-image-only", "baselineSha256": "b" * 64, "backupProofSha256": "c" * 64}))
         events = []
+        oci = nue.load_module("nue_test_oci", ROOT / "platform-infra/scripts/catering_target_oci.py")
         def run(argv, **kwargs):
             events.append(argv)
-            if argv[:3] == ["docker", "image", "inspect"]: return json.dumps([{**{"Id": binding["platformManifestDigest"], "Os": "linux", "Architecture": "amd64"}}]).encode()
+            if argv[:3] == ["docker", "image", "inspect"]:
+                row = {"Id": binding["configDigest"] if loaded_mutation == "config-id" else binding["platformManifestDigest"], "Os": "linux", "Architecture": "amd64"}
+                if loaded_mutation == "descriptor": row["Descriptor"] = {"digest": binding["configDigest"]}
+                return json.dumps([row]).encode()
             if argv[:2] == ["docker", "save"]: Path(argv[3]).write_bytes(b"fixture")
             if "psql" in argv: return b"0"
             return b""
         verify_results = [RuntimeError("CANDIDATE_HEALTH_FAIL"), RuntimeError("ROLLBACK_FAIL") if recovery_fails else {}]
-        with patch.multiple(nue, RELEASES=tmp, COMPOSE=compose), patch.object(nue, "host_identity"), patch.object(nue, "protected", side_effect=lambda p, **kw: Path(p)), patch.object(nue, "verify_bundle", return_value=manifest), patch.object(nue, "read_bound", side_effect=lambda p, sha: baseline if Path(p).name == "baseline.json" else {}), patch.object(nue, "backup_gate"), patch.object(nue, "own_lock", return_value="token"), patch.object(nue, "owned"), patch.object(nue, "snapshot", return_value={} if preflight_fails else baseline), patch.object(nue, "runtime_schema", return_value={}), patch.object(nue, "command", side_effect=run), patch.object(nue, "load_module", return_value=SimpleNamespace(_inspect_archive=lambda p: binding)), patch.object(nue, "replace_compose", side_effect=lambda body, meta, token: compose.write_bytes(body)), patch.object(nue, "pause_applications") as pause, patch.object(nue, "compose_up") as up, patch.object(nue, "set_policies"), patch.object(nue, "verify_runtime", side_effect=verify_results), patch.object(nue, "unlock") as unlock:
-            with self.assertRaisesRegex(RuntimeError, "NUE_BASELINE_CHANGED|CANDIDATE_HEALTH_FAIL"):
+        with patch.multiple(nue, RELEASES=tmp, COMPOSE=compose), patch.object(nue, "host_identity"), patch.object(nue, "protected", side_effect=lambda p, **kw: Path(p)), patch.object(nue, "require_admission"), patch.object(nue, "verify_bundle", return_value=manifest), patch.object(nue, "read_bound", side_effect=lambda p, sha: baseline if Path(p).name == "baseline.json" else {}), patch.object(nue, "backup_gate"), patch.object(nue, "own_lock", return_value="token"), patch.object(nue, "owned"), patch.object(nue, "snapshot", return_value={} if preflight_fails else baseline), patch.object(nue, "runtime_schema", return_value={}), patch.object(nue, "command", side_effect=run), patch.object(nue, "load_module", side_effect=lambda name, path: oci if str(path).endswith("catering_target_oci.py") else SimpleNamespace(_inspect_archive=lambda p: binding)), patch.object(nue, "replace_compose", side_effect=lambda body, meta, token: compose.write_bytes(body)), patch.object(nue, "pause_applications") as pause, patch.object(nue, "compose_up") as up, patch.object(nue, "set_policies"), patch.object(nue, "verify_runtime", side_effect=verify_results), patch.object(nue, "unlock") as unlock:
+            expected_error = self.assertRaises(ValueError) if loaded_mutation else self.assertRaisesRegex(RuntimeError, "NUE_BASELINE_CHANGED|CANDIDATE_HEALTH_FAIL")
+            with expected_error:
                 nue.apply(bundle, sha, smoke, hashlib.sha256(smoke.read_bytes()).hexdigest())
             return bundle, old, compose.read_bytes(), pause.call_count, up.call_count, unlock.call_count
 
@@ -127,6 +134,90 @@ class NueTests(unittest.TestCase):
             _, old, after, pauses, starts, unlocks = self.run_apply_failure(Path(tmp), preflight_fails=True)
             self.assertEqual(after, old)
             self.assertEqual((pauses, starts, unlocks), (0, 0, 1))
+
+    def test_loaded_config_id_and_wrong_descriptor_fail_before_writer_pause(self):
+        for mutation in ("config-id", "descriptor"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as tmp:
+                _, old, after, pauses, starts, unlocks = self.run_apply_failure(Path(tmp), loaded_mutation=mutation)
+                self.assertEqual(after, old)
+                self.assertEqual((pauses, starts, unlocks), (0, 0, 1))
+
+    def test_running_candidate_checks_observed_manifest_descriptor(self):
+        oci = nue.load_module("nue_running_oci", ROOT / "platform-infra/scripts/catering_target_oci.py")
+        m, c = "sha256:" + "1" * 64, "sha256:" + "2" * 64
+        for row in ({"Image": c, "State": {"Running": True}}, {"Image": m, "State": {"Running": True}, "ImageManifestDescriptor": {"digest": c}}):
+            with self.subTest(row=row), self.assertRaises(ValueError): oci.check_running_container(row, m)
+
+    def test_candidate_postflight_invokes_running_oci_gate(self):
+        oci = nue.load_module("nue_postflight_oci", ROOT / "platform-infra/scripts/catering_target_oci.py")
+        m, c = "sha256:" + "1" * 64, "sha256:" + "2" * 64
+        with tempfile.TemporaryDirectory() as tmp:
+            compose = Path(tmp) / "compose.json"; compose.write_bytes(b"{}")
+            baseline = {"networks": [], "volumes": [], "catalogue": {}, "files": {str(compose): {"sha256": nue.digest(compose)}}, "containers": {}}
+            bad = {"Name": "/platform-infra-web-1", "Image": m, "State": {"Running": True}, "ImageManifestDescriptor": {"digest": c}}
+            with patch.object(nue, "COMPOSE", compose), patch.object(nue, "snapshot", return_value=baseline), patch.object(nue, "inspect", return_value=[bad]), patch.object(nue, "health") as health:
+                with self.assertRaises(ValueError): nue.verify_runtime(baseline, {s: m for s in nue.SERVICES}, b"{}", candidate_oci=oci)
+                health.assert_not_called()
+
+    def test_remote_stage_and_apply_without_admission_never_take_lock(self):
+        with patch.object(nue, "host_identity"), patch.object(nue, "protected", side_effect=lambda p, **kw: Path(p)), patch.object(nue, "verify_bundle", return_value={}), patch.object(nue, "own_lock") as lock:
+            with self.assertRaisesRegex(RuntimeError, "NUE_FRESH_MAC_ADMISSION_REQUIRED"):
+                nue.stage(Path("/bundle"), "a" * 64, Path("/baseline"), "b" * 64, Path("/proof"), "c" * 64)
+            with self.assertRaisesRegex(RuntimeError, "NUE_FRESH_MAC_ADMISSION_REQUIRED"):
+                nue.apply(nue.RELEASES / ("a" * 64), "a" * 64, Path("/smoke"), "d" * 64)
+            lock.assert_not_called()
+
+    def test_static_host_cli_cannot_self_declare_operator_admission(self):
+        for phase in ("stage", "apply"):
+            args = [phase, "--bundle-dir", "/bundle", "--manifest-sha256", "a" * 64, "--admission", "/forged-admission", "--admission-sha256", "b" * 64]
+            with self.subTest(phase=phase), patch.object(nue, "stage") as stage, patch.object(nue, "apply") as apply, redirect_stderr(io.StringIO()) as error:
+                self.assertEqual(nue.main(args), 1)
+                self.assertIn("NUE_TRUSTED_MAC_CALLER_REQUIRED", error.getvalue())
+                stage.assert_not_called(); apply.assert_not_called()
+
+    def test_admission_binds_phase_params_commits_and_short_expiry(self):
+        manifest = {"productCommit": "1" * 40, "operationsCommit": "2" * 40, "sourceTreeSha256": "3" * 64, "helpers": {"payload": "4" * 64}}
+        params = {"protectedSmoke": "/smoke", "protectedSmokeSha256": "5" * 64}
+        bundle = nue.RELEASES / ("a" * 64)
+        gate = nue.make_admission(manifest, "a" * 64, "apply", str(bundle), "/admission.json", params)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "admission.json"
+            path.write_bytes(nue.canonical(gate["admission"]))
+            with patch.object(nue, "protected", return_value=path):
+                nue.require_admission(path, gate["admissionSha256"], manifest, "a" * 64, "apply", bundle, params)
+                for phase, parameters in (("stage", params), ("apply", {**params, "protectedSmoke": "/changed"})):
+                    with self.assertRaisesRegex(RuntimeError, "NUE_ADMISSION_"):
+                        nue.require_admission(path, gate["admissionSha256"], manifest, "a" * 64, phase, bundle, parameters)
+                changed = dict(gate["admission"], issuedAt=(datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=16)).isoformat())
+                path.write_bytes(nue.canonical(changed))
+                with self.assertRaisesRegex(RuntimeError, "NUE_MAC_ADMISSION_EXPIRED"):
+                    nue.require_admission(path, nue.digest(path), manifest, "a" * 64, "apply", bundle, params)
+
+    def gate_args(self, operator, phase="stage"):
+        argv = ["nue-" + phase + "-gate", "--target", "catering-prod-02", "--product-commit", "1" * 40, "--operations-commit", "2" * 40, "--product-source", "/product", "--bundle-dir", "/bundle", "--manifest-sha256", "a" * 64, "--remote-bundle-dir", "/remote-bundle" if phase == "stage" else str(nue.RELEASES / ("a" * 64)), "--remote-admission-path", "/admission.json"]
+        argv += (["--expected-baseline", "/baseline", "--expected-baseline-sha256", "b" * 64, "--backup-proof", "/proof", "--backup-proof-sha256", "c" * 64] if phase == "stage" else ["--protected-smoke", "/smoke", "--protected-smoke-sha256", "d" * 64])
+        return argv, operator._arguments().parse_args(argv)
+
+    def test_stage_and_apply_gate_reject_nonmain_or_unfinished_ci_before_admission(self):
+        from catering_target_operator_test import operator
+        for phase in ("stage", "apply"):
+            argv, _ = self.gate_args(operator, phase)
+            for in_main in (True, False):
+                def rejected(*args): operator.check_commit_acceptance("product", "1" * 40, is_in_main=in_main, runs=[])
+                with self.subTest(phase=phase, in_main=in_main), patch.object(operator, "require_macos"), patch.object(operator, "verify_commit_gates", side_effect=rejected), patch.object(operator, "nue_admission") as admit, redirect_stderr(io.StringIO()):
+                    self.assertEqual(operator.main(argv), 1)
+                    admit.assert_not_called()
+
+    def test_gate_rejects_forged_product_source_and_ops_helper_relation(self):
+        from catering_target_operator_test import operator
+        _, args = self.gate_args(operator)
+        manifest = {"productCommit": args.product_commit, "operationsCommit": args.operations_commit, "sourceTreeSha256": "3" * 64, "helpers": {"catering_target_oci.py": nue.digest(ROOT / "platform-infra/scripts/catering_target_oci.py")}}
+        with patch.object(operator, "_nue", return_value=nue), patch.object(nue, "verify_bundle", return_value=manifest):
+            with patch.object(operator, "_bound_product_source_tree_digest", return_value="wrong"), self.assertRaisesRegex(operator.OperatorError, "exact accepted product"):
+                operator.nue_admission(ROOT, Path("/product"), args)
+            manifest["helpers"]["catering_target_oci.py"] = "4" * 64
+            with patch.object(operator, "_bound_product_source_tree_digest", return_value="3" * 64), self.assertRaisesRegex(operator.OperatorError, "accepted operations commit"):
+                operator.nue_admission(ROOT, Path("/product"), args)
 
     def test_restore_gates_reject_partial_cleanup_or_stale_proof(self):
         for mutation in ("databases", "cleanup", "stale", "run"):
