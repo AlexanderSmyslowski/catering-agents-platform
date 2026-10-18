@@ -2,10 +2,20 @@
 
 **Korrektur der CI-Deutung, 18.10.2026 01:38 CEST:** Run39079338322 wurde vom Koordinator bei rund sechs Minuten voreilig abgebrochen. Das nun vollständige Log beweist regulären Fortschritt: unter anderem95 Operationsprüfungen in244s PASS; der Observer-Test war noch gar nicht gestartet. Der alte Run39075030417 hatte37 Minuten bis zum Abbruch regulär426 Dateien abgearbeitet; aus der fehlenden Observerausgabe allein ist weder sein Start noch ein tatsächlicher Hänger nachgewiesen. Die frühere Zuschreibung eines konkreten CI-Hängers zum Observer ist zurückgenommen. Das statisch belegte spawnSync-/Nachfahren-/Pipe-Risiko wurde lokal begrenzt und unabhängig geprüft, ist aber kein Nachweis der ursprünglichen CI-Ursache. Keine weitere Linux-Reparatur/Prüfarchitektur ohne Fehlerbeleg. Nach gebündelten tatsächlichen Opus-Produktbefunden einen erforderlichen Gesamt-CI-Lauf mit realistischer Dauer vollständig abwarten; keine manuellen unveränderten Vollsuiten und keine vorschnellen Abbrüche. Alle vier bisherigen CI-Runs sind CANCELLED, kein Full-Suite-PASS. Browser/Compose/macOS des letzten Heads waren PASS. Beleg tmp/product-pilot-20261018/ci-39079338322-build-cancelled.log.
 
-version: 5.445
+version: 5.446
 date: 2026-10-18
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
+
+## 5.446 — 18.10.2026: eng gebundene bestehende NUE-Basen und echte Loopback-ACL
+
+Der tatsächlich fehlgeschlagene Operations-CI39111770163/e456db7 scheiterte am Import des NUE-Testharness unter Python3.12: mehr als 20 statisch verschachtelte Kontextblöcke. Derselbe Fehler wurde mit vorhandenem Python3.11.15 lokal reproduziert. ExitStack erhält sämtliche ursprünglichen Mockausdrücke in gleicher Reihenfolge und die unveränderten Assertions; der ursprüngliche Block wurde zusätzlich per AST verglichen. Kein Produktfehler oder Produktgesamttest wird daraus abgeleitet.
+
+Der explizite Host-Buildmodus local-current bindet jetzt ausschließlich die tatsächlich belegten vier Backend-Ms und das bestehende Web-M. Vor/nach Build werden aktuelle Container-/Command-/CWD-/Mount-/Compose-/Caddy-/Sitebelege identisch geprüft; eigene lokale Aliases werden vor jedem Build und danach exakt gegen M geprüft. Keine erfundenen RepoDigests, kein neuer Basispull oder Edge-Caddyupgrade. Vollständiger getrackter Produktbaum und Lockfile/npm ci entstehen in frischem /catering-product. Nur im Kandidatenimage wird altes /srv nach /catering-previous-public verschoben und /srv auf den frischen symlinkfreien /catering-public-Baum verlinkt; gebundene Hostsites bleiben erhalten. Der Kandidatenpostflight prüft neue Runtimewurzel und Servierbaum.
+
+HTTP18081 verlangt weiter 200/401 mit begrenzter Readiness. Der tatsächliche ursprüngliche Edge verweigert Loopback absichtlich mit TLS403; ausschließlich sein fest gebundener Originalhash mit unveränderter Datei-/UID-/GID-/Mode-Stagebaseline erlaubt diesen Zertifikat-/ACL-Nachweis. Unbekannte 403, Dateidrift und Zertifikatfehler bleiben gesperrt. Dies ist keine Anmeldung; der geschützte authentifizierte Smoke bleibt zwingend, sein Fehler erzwingt weiterhin Recovery.
+
+35 fokussierte NUE-Prüfungen unter Python3.11.15 bestanden, einschließlich normaler und local-current-Bundles, vor/nach-Buildbindung, falscher M-/Descriptor-/Command-/Root-/Mountbelege, frischem Servierbaum/Pfadkollisionen, TLS-/HTTP-/Zertifikatnegativen und weiterhin erzwungenem Smoke. Python3.12 ist lokal nicht vorhanden; tatsächlicher neuer CI-Nachweis bleibt offen. Keine unveränderte Gesamtsuite wiederholt. Dieser Stand ist uncommitted und benötigt die gezielte unabhängige Review vor gebündelter Integration; keine Live-Build-, Backup-/Restore-, Hostinstallations- oder Pilotabnahme durch diese lokale Umsetzung behauptet.
 
 ## 5.445 — 18.10.2026: authentische Maczulassung über vorhandene OpenSSH-Signaturen
 
@@ -2686,3 +2696,8 @@ NUE-Image-only-Pfad bis d50b5a7 lokal unabhängig angenommen; fokussierte Prüfu
 ### 5.445 — 18.10.2026: bestehender Mac-SSH-Key authentisiert Admission
 
 OpenSSH-sign/verify statt selbstdeklarierter runpy-/SHA-Zulassung lokal implementiert; 28 gezielte synthetische Prüfungen bestanden. Gezielte Folgeabnahme, neuer Head-CI und reale Ausführung weiter offen.
+
+
+### 5.446 — 18.10.2026: bestehende NUE-M-Basen, frische Pfade und gebundener TLS403
+
+ExitStack schließt reproduzierten älteren Python-Nestingfehler. Enger local-current-Build und ausschließlich originalgebundene Loopback-TLS403-Readiness lokal umgesetzt; 35 gezielte Tests bestanden. Unabhängige Review, tatsächliche neue CI und Liveausführung offen.

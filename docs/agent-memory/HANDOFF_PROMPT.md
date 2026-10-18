@@ -1,3 +1,15 @@
+# Aktueller Operationsstand — Version 5.446 / 18.10.2026
+
+## 5.446 — 18.10.2026: eng gebundene bestehende NUE-Basen und echte Loopback-ACL
+
+Der tatsächlich fehlgeschlagene Operations-CI39111770163/e456db7 scheiterte am Import des NUE-Testharness unter Python3.12: mehr als 20 statisch verschachtelte Kontextblöcke. Derselbe Fehler wurde mit vorhandenem Python3.11.15 lokal reproduziert. ExitStack erhält sämtliche ursprünglichen Mockausdrücke in gleicher Reihenfolge und die unveränderten Assertions; der ursprüngliche Block wurde zusätzlich per AST verglichen. Kein Produktfehler oder Produktgesamttest wird daraus abgeleitet.
+
+Der explizite Host-Buildmodus local-current bindet jetzt ausschließlich die tatsächlich belegten vier Backend-Ms und das bestehende Web-M. Vor/nach Build werden aktuelle Container-/Command-/CWD-/Mount-/Compose-/Caddy-/Sitebelege identisch geprüft; eigene lokale Aliases werden vor jedem Build und danach exakt gegen M geprüft. Keine erfundenen RepoDigests, kein neuer Basispull oder Edge-Caddyupgrade. Vollständiger getrackter Produktbaum und Lockfile/npm ci entstehen in frischem /catering-product. Nur im Kandidatenimage wird altes /srv nach /catering-previous-public verschoben und /srv auf den frischen symlinkfreien /catering-public-Baum verlinkt; gebundene Hostsites bleiben erhalten. Der Kandidatenpostflight prüft neue Runtimewurzel und Servierbaum.
+
+HTTP18081 verlangt weiter 200/401 mit begrenzter Readiness. Der tatsächliche ursprüngliche Edge verweigert Loopback absichtlich mit TLS403; ausschließlich sein fest gebundener Originalhash mit unveränderter Datei-/UID-/GID-/Mode-Stagebaseline erlaubt diesen Zertifikat-/ACL-Nachweis. Unbekannte 403, Dateidrift und Zertifikatfehler bleiben gesperrt. Dies ist keine Anmeldung; der geschützte authentifizierte Smoke bleibt zwingend, sein Fehler erzwingt weiterhin Recovery.
+
+35 fokussierte NUE-Prüfungen unter Python3.11.15 bestanden, einschließlich normaler und local-current-Bundles, vor/nach-Buildbindung, falscher M-/Descriptor-/Command-/Root-/Mountbelege, frischem Servierbaum/Pfadkollisionen, TLS-/HTTP-/Zertifikatnegativen und weiterhin erzwungenem Smoke. Python3.12 ist lokal nicht vorhanden; tatsächlicher neuer CI-Nachweis bleibt offen. Keine unveränderte Gesamtsuite wiederholt. Dieser Stand ist uncommitted und benötigt die gezielte unabhängige Review vor gebündelter Integration; keine Live-Build-, Backup-/Restore-, Hostinstallations- oder Pilotabnahme durch diese lokale Umsetzung behauptet.
+
 # Aktueller Operationsstand — Version 5.445 / 18.10.2026
 
 ## 5.445 — 18.10.2026: authentische Maczulassung über vorhandene OpenSSH-Signaturen

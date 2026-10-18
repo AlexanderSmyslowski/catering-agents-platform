@@ -49,6 +49,13 @@ SIGNATURE_NAMESPACE = "catering-nue-image-update@catering-agents-platform"
 SIGNER_IDENTITY = "catering-nue-operator"
 ADMISSION_LIMIT = 32768
 SIGNATURE_LIMIT = 8192
+CURRENT_RUNTIME_M = "sha256:fb26fe510fade286bbfa02c981a8abb910ef8624a802d26822db662d81befdeb"
+CURRENT_WEB_M = "sha256:b2ffe4694b983e4b4c1859676bf24df344900dfeaf8f2f7c07ad1ee23cbce25d"
+ORIGINAL_EDGE_CADDY = Path("/opt/catering-edge/Caddyfile")
+# The independently observed original remote_ip ACL denies loopback before auth.
+ORIGINAL_EDGE_CADDY_SHA256 = "2f432e92aba90d6f4c533cb3f0cc2cbbd854ba6cc7316a286fcde2e7b1585001"
+CURRENT_BASE_LAYOUT = {"mode": "local-current", "runtimeManifest": CURRENT_RUNTIME_M, "webManifest": CURRENT_WEB_M,
+                       "runtimeRoot": "/catering-product", "publicRoot": "/catering-public", "servedRoot": "/srv", "previousPublicRoot": "/catering-previous-public"}
 
 
 def require(value, reason):
@@ -243,8 +250,9 @@ def source_schema(root):
     return schema_binding(files)
 
 
-def runtime_schema(container):
-    raw = command(["docker", "exec", container, "tar", "-C", "/app", "-cf", "-", *RUNTIME_ROOTS])
+def runtime_schema(container, application_root="/app"):
+    require(application_root in ("/app", "/catering-product"), "NUE_RUNTIME_SOURCE_ROOT")
+    raw = command(["docker", "exec", container, "tar", "-C", application_root, "-cf", "-", *RUNTIME_ROOTS])
     files = {}
     roots = set()
     with tarfile.open(fileobj=io.BytesIO(raw)) as archive:
@@ -278,9 +286,12 @@ def verify_bundle(bundle, manifest_sha):
     require((bundle / "source/package-lock.json").is_file() and (bundle / "source/package.json").is_file(), "NUE_LOCKFILE_REQUIRED")
     require(source_schema(bundle / "source") == manifest["schemaBinding"], "NUE_SOURCE_SCHEMA_BINDING")
     require(set(manifest["images"]) == {"runtime", "web"}, "NUE_IMAGE_SCOPE")
-    require(set(manifest["bases"]) == {"node", "caddy"}, "NUE_BASE_SCOPE")
-    for base in manifest["bases"].values():
-        require(set(base) == {"reference", "localImageId"} and re.fullmatch(r"[a-zA-Z0-9./:_-]+@sha256:[0-9a-f]{64}", base["reference"]) and IMAGE.fullmatch(base["localImageId"]), "NUE_BASE_BINDING")
+    if manifest["bases"].get("mode") == "local-current":
+        require(manifest["bases"] == CURRENT_BASE_LAYOUT, "NUE_CURRENT_BASE_BINDING")
+    else:
+        require(set(manifest["bases"]) == {"node", "caddy"}, "NUE_BASE_SCOPE")
+        for base in manifest["bases"].values():
+            require(set(base) == {"reference", "localImageId"} and re.fullmatch(r"[a-zA-Z0-9./:_-]+@sha256:[0-9a-f]{64}", base["reference"]) and IMAGE.fullmatch(base["localImageId"]), "NUE_BASE_BINDING")
     for role, binding in manifest["images"].items():
         require(set(binding) == {"indexDigest", "platformManifestDigest", "configDigest", "archiveSha256"}, "NUE_IMAGE_SHAPE")
         path = bundle / (role + "-image.tar.gz")
@@ -302,7 +313,7 @@ def prepare(operator, source, product, operations, output):
     return digest(output / "build-input.json")
 
 
-def build_prepared(directory, request_sha, output, node_base, caddy_base):
+def build_prepared(directory, request_sha, output, node_base, caddy_base, *, base_mode="repository", runtime_base=None, web_base=None):
     host_identity(); directory = protected(directory, directory=True)
     request = read_bound(protected(directory / "build-input.json"), request_sha)
     require(set(request) == {"schemaVersion", "mode", "repository", "targetId", "productCommit", "operationsCommit", "sourceTreeSha256", "helpers"}, "NUE_BUILD_REQUEST_SHAPE")
@@ -317,19 +328,90 @@ def build_prepared(directory, request_sha, output, node_base, caddy_base):
     token = own_lock()
     try:
         owned(token)
-        return create_bundle(operator, directory / "source", request["productCommit"], request["operationsCommit"], output, node_base, caddy_base, exported=True)
+        return create_bundle(operator, directory / "source", request["productCommit"], request["operationsCommit"], output, node_base, caddy_base, exported=True, base_mode=base_mode, runtime_base=runtime_base, web_base=web_base)
     finally: unlock(token)
 
 
-def create_bundle(operator, source, product, operations, output, node_base, caddy_base, *, exported=False):
+def current_base_gate(oci, runtime_m, web_m):
+    host_identity()
+    require(runtime_m == CURRENT_RUNTIME_M and web_m == CURRENT_WEB_M, "NUE_CURRENT_BASE_EXACT_M_REQUIRED")
+    compose = json.loads(protected(COMPOSE).read_bytes())
+    require(set(compose["services"]) == set(SERVICES) and all("working_dir" not in compose["services"][s] for s in SERVICES), "NUE_CURRENT_COMPOSE_WORKDIR")
+    observations = {}
+    image_rows = {role: json.loads(command(["docker", "image", "inspect", identity]))[0] for role, identity in (("runtime", runtime_m), ("web", web_m))}
+    for role, identity in (("runtime", runtime_m), ("web", web_m)):
+        image = image_rows[role]
+        oci.check_loaded_image(image, identity)
+        require(image.get("Descriptor", {}).get("mediaType") == "application/vnd.oci.image.manifest.v1+json", "NUE_CURRENT_BASE_NOT_PLATFORM_MANIFEST")
+    rows = inspect(["platform-infra-" + service + "-1" for service in SERVICES])
+    require({row["Name"] for row in rows} == {"/platform-infra-" + s + "-1" for s in SERVICES} and len(rows) == 5, "NUE_CURRENT_BASE_CONTAINER_SCOPE")
+    for row in rows:
+        service = row["Name"].removeprefix("/platform-infra-").removesuffix("-1")
+        oci.check_running_container(row, web_m if service == "web" else runtime_m)
+        require(row.get("ImageManifestDescriptor", {}).get("mediaType") == "application/vnd.oci.image.manifest.v1+json", "NUE_CURRENT_CONTAINER_NOT_PLATFORM_MANIFEST")
+        config = row["Config"]
+        if service != "web":
+            require(config["Cmd"] == ["npm", "run", "dev:" + service] and config["Entrypoint"] == ["docker-entrypoint.sh"] and config["WorkingDir"] == "/app", "NUE_CURRENT_RUNTIME_COMMAND")
+            require(not row["Mounts"], "NUE_CURRENT_RUNTIME_MOUNTS")
+            command(["docker", "exec", row["Id"], "sh", "-ec", "test ! -e /catering-product && test ! -L /catering-product"])
+        else:
+            require(config["Cmd"] == ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"] and not config["Entrypoint"] and config["WorkingDir"] == "/srv", "NUE_CURRENT_WEB_COMMAND")
+            require(config["Cmd"] == image_rows["web"]["Config"]["Cmd"] and config["Entrypoint"] == image_rows["web"]["Config"]["Entrypoint"], "NUE_CURRENT_WEB_IMAGE_COMMAND")
+            require(all(not any(m["Destination"] == root or root.startswith(m["Destination"].rstrip("/") + "/") or m["Destination"].startswith(root + "/") for root in ("/srv", "/catering-public", "/catering-previous-public")) for m in row["Mounts"]), "NUE_CURRENT_WEB_ROOT_MOUNT")
+            command(["docker", "exec", row["Id"], "sh", "-ec", "test -d /srv && test ! -L /srv && test ! -e /catering-public && test ! -L /catering-public && test ! -e /catering-previous-public && test ! -L /catering-previous-public"])
+            image_config = command(["docker", "exec", row["Id"], "cat", "/etc/caddy/Caddyfile"])
+            site_mounts = [m for m in row["Mounts"] if m["Type"] == "bind" and m["Destination"] == "/etc/caddy/sites"]
+            require(len(site_mounts) == 1 and not site_mounts[0]["RW"], "NUE_CURRENT_SITES_MOUNT")
+            site_root = protected(Path(site_mounts[0]["Source"]), directory=True)
+            require(site_root == COMPOSE.parent / "sites", "NUE_CURRENT_SITES_SOURCE")
+            configurations = {"image": image_config}
+            for path in sorted(site_root.glob("*.caddy")): configurations[str(path)] = protected(path).read_bytes()
+            require(len(configurations) > 1, "NUE_CURRENT_SITES_REQUIRED")
+            for content in configurations.values():
+                roots = re.findall(rb"(?m)^\s*root\s+(?:\*\s+)?([^\s{}]+)\s*$", content)
+                require(roots and all(root == b"/srv" for root in roots) and b"/catering-previous-public" not in content, "NUE_CURRENT_WEB_SERVING_ROOT")
+            observations["caddyConfiguration"] = {name: hashlib.sha256(content).hexdigest() for name, content in configurations.items()}
+        observations[row["Name"]] = {"binding": container_binding(row), "cmd": config["Cmd"], "entrypoint": config["Entrypoint"], "workingDir": config["WorkingDir"]}
+    observations["composeSha256"] = digest(COMPOSE)
+    return observations
+
+
+def local_current_dockerfile(role, runtime_m, web_m):
+    require(runtime_m == CURRENT_RUNTIME_M and web_m == CURRENT_WEB_M, "NUE_CURRENT_BASE_EXACT_M_REQUIRED")
+    runtime = "FROM " + current_local_reference("runtime", runtime_m) + "\nWORKDIR /\nRUN test ! -e /catering-product && test ! -L /catering-product\nWORKDIR /catering-product\nCOPY . .\nRUN npm ci\n"
+    if role == "runtime": return runtime + 'CMD ["npm", "run", "dev:intake"]\n'
+    require(role == "web", "NUE_CURRENT_DOCKERFILE_ROLE")
+    build = runtime.replace("\nWORKDIR /\n", " AS build\nWORKDIR /\n", 1)
+    return build + "RUN npm --workspace @catering/backoffice-ui run build\nRUN test -f /catering-product/backoffice-ui/dist/index.html && test -z \"$(find /catering-product/backoffice-ui/dist -type l -print)\"\nFROM " + current_local_reference("web", web_m) + "\nWORKDIR /\nRUN test -d /srv && test ! -L /srv && test ! -e /catering-public && test ! -L /catering-public && test ! -e /catering-previous-public && test ! -L /catering-previous-public && mv /srv /catering-previous-public && mkdir /catering-public && ln -s /catering-public /srv\nCOPY --from=build /catering-product/backoffice-ui/dist/ /catering-public/\nCOPY platform-infra/Caddyfile /etc/caddy/Caddyfile\nWORKDIR /srv\n"
+
+
+def current_local_reference(role, identity):
+    require(role in ("runtime", "web") and IMAGE.fullmatch(identity or ""), "NUE_CURRENT_LOCAL_REFERENCE")
+    return "catering-nue-current-" + role + ":" + identity.removeprefix("sha256:")
+
+
+def create_bundle(operator, source, product, operations, output, node_base, caddy_base, *, exported=False, base_mode="repository", runtime_base=None, web_base=None):
     """Build only with exact, already present base manifests; no floating FROM tags."""
     require(not output.exists() and not output.is_symlink(), "NUE_OUTPUT_EXISTS")
     bases = {}
-    for role, reference in (("node", node_base), ("caddy", caddy_base)):
-        require(re.fullmatch(r"[a-zA-Z0-9./:_-]+@sha256:[0-9a-f]{64}", reference or ""), "NUE_PINNED_BASE_REQUIRED")
-        row = json.loads(command(["docker", "image", "inspect", reference]))[0]
-        require(row["Os"] == "linux" and row["Architecture"] == "amd64" and IMAGE.fullmatch(row["Id"]), "NUE_BASE_PLATFORM")
-        bases[role] = {"reference": reference, "localImageId": row["Id"]}
+    require(base_mode in ("repository", "local-current"), "NUE_BASE_MODE")
+    if base_mode == "local-current":
+        require(node_base is None and caddy_base is None, "NUE_CURRENT_BASE_INPUT_SCOPE")
+        current_before = current_base_gate(operator._oci(), runtime_base, web_base)
+        # Reuse the accepted local tag→exact-M binding; these are local aliases,
+        # never invented official repository digests or registry inputs.
+        for role, identity in (("runtime", runtime_base), ("web", web_base)):
+            reference = current_local_reference(role, identity)
+            command(["docker", "tag", identity, reference])
+            operator._oci().check_loaded_image(json.loads(command(["docker", "image", "inspect", reference]))[0], identity)
+        bases = dict(CURRENT_BASE_LAYOUT)
+    else:
+        require(runtime_base is None and web_base is None, "NUE_REPOSITORY_BASE_INPUT_SCOPE")
+        for role, reference in (("node", node_base), ("caddy", caddy_base)):
+            require(re.fullmatch(r"[a-zA-Z0-9./:_-]+@sha256:[0-9a-f]{64}", reference or ""), "NUE_PINNED_BASE_REQUIRED")
+            row = json.loads(command(["docker", "image", "inspect", reference]))[0]
+            require(row["Os"] == "linux" and row["Architecture"] == "amd64" and IMAGE.fullmatch(row["Id"]), "NUE_BASE_PLATFORM")
+            bases[role] = {"reference": reference, "localImageId": row["Id"]}
     output.mkdir(mode=0o755)
     context = output / "source"
     if exported: shutil.copytree(source, context)
@@ -346,16 +428,23 @@ def create_bundle(operator, source, product, operations, output, node_base, cadd
             require(original.count("FROM node:22-alpine") == 1 and original.count("FROM ") == 1, "NUE_RUNTIME_DOCKERFILE")
         else:
             require(original.count("FROM node:22-alpine AS build") == 1 and original.count("FROM caddy:2.10-alpine") == 1 and original.count("FROM ") == 2, "NUE_WEB_DOCKERFILE")
-        rendered = original.replace("FROM node:22-alpine", "FROM " + node_base).replace("FROM caddy:2.10-alpine", "FROM " + caddy_base)
+        rendered = local_current_dockerfile(role, runtime_base, web_base) if base_mode == "local-current" else original.replace("FROM node:22-alpine", "FROM " + node_base).replace("FROM caddy:2.10-alpine", "FROM " + caddy_base)
         dockerfile = output / ("Dockerfile." + role + ".bound")
         dockerfile.write_text(rendered); dockerfile.chmod(0o644)
         iid = output / (role + ".iid")
+        if base_mode == "local-current":
+            for kind, identity in (("runtime", runtime_base), ("web", web_base)):
+                operator._oci().check_loaded_image(json.loads(command(["docker", "image", "inspect", current_local_reference(kind, identity)]))[0], identity)
         command(["docker", "build", "--pull=false", "--provenance=false", "--sbom=false", "--platform", "linux/amd64", "--iidfile", str(iid), "--file", str(dockerfile), str(context)], timeout=1800)
         identity = iid.read_text().strip()
         require(IMAGE.fullmatch(identity), "NUE_BUILD_IDENTITY")
         archive = output / (role + "-image.tar.gz")
         operator._save_docker_image(identity, archive)
         images[role] = {**operator._inspect_archive(archive, identity), "archiveSha256": digest(archive)}
+    if base_mode == "local-current":
+        require(current_base_gate(operator._oci(), runtime_base, web_base) == current_before, "NUE_CURRENT_BASE_CHANGED_DURING_BUILD")
+        for kind, identity in (("runtime", runtime_base), ("web", web_base)):
+            operator._oci().check_loaded_image(json.loads(command(["docker", "image", "inspect", current_local_reference(kind, identity)]))[0], identity)
     manifest = {"schemaVersion": 1, "mode": "nue-image-only", "repository": operator.REPOSITORY, "targetId": "catering-prod-02", "platform": "linux/amd64", "productCommit": product, "operationsCommit": operations, "sourceTreeSha256": operator._source_tree_digest(context), "schemaBinding": source_schema(context), "bases": bases, "images": images, "helpers": {path.name: digest(path) for path in tools.iterdir()}}
     (output / "manifest.json").write_bytes(canonical(manifest)); (output / "manifest.json").chmod(0o644)
     value = digest(output / "manifest.json")
@@ -568,7 +657,14 @@ def pause_applications(baseline, allowed_images, pending, token):
         pending.remove(row["Id"])
 
 
-def health():
+def original_edge_loopback_denial(baseline):
+    expected = baseline["files"].get(str(ORIGINAL_EDGE_CADDY))
+    require(expected is not None and expected["sha256"] == ORIGINAL_EDGE_CADDY_SHA256, "NUE_TLS_403_ORIGINAL_ACL_BASELINE_REQUIRED")
+    path = protected(ORIGINAL_EDGE_CADDY); info = path.stat()
+    require({"uid": info.st_uid, "gid": info.st_gid, "mode": stat.S_IMODE(info.st_mode), "sha256": digest(path)} == expected, "NUE_TLS_403_ORIGINAL_ACL_CHANGED")
+
+
+def health(baseline):
     deadline = time.monotonic() + 90
     for service, port in zip(SERVICES[:-1], (3101, 3102, 3103, 3104)):
         while True:
@@ -576,12 +672,25 @@ def health():
             if result.returncode == 0: break
             require(time.monotonic() < deadline, "NUE_HEALTH_TIMEOUT")
             time.sleep(1)
-    for url, extra in (("http://127.0.0.1:18081/", []), ("https://catering.the-one.catering/", ["--resolve", "catering.the-one.catering:443:127.0.0.1"])):
-        code = command(["curl", "--noproxy", "*", "--connect-timeout", "5", "--max-time", "10", "--silent", "--show-error", "--output", "/dev/null", "--write-out", "%{http_code}", *extra, url]).decode()
-        require(code in ("200", "401"), "NUE_HTTP_TLS_HEALTH")
+    observed = {"authenticatedSmoke": False}
+    for name, url, extra in (("web", "http://127.0.0.1:18081/", []), ("tls", "https://catering.the-one.catering/", ["--resolve", "catering.the-one.catering:443:127.0.0.1"])):
+        deadline = time.monotonic() + 60
+        while True:
+            result = subprocess.run(["curl", "--noproxy", "*", "--connect-timeout", "5", "--max-time", "10", "--silent", "--output", "/dev/null", "--write-out", "%{http_code}", *extra, url], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=15)
+            code = result.stdout.decode("ascii", errors="replace")
+            if result.returncode == 0:
+                if code in ("200", "401"): break
+                if name == "tls" and code == "403":
+                    original_edge_loopback_denial(baseline)
+                    observed["tlsProbe"] = "VALID_CERTIFICATE_AND_ORIGINAL_LOOPBACK_ACL_DENIAL"
+                    break
+            require(time.monotonic() < deadline, "NUE_HTTP_TLS_HEALTH")
+            time.sleep(1)
+        observed[name] = code
+    return observed
 
 
-def verify_runtime(baseline, images, compose_bytes, candidate_oci=None):
+def verify_runtime(baseline, images, compose_bytes, candidate_oci=None, candidate_layout=None, candidate_schema=None):
     current = snapshot()
     require(COMPOSE.read_bytes() == compose_bytes, "NUE_COMPOSE_BYTES")
     for key in ("networks", "volumes", "catalogue"):
@@ -601,7 +710,13 @@ def verify_runtime(baseline, images, compose_bytes, candidate_oci=None):
         for row in inspect(["platform-infra-" + s + "-1" for s in SERVICES]):
             service = row["Name"].removeprefix("/platform-infra-").removesuffix("-1")
             candidate_oci.check_running_container(row, images[service])
-    health()
+            if candidate_layout == CURRENT_BASE_LAYOUT:
+                if service == "web":
+                    command(["docker", "exec", row["Id"], "sh", "-ec", 'test "$(readlink /srv)" = /catering-public && test -f /catering-public/index.html && test -z "$(find /catering-public -type l -print)"'])
+                else:
+                    require(row["Config"]["WorkingDir"] == "/catering-product" and row["Config"]["Cmd"] == ["npm", "run", "dev:" + service] and row["Config"]["Entrypoint"] == ["docker-entrypoint.sh"], "NUE_CANDIDATE_FRESH_RUNTIME_ROOT")
+                    require(runtime_schema(row["Id"], "/catering-product") == candidate_schema, "NUE_CANDIDATE_RUNTIME_SCHEMA")
+    health(baseline)
     return current
 
 
@@ -663,7 +778,7 @@ def apply(bundle, manifest_sha, smoke, smoke_sha, admission_path=None, admission
         owned(token); require(COMPOSE.read_bytes() == old, "NUE_COMPOSE_CHANGED_BEFORE_REPLACE")
         replace_compose(candidate, baseline["files"][str(COMPOSE)], token)
         compose_up(); set_policies(baseline, token)
-        verify_runtime(baseline, images, candidate, candidate_oci=oci)
+        verify_runtime(baseline, images, candidate, candidate_oci=oci, candidate_layout=manifest["bases"], candidate_schema=manifest["schemaBinding"])
         command([str(smoke)], timeout=180)
         put(bundle / "installed.json", {"status": "NUE_IMAGE_ONLY_INSTALLED", "manifestSha256": manifest_sha, "composeSha256": hashlib.sha256(candidate).hexdigest(), "images": images, "smokeSha256": smoke_sha, "observerInstalled": False, "automaticBackupRestoreChainAccepted": False})
         safe = True
@@ -705,7 +820,7 @@ def verify(bundle, manifest_sha):
     images = {s: manifest["images"]["web" if s == "web" else "runtime"]["platformManifestDigest"] for s in SERVICES}
     require(images == installed["images"] and installed["status"] == "NUE_IMAGE_ONLY_INSTALLED", "NUE_INSTALLED_IMAGE_BINDING")
     oci = load_module("nue_verify_oci", bundle / "tools/catering_target_oci.py")
-    verify_runtime(baseline, images, candidate, candidate_oci=oci)
+    verify_runtime(baseline, images, candidate, candidate_oci=oci, candidate_layout=manifest["bases"], candidate_schema=manifest["schemaBinding"])
     return {"status": "NUE_IMAGE_ONLY_VERIFIED", "observerInstalled": False, "automaticBackupRestoreChainAccepted": False}
 
 
@@ -728,13 +843,16 @@ def main(argv=None):
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--node-base")
     parser.add_argument("--caddy-base")
+    parser.add_argument("--base-mode", choices=("repository", "local-current"), default="repository")
+    parser.add_argument("--runtime-base")
+    parser.add_argument("--web-base")
     args = parser.parse_args(argv)
     try:
         if args.phase in ("stage", "apply"):
             require(args.admission_signature is not None and args.admission_signature_sha256 is not None, "NUE_SIGNED_MAC_ADMISSION_REQUIRED")
         if args.phase == "build":
             require(args.confirm == "BUILD_NUE_IMAGE_ONLY" and args.output_dir is not None, "NUE_BUILD_CONFIRMATION")
-            result = {"status": "NUE_IMAGE_ONLY_BUNDLE_BUILT", "manifestSha256": build_prepared(args.bundle_dir, args.manifest_sha256, args.output_dir, args.node_base, args.caddy_base)}
+            result = {"status": "NUE_IMAGE_ONLY_BUNDLE_BUILT", "manifestSha256": build_prepared(args.bundle_dir, args.manifest_sha256, args.output_dir, args.node_base, args.caddy_base, base_mode=args.base_mode, runtime_base=args.runtime_base, web_base=args.web_base)}
         elif args.phase == "stage":
             require(args.confirm == "STAGE_NUE_IMAGE_ONLY", "NUE_STAGE_CONFIRMATION")
             result = stage(args.bundle_dir, args.manifest_sha256, args.expected_baseline, args.expected_baseline_sha256, args.backup_proof, args.backup_proof_sha256, args.admission, args.admission_sha256, args.admission_signature, args.admission_signature_sha256)

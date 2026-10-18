@@ -13,7 +13,7 @@ import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
-from contextlib import contextmanager, redirect_stderr
+from contextlib import ExitStack, contextmanager, redirect_stderr
 import io
 from unittest.mock import patch
 
@@ -23,6 +23,33 @@ nue = importlib.util.module_from_spec(SPEC); SPEC.loader.exec_module(nue)
 
 
 class NueTests(unittest.TestCase):
+    @contextmanager
+    def synthetic_current_host(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary); compose = root / "compose.json"; sites = root / "sites"; sites.mkdir()
+            (sites / "accepted.caddy").write_bytes(b":8081 {\n root * /srv\n file_server\n}\n")
+            compose.write_text(json.dumps({"services": {s: {"image": "existing"} for s in nue.SERVICES}}))
+            caddy_cmd = ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
+            rows = []
+            for service in nue.SERVICES:
+                identity = nue.CURRENT_WEB_M if service == "web" else nue.CURRENT_RUNTIME_M
+                row = {"Name": "/platform-infra-" + service + "-1", "Id": service + "-existing-id", "Image": identity,
+                       "ImageManifestDescriptor": {"digest": identity, "mediaType": "application/vnd.oci.image.manifest.v1+json"}, "State": {"Running": True},
+                       "Config": {"Cmd": caddy_cmd if service == "web" else ["npm", "run", "dev:" + service], "Entrypoint": None if service == "web" else ["docker-entrypoint.sh"], "WorkingDir": "/srv" if service == "web" else "/app", "Env": []},
+                       "Mounts": [{"Type": "bind", "Destination": "/etc/caddy/sites", "Source": str(sites), "RW": False}] if service == "web" else [],
+                       "HostConfig": {"RestartPolicy": {"Name": "unless-stopped", "MaximumRetryCount": 0}, "PortBindings": {}}, "NetworkSettings": {"Networks": {"catering_private": {}}}}
+                rows.append(row)
+            images = {identity: {"Id": identity, "Descriptor": {"digest": identity, "mediaType": "application/vnd.oci.image.manifest.v1+json"}, "Os": "linux", "Architecture": "amd64", "Config": {"Cmd": caddy_cmd, "Entrypoint": None}} for identity in (nue.CURRENT_RUNTIME_M, nue.CURRENT_WEB_M)}
+            state = {"rows": rows, "images": images, "compose": compose, "sites": sites, "imageConfig": b":80 {\n root * /srv\n file_server\n}\n", "collision": False, "calls": []}
+            def command(argv, **kwargs):
+                state["calls"].append(argv)
+                if argv[:3] == ["docker", "image", "inspect"]: return json.dumps([images[argv[-1]]]).encode()
+                if "cat" in argv: return state["imageConfig"]
+                if "sh" in argv and state["collision"]: raise RuntimeError("NUE_CURRENT_PATH_COLLISION")
+                return b""
+            with patch.object(nue, "host_identity"), patch.object(nue, "protected", side_effect=lambda p, **kw: Path(p)), patch.object(nue, "COMPOSE", compose), patch.object(nue, "inspect", side_effect=lambda names: rows), patch.object(nue, "command", side_effect=command):
+                yield state
+
     @contextmanager
     def synthetic_issuer(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -99,19 +126,20 @@ class NueTests(unittest.TestCase):
     def proof(self):
         return {"capture": {"sourceResumed": True, "files": list(range(17)), "manifestSha256": "c" * 64}, "restore": {"status": "ALL_THREE_DATABASES_GLOBALS_AND_REQUIRED_FILES_IDENTICAL", "databases": 3, "fileTrees": 8, "probeContainerRemoved": True, "runId": "a" * 32}, "captureCleanup": {"status": "OWN_TMPFS_UNMOUNTED", "runId": "a" * 32}, "finalHealth": {"status": "ORIGINAL_SEVEN_CONTAINERS_POLICIES_DATABASE_SCOPE_AND_HTTPS_HEALTHY"}, "snapshotId": "b" * 64, "manifestSha256": "c" * 64, "at": datetime.datetime.now(datetime.timezone.utc).isoformat(), "runId": "a" * 32}
 
-    def run_apply_failure(self, tmp, recovery_fails=False, preflight_fails=False, loaded_mutation=None):
+    def run_apply_failure(self, tmp, recovery_fails=False, preflight_fails=False, loaded_mutation=None, smoke_fails=False):
         sha = "a" * 64; bundle = tmp / sha; bundle.mkdir()
         compose = tmp / "compose.json"
         old = json.dumps({"services": {s: {"image": "old"} for s in nue.SERVICES}}).encode(); compose.write_bytes(old)
         smoke = tmp / "smoke"; smoke.write_bytes(b"#!/bin/sh\nexit 0\n"); smoke.chmod(0o700)
         baseline = {"files": {str(compose): {"uid": 0, "gid": 0, "mode": 0o600}}, "containers": {"platform-infra-" + s + "-1": {"id": s, "image": "old", "restart": {"Name": "unless-stopped", "MaximumRetryCount": 0}} for s in nue.SERVICES}}
         binding = {"platformManifestDigest": "sha256:" + "1" * 64, "configDigest": "sha256:" + "2" * 64}
-        manifest = {"schemaBinding": {}, "images": {r: dict(binding) for r in ("runtime", "web")}}
+        manifest = {"schemaBinding": {}, "bases": {}, "images": {r: dict(binding) for r in ("runtime", "web")}}
         (bundle / "stage.json").write_text(json.dumps({"manifestSha256": sha, "mode": "nue-image-only", "baselineSha256": "b" * 64, "backupProofSha256": "c" * 64}))
         events = []
         oci = nue.load_module("nue_test_oci", ROOT / "platform-infra/scripts/catering_target_oci.py")
         def run(argv, **kwargs):
             events.append(argv)
+            if smoke_fails and argv == [str(smoke)] and events.count(argv) == 1: raise RuntimeError("AUTHENTICATED_SMOKE_FAILED")
             if argv[:3] == ["docker", "image", "inspect"]:
                 row = {"Id": binding["configDigest"] if loaded_mutation == "config-id" else binding["platformManifestDigest"], "Os": "linux", "Architecture": "amd64"}
                 if loaded_mutation == "descriptor": row["Descriptor"] = {"digest": binding["configDigest"]}
@@ -119,9 +147,29 @@ class NueTests(unittest.TestCase):
             if argv[:2] == ["docker", "save"]: Path(argv[3]).write_bytes(b"fixture")
             if "psql" in argv: return b"0"
             return b""
-        verify_results = [RuntimeError("CANDIDATE_HEALTH_FAIL"), RuntimeError("ROLLBACK_FAIL") if recovery_fails else {}]
-        with patch.multiple(nue, RELEASES=tmp, COMPOSE=compose), patch.object(nue, "host_identity"), patch.object(nue, "protected", side_effect=lambda p, **kw: Path(p)), patch.object(nue, "require_admission"), patch.object(nue, "bind_admission_manifest"), patch.object(nue, "verify_bundle", return_value=manifest), patch.object(nue, "read_bound", side_effect=lambda p, sha: baseline if Path(p).name == "baseline.json" else {}), patch.object(nue, "backup_gate"), patch.object(nue, "own_lock", return_value="token"), patch.object(nue, "owned"), patch.object(nue, "snapshot", return_value={} if preflight_fails else baseline), patch.object(nue, "runtime_schema", return_value={}), patch.object(nue, "command", side_effect=run), patch.object(nue, "load_module", side_effect=lambda name, path: oci if str(path).endswith("catering_target_oci.py") else SimpleNamespace(_inspect_archive=lambda p: binding)), patch.object(nue, "replace_compose", side_effect=lambda body, meta, token: compose.write_bytes(body)), patch.object(nue, "pause_applications") as pause, patch.object(nue, "compose_up") as up, patch.object(nue, "set_policies"), patch.object(nue, "verify_runtime", side_effect=verify_results), patch.object(nue, "unlock") as unlock:
-            expected_error = self.assertRaises(ValueError) if loaded_mutation else self.assertRaisesRegex(RuntimeError, "NUE_BASELINE_CHANGED|CANDIDATE_HEALTH_FAIL")
+        verify_results = [{} if smoke_fails else RuntimeError("CANDIDATE_HEALTH_FAIL"), RuntimeError("ROLLBACK_FAIL") if recovery_fails else {}]
+        with ExitStack() as stack:
+            stack.enter_context(patch.multiple(nue, RELEASES=tmp, COMPOSE=compose))
+            stack.enter_context(patch.object(nue, "host_identity"))
+            stack.enter_context(patch.object(nue, "protected", side_effect=lambda p, **kw: Path(p)))
+            stack.enter_context(patch.object(nue, "require_admission"))
+            stack.enter_context(patch.object(nue, "bind_admission_manifest"))
+            stack.enter_context(patch.object(nue, "verify_bundle", return_value=manifest))
+            stack.enter_context(patch.object(nue, "read_bound", side_effect=lambda p, sha: baseline if Path(p).name == "baseline.json" else {}))
+            stack.enter_context(patch.object(nue, "backup_gate"))
+            stack.enter_context(patch.object(nue, "own_lock", return_value="token"))
+            stack.enter_context(patch.object(nue, "owned"))
+            stack.enter_context(patch.object(nue, "snapshot", return_value={} if preflight_fails else baseline))
+            stack.enter_context(patch.object(nue, "runtime_schema", return_value={}))
+            stack.enter_context(patch.object(nue, "command", side_effect=run))
+            stack.enter_context(patch.object(nue, "load_module", side_effect=lambda name, path: oci if str(path).endswith("catering_target_oci.py") else SimpleNamespace(_inspect_archive=lambda p: binding)))
+            stack.enter_context(patch.object(nue, "replace_compose", side_effect=lambda body, meta, token: compose.write_bytes(body)))
+            pause = stack.enter_context(patch.object(nue, "pause_applications"))
+            up = stack.enter_context(patch.object(nue, "compose_up"))
+            stack.enter_context(patch.object(nue, "set_policies"))
+            stack.enter_context(patch.object(nue, "verify_runtime", side_effect=verify_results))
+            unlock = stack.enter_context(patch.object(nue, "unlock"))
+            expected_error = self.assertRaises(ValueError) if loaded_mutation else self.assertRaisesRegex(RuntimeError, "AUTHENTICATED_SMOKE_FAILED" if smoke_fails else "NUE_BASELINE_CHANGED|CANDIDATE_HEALTH_FAIL")
             with expected_error:
                 nue.apply(bundle, sha, smoke, hashlib.sha256(smoke.read_bytes()).hexdigest())
             return bundle, old, compose.read_bytes(), pause.call_count, up.call_count, unlock.call_count
@@ -145,6 +193,46 @@ class NueTests(unittest.TestCase):
             _, old, after, pauses, starts, unlocks = self.run_apply_failure(Path(tmp), preflight_fails=True)
             self.assertEqual(after, old)
             self.assertEqual((pauses, starts, unlocks), (0, 0, 1))
+
+    def test_authenticated_smoke_remains_required_after_readiness(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            bundle, old, after, pauses, starts, unlocks = self.run_apply_failure(Path(temporary), smoke_fails=True)
+            self.assertEqual(after, old)
+            self.assertEqual((pauses, starts, unlocks), (2, 2, 1))
+            self.assertFalse((bundle / "installed.json").exists())
+            self.assertTrue((bundle / "rollback-verified.json").exists())
+
+    def test_web_readiness_retries_http_but_keeps_original_tls_acl_and_cert_validation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            edge = Path(temporary) / "Caddyfile"; edge.write_bytes(b"synthetic-original-edge-acl"); edge.chmod(0o600)
+            info = edge.stat(); expected = {"uid": info.st_uid, "gid": info.st_gid, "mode": 0o600, "sha256": nue.digest(edge)}
+            baseline = {"files": {str(edge): expected}}; calls = []; http_codes = iter((b"503", b"401"))
+            def run(argv, **kwargs):
+                calls.append(argv)
+                return SimpleNamespace(returncode=0, stdout=(b"403" if argv[-1].startswith("https://") else next(http_codes)) if argv[0] == "curl" else b"")
+            with patch.object(nue, "ORIGINAL_EDGE_CADDY", edge), patch.object(nue, "ORIGINAL_EDGE_CADDY_SHA256", expected["sha256"]), patch.object(nue, "protected", side_effect=lambda p: p), patch.object(nue.subprocess, "run", side_effect=run), patch.object(nue.time, "sleep"):
+                result = nue.health(baseline)
+            self.assertEqual((result["web"], result["tls"], result["authenticatedSmoke"]), ("401", "403", False))
+            self.assertEqual(result["tlsProbe"], "VALID_CERTIFICATE_AND_ORIGINAL_LOOPBACK_ACL_DENIAL")
+            self.assertEqual(len([call for call in calls if call[0] == "curl"]), 3)
+            self.assertTrue(all("-k" not in call and "--insecure" not in call for call in calls))
+
+    def test_tls_403_requires_exact_original_file_metadata_and_baseline(self):
+        for mutation in ("baseline", "bytes", "mode", "certificate", "http403"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
+                edge = Path(temporary) / "Caddyfile"; edge.write_bytes(b"synthetic-original-edge-acl"); edge.chmod(0o600)
+                original_sha = nue.digest(edge); info = edge.stat()
+                expected = {"uid": info.st_uid, "gid": info.st_gid, "mode": 0o600, "sha256": original_sha}
+                if mutation == "baseline": expected["sha256"] = "f" * 64
+                if mutation == "bytes": edge.write_bytes(b"changed-ACL")
+                if mutation == "mode": edge.chmod(0o644)
+                baseline = {"files": {str(edge): expected}}
+                def run(argv, **kwargs):
+                    if argv[0] != "curl": return SimpleNamespace(returncode=0, stdout=b"")
+                    tls = argv[-1].startswith("https://")
+                    return SimpleNamespace(returncode=60 if tls and mutation == "certificate" else 0, stdout=b"403" if tls or mutation == "http403" else b"401")
+                with patch.object(nue, "ORIGINAL_EDGE_CADDY", edge), patch.object(nue, "ORIGINAL_EDGE_CADDY_SHA256", original_sha), patch.object(nue, "protected", side_effect=lambda p: p), patch.object(nue.subprocess, "run", side_effect=run), patch.object(nue.time, "monotonic", side_effect=[0, 0, 61] if mutation == "http403" else [0, 0, 0, 61]), patch.object(nue.time, "sleep"):
+                    with self.assertRaisesRegex(RuntimeError, "NUE_TLS_403_ORIGINAL_ACL_|NUE_HTTP_TLS_HEALTH"): nue.health(baseline)
 
     def test_loaded_config_id_and_wrong_descriptor_fail_before_writer_pause(self):
         for mutation in ("config-id", "descriptor"):
@@ -323,40 +411,113 @@ class NueTests(unittest.TestCase):
     def test_new_bundle_binds_actual_full_source_lockfile_helpers_and_oci(self):
         from catering_target_operator_test import operator
         from catering_target_v4_test import archive_fixture
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp); source = root / "source"; source.mkdir(mode=0o755)
-            for directory in nue.RUNTIME_ROOTS: (source / directory).mkdir(parents=True, mode=0o755)
-            (source / "shared-core/src/persistence.ts").write_text("const BUSINESS_RECORDS_SCHEMA_MIGRATION=`CREATE TABLE records(id TEXT)`;\nfunction getCachedPool() {}")
-            (source / "package.json").write_text("{}"); (source / "package-lock.json").write_text('{"lockfileVersion":3}')
-            docker = source / "platform-infra/docker"; docker.mkdir(parents=True)
-            (docker / "Dockerfile.runtime").write_text("FROM node:22-alpine\nWORKDIR /app\nCOPY . .\nRUN npm ci\n")
-            (docker / "Dockerfile.web").write_text("FROM node:22-alpine AS build\nWORKDIR /app\nCOPY . .\nRUN npm ci\nFROM caddy:2.10-alpine\n")
-            fixtures = {role: archive_fixture(role, "manifest") for role in ("runtime", "web")}
-            calls = []
-            def command(argv, **kwargs):
-                calls.append(argv)
-                if argv[:3] == ["docker", "image", "inspect"]: return json.dumps([{"Id": "sha256:" + "3" * 64, "Os": "linux", "Architecture": "amd64"}]).encode()
-                role = "runtime" if "runtime" in argv[argv.index("--file") + 1] else "web"
-                Path(argv[argv.index("--iidfile") + 1]).write_text(fixtures[role][2])
-                return b""
-            def save(identity, path):
-                role = next(role for role in fixtures if fixtures[role][2] == identity)
-                path.write_bytes(gzip.compress(fixtures[role][1]))
-            with patch.object(nue, "command", side_effect=command), patch.object(operator, "export_product_context", side_effect=lambda src, sha, dst: shutil.copytree(src, dst)), patch.object(operator, "_save_docker_image", side_effect=save):
-                out = root / "bundle"
-                sha = nue.create_bundle(operator, source, "1" * 40, "2" * 40, out, "node@sha256:" + "4" * 64, "caddy@sha256:" + "5" * 64)
-            manifest = nue.verify_bundle(out, sha)
-            self.assertEqual((manifest["targetId"], manifest["mode"]), ("catering-prod-02", "nue-image-only"))
-            self.assertTrue(all("--pull=false" in call for call in calls if call[1] == "build"))
-            self.assertIn("FROM node@sha256:", (out / "Dockerfile.runtime.bound").read_text())
-            (out / "source/package-lock.json").write_text("tampered")
-            with self.assertRaisesRegex(RuntimeError, "NUE_FULL_SOURCE_BINDING"): nue.verify_bundle(out, sha)
+        for mode in ("repository", "local-current"):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp); source = root / "source"; source.mkdir(mode=0o755)
+                for directory in nue.RUNTIME_ROOTS: (source / directory).mkdir(parents=True, mode=0o755)
+                (source / "shared-core/src/persistence.ts").write_text("const BUSINESS_RECORDS_SCHEMA_MIGRATION=`CREATE TABLE records(id TEXT)`;\nfunction getCachedPool() {}")
+                (source / "package.json").write_text("{}"); (source / "package-lock.json").write_text('{"lockfileVersion":3}')
+                docker = source / "platform-infra/docker"; docker.mkdir(parents=True)
+                (docker / "Dockerfile.runtime").write_text("FROM node:22-alpine\nWORKDIR /app\nCOPY . .\nRUN npm ci\n")
+                (docker / "Dockerfile.web").write_text("FROM node:22-alpine AS build\nWORKDIR /app\nCOPY . .\nRUN npm ci\nFROM caddy:2.10-alpine\n")
+                fixtures = {role: archive_fixture(role, "manifest") for role in ("runtime", "web")}
+                calls = []
+                def command(argv, **kwargs):
+                    calls.append(argv)
+                    if argv[:3] == ["docker", "image", "inspect"]:
+                        identity = nue.CURRENT_RUNTIME_M if "runtime" in argv[-1] else nue.CURRENT_WEB_M
+                        return json.dumps([{"Id": identity, "Os": "linux", "Architecture": "amd64"}]).encode()
+                    if argv[:2] == ["docker", "tag"]: return b""
+                    role = "runtime" if "runtime" in argv[argv.index("--file") + 1] else "web"
+                    Path(argv[argv.index("--iidfile") + 1]).write_text(fixtures[role][2])
+                    return b""
+                def save(identity, path):
+                    role = next(role for role in fixtures if fixtures[role][2] == identity)
+                    path.write_bytes(gzip.compress(fixtures[role][1]))
+                with patch.object(nue, "command", side_effect=command), patch.object(operator, "export_product_context", side_effect=lambda src, sha, dst: shutil.copytree(src, dst)), patch.object(operator, "_save_docker_image", side_effect=save), patch.object(nue, "current_base_gate", return_value={"current": True}) as current_gate:
+                    out = root / "bundle"
+                    sha = nue.create_bundle(operator, source, "1" * 40, "2" * 40, out,
+                                            "node@sha256:" + "4" * 64 if mode == "repository" else None,
+                                            "caddy@sha256:" + "5" * 64 if mode == "repository" else None,
+                                            base_mode=mode, runtime_base=nue.CURRENT_RUNTIME_M if mode == "local-current" else None,
+                                            web_base=nue.CURRENT_WEB_M if mode == "local-current" else None)
+                manifest = nue.verify_bundle(out, sha)
+                self.assertEqual((manifest["targetId"], manifest["mode"]), ("catering-prod-02", "nue-image-only"))
+                self.assertTrue(all("--pull=false" in call for call in calls if call[1] == "build"))
+                if mode == "repository":
+                    self.assertIn("FROM node@sha256:", (out / "Dockerfile.runtime.bound").read_text())
+                    current_gate.assert_not_called()
+                else:
+                    self.assertEqual(current_gate.call_count, 2)
+                    self.assertEqual(manifest["bases"], nue.CURRENT_BASE_LAYOUT)
+                    self.assertIn("WORKDIR /catering-product", (out / "Dockerfile.runtime.bound").read_text())
+                    self.assertIn("ln -s /catering-public /srv", (out / "Dockerfile.web.bound").read_text())
+                    self.assertFalse(any(call[1] == "pull" for call in calls))
+                    with patch.object(nue, "command", side_effect=command), patch.object(operator, "export_product_context", side_effect=lambda src, sha, dst: shutil.copytree(src, dst)), patch.object(operator, "_save_docker_image", side_effect=save), patch.object(nue, "current_base_gate", side_effect=[{"current": True}, {"current": False}]):
+                        rejected = root / "drift-bundle"
+                        with self.assertRaisesRegex(RuntimeError, "NUE_CURRENT_BASE_CHANGED_DURING_BUILD"):
+                            nue.create_bundle(operator, source, "1" * 40, "2" * 40, rejected, None, None, base_mode="local-current", runtime_base=nue.CURRENT_RUNTIME_M, web_base=nue.CURRENT_WEB_M)
+                        self.assertFalse((rejected / "manifest.json").exists())
+                (out / "source/package-lock.json").write_text("tampered")
+                with self.assertRaisesRegex(RuntimeError, "NUE_FULL_SOURCE_BINDING"): nue.verify_bundle(out, sha)
 
     def test_floating_bases_fail_before_any_build(self):
         with tempfile.TemporaryDirectory() as tmp, patch.object(nue, "command") as command:
             with self.assertRaisesRegex(RuntimeError, "NUE_PINNED_BASE_REQUIRED"):
                 nue.create_bundle(None, Path(tmp), "1" * 40, "2" * 40, Path(tmp) / "bundle", "node:22-alpine", "caddy:2.10-alpine")
             command.assert_not_called()
+
+    def test_current_base_gate_binds_real_five_commands_images_sites_and_compose(self):
+        oci = nue.load_module("nue_current_oci", ROOT / "platform-infra/scripts/catering_target_oci.py")
+        with self.synthetic_current_host() as state:
+            first = nue.current_base_gate(oci, nue.CURRENT_RUNTIME_M, nue.CURRENT_WEB_M)
+            self.assertEqual(first, nue.current_base_gate(oci, nue.CURRENT_RUNTIME_M, nue.CURRENT_WEB_M))
+            self.assertEqual(len([key for key in first if key.startswith("/platform-infra-")]), 5)
+            self.assertTrue(all(call[:3] in (["docker", "image", "inspect"], ["docker", "exec", call[2]]) for call in state["calls"]))
+
+    def test_current_base_gate_rejects_image_root_command_mount_and_compose_drift(self):
+        oci = nue.load_module("nue_current_negative_oci", ROOT / "platform-infra/scripts/catering_target_oci.py")
+        for mutation in ("config-id", "index", "container", "command", "cwd", "mount", "site", "collision", "compose"):
+            with self.subTest(mutation=mutation), self.synthetic_current_host() as state:
+                if mutation == "config-id": state["images"][nue.CURRENT_RUNTIME_M]["Id"] = "sha256:" + "a" * 64
+                if mutation == "index": state["images"][nue.CURRENT_WEB_M]["Descriptor"]["mediaType"] = "application/vnd.oci.image.index.v1+json"
+                if mutation == "container": state["rows"][0]["ImageManifestDescriptor"]["digest"] = "sha256:" + "a" * 64
+                if mutation == "command": state["rows"][0]["Config"]["Cmd"] = ["npm", "run", "other"]
+                if mutation == "cwd": state["rows"][0]["Config"]["WorkingDir"] = "/unexpected"
+                if mutation == "mount": state["rows"][-1]["Mounts"].append({"Type": "bind", "Destination": "/srv", "Source": "/old-assets", "RW": False})
+                if mutation == "site": (state["sites"] / "accepted.caddy").write_text("root * /catering-previous-public\n")
+                if mutation == "collision": state["collision"] = True
+                if mutation == "compose": state["compose"].write_text(json.dumps({"services": {s: {"working_dir": "/app"} for s in nue.SERVICES}}))
+                with self.assertRaises((RuntimeError, ValueError)): nue.current_base_gate(oci, nue.CURRENT_RUNTIME_M, nue.CURRENT_WEB_M)
+
+    def test_current_mode_rejects_edge_or_floating_bases_before_build(self):
+        for runtime_m, web_m in ((nue.CURRENT_RUNTIME_M, "sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648"), ("node:22-alpine", nue.CURRENT_WEB_M)):
+            with self.subTest(runtime_m=runtime_m, web_m=web_m), patch.object(nue, "host_identity"), patch.object(nue, "command") as command:
+                with self.assertRaisesRegex(RuntimeError, "NUE_CURRENT_BASE_EXACT_M_REQUIRED"): nue.current_base_gate(None, runtime_m, web_m)
+                command.assert_not_called()
+
+    def test_current_web_image_replaces_serving_root_without_deleting_old_assets(self):
+        dockerfile = nue.local_current_dockerfile("web", nue.CURRENT_RUNTIME_M, nue.CURRENT_WEB_M)
+        script = next(line.removeprefix("RUN ") for line in dockerfile.splitlines() if line.startswith("RUN test -d /srv"))
+        for collision in (False, True):
+            with self.subTest(collision=collision), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary); srv = root / "srv"; srv.mkdir(); (srv / "stale.js").write_text("old")
+                if collision: (root / "catering-public").mkdir()
+                bounded = script
+                for name in ("/catering-previous-public", "/catering-public", "/srv"): bounded = bounded.replace(name, str(root / name[1:]))
+                result = subprocess.run(["sh", "-ec", bounded], capture_output=True)
+                if collision:
+                    self.assertNotEqual(result.returncode, 0); self.assertFalse(srv.is_symlink()); self.assertTrue((srv / "stale.js").exists())
+                else:
+                    self.assertEqual(result.returncode, 0)
+                    (root / "catering-public/index.html").write_text("fresh")
+                    self.assertTrue(srv.is_symlink()); self.assertEqual((srv / "index.html").read_text(), "fresh")
+                    self.assertFalse((srv / "stale.js").exists()); self.assertTrue((root / "catering-previous-public/stale.js").exists())
+        self.assertIn("COPY --from=build /catering-product/backoffice-ui/dist/ /catering-public/", dockerfile)
+        self.assertIn("COPY platform-infra/Caddyfile /etc/caddy/Caddyfile", dockerfile)
+        self.assertNotIn("/app/", dockerfile)
+        self.assertIn("RUN npm ci", dockerfile)
+        self.assertIn("find /catering-product/backoffice-ui/dist -type l", dockerfile)
 
 
 if __name__ == "__main__": unittest.main()

@@ -430,6 +430,37 @@ python3 -I "$nue_input/tools/catering_target_nue_image_update.py" build \
   --caddy-base "$exact_local_caddy" --confirm BUILD_NUE_IMAGE_ONLY
 ```
 
+Für den tatsächlich vorgefundenen NUE-Bestand ohne offizielle RepoDigests gibt es
+den ausdrücklich getrennten Host-Buildmodus `--base-mode local-current`. Er
+akzeptiert ausschließlich die im Helper gebundenen aktuellen vier Backend-Ms
+und das bestehende Web-M, niemals das abweichende Edge-Caddyimage. Er prüft die
+laufenden fünf Container, linux/amd64-M-/Descriptorbindungen, Commands/CWD,
+Mounts, Compose-Workingdirs, Image-Caddyfile und gebundene Sites vor und nach dem
+Build identisch. Unklassifizierte Webcommands oder belegte Pfadkollisionen
+führen zu HOLD. Eigene lokale Aliases werden aus diesen bereits vorhandenen Ms
+gebildet und vor jedem Build sowie danach exakt auf M geprüft; es wird kein
+offizieller RepoDigest erfunden und kein Registry-Pull als Ersatz zugelassen.
+
+```bash
+python3 -I "$nue_input/tools/catering_target_nue_image_update.py" build \
+  --bundle-dir "$nue_input" --manifest-sha256 "$request_sha" \
+  --output-dir "$nue_bundle" --base-mode local-current \
+  --runtime-base sha256:fb26fe510fade286bbfa02c981a8abb910ef8624a802d26822db662d81befdeb \
+  --web-base sha256:b2ffe4694b983e4b4c1859676bf24df344900dfeaf8f2f7c07ad1ee23cbce25d \
+  --confirm BUILD_NUE_IMAGE_ONLY
+```
+
+Der vollständige getrackte Produktbaum samt Lockfile und `npm ci` entsteht in
+frischem `/catering-product`; die bestehenden relativen Backendcommands starten
+dort. Der Webbuild kopiert ausschließlich den frischen, symlinkfreien Vite-Output
+nach `/catering-public`. Nur im Kandidatenimage wird bisheriges `/srv` nach
+`/catering-previous-public` verschoben und `/srv` mit dem frischen Baum verlinkt.
+So behalten Image-Caddyfile und unveränderte gebundene Sites ihre `/srv`-Root,
+ohne alte Assets auszuliefern. Hostdateien werden weder geändert noch gelöscht.
+Postflight prüft den neuen Backend-CWD/Schemaquellpfad und den frischen
+Webservierbaum. Der normale `repository@M`-Modus und historische Wege bleiben
+unverändert; Backup-/Stage-/signierte Apply-Gates werden dadurch nicht ersetzt.
+
 Ein vorhandener autorisierter Mac-Dockerbestand kann alternativ `nue-bundle` mit
 denselben Produkt-/Operations-/Quellparametern, `--output-dir`, `--node-base` und
 `--caddy-base` verwenden. Jeder neue Bundleaufbau bindet direkt die tatsächlichen
@@ -535,6 +566,15 @@ vor Erfolg Pflicht. Bei Fehler pausiert Recovery auch bereits gestartete
 Kandidaten und prüft den echten Compose-/Image-/Restart-/Health-/Smoke-Rückweg;
 aktuelle Daten werden nicht zurückgesetzt. Unklare Recovery behält den eigenen
 Update-Lock und einen Recovery-HOLD-Beleg. Fremde Locks werden nie übernommen.
+
+Die begrenzte HTTP-Readiness verlangt auf localhost:18081 weiterhin 200/401.
+TLS prüft das echte Zertifikat unverändert. Die tatsächlich ursprüngliche
+Loopback-ACL antwortet absichtlich mit 403 vor Authentifizierung; ausschließlich
+bei exakt dem gebundenen ursprünglichen Edge-Caddyfile-SHA256 und unveränderten
+UID/GID/Modi derselben Stagebaseline wird dieser Fall als TLS-/ACL-Nachweis
+anerkannt. Unbekannte 403, Konfigurationsdrift und Zertifikatfehler bleiben HOLD.
+Dieser Nachweis bezeichnet ausdrücklich keine erfolgreiche Anmeldung und ersetzt
+den weiterhin zwingenden geschützten authentifizierten Smoke nicht.
 
 Dieser Imagepfad installiert weder Backup-/Restore-Timer noch Observer und meldet
 diese weiterhin ausdrücklich als offen. Lokale synthetische Tests belegen kein
