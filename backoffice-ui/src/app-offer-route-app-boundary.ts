@@ -43,6 +43,9 @@ export function buildAppOfferRouteAppBoundary(
     activeOfferCaseId: input.activeOfferCaseId,
     setActiveOfferCaseId: input.setActiveOfferCaseId,
     offerText: input.offerText,
+    customerName: input.manualInput.customerName,
+    setOfferText: input.setOfferText,
+    clearCustomerName: () => input.manualActions.setCustomerName(""),
     setSubmitting: input.setSubmitting,
     clearMessages: input.clearMessages,
     setSelectedDraftId: input.setSelectedDraftId,
@@ -68,6 +71,7 @@ export function buildAppOfferRouteAppBoundary(
 
   return buildAppOfferRouteState({
     ...input,
+    hasActiveOfferCase: Boolean(input.activeOfferCaseId),
     submitOfferText,
     approveDraft: approvalAction.approve,
     createHandoff: approvalAction.createHandoff

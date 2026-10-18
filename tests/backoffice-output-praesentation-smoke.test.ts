@@ -592,9 +592,9 @@ describe("backoffice production presentation smoke", () => {
     expect(content).not.toContain("Aktualisieren");
     expect(content).toContain("Angebotsentwurf prüfen");
     expect(content).toContain("Alternative Erfassung");
-    expect(content).toContain("Für die Produktion übernommene Veranstaltungen");
+    expect(content).toContain("Erfasste Veranstaltungsdaten");
     expect(content).toContain("Lunch-Angebot für 45 Personen · 2 Varianten · 1 offener Punkt");
-    expect(content).toContain("Produktionsübergabe: 1 vollständig · 0 teilweise");
+    expect(content).toContain("Veranstaltungsdaten: 1 vollständig · 0 teilweise");
     expect(content).toContain("presentation-draft-success");
     expect(content).toContain("presentation-spec-success");
     expect(content).toContain("Angebot exportieren");
@@ -640,7 +640,7 @@ describe("backoffice production presentation smoke", () => {
     expect(content).toContain("Plan: vollständig");
     expect(content).toContain("Produktionsblatt: vorhanden");
     expect(content).toContain("Einkauf: 1 Liste");
-    expect(content).toContain("Offene Punkte: keine");
+    expect(content).toContain("Berechnungshinweise: keine");
     expect(content).toContain("Vegetarische Tomatensuppe");
     expect(content).toContain("Küchenblatt Vegetarische Tomatensuppe");
     expect(content).toContain("Tomaten");
@@ -679,7 +679,7 @@ describe("backoffice production presentation smoke", () => {
     const content = await renderProductionRoute();
 
     expect(content).toContain("Status: unzureichend");
-    expect(content).toContain("Offene Punkte:");
+    expect(content).toContain("Berechnungshinweise:");
     expect(content).toContain("Teilnehmerzahl bitte noch präzisieren");
     expect(content).not.toContain("Offene Punkte: keine");
     expect(content).not.toContain("Arbeitsblätter: 1");

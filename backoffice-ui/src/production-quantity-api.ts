@@ -43,8 +43,8 @@ export interface ProductionQuantityWorkflowPreview {
   requestedValue?: { amount: number; unit: string };
   resultingTarget?: { amount: number; unit: string };
   scaleFactor?: number;
-  recipeChanges?: Array<{ ingredientId: string; name: string; baselineAmount: number; effectiveAmount: number; unit: string }>;
-  purchaseChanges?: Array<{ ingredientId: string; name: string; baselineAmount: number; effectiveAmount: number; unit: string }>;
+  recipeChanges?: Array<{ ingredientId: string; name: string; previousAmount?: number; baselineAmount: number; effectiveAmount: number; unit: string }>;
+  purchaseChanges?: Array<{ ingredientId: string; name: string; previousAmount?: number; baselineAmount: number; effectiveAmount: number; unit: string }>;
   appliedRuleIds?: string[];
   relevantCandidateRuleIds?: string[];
   nonlinearIssues?: string[];

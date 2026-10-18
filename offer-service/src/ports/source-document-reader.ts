@@ -18,6 +18,11 @@ export interface StoredSourceDocument {
 }
 
 export interface SourceDocumentMetadataReader {
+  /** Inserts an immutable text source through Intake; never accepts caller-authored specs. */
+  ensureTextRequest?(
+    context: BusinessContext, requestId: string, text: string
+  ): Promise<AcceptedEventSpec>;
+
   getMetadata(
     context: BusinessContext,
     documentId: string

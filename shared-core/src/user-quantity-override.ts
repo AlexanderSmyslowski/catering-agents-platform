@@ -116,7 +116,7 @@ const STALE_ARTIFACTS: QuantityOverrideStaleArtifact[] = [
 ];
 
 function normalize(value: number): number {
-  return Number(value.toFixed(6));
+  return Number(value.toPrecision(15));
 }
 
 function positive(value: number): boolean {
@@ -172,8 +172,9 @@ export function previewQuantityOverride(input: QuantityOverridePreviewInput): Qu
     purchaseIngredientId = purchaseEdit.ingredientId;
   }
 
-  const scaleFactor = normalize(proposedTarget / input.currentAuthority.targetAmount);
-  const targetServings = servings! * scaleFactor;
+  const scaleFactor = proposedTarget / input.currentAuthority.targetAmount;
+  // Derive the new yield from its authoritative target, not a rounded ratio.
+  const targetServings = proposedTarget / input.outputMapping.outputAmount * input.outputMapping.recipeServings;
   const proportionalBaseline = scaleRecipe(input.recipe, targetServings);
   const proposedAuthority: QuantityDecisionInput = {
     ...input.currentAuthority,

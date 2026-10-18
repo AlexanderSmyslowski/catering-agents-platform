@@ -8,7 +8,7 @@ const ALLERGEN_LABELS: Readonly<Record<string, string>> = {
 };
 
 function formatNumber(value: number): string {
-  return new Intl.NumberFormat("de-DE", { maximumFractionDigits: 3 }).format(value);
+  return new Intl.NumberFormat("de-DE", { maximumSignificantDigits: 15 }).format(value);
 }
 
 function formatQuantity(quantity: Quantity): string {

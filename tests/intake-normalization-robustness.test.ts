@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   createEventRequestFromText,
@@ -149,6 +150,15 @@ describe("intake normalization robustness", () => {
     }
   );
 
+  it("carries an explicit customer line through normalization without guessing a greeting or consuming the next line", () => {
+    const spec = normalizeEventRequestToSpec(createEventRequestFromText({ requestId: "named-source", channel: "text",
+      rawText: "Kunde: SYNTHETISCHES Wissenschaftsforum\nEmpfang für 100 Gäste am 12.11.2026." }));
+    expect(spec.customer?.name).toBe("SYNTHETISCHES Wissenschaftsforum");
+    for (const rawText of ["Hallo Frau Beispiel, wir planen einen Empfang.", "Kunde:\nEmpfang für 100 Gäste.", `Kunde: ${"x".repeat(321)}`]) {
+      expect(createEventRequestFromText({ requestId: "unknown-customer", channel: "text", rawText }).customer).toBeUndefined();
+    }
+  });
+
   it("keeps dish-level vegan and vegetarian labels out of global production constraints", () => {
     const request = createEventRequestFromText({
       requestId: "mixed-diet-menu-1",
@@ -174,6 +184,27 @@ describe("intake normalization robustness", () => {
     );
   });
 
+  it("does not turn explicit mixed-menu portions and guest subgroups into a global vegan mandate", () => {
+    const rawText = "SYNTHETISCHER TESTAUFTRAG – KEIN ECHTER KUNDE. Kunde TEST NÜRNBERG Wissenschaftsforum, test-catering@example.invalid. Wissenschaftliche Abendveranstaltung am 12.11.2026 in Nürnberg für 100 Erwachsene. Empfang 18:00–19:00 mit 200 kleinen Canapés à 25–35 g, davon 100 vegan und 100 vegetarisch. Abendbuffet 19:00–21:00: 55 Portionen Hähnchenragout, 25 Portionen vegetarische Gemüsebratlinge, 20 Portionen veganes Linsenragout; jeweils 150 g gegarte Hauptkomponente. Für alle 100 Gäste je 180 g gegarte Rosmarinkartoffeln und 150 g gegartes Ofengemüse. Dessert: 80 Quarkcreme und 20 vegane Fruchtkompotte à 100 g. Gäste: 60 omnivor, 25 vegetarisch, 15 vegan; fünf omnivore Gäste wählen veganes Hauptgericht und Dessert. Insgesamt 100 Hauptgerichte und Desserts, Diätuntergruppen nicht addieren. Vier Gäste benötigen glutenfreie Speisen, drei dürfen keine Schalenfrüchte erhalten; Gruppen können sich überschneiden. Konkrete Allergene, Lieferantendeklarationen und Kreuzkontakte vor Freigabe klären; keine unbelegte Allergenfreiheit. Für glutenfreie Gäste geeignete getrennte Empfangshäppchen und Hauptgerichte vorsehen. Personalannahme: zwei Küchenkräfte je acht Stunden, vier Servicekräfte je sechs Stunden und eine Fahrkraft fünf Stunden, zusammen 45 Stunden. Logistik: Warm- und Kühltransport, getrennte beschriftete Sonderkost, GN-Behälter, Warmhaltung und Geschirr. Anlieferung 16:30, Aufbau bis 17:45, Abbau ab 21:00. Budgetrahmen 6.500 EUR netto einschließlich Personal und Logistik. Umsatzsteuer und Bruttopreis aus bestehender tatsächlicher Kalkulation ausweisen; keine fingierten Rezept- oder Einkaufspreise. Vollständiges Angebot, nachvollziehbare Leistungen, Ernährungskennzeichnung, Allergene, Personal und Transport; offene Annahmen sichtbar klären. Ausschließlich diesen Testauftrag bearbeiten.";
+    const request = createEventRequestFromText({ requestId: "nue-mixed-100", channel: "text", rawText });
+    const spec = normalizeEventRequestToSpec(request);
+    expect(spec.productionConstraints ?? []).not.toContain("vegan");
+    expect(spec.productionConstraints ?? []).not.toContain("vegetarian");
+    expect(spec.menuPlan.map(item => item.servings)).toEqual([55, 25, 20]);
+  });
+
+  it.each(["Das gesamte Buffet muss vegan sein.", "Das Buffet muss vegan sein und glutenfreie Optionen bieten.", "Bitte veganes Buffet mit glutenfreien Alternativen.", "Wir wählen ein veganes Buffet.", "Alle Gäste erhalten ausschließlich vegane Speisen.", "25 vegane Portionen; das gesamte Catering muss vegan sein.", "25 vegane Portionen. Das gesamte Buffet muss vegan sein.", "25 vegane Portionen, das Buffet muss vegan sein."])(
+    "retains an explicit global vegan mandate: %s", rawText => {
+      expect(createEventRequestFromText({ requestId: "global-vegan", channel: "text", rawText }).constraints).toContain("vegan");
+    }
+  );
+
+  it("retains hard allergy constraints alongside portion-scoped diet labels", () => {
+    const request = createEventRequestFromText({ requestId: "allergy-mixed", channel: "text",
+      rawText: "25 Portionen vegetarische Bratlinge, 20 Portionen veganes Linsenragout. Allergie: keine Milch, ohne Gluten." });
+    expect(request.constraints).toEqual(expect.arrayContaining(["milk_free", "gluten_free"]));
+  });
+
   it("extracts comma-separated dishes after an inline menu marker", () => {
     const request = createEventRequestFromText({
       requestId: "inline-menu-marker-1",
@@ -194,4 +225,56 @@ describe("intake normalization robustness", () => {
     expect(spec.menuPlan.map((component) => component.label).join(" ")).not.toContain("Lunch am");
     expect(spec.menuPlan.map((component) => component.label).join(" ")).not.toContain("Lieferung");
   });
+  it("retains the exact synthetic 100-guest request's special diets and labelled schedule as unapproved source instructions", () => {
+    const text = readFileSync(new URL("./fixtures/synthetic-100-guest-request.txt", import.meta.url), "utf8");
+    const request = createEventRequestFromText({ requestId: "exact-source-context", channel: "text", rawText: text });
+    const spec = normalizeEventRequestToSpec(request);
+    const notes = spec.productionConstraints?.join("\n") ?? "";
+    for (const detail of ["4 Gäste benötigen glutenfreie Sonderkost", "3 Gäste Schalenfruchtvermeidung", "Empfang 18:00–19:00", "Abendbuffet 19:00–21:00", "Anlieferung 16:30", "Aufbau 17:45", "Abbau 21:00"]) {
+      expect(notes).toContain(detail);
+    }
+    expect(spec.productionConstraints).not.toContain("gluten_free");
+    expect(spec.productionConstraints).not.toContain("nut_free");
+    expect(spec.uncertainties?.some(item => item.field === "productionConstraints")).toBe(true);
+    expect(spec.uncertainties?.some(item => item.field === "event.schedule")).toBe(true);
+    expect(spec.attendees.expected).toBe(100);
+  });
+
+  it.each(["glutenfreie", "glutenfreies", "laktosefreie", "milchfreie", "nussfreie"])(
+    "retains inflected guest-subset instructions without creating a global free-from claim: %s", word => {
+      const text = `4 Gäste benötigen ${word} Sonderkost.`;
+      const request = createEventRequestFromText({ requestId: "inflected-subset", channel: "text", rawText: text });
+      expect(request.constraints?.join(" ")).toContain(text);
+      expect(request.constraints?.filter(value => ["gluten_free", "lactose_free", "milk_free", "nut_free"].includes(value))).toEqual([]);
+    }
+  );
+
+  it("does not turn unscoped gluten-free options into a whole-menu requirement", () => {
+    const request = createEventRequestFromText({ requestId: "free-from-options", channel: "text", rawText: "Bitte glutenfreie Optionen zum Buffet anbieten." });
+    expect(request.constraints ?? []).not.toContain("gluten_free");
+  });
+
+  it("retains guest-subset special diets as open instructions without declaring the entire menu free-from", () => {
+    const request = createEventRequestFromText({ requestId: "subset-dietary", channel: "text", rawText: "Wissenschaftsabend am 12.11.2026 für 100 Gäste. 4 Gäste glutenfrei, 3 Schalenfruchtvermeidung. Empfang 18:00–19:00." });
+    const spec = normalizeEventRequestToSpec(request);
+    expect(spec.productionConstraints?.join(" ")).toContain("4 Gäste glutenfrei");
+    expect(spec.productionConstraints?.join(" ")).toContain("3 Schalenfruchtvermeidung");
+    expect(spec.productionConstraints).not.toContain("gluten_free");
+    expect(spec.uncertainties?.some(item => item.field === "productionConstraints")).toBe(true);
+    expect(spec.attendees.expected).toBe(100);
+  });
+
+  it.each([
+    { text: "Für 100 Gäste muss das komplette Buffet glutenfrei sein.", expected: ["gluten_free"] },
+    { text: "Das gesamte Buffet muss vegan sein und 4 Gäste benötigen glutenfrei.", expected: ["vegan"], excluded: "gluten_free" },
+    { text: "Für alle 100 Gäste glutenfrei.", expected: ["gluten_free"] },
+    { text: "Das Buffet muss glutenfrei sein und 4 Gäste benötigen glutenfrei.", expected: ["gluten_free"] },
+    { text: "4 Gäste glutenfrei und das gesamte Buffet muss glutenfrei sein.", expected: ["gluten_free"] }
+  ])("preserves explicit global requirements: $text", ({ text, expected, excluded }) => {
+    const request = createEventRequestFromText({ requestId: "global-dietary-scope", channel: "text", rawText: text });
+    const spec = normalizeEventRequestToSpec(request);
+    expect(spec.productionConstraints).toEqual(expect.arrayContaining(expected));
+    if (excluded) expect(spec.productionConstraints).not.toContain(excluded);
+  });
+
 });

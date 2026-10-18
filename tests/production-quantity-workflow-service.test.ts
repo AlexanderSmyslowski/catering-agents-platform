@@ -200,7 +200,7 @@ describe("production quantity workflow service", () => {
     expect(result.requestedValue).toEqual({ amount: 60, unit: "g" });
     expect(result.resultingTarget).toEqual({ amount: 3000, unit: "g" });
     expect(result.scaleFactor).toBeCloseTo(3000 / 2750);
-    expect(result.recipeChanges.find((x) => x.ingredientId === "salt")).toMatchObject({ baselineAmount: 43.64, effectiveAmount: 34.91, unit: "g" });
+    expect(result.recipeChanges.find((x) => x.ingredientId === "salt")).toMatchObject({ previousAmount: 32, baselineAmount: expect.closeTo(43.6363636363636, 12), effectiveAmount: expect.closeTo(34.9090909090909, 12), unit: "g" });
     expect(result.appliedRuleIds).toEqual(["salt-large-batch"]);
     expect(result.confirmable).toBe(true);
   });
@@ -223,6 +223,36 @@ describe("production quantity workflow service", () => {
     const roastbeefAmount = result.recipeChanges.find((x) => x.ingredientId === "roastbeef")?.effectiveAmount;
     expect(roastbeefAmount).toBeDefined();
     expect(Math.abs(roastbeefAmount! - 3000)).toBeLessThanOrEqual(0.5);
-    expect(result.recipeChanges.find((x) => x.ingredientId === "salt")?.effectiveAmount).toBe(43.64);
+    expect(result.recipeChanges.find((x) => x.ingredientId === "salt")?.effectiveAmount).toBeCloseTo(43.6363636363636, 12);
   });
+  it("compares previous 55 portions with exact 60 portions without a rounded intermediate factor", () => {
+    const source = recipe();
+    source.ingredients = [{ ingredientId: "chicken", name: "Hähnchenbrust roh", quantity: { amount: 1.2, unit: "kg" }, group: "Fleisch" }];
+    const result = previewProductionQuantityOverride({
+      eventSpecId: "event-1", componentId: "roastbeef", recipe: source,
+      currentAuthority: { ...authority(), guestCount: 100, basis: "servings_per_person", perUnitAmount: 0.55, perUnitUnit: "servings", targetAmount: 55, targetUnit: "servings" },
+      outputMapping: { ...mapping(), outputAmount: 10, outputUnit: "servings", recipeServings: 10 },
+      edit: { origin: "target_output", perUnitAmount: 0.6, unit: "servings" }
+    });
+    expect(result.status).toBe("preview_ready");
+    if (result.status !== "preview_ready") throw new Error("preview missing");
+    expect(result.recipeChanges[0]).toMatchObject({ previousAmount: 6.6, baselineAmount: 7.2, effectiveAmount: 7.2 });
+    expect(result.resultingTarget).toEqual({ amount: 60, unit: "servings" });
+  });
+
+  it("keeps a previous 2 g spice amount in kg visible during a purchase override", () => {
+    const source = recipe();
+    source.ingredients = [{ ingredientId: "cinnamon", name: "Zimt", quantity: { amount: 0.001, unit: "kg" }, group: "Gewürze" }];
+    const result = previewProductionQuantityOverride({
+      eventSpecId: "event-1", componentId: "roastbeef", recipe: source,
+      currentAuthority: { ...authority(), guestCount: 100, basis: "servings_per_person", perUnitAmount: 0.2, perUnitUnit: "servings", targetAmount: 20, targetUnit: "servings" },
+      outputMapping: { ...mapping(), outputAmount: 10, outputUnit: "servings", recipeServings: 10 },
+      edit: { origin: "purchase_ingredient", ingredientId: "cinnamon", amount: 0.003, unit: "kg" }
+    });
+    expect(result.status).toBe("preview_ready");
+    if (result.status !== "preview_ready") throw new Error("preview missing");
+    expect(result.previousValue).toEqual({ amount: 0.002, unit: "kg" });
+    expect(result.recipeChanges[0]).toMatchObject({ previousAmount: 0.002, effectiveAmount: 0.003 });
+  });
+
 });

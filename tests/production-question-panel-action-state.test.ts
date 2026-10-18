@@ -2,6 +2,20 @@ import { describe, expect, it } from "vitest";
 import { buildProductionQuestionPanelActionState } from "../backoffice-ui/src/production-question-panel-action-state.js";
 
 describe("production question panel action state", () => {
+  it("keeps unresolved questions blocking a new calculation while acknowledging the existing plan", () => {
+    expect(buildProductionQuestionPanelActionState({
+      focusedProductionSpec: { specId: "spec-1" }, submitting: false, hasFocusedSpecEditChanges: false,
+      openQuestionCount: 1, hasExistingPlan: true
+    })).toMatchObject({
+      primaryActionLabel: "Erneut berechnen", primaryActionDisabled: true,
+      sourceReviewHelperText: "Rückfragen beantworten, bevor dieser Plan neu berechnet wird. Der bisherige Plan bleibt erhalten."
+    });
+    expect(buildProductionQuestionPanelActionState({
+      focusedProductionSpec: { specId: "spec-1" }, editingSpecId: "spec-1", submitting: false,
+      hasFocusedSpecEditChanges: true, hasExistingPlan: true
+    })).toMatchObject({ primaryActionLabel: "Speichern und neu berechnen", primaryActionDisabled: false });
+  });
+
   it("keeps focused-spec actions in read/start mode while no focused edit is active", () => {
     expect(
       buildProductionQuestionPanelActionState({

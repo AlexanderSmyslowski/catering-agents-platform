@@ -133,6 +133,9 @@ describe("app offer route app boundary", () => {
     await state.offerWorkbenchState.submitOfferText();
 
     expect(boundaryInput.setError).not.toHaveBeenCalled();
+    expect(boundaryInput.createOfferCase).toHaveBeenCalledWith({ customerName: "Demo Kunde" });
+    expect(boundaryInput.setOfferText).toHaveBeenCalledWith("Kunde: Demo Kunde\n\nBusiness Lunch fuer 35 Personen.");
+    expect(boundaryInput.manualActions.setCustomerName).toHaveBeenCalledWith("");
     expect(state.offerWorkbenchState.manualInput).toBe(boundaryInput.manualInput);
     expect(state.offerWorkbenchState.filteredOfferDrafts).toBe(boundaryInput.filteredOfferDrafts);
     expect(state.offerWorkbenchState.setMiniPilotRawResult).toBe(boundaryInput.setMiniPilotRawResult);
@@ -141,7 +144,7 @@ describe("app offer route app boundary", () => {
       "clearMessages",
       "createOfferCase",
       "setActiveOfferCaseId:offer-case-new",
-      "createOfferFromText:offer-case-new:Business Lunch fuer 35 Personen.:request-offer-boundary",
+      "createOfferFromText:offer-case-new:Kunde: Demo Kunde\n\nBusiness Lunch fuer 35 Personen.:request-offer-boundary",
       "setSelectedDraftId:draft-new",
       "refreshDashboard",
       "setNotice:Angebotsentwurf wurde erstellt.",

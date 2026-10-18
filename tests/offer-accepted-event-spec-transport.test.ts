@@ -62,7 +62,7 @@ function createRoot(): string {
 }
 
 function appFetch(app: FastifyInstance): typeof fetch {
-  const inject = app.inject as unknown as (request: {
+  const inject = app.inject.bind(app) as unknown as (request: {
     method: string;
     url: string;
     headers: Record<string, string>;
@@ -90,6 +90,85 @@ function expectStatus(response: { statusCode: number; body: string }, statusCode
 describe("AcceptedEventSpec production decision transport", () => {
   afterEach(() => {
     for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+  });
+
+  it("carries an edited 55/25/20 portion menu through canonical Intake, approval, Apply and exports", async () => {
+    const rootDir = createRoot();
+    const env = { CATERING_DEFAULT_BUSINESS_ID: "local", CATERING_TRUSTED_ACTOR_SECRET: trustedSecret, CATERING_DEV_AUTH: "1" };
+    const intakeApp = buildIntakeApp({ rootDir, trustedActorSecret: trustedSecret, env });
+    const reader = new HttpSourceDocumentMetadataReader({ intakeServiceUrl: "http://intake.internal", trustedServiceSecret: trustedSecret, fetch: appFetch(intakeApp) });
+    const offerApp = buildOfferApp({ rootDir, trustedActorSecret: trustedSecret, env, sourceDocumentReader: reader });
+    const repository = new InMemoryRecipeRepository({ rootDir });
+    await repository.seed({ businessId: "local" }, internalRecipes);
+    const productionApp = buildProductionApp({
+      dataRoot: rootDir, repository, trustedActorSecret: trustedSecret, env,
+      handoffReader: new HttpProductionHandoffReader({ offerServiceUrl: "http://offer.internal", trustedServiceSecret: trustedSecret, fetch: appFetch(offerApp) }),
+      intakeRecords: new HttpIntakeRecordsPort({ intakeServiceUrl: "http://intake.internal", trustedServiceSecret: trustedSecret, fetch: appFetch(intakeApp) })
+    });
+    const exports = buildPrintExportApp({ rootDir, trustedActorSecret: trustedSecret, env });
+    try {
+      const c = await offerApp.inject({ method: "POST", url: "/v1/offers/cases", headers: offerHeaders, payload: {} });
+      const caseId = c.json().case.caseId;
+      const response = await offerApp.inject({ method: "POST", url: "/v1/offers/from-text", headers: offerHeaders,
+        payload: { caseId, requestId: "menu-apply-100", text: "SYNTHETISCH: Lunch für 100 Gäste am 12.11.2026. 55 Portionen Hähnchenragout, 25 Portionen Gemüsebratlinge, 20 Portionen Linsenragout." } });
+      expectStatus(response, 201);
+      const original = response.json() as OfferDraft;
+      const baseline = structuredClone(original.sourceAcceptedEventSpecSnapshot);
+      expect(baseline?.menuPlan.map(x => x.servings)).toEqual([55, 25, 20]);
+      // This fixture verifies transport/scaling with an existing test recipe;
+      // it is not a claim that Caesar Salad is a real replacement for the mains.
+      const edit = await offerApp.inject({ method: "POST", url: `/v1/offers/drafts/${original.draftId}/menu`, headers: offerHeaders,
+        payload: { revision: 1, menuPlan: [55, 25, 20].map(servings => ({ label: "Caesar Salad", servings, menuCategory: "vegetarian" })) } });
+      expectStatus(edit, 201);
+      const revised = edit.json() as OfferDraft;
+      const approved = await offerApp.inject({ method: "POST", url: `/v1/offers/drafts/${revised.draftId}/decision`, headers: offerHeaders,
+        payload: { decision: "approved", revision: 1, variantId: revised.variantSet[1]!.variantId } });
+      expectStatus(approved, 201);
+      const handoffResponse = await offerApp.inject({ method: "POST", url: `/v1/offers/approved/${approved.json().approvedOffer.approvedOfferId}/handoffs`, headers: offerHeaders, payload: {} });
+      expectStatus(handoffResponse, 201);
+      const handoff = handoffResponse.json().handoff;
+      const productionCase = await productionApp.inject({ method: "POST", url: `/v1/production/cases/from-handoff/${handoff.handoffId}`, headers: productionHeaders, payload: {} });
+      expectStatus(productionCase, 201);
+      const productionCaseId = productionCase.json().case.caseId;
+      const draftResponse = await productionApp.inject({ method: "POST", url: `/v1/production/drafts/from-handoff/${handoff.handoffId}`, headers: productionHeaders, payload: { caseId: productionCaseId } });
+      expectStatus(draftResponse, 201);
+      let draft = draftResponse.json().draft as ProductionDraft;
+      const operationalRevision = await productionApp.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/revise`, headers: productionHeaders,
+        payload: { caseId: productionCaseId, expectedRevision: draft.revision, componentClassifications: [],
+          componentUpdates: draft.draftArtifacts.eventSpec!.menuPlan.map(component => ({ componentId: component.componentId, productionMode: "scratch", purchasedElements: [], recipeOverrideId: "recipe-caesar-salad" })) } });
+      expectStatus(operationalRevision, 201);
+      draft = operationalRevision.json().draft as ProductionDraft;
+      for (const [index, component] of draft.draftArtifacts.eventSpec!.menuPlan.entries()) {
+        const portions = [55, 25, 20][index]!;
+        const evidence = await productionApp.inject({ method: "POST", url: `/v1/production/cases/${productionCaseId}/planning-evidence`, headers: productionHeaders, payload: {
+          draftId: draft.draftId, draftRevision: draft.revision, componentId: component.componentId, recipeId: "recipe-caesar-salad",
+          quantityDecision: { decisionId: `menu-apply-quantity-${index}`, eventSpecId: baseline!.specId, componentId: component.componentId,
+            guestCount: 100, serviceFormat: "buffet", dishRole: "main", basis: "servings_per_person",
+            perUnitAmount: portions / 100, perUnitUnit: "servings", targetAmount: portions, targetUnit: "servings",
+            rationale: "Explizite synthetische Portionsentscheidung.", evidence: { kind: "operator_instruction", reference: "menu-apply-test" }, reviewStatus: "approved" },
+          recipeEventUseReview: { eventSpecId: baseline!.specId, recipeId: "recipe-caesar-salad", reviewedBy: "Produktions-Mitarbeiter", reviewedAt: "2026-10-17T17:00:00.000Z", decision: "accepted_for_event",
+            confirmations: { quantitiesAndYield: true, methodAndEquipment: true, allergensAndDiet: true, holdingAndRegeneration: true } }
+        } });
+        expectStatus(evidence, 201);
+      }
+      const prepared = await productionApp.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/prepare`, headers: productionHeaders, payload: {} });
+      expectStatus(prepared, 201);
+      const ready = prepared.json().draft as ProductionDraft;
+      for (const card of ready.reviewCards) {
+        const r = await productionApp.inject({ method: "PATCH", url: `/v1/production/drafts/${ready.draftId}/review-cards/${card.cardId}`, headers: productionHeaders,
+          payload: { decision: "fits", operatorComment: "Synthetischer Vertrags-/Skalierungstest." } });
+        expectStatus(r, 200);
+      }
+      const decision = await productionApp.inject({ method: "POST", url: `/v1/production/drafts/${ready.draftId}/decision`, headers: productionHeaders, payload: { decision: "approved" } });
+      expectStatus(decision, 201);
+      const applied = await productionApp.inject({ method: "POST", url: `/v1/production/approved-specs/${decision.json().approvedProductionSpec.approvedProductionSpecId}/apply`, headers: productionHeaders, payload: {} });
+      expectStatus(applied, 200);
+      expect(applied.json().eventSpec.menuPlan.map((x: any) => x.servings)).toEqual([55, 25, 20]);
+      expect(await reader.getSpec({ businessId: "local" }, baseline!.specId)).toEqual(baseline);
+      for (const url of [`/v1/exports/production-folders/${applied.json().plan.planId}/html`, `/v1/exports/purchase-lists/${applied.json().purchaseList.purchaseListId}/csv`]) {
+        expectStatus(await exports.inject({ method: "GET", url, headers: productionHeaders }), 200);
+      }
+    } finally { await Promise.all([intakeApp.close(), offerApp.close(), productionApp.close(), exports.close()]); }
   });
 
   it("preserves the server-owned production decision and provenance through offer approval and production draft", async () => {

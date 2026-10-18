@@ -1,4 +1,4 @@
-import { analyzeIntakeText } from "./intake-signals.js";
+import { analyzeIntakeText, extractLabeledCustomerName } from "./intake-signals.js";
 import type { EventRequest } from "./types.js";
 import { SCHEMA_VERSION } from "./types.js";
 
@@ -9,6 +9,7 @@ export function createEventRequestFromText(input: {
   sourceRef?: string;
 }): EventRequest {
   const signals = analyzeIntakeText(input.rawText);
+  const customerName = extractLabeledCustomerName(input.rawText);
 
   return {
     schemaVersion: SCHEMA_VERSION,
@@ -29,6 +30,7 @@ export function createEventRequestFromText(input: {
         content: input.rawText
       }
     ],
+    ...(customerName ? { customer: { name: customerName } } : {}),
     extractedFacts: signals.extractedFacts,
     constraints: signals.constraints.length > 0 ? signals.constraints : undefined,
     uncertainties: signals.uncertainties.length > 0 ? signals.uncertainties : undefined

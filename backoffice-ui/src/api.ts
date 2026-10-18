@@ -284,6 +284,7 @@ export interface ProductionRouteAccessData {
 
 export interface WorkspaceRefreshOptions {
   focusedSpecId?: string;
+  focusedOfferCaseId?: string;
 }
 
 const MINI_PILOT_RESULT_STORAGE_KEY = "catering.miniPilotRawResult";
@@ -618,11 +619,7 @@ export async function loadOfferProductData(activeCaseId?: string): Promise<Offer
   const activeSpecIds = new Set(
     [
       workspace.currentDraft?.proposedEventSpec?.specId,
-      workspace.handoff?.eventSpecSnapshot.specId,
-      ...workspace.activeEvents.flatMap((event) => [
-        event.artifactId,
-        event.revisionRef?.artifactId
-      ])
+      workspace.handoff?.eventSpecSnapshot.specId
     ].filter((specId): specId is string => Boolean(specId?.trim()))
   );
   const [intakeRequests, acceptedSpecs] = await Promise.all([
@@ -661,9 +658,10 @@ export async function loadProductionProductData(
   activeCaseId?: string,
   _focusedSpecId?: string
 ): Promise<ProductionProductData> {
-  const [workspace, health] = await Promise.all([
+  const [workspace, health, recipeLibrary] = await Promise.all([
     loadProductionWorkspaceState(activeCaseId),
-    loadProductionWorkspaceHealth()
+    loadProductionWorkspaceHealth(),
+    activeCaseId ? loadProductionRecipeLibrary() : Promise.resolve({ items: [] })
   ]);
 
   const eventSpecSnapshot = workspace.currentDraft?.draftArtifacts?.eventSpec;
@@ -677,7 +675,7 @@ export async function loadProductionProductData(
     acceptedSpecs,
     productionPlans: workspace.currentPlan ? [workspace.currentPlan] : [],
     purchaseLists: workspace.currentPurchaseList ? [workspace.currentPurchaseList] : [],
-    recipes: workspace.referencedRecipes,
+    recipes: recipeLibrary.items,
     auditEvents: activeCaseId ? auditEntriesFromCaseEvents(workspace.activeEvents) : [],
     serviceHealth: serviceHealthStateFor("production", health)
   };
@@ -1068,7 +1066,7 @@ export async function loadProductionDrafts(caseId?: string) {
 }
 
 export async function loadProductionRecipeLibrary() {
-  return fetchJson<{ items: Array<Record<string, unknown>> }>("/api/production/v1/production/recipes", undefined);
+  return fetchJson<{ items: Array<Recipe & Record<string, unknown>> }>("/api/production/v1/production/recipes", undefined);
 }
 
 export async function decideProductionDraftReviewCard(
@@ -1297,6 +1295,27 @@ export function productionFolderExportUrl(planId: string): string {
   return `/api/exports/v1/exports/production-folders/${planId}/html`;
 }
 
-export function purchaseListExportUrl(purchaseListId: string): string {
-  return `/api/exports/v1/exports/purchase-lists/${purchaseListId}/csv`;
+export function purchaseListExportUrl(purchaseListId: string, format?: "excel-de"): string {
+  return `/api/exports/v1/exports/purchase-lists/${purchaseListId}/csv${format === "excel-de" ? "?format=excel-de" : ""}`;
+}
+
+export type OfferMenuEditItem = {
+  componentId?: string;
+  label: string;
+  servings: number;
+  menuCategory?: "classic" | "vegetarian" | "vegan";
+  dietaryTags?: string[];
+};
+
+export async function reviseOfferMenu(draftId: string, revision: number, menuPlan: OfferMenuEditItem[]) {
+  return fetchJson<OfferDraft>(`/api/offers/v1/offers/drafts/${encodeURIComponent(draftId)}/menu`, {
+    method: "POST",
+    body: JSON.stringify({ revision, menuPlan })
+  });
+}
+
+export async function reviseOfferPricing(draftId: string, revision: number, variantId: string, lines: import("@catering/shared-core").OfferCalculationLineInput[]) {
+  return fetchJson<OfferDraft>("/api/offers/v1/offers/drafts/" + encodeURIComponent(draftId) + "/pricing", {
+    method: "POST", body: JSON.stringify({ revision, variantId, calculation: { lines } })
+  });
 }

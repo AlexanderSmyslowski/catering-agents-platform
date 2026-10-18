@@ -4,6 +4,7 @@ export type OfferWorkbenchStateInput = OfferWorkbenchProps;
 
 export function buildOfferWorkbenchState({
   submitting,
+  hasActiveOfferCase,
   latestSourceLabel,
   offerText,
   setOfferText,
@@ -26,6 +27,9 @@ export function buildOfferWorkbenchState({
   setSelectedVariantId,
   approveDraft,
   approvalBinding,
+  openProductionHandoff,
+  onMenuSaved,
+  onMenuEditingChange,
   createHandoff,
   filteredSpecs,
   activeSpec,
@@ -40,6 +44,7 @@ export function buildOfferWorkbenchState({
 }: OfferWorkbenchStateInput): OfferWorkbenchProps {
   return {
     submitting,
+    hasActiveOfferCase,
     latestSourceLabel,
     offerText,
     setOfferText,
@@ -62,6 +67,9 @@ export function buildOfferWorkbenchState({
     setSelectedVariantId,
     approveDraft,
     approvalBinding,
+    openProductionHandoff,
+    onMenuSaved,
+  onMenuEditingChange,
     createHandoff,
     filteredSpecs,
     activeSpec,

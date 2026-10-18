@@ -62,6 +62,7 @@ export interface ProductionQuantityPreviewInput extends Omit<QuantityOverridePre
 export interface QuantityPreviewIngredientChange {
   ingredientId: string;
   name: string;
+  previousAmount: number;
   baselineAmount: number;
   effectiveAmount: number;
   unit: string;
@@ -149,7 +150,7 @@ export function buildQuantityWorkflowProjection(input: QuantityWorkflowProjectio
 
 function previousAndRequestedValue(
   input: ProductionQuantityPreviewInput,
-  corePreview: Extract<ReturnType<typeof previewQuantityOverride>, { status: "preview_ready" }>
+  previousRecipe: ReturnType<typeof applyNonlinearProductionScaling>["effectiveRecipe"]
 ): { previousValue: { amount: number; unit: string }; requestedValue: { amount: number; unit: string } } {
   if (input.edit.origin === "target_output") {
     return {
@@ -162,12 +163,12 @@ function previousAndRequestedValue(
   }
 
   const purchaseEdit = input.edit;
-  const newLine = corePreview.proportionalBaseline.ingredients.find(
+  const previousLine = previousRecipe.ingredients.find(
     (line) => line.ingredientId === purchaseEdit.ingredientId
   );
   return {
     previousValue: {
-      amount: newLine ? Number((newLine.quantity.amount / corePreview.scaleFactor).toFixed(2)) : purchaseEdit.amount,
+      amount: previousLine!.quantity.amount,
       unit: purchaseEdit.unit
     },
     requestedValue: { amount: purchaseEdit.amount, unit: purchaseEdit.unit }
@@ -189,6 +190,13 @@ export function previewProductionQuantityOverride(input: ProductionQuantityPrevi
     return { status: "blocked", confirmable: false, issues: corePreview.issues };
   }
 
+  const previous = applyNonlinearProductionScaling({
+    recipe: input.recipe,
+    targetServings: input.currentAuthority.targetAmount / input.outputMapping.outputAmount * input.outputMapping.recipeServings,
+    rules: input.productionScalingRules ?? [],
+    context: input.productionContext
+  });
+  const previousByIngredient = new Map(previous.effectiveRecipe.ingredients.map(line => [line.ingredientId, line] as const));
   const effective = applyNonlinearProductionScaling({
     recipe: input.recipe,
     targetServings: corePreview.proportionalBaseline.scaledYield.amount,
@@ -201,6 +209,7 @@ export function previewProductionQuantityOverride(input: ProductionQuantityPrevi
     return {
       ingredientId: line.ingredientId,
       name: line.name,
+      previousAmount: previousByIngredient.get(line.ingredientId)!.quantity.amount,
       baselineAmount: line.quantity.amount,
       effectiveAmount: effectiveLine.quantity.amount,
       unit: line.quantity.unit
@@ -211,7 +220,7 @@ export function previewProductionQuantityOverride(input: ProductionQuantityPrevi
     status: "preview_ready",
     confirmable: true,
     editOrigin: input.edit.origin,
-    ...previousAndRequestedValue(input, corePreview),
+    ...previousAndRequestedValue(input, previous.effectiveRecipe),
     resultingTarget: { amount: corePreview.proposedAuthority.targetAmount, unit: corePreview.proposedAuthority.targetUnit },
     scaleFactor: corePreview.scaleFactor,
     recipeChanges,

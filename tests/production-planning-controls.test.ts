@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import * as draftReview from "../backoffice-ui/src/production-draft-review-panel.js";
 import {
   buildProductionPlanningControls,
   type ProductionPlanningControlsInput
@@ -183,6 +184,26 @@ describe("canonical draft context across save and prepare", () => {
     expect(actionInput.showProductionDraftReview).not.toHaveBeenCalled();
     expect(actionInput.resetSpecEdit).not.toHaveBeenCalled();
     expect(actionInput.setFocusedProductionSpecId).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])("refreshes planning panels only after a current canonical save (stale=%s)", async stale => {
+    const refresh = vi.spyOn(draftReview, "announceProductionDraftRefresh");
+    try {
+      const pinned = context();
+      let current = pinned;
+      const actionInput = input({
+        productionDraftContext: pinned, activeProductionCaseId: pinned.caseId,
+        getCurrentProductionDraftContext: () => current,
+        reviseProductionDraft: vi.fn(async () => {
+          if (stale) current = context("another-case", "another-draft");
+          return { draft: context("old-case", "saved-draft", 3).draft };
+        }),
+        buildCurrentSpecUpdateInput: () => form("vegetarian")
+      });
+      await buildProductionPlanningControls(actionInput).handleSaveSpecEdit();
+      expect(refresh).toHaveBeenCalledTimes(stale ? 0 : 1);
+      expect(actionInput.prepareProductionDraft).not.toHaveBeenCalled();
+    } finally { refresh.mockRestore(); }
   });
 
   it.each(["before render", "after render"])("prepares its own newly saved revision %s", async timing => {

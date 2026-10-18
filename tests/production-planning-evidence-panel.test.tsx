@@ -6,7 +6,7 @@ import * as api from "../backoffice-ui/src/api.js";
 import * as session from "../backoffice-ui/src/session-boundary.js";
 import { ProductionPlanningEvidencePanel } from "../backoffice-ui/src/production-planning-evidence-panel.js";
 
-const recipe = { recipeId: "test-recipe", name: "Synthetische Kaffeepause", source: { approvalState: "review_required", reference: "synthetic:test" }, baseYield: { servings: 10, unit: "servings" }, ingredients: [], steps: [], allergens: [], dietTags: [] };
+const recipe: Awaited<ReturnType<typeof api.loadProductionRecipeLibrary>>["items"][number] = { schemaVersion: "1.0", scalingRules: { defaultLossFactor: 1 }, recipeId: "test-recipe", name: "Synthetische Kaffeepause", source: { tier: "digitized_cookbook", originType: "approved_import", approvalState: "review_required", reference: "synthetic:test", retrievedAt: "2026-10-18T00:00:00Z", qualityScore: 0.5, fitScore: 0.5, extractionCompleteness: 0.5 }, baseYield: { servings: 10, unit: "servings" }, ingredients: [], steps: [], allergens: [], dietTags: [] };
 const planningRecipes = [{ recipe, recipeSnapshotHash: `sha256:${"a".repeat(64)}` }];
 function draft(recipeId: string | undefined = recipe.recipeId, revision = 1): api.ProductionDraft {
   return { draftId: `draft-${revision}`, revision, status: "pending_review", createdAt: "2026-09-19",
@@ -48,6 +48,33 @@ async function completeReview() {
 afterEach(async () => { if (root) await act(async () => root.unmount()); container?.remove(); vi.restoreAllMocks(); });
 
 describe("planning evidence operator panel", () => {
+  it("shows immutable source evidence after preparation without empty confirmation controls or rebinding it", async () => {
+    const prepared = { ...draft(recipe.recipeId, 3), status: "approved" as const,
+      draftArtifacts: { ...draft().draftArtifacts, productionPlan: { planId: "plan-prepared" } }
+    };
+    await setup(prepared);
+    vi.mocked(api.loadProductionDrafts).mockResolvedValue({
+      items: [prepared], planningRecipes,
+      planningEvidence: [
+        { evidenceId: "evidence-source", caseId: "case-1", draftId: "draft-2", draftRevision: 2,
+          componentId: "coffee", recipeId: recipe.recipeId, eventSpecId: "spec-1",
+          quantityDecision: { targetAmount: 35, targetUnit: "servings", rationale: "SYNTHETISCH: 35 Gäste, je eine Portion",
+            evidence: { reference: "synthetic:source-revision-2" } } } as api.ProductionPlanningEvidence,
+        { evidenceId: "foreign", caseId: "case-other", draftId: "draft-2", draftRevision: 2,
+          componentId: "coffee", recipeId: recipe.recipeId, quantityDecision: { rationale: "FOREIGN_EVIDENCE" } } as api.ProductionPlanningEvidence
+      ]
+    });
+    await click("Planungsstand neu laden");
+    expect(container.textContent).toContain("Gespeicherter Planungsnachweis · Quellrevision 2");
+    expect(container.textContent).toContain("SYNTHETISCH: 35 Gäste, je eine Portion");
+    expect(container.textContent).toContain("synthetic:source-revision-2");
+    expect(container.textContent).toContain("weder auf eine andere Fassung übertragen noch erneut freigegeben");
+    expect(container.textContent).not.toContain("FOREIGN_EVIDENCE");
+    expect(container.querySelectorAll('input[type="checkbox"]')).toHaveLength(0);
+    expect(button("Menge und Eventprüfung speichern")).toBeUndefined();
+    expect(button("Rezeptzuordnung speichern")).toBeUndefined();
+  });
+
   it("allows corrected input after a definitive 422 and requires all confirmations again", async () => {
     await setup(); await completeReview();
     const transport = vi.spyOn(globalThis, "fetch").mockImplementation(async () =>

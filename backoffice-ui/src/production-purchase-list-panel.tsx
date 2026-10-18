@@ -36,6 +36,7 @@ export function ProductionPurchaseListPanel({
               <a
                 className="ghost-link"
                 href={purchaseList.exportUrl}
+                title="CSV für deutsches Excel"
                 target="_blank"
                 rel="noreferrer"
               >
@@ -92,6 +93,7 @@ export function ProductionPurchaseListPanel({
                     <a
                       className="ghost-link"
                       href={purchaseList.exportUrl}
+                      title="CSV für deutsches Excel"
                       target="_blank"
                       rel="noreferrer"
                     >

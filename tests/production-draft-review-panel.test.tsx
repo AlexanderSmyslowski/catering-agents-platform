@@ -132,6 +132,7 @@ afterEach(() => {
     value: undefined
   });
   document.body.innerHTML = "";
+  window.history.replaceState({}, "", "/produktion");
   vi.restoreAllMocks();
 });
 
@@ -155,6 +156,90 @@ describe("ProductionDraftReviewPanel", () => {
       ...draftFixture(),
       draftArtifacts: undefined
     })).toBe("keine Fachartefakte");
+  });
+
+  it("synchronizes applied snapshots across review consumers and distinguishes them from missing drafts", async () => {
+    const draft = { ...draftFixture(), revision: 1, status: "approved" as const };
+    let applied = false;
+    window.history.pushState({}, "", "/produktion?productionDraftId=" + draft.draftId);
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === productionDraftsUrl) return jsonResponse({
+        items: [draft], approvedProductionSpecs: [{
+          approvedProductionSpecId: "approved-synchronized", sourceDraft: { draftId: draft.draftId, revision: draft.revision ?? 1 }, applied
+        }]
+      });
+      if (String(input).endsWith("/approved-synchronized/apply") && init?.method === "POST") {
+        applied = true;
+        return jsonResponse({ eventSpec: { specId: "spec-synchronized" }, plan: {}, purchaseList: {}, recipes: [] });
+      }
+      return jsonResponse({ message: "not found" }, 404);
+    }) as typeof fetch;
+    const container = document.createElement("div"); document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(createElement("div", null,
+        createElement(ProductionDraftReviewPanel, { submitting: false, caseId: activeCaseId, embedded: true, latestOnly: true }),
+        createElement(ProductionDraftReviewPanel, { submitting: false, caseId: activeCaseId })));
+      await flushPromises();
+    });
+    expect([...container.querySelectorAll("button")].filter(button => button.textContent === "Entwurf übernehmen")).toHaveLength(2);
+    await act(async () => {
+      [...container.querySelectorAll("button")].find(button => button.textContent === "Entwurf übernehmen")!.click();
+      await flushPromises(); await flushPromises();
+    });
+    expect(container.textContent).toContain("Produktionsentwurf übernommen.");
+    expect(container.textContent).not.toContain("angeforderte Produktionsentwurf ist nicht verfügbar");
+    expect(container.textContent?.match(/Dieser Produktionsentwurf wurde bereits übernommen/g)).toHaveLength(2);
+    expect([...container.querySelectorAll("button")].filter(button => button.textContent === "Entwurf übernehmen")).toHaveLength(0);
+    await act(async () => root.unmount()); container.remove();
+    window.history.replaceState({}, "", "/produktion");
+  });
+
+  it.each([
+    ["decision", "success"], ["decision", "error"], ["apply", "success"], ["apply", "error"]
+  ] as const)("ignores a late %s %s after switching A → B → A", async (operation, outcome) => {
+    const draft: ProductionDraft = { ...draftFixture(), revision: 1,
+      status: operation === "apply" ? "approved" : "pending_review",
+      reviewCards: draftFixture().reviewCards.map(card => ({ ...card, decision: "fits" }))
+    };
+    vi.spyOn(api, "loadProductionDrafts").mockResolvedValue({
+      items: [draft], approvedProductionSpecs: operation === "apply" ? [{
+        approvedProductionSpecId: "approved-aba", sourceDraft: { draftId: draft.draftId, revision: 1 }, applied: false
+      }] : []
+    });
+    let resolve!: (value: any) => void;
+    let reject!: (cause: Error) => void;
+    const pending = new Promise<any>((ok, fail) => { resolve = ok; reject = fail; });
+    if (operation === "apply") vi.spyOn(api, "applyApprovedProductionSpec").mockReturnValue(pending);
+    else vi.spyOn(api, "decideProductionDraft").mockReturnValue(pending);
+    const onDraftChanged = vi.fn(async () => undefined);
+    const container = document.createElement("div"); document.body.appendChild(container);
+    const root = createRoot(container);
+    const renderCase = async (caseId: string) => {
+      await act(async () => {
+        root.render(createElement(ProductionDraftReviewPanel, { submitting: false, caseId, onDraftChanged }));
+        await flushPromises();
+      });
+    };
+    await renderCase("case-a");
+    await act(async () => {
+      [...container.querySelectorAll("button")].find(button => button.textContent ===
+        (operation === "apply" ? "Entwurf übernehmen" : "Entwurf freigeben"))!.click();
+      await flushPromises();
+    });
+    await renderCase("case-b"); await renderCase("case-a");
+    await act(async () => {
+      if (outcome === "error") reject(new Error("LATE_CASE_A_ERROR"));
+      else resolve(operation === "apply" ? { eventSpec: { specId: "spec-old-a" } } : {
+        approval: { decision: "approved" }, approvedProductionSpec: { approvedProductionSpecId: "approved-old-a" }
+      });
+      await flushPromises();
+    });
+    expect(onDraftChanged).not.toHaveBeenCalled();
+    expect(container.textContent).not.toContain("LATE_CASE_A_ERROR");
+    expect(container.textContent).not.toContain("Produktionsentwurf übernommen.");
+    expect(container.textContent).not.toContain("Produktionsentwurf freigegeben.");
+    await act(async () => root.unmount()); container.remove();
   });
 
   it("loads pending ProductionDrafts and calls the draft-only review endpoints", async () => {
@@ -891,7 +976,11 @@ describe("ProductionDraftReviewPanel", () => {
     };
     window.history.pushState({}, "", "/produktion?productionDraftId=draft-requested");
     globalThis.fetch = vi.fn(async () => jsonResponse({
-      items: requestedDraft ? [requestedDraft, unrelatedDraft] : [unrelatedDraft]
+      items: requestedDraft ? [requestedDraft, unrelatedDraft] : [unrelatedDraft],
+      approvedProductionSpecs: targetState === "applied" ? [{
+        approvedProductionSpecId: "approved-wrong-revision",
+        sourceDraft: { draftId: "draft-requested", revision: 999 }, applied: true
+      }] : []
     })) as typeof fetch;
 
     await act(async () => {

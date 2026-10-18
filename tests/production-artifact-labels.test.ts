@@ -70,6 +70,9 @@ describe("production artifact labels", () => {
     );
 
     expect(markup).toContain("Plan-Kontext: aktueller Produktionsplan");
+    expect(markup).toContain("Berechnungshinweise: keine");
+    expect(markup).toContain("Fachliche Rückfragen und Freigaben separat prüfen.");
+    expect(markup).not.toContain("Offene Punkte: keine");
     expect(markup).toContain("Produktionsblatt exportieren");
     expect(markup).toContain("für aktuellen Produktionsplan");
     expect(markup).toContain('href="/api/exports/v1/exports/production-plans/plan-lunch/html"');
@@ -106,8 +109,8 @@ describe("production artifact labels", () => {
 
     expect(markup).toContain("Lunch · 40 Teilnehmer · 2026-06-18");
     expect(markup).toContain("Abendessen · 24 Teilnehmer · 2026-06-19");
-    expect(markup).toContain('href="/api/exports/v1/exports/purchase-lists/purchase-lunch/csv"');
-    expect(markup).toContain('href="/api/exports/v1/exports/purchase-lists/purchase-dinner/csv"');
+    expect(markup).toContain('href="/api/exports/v1/exports/purchase-lists/purchase-lunch/csv?format=excel-de"');
+    expect(markup).toContain('href="/api/exports/v1/exports/purchase-lists/purchase-dinner/csv?format=excel-de"');
     expect(markup).not.toContain("<strong>Einkaufsliste</strong>");
   });
 

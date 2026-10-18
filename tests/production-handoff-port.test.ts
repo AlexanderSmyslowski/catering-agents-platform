@@ -168,14 +168,14 @@ describe("production handoff port", () => {
       method: "POST",
       url: "/v1/offers/cases",
       headers: offerHeaders,
-      payload: { eventTypeLabel: "Lunch", attendeeCount: 35 }
+      payload: { customerName: "SYNTHETISCHES Testinstitut", eventTypeLabel: "Lunch", attendeeCount: 35 }
     });
     const offerCaseId = createdCase.json<{ case: { caseId: string } }>().case.caseId;
     const createdDraft = await offerApp.inject({
       method: "POST",
       url: "/v1/offers/from-text",
       headers: offerHeaders,
-      payload: { caseId: offerCaseId, text: "Business Lunch fuer 35 Personen." }
+      payload: { caseId: offerCaseId, text: "Kunde: SYNTHETISCHES Testinstitut\n\nBusiness Lunch fuer 35 Personen." }
     });
     const draft = createdDraft.json<{ draftId: string; variantSet: Array<{ variantId: string }> }>();
     const approved = await offerApp.inject({ method: "POST", url: `/v1/offers/drafts/${draft.draftId}/decision`, headers: offerHeaders, payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId } });
@@ -193,6 +193,13 @@ describe("production handoff port", () => {
     });
     expect(productionCase.statusCode).toBe(201);
     const productionCaseId = productionCase.json<{ case: { caseId: string } }>().case.caseId;
+    expect(productionCase.json().case.displayName).toContain("SYNTHETISCHES Testinstitut");
+    const query = encodeURIComponent("SYNTHETISCHES Testinstitut");
+    const offerMatches = await offerApp.inject({ method: "GET", url: `/v1/offers/cases?search=${query}`, headers: offerHeaders });
+    const productionMatches = await productionApp.inject({ method: "GET", url: `/v1/production/cases?search=${query}`, headers: productionHeaders });
+    expect(offerMatches.json().items.map((item: { caseId: string }) => item.caseId)).toContain(offerCaseId);
+    expect(productionMatches.json().items.map((item: { caseId: string }) => item.caseId)).toContain(productionCaseId);
+
     const entered = await productionApp.inject({
       method: "POST",
       url: `/v1/production/drafts/from-handoff/${handoffId}`,
@@ -200,6 +207,7 @@ describe("production handoff port", () => {
       payload: { caseId: productionCaseId }
     });
     expect(entered.statusCode).toBe(201);
+    expect(entered.json().draft.draftArtifacts.eventSpec.customer?.name).toBe("SYNTHETISCHES Testinstitut");
     expect(entered.json()).toMatchObject({ draft: { businessId: "local", source: { sourceRef: `offer-handoff:${handoffId}` } } });
 
     const forbiddenMutation = await offerApp.inject({ method: "POST", url: `/v1/offers/drafts/${draft.draftId}/decision`, headers: productionHeaders, payload: { decision: "rejected", revision: 1 } });

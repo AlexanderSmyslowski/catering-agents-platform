@@ -110,7 +110,7 @@ export function buildProductionPurchaseListPanelState(
         contextLabel: "Aktueller Vorgang",
         canExport,
         exportUnavailableLabel: "Export erst verfügbar, wenn Einkaufspositionen ermittelt sind.",
-        exportUrl: canExport ? purchaseListExportUrl(purchaseListId) : undefined,
+        exportUrl: canExport ? purchaseListExportUrl(purchaseListId, "excel-de") : undefined,
         exportContextLabel: "für aktuellen Vorgang",
         warnings: qualityWarnings.map((warning) => ({
           key: warning.code,
@@ -139,7 +139,7 @@ export function buildProductionPurchaseListPanelState(
         itemCountLabel: formatPurchaseListItemCountLabel(purchaseList),
         canExport,
         exportUnavailableLabel: "Export erst verfügbar, wenn Einkaufspositionen ermittelt sind.",
-        exportUrl: canExport ? purchaseListExportUrl(purchaseListId) : undefined,
+        exportUrl: canExport ? purchaseListExportUrl(purchaseListId, "excel-de") : undefined,
         exportContextLabel: "aus älterem Vorgang"
       };
     }),

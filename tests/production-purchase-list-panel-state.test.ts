@@ -57,7 +57,7 @@ describe("production purchase list panel state", () => {
           contextLabel: "Aktueller Vorgang",
           canExport: true,
           exportUnavailableLabel: "Export erst verfügbar, wenn Einkaufspositionen ermittelt sind.",
-          exportUrl: "/api/exports/v1/exports/purchase-lists/purchase-lunch/csv",
+          exportUrl: "/api/exports/v1/exports/purchase-lists/purchase-lunch/csv?format=excel-de",
           exportContextLabel: "für aktuellen Vorgang",
           warnings: [],
           previewItems: [
@@ -79,7 +79,7 @@ describe("production purchase list panel state", () => {
           itemCountLabel: "Positionen: 3",
           canExport: true,
           exportUnavailableLabel: "Export erst verfügbar, wenn Einkaufspositionen ermittelt sind.",
-          exportUrl: "/api/exports/v1/exports/purchase-lists/purchase-dinner/csv",
+          exportUrl: "/api/exports/v1/exports/purchase-lists/purchase-dinner/csv?format=excel-de",
           exportContextLabel: "aus älterem Vorgang"
         }
       ],

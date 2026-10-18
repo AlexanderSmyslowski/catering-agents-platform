@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CaseProduct } from "@catering/shared-core";
 import type { CaseHistoryItem } from "./case-history-state.js";
 
@@ -18,6 +18,12 @@ function productLabel(product: CaseProduct): string {
   return product === "offer" ? "Angebots" : "Produktions";
 }
 
+function caseCreatedLabel(createdAt: string): string {
+  const date = new Date(createdAt);
+  if (!Number.isFinite(date.getTime())) return "Anlagezeit unbekannt";
+  return `Angelegt ${new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "medium" }).format(date)}`;
+}
+
 export function CaseHistoryPanel({
   product,
   items,
@@ -32,6 +38,17 @@ export function CaseHistoryPanel({
   const [copyingCaseId, setCopyingCaseId] = useState<string>();
   const [copyError, setCopyError] = useState<string>();
   const label = productLabel(product);
+  const historyRef = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const revealLinkedHistory = () => {
+      if (window.location.hash === "#history" && historyRef.current) {
+        historyRef.current.open = true;
+      }
+    };
+    revealLinkedHistory();
+    window.addEventListener("hashchange", revealLinkedHistory);
+    return () => window.removeEventListener("hashchange", revealLinkedHistory);
+  }, [product]);
 
   async function copyCase(caseId: string) {
     setCopyingCaseId(caseId);
@@ -48,6 +65,7 @@ export function CaseHistoryPanel({
   return (
     <details
       id="history"
+      ref={historyRef}
       className={`panel secondary-workspace ${product === "offer" ? "offer-history-details" : "production-history-details"}`}
     >
       <summary>
@@ -85,7 +103,8 @@ export function CaseHistoryPanel({
                       onClick={() => onOpen(item.caseId)}
                     >
                       <strong>{item.displayName}</strong>
-                      <span>{item.status}{active ? " · geöffnet" : ""}</span>
+                      <span>{caseCreatedLabel(item.createdAt)}</span>
+                      <span>{{ open: "Offen", completed: "Abgeschlossen", archived: "Archiviert" }[item.status]}{active ? " · geöffnet" : ""}</span>
                     </button>
                     <button
                       className="quiet-list__copy"

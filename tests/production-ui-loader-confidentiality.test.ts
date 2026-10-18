@@ -135,6 +135,7 @@ function installCanonicalFetch(options: {
     if (url.endsWith("/api/production/health")) {
       return Response.json({ service: "production", status: "ok", timestamp: "", counts: {} });
     }
+    if (url.endsWith("/api/production/v1/production/recipes")) return Response.json({ items: [{ recipeId: "library-new", name: "Neu importiertes Küchenrezept" }] });
     if (url.includes("/api/intake/")) {
       return Response.json({
         specId: "spec-a",
@@ -153,6 +154,15 @@ afterEach(() => {
 });
 
 describe("Gate B production UI snapshot confidentiality", () => {
+  it("loads the operational recipe library before a recipe has been assigned to a plan", async () => {
+    const calls = installCanonicalFetch();
+    const result = await loadProductionProductData("case-a");
+    expect(result.workspace.referencedRecipes).toEqual([]);
+    expect(result.recipes).toEqual([{ recipeId: "library-new", name: "Neu importiertes Küchenrezept" }]);
+    expect(calls).toContain("/api/production/v1/production/recipes");
+    expect(calls.some(url => url.includes("/api/intake/") || url.includes("/api/offers/"))).toBe(false);
+  });
+
   it("rehydrates the exact approved ProductionDraft projection without any Intake GET", async () => {
     const calls = installCanonicalFetch();
 
@@ -190,6 +200,7 @@ describe("Gate B production UI snapshot confidentiality", () => {
       const url = String(input);
       calls.push(url);
       if (url.endsWith("/api/production/v1/production/cases")) return Response.json({ items: [] });
+      if (url.endsWith("/api/production/v1/production/recipes")) return Response.json({ items: [] });
       if (url.endsWith("/api/production/health")) {
         return Response.json({ service: "production", status: "ok", timestamp: "", counts: {} });
       }

@@ -9,6 +9,14 @@ export interface IntakeSignals {
   eventDate?: string;
 }
 
+// Only an explicit labelled line supplies a customer identity; greetings,
+// email signatures and dish descriptions are not reliable customer records.
+export function extractLabeledCustomerName(text: string): string | undefined {
+  const match = /^[ \t]*(?:Kunde|Kundenname|Auftraggeber)[ \t]*:[ \t]*([^\r\n]*)$/im.exec(text);
+  const name = match?.[1]?.normalize("NFKC").replace(/\s+/gu, " ").trim();
+  return name && name.length <= 320 ? name : undefined;
+}
+
 function addUniqueString(values: string[], value: string | undefined): void {
   if (!value) {
     return;
@@ -184,7 +192,42 @@ function isComponentScopedDietarySegment(segment: string, canonical: string): bo
   return dishContextPattern.test(segment) && !globalMenuDietaryScopePattern.test(segment);
 }
 
+
+function isGuestSubsetDietarySegment(segment: string, canonical: string): boolean {
+  if (canonical === "vegan" || canonical === "vegetarian") return false;
+  const pattern = DIETARY_PATTERNS.find(item => item.canonical === canonical);
+  if (!pattern) return false;
+  // Preserve German inflections in guest instructions without broadening
+  // the canonical matcher that can assert a requirement for the whole menu.
+  const guestDiet = pattern.regex.source.replaceAll(String.raw`frei\b`, String.raw`frei(?:e[nmrs]?)?\b`);
+  const match = new RegExp(String.raw`\b[0-9]+\s+(?:gäste|gaeste|personen|teilnehmer)(?:\s+(?:benötigen|benoetigen|brauchen|wünschen|wuenschen|essen|sind|müssen|muessen|bitte)){0,2}\s+(?:${guestDiet})`, "i").exec(segment);
+  if (!match || /\balle\s*$/i.test(segment.slice(0, match.index))) return false;
+  const globalInSameClause = segment.split(/\b(?:und|aber|sowie)\b/i).some(clause =>
+    pattern.regex.test(clause) && (
+      /\b(?:gesamte[nmrs]?|komplette[nmrs]?|durchgehend|vollständig|vollstaendig|ausschließlich|ausschliesslich|alle)\b/i.test(clause)
+      || new RegExp(String.raw`(?:Buffet|Menü|Menu|Catering|Event|Veranstaltung|Essen)\s+(?:muss|soll|sollte|müssen|muessen|sollen)\s+(?:${pattern.regex.source})`, "i").test(clause)
+    )
+  );
+  return !globalInSameClause;
+}
+
 function shouldPromoteDietarySignalToConstraint(segment: string, canonical: string): boolean {
+  if (isGuestSubsetDietarySegment(segment, canonical)) return false;
+  if (canonical === "vegan" || canonical === "vegetarian") {
+    const diet = canonical === "vegan" ? "vegan(?:e|er|en|es)?" : "(?:vegetarisch(?:e|er|en|es)?|vegetarian)";
+    const explicitGlobal = /\b(?:gesamte[nmrs]?|komplett|durchgehend|ausschließlich|ausschliesslich|vollständig|vollstaendig)\b/i.test(segment)
+      || /\b(?:alle Gäste|alle Gaeste|für alle|fuer alle)\b/i.test(segment)
+      || new RegExp(diet+"\\s+(?:Buffet|Menü|Menu|Catering|Event|Veranstaltung|Essen)\\b", "i").test(segment)
+      || new RegExp("(?:Buffet|Menü|Menu|Catering|Event|Veranstaltung|Essen)\\s+(?:muss|soll|sollte)\\s+(?:"+diet+")\\b", "i").test(segment);
+    // Counts and guest choices describe part of a mixed menu. An explicit
+    // whole-event mandate still takes precedence over that local wording.
+    const portionOrGroup = new RegExp("\\b\\d+\\s+(?:Portion(?:en)?\\s+)?"+diet+"\\b", "i").test(segment)
+      || new RegExp(diet+"\\s+(?:Optionen|Alternativen)\\b", "i").test(segment)
+      || (/\b(?:Gäste|Gaeste|Personen)\b/i.test(segment)
+        && new RegExp("(?:wählen|waehlen)\\s+"+diet+"\\b", "i").test(segment));
+    if (portionOrGroup && !explicitGlobal) return false;
+  }
+
   if (requestLevelDietaryIntentPattern.test(segment)) {
     return true;
   }
@@ -229,7 +272,7 @@ export function analyzeIntakeText(text: string): IntakeSignals {
     constraints,
     uncertainties
   };
-  const segments = text.split(/[,;\n]+/).map(normalizeSegment).filter(Boolean);
+  const segments = text.split(/[,;\n]+|(?<=[.!?])\s+(?=[A-ZÄÖÜ])/).map(normalizeSegment).filter(Boolean);
 
   for (const segment of segments) {
     const attendee = extractAttendeeObservation(segment);
@@ -278,6 +321,24 @@ export function analyzeIntakeText(text: string): IntakeSignals {
       });
     }
 
+    const labelledSchedule = /\b(?:Anlieferung|Lieferung|Aufbau|Abbau|Empfang|Abendbuffet|Buffet|Service|Beginn|Start|Ende|Abfahrt)\b/i.test(segment);
+    if (labelledSchedule && (timeHint || /\b(?:[01]?\d|2[0-3]):[0-5]\d\b/.test(segment))) {
+      // Keep the source wording through handoff and frozen snapshots;
+      // parsing a clock time is not an agreed operational schedule.
+      addUniqueString(constraints, `Zeit-/Logistikangabe aus Anfrage (ungeprüft): ${segment}`);
+    }
+
+    const subsetDietary = DIETARY_PATTERNS.some(pattern => isGuestSubsetDietarySegment(segment, pattern.canonical));
+    if (subsetDietary || /schalenfrucht(?:vermeidung|allergie|frei)?/i.test(segment)) {
+      // A subset request is not a free-from claim for the complete menu.
+      addUniqueString(constraints, `Sonderkost angefragt; separat klären: ${segment}`);
+      addUniqueUncertainty(uncertainties, {
+        field: "productionConstraints",
+        message: "Angefragte Sonderkostfälle benötigen eine gesonderte fachliche Klärung.",
+        severity: "medium",
+        suggestedQuestion: "Welche Maßnahmen und Freigaben gelten für die angefragten Sonderkostfälle?"
+      });
+    }
     const dietary = extractDietarySignals(segment);
     for (const constraint of dietary.confirmed) {
       addUniqueString(extractedFacts, `constraint=${constraint}`);

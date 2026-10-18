@@ -75,6 +75,7 @@ describe("offer text submit action", () => {
 
     await submitOfferText();
 
+    expect(actionInput.refreshDashboard).toHaveBeenCalledWith({ focusedOfferCaseId: "offer-case-1" });
     expect(actionInput.setError).not.toHaveBeenCalled();
     expect(calls).toEqual([
       "setSubmitting:true",
@@ -89,12 +90,54 @@ describe("offer text submit action", () => {
     ]);
   });
 
+  it("keeps the operator's customer identity in the case and canonical source across a lost-response retry", async () => {
+    let currentText = "Empfang für 20 Gäste.";
+    let customerName = "SYNTHETISCHER Bürotest";
+    let activeOfferCaseId: string | undefined;
+    const createOfferFromText = vi.fn(async () => {
+      if (createOfferFromText.mock.calls.length === 1) throw new Error("Antwort verloren");
+      return { draftId: "named-draft" };
+    });
+    const actionInput = input({
+      createOfferFromText,
+      setActiveOfferCaseId: id => { activeOfferCaseId = id; },
+      setOfferText: text => { currentText = text; },
+      clearCustomerName: () => { customerName = ""; }
+    });
+    const attempt = () => buildOfferTextSubmitAction({ ...actionInput, offerText: currentText, customerName, activeOfferCaseId })();
+    await attempt();
+    await attempt();
+    const source = "Kunde: SYNTHETISCHER Bürotest\n\nEmpfang für 20 Gäste.";
+    expect(actionInput.createOfferCase).toHaveBeenCalledExactlyOnceWith({ customerName: "SYNTHETISCHER Bürotest" });
+    expect(actionInput.getOrCreateOfferRequestId).toHaveBeenNthCalledWith(1, source);
+    expect(actionInput.getOrCreateOfferRequestId).toHaveBeenNthCalledWith(2, source);
+    expect(createOfferFromText).toHaveBeenNthCalledWith(1, "offer-case-1", source, "request-offer-1");
+    expect(createOfferFromText).toHaveBeenNthCalledWith(2, "offer-case-1", source, "request-offer-1");
+    expect(actionInput.completeOfferRequestId).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses an explicit customer already present in the source for the new case name", async () => {
+    const actionInput = input({ offerText: "Auftraggeber: SYNTHETISCHES Testinstitut\nEmpfang für 20 Gäste." });
+    await buildOfferTextSubmitAction(actionInput)();
+    expect(actionInput.createOfferCase).toHaveBeenCalledWith({ customerName: "SYNTHETISCHES Testinstitut" });
+    expect(actionInput.createOfferFromText).toHaveBeenCalledWith("offer-case-1", actionInput.offerText, "request-offer-1");
+  });
+
+  it("does not apply a stale new-customer field to an already selected case", async () => {
+    const actionInput = input({ activeOfferCaseId: "existing-case", customerName: "Other customer", clearCustomerName: vi.fn(), setOfferText: vi.fn() });
+    await buildOfferTextSubmitAction(actionInput)();
+    expect(actionInput.createOfferCase).not.toHaveBeenCalled();
+    expect(actionInput.createOfferFromText).toHaveBeenCalledWith("existing-case", actionInput.offerText, "request-offer-1");
+    expect(actionInput.setOfferText).not.toHaveBeenCalled();
+  });
+
   it("continues inside the active offer case", async () => {
     const actionInput = input({ activeOfferCaseId: "offer-case-existing" });
     const submitOfferText = buildOfferTextSubmitAction(actionInput);
 
     await submitOfferText();
 
+    expect(actionInput.refreshDashboard).toHaveBeenCalledWith({ focusedOfferCaseId: "offer-case-existing" });
     expect(actionInput.createOfferCase).not.toHaveBeenCalled();
     expect(actionInput.setActiveOfferCaseId).not.toHaveBeenCalled();
     expect(actionInput.createOfferFromText).toHaveBeenCalledWith(

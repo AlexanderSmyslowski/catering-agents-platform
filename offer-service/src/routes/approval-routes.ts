@@ -501,7 +501,9 @@ export function registerOfferApprovalRoutes(app: FastifyInstance, deps: OfferApp
       (variant) => variant.variantId === approval.selectedVariantId
     );
     const pricingSummary = selectedVariant?.proposedEventSpec.budgetContext?.pricingSummary;
-    if (approval.decision !== "approved" || !selectedVariant || !pricingSummary) {
+    if (approval.decision !== "approved" || !selectedVariant || !pricingSummary
+      || pricingSummary.calculationRequired
+      || (pricingSummary.calculation && pricingSummary.calculation.grossCents === undefined)) {
       throw new Error("The selected variant has no approvable pricing snapshot.");
     }
     return validateApprovedOffer({

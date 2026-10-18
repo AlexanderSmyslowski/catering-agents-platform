@@ -202,6 +202,20 @@ function ComponentEvidence({ caseId, userId, draft, spec, component, recipes, re
     } catch (cause) { if (alive.current) setMessage(cause instanceof Error ? cause.message : "Speicherantwort unklar. Bitte identisch erneut senden."); }
     finally { running.current = false; if (alive.current) setBusy(false); }
   }
+  if (draft.status !== "pending_review" || draft.draftArtifacts?.productionPlan) {
+    const sourceEvidence = evidence ? [evidence] : predecessor;
+    return <article className="form-panel" aria-label={`Rezeptplanung ${component.label}`}>
+      <h4>{component.label}</h4>
+      <p>{draft.draftArtifacts?.productionPlan ? "Vorbereiteter Rezeptstand" : "Abgeschlossener Rezeptstand"} · nur lesbar. Mengenänderungen benötigen eine neue Prüfung und Freigabe.</p>
+      <p>Quellnachweise behalten ihre ursprüngliche Entwurfs- und Revisionsbindung. Sie werden hier weder auf eine andere Fassung übertragen noch erneut freigegeben.</p>
+      {sourceEvidence.length ? sourceEvidence.map(item => <div key={item.evidenceId}>
+        <strong>Gespeicherter Planungsnachweis · Quellrevision {item.draftRevision}</strong>
+        <p>{item.quantityDecision.targetAmount} {item.quantityDecision.targetUnit === "servings" ? "Portionen" : item.quantityDecision.targetUnit === "pieces" ? "Stück" : item.quantityDecision.targetUnit} · {item.quantityDecision.rationale}</p>
+        <p>Herkunft: {item.quantityDecision.evidence.reference}</p>
+        <details><summary>Quellenbindung anzeigen</summary><p>Rezept: {item.recipeId} · Quellentwurf: {item.draftId}</p></details>
+      </div>) : <p>Kein gesonderter Planungsnachweis in diesem Fall geladen. Der eingefrorene Produktionsstand und seine Freigabe bleiben maßgeblich.</p>}
+    </article>;
+  }
   const source = recipe?.source as Record<string, unknown> | undefined;
   return <article className="form-panel" aria-label={`Rezeptplanung ${component.label}`}>
     <h4>{component.label}</h4>

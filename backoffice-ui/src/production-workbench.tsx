@@ -6,6 +6,8 @@ import { buildProductionMiniPilotCardState } from "./production-mini-pilot-card-
 import { buildProductionWorkbenchOutputAnchorState } from "./production-workbench-output-anchor-state.js";
 
 export type ProductionWorkbenchSummary = {
+  approvalState?: "pending" | "approved" | "applied";
+  productionNotes?: string[];
   hasActiveContext?: boolean;
   activeSpecLabel: string;
   activeTechnicalContextLabel?: string;
@@ -46,7 +48,7 @@ type ProductionConversationalWorkbenchProps = {
 
 function formatQuestionStatus(questionCount: number): string {
   if (questionCount === 0) {
-    return "keine offenen Rückfragen";
+    return "keine strukturierten Rückfragen erfasst; Auftrags- und Küchenhinweise separat prüfen";
   }
   if (questionCount === 1) {
     return "1 offene Rückfrage";
@@ -96,6 +98,7 @@ function formatOperatorProductionObjects(productionObjectStatusLabel: string): s
 }
 
 function buildProductionSummaryFacts(input: {
+  approvalState?: ProductionWorkbenchSummary["approvalState"];
   readinessLabel: string;
   openVisibleQuestionCount: number;
   answeredQuestionCount: number;
@@ -125,8 +128,9 @@ function buildProductionSummaryFacts(input: {
       value: formatOperatorProductionObjects(input.productionObjectStatusLabel)
     },
     {
-      label: "Freigabe",
-      value: "nicht erteilt"
+      label: "Interne Produktionsfreigabe",
+      value: input.approvalState === "applied" ? "erteilt · übernommen"
+        : input.approvalState === "approved" ? "erteilt · Übernahme ausstehend" : "nicht erteilt"
     }
   ];
 }
@@ -186,6 +190,7 @@ export function ProductionConversationalWorkbench({
   const hasProductionResults = productionObjectCount > 0 || purchaseListCount > 0;
   const productionOutputAnchorId = "production-output-anchor";
   const summaryFacts = buildProductionSummaryFacts({
+    approvalState: summary.approvalState,
     readinessLabel,
     openVisibleQuestionCount,
     answeredQuestionCount,
@@ -240,11 +245,12 @@ export function ProductionConversationalWorkbench({
       {hasActiveContext ? (
         <>
           <aside className="production-calm-summary" aria-label="Kompakte Produktionszusammenfassung">
-            <p className="eyebrow">Bestandsdaten im Hintergrund</p>
+            <p className="eyebrow">{summary.hasActiveContext ? "Aktueller Produktionsauftrag" : "Bestandsdaten im Hintergrund"}</p>
             <strong>{activeSpecLabel}</strong>
             <p className="helper-text">
-              Kontext aus Demo, Bestand oder vorherigem Lauf. Starte oben mit einer Datei oder Texteingabe, wenn du einen neuen Auftrag prüfen willst.
+              {summary.hasActiveContext ? "Dieser Arbeitsstand gehört zum geöffneten Produktionsauftrag." : "Kontext aus Demo, Bestand oder vorherigem Lauf. Starte oben mit einer Datei oder Texteingabe, wenn du einen neuen Auftrag prüfen willst."}
             </p>
+            {summary.productionNotes?.length ? <section aria-label="Auftrags- und Küchenhinweise"><h4>Auftrags- und Küchenhinweise</h4><p>Vorgaben separat prüfen. Dies ist keine Sonderkost-, Allergen- oder Hygienefreigabe.</p><ul>{summary.productionNotes.map(note => <li key={note}>{note}</li>)}</ul></section> : null}
             <ul className="production-calm-summary__facts" aria-label="Datenstand Produktionsauftrag">
               {summaryFacts.map((fact) => (
                 <li key={fact.label}>

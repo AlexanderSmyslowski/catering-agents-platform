@@ -576,7 +576,7 @@ describe("Linux browser rehearsal governance", () => {
       open: false,
       querySelector: (selector: string) =>
         selector === "summary"
-          ? { textContent: "Für die Produktion übernommene Veranstaltungen" }
+          ? { textContent: "Erfasste Veranstaltungsdaten" }
           : null,
       querySelectorAll: () => [],
     };
@@ -650,7 +650,7 @@ describe("Linux browser rehearsal governance", () => {
     const handoffDetails = {
       open: false,
       querySelector: (selector: string) => selector === "summary"
-        ? { textContent: "Für die Produktion übernommene Veranstaltungen" }
+        ? { textContent: "Erfasste Veranstaltungsdaten" }
         : null,
       querySelectorAll: () => [],
     };
@@ -713,7 +713,7 @@ describe("Linux browser rehearsal governance", () => {
     };
     const handoffDetails = {
       open: false,
-      querySelector: (selector: string) => selector === "summary" ? { textContent: "Für die Produktion übernommene Veranstaltungen" } : null,
+      querySelector: (selector: string) => selector === "summary" ? { textContent: "Erfasste Veranstaltungsdaten" } : null,
       querySelectorAll: () => [],
     };
     const document = {
@@ -1102,7 +1102,7 @@ describe("Linux browser rehearsal governance", () => {
     const handoffDetails = {
       open: false,
       querySelector: (selector: string) => selector === "summary"
-        ? { textContent: "Für die Produktion übernommene Veranstaltungen" }
+        ? { textContent: "Erfasste Veranstaltungsdaten" }
         : null,
       querySelectorAll: () => [],
     };
@@ -1233,7 +1233,7 @@ describe("Linux browser rehearsal governance", () => {
       open: false,
       querySelector: (selector: string) =>
         selector === "summary"
-          ? { textContent: "Für die Produktion übernommene Veranstaltungen" }
+          ? { textContent: "Erfasste Veranstaltungsdaten" }
           : null,
       querySelectorAll: () => [],
     };
@@ -1323,7 +1323,7 @@ describe("Linux browser rehearsal governance", () => {
       open: false,
       querySelector: (selector: string) =>
         selector === "summary"
-          ? { textContent: "Für die Produktion übernommene Veranstaltungen" }
+          ? { textContent: "Erfasste Veranstaltungsdaten" }
           : null,
       querySelectorAll: () => [],
     };

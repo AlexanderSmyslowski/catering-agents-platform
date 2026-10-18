@@ -94,6 +94,46 @@ describe("print export HTML escaping", () => {
     expect(html).not.toContain('"quoted" & \'single\'');
   });
 
+  it("escapes grounded event, menu and question text in an unpriced internal draft without releasing catalogue or customer text", () => {
+    const html = renderOfferHtml(minimalOfferDraft({
+      proposedEventSpec: {
+        event: { title: maliciousText },
+        attendees: { expected: 42 },
+        menuPlan: [{ componentId: "unpriced-menu", label: maliciousText, servings: 2 }]
+      } as OfferDraft["proposedEventSpec"]
+    }));
+    expect(html).toContain("Kalkulation offen");
+    expect(html).toContain("42 Gäste");
+    expect(html).toContain("2 Portionen");
+    expect(html).toContain("&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;");
+    expect(html).not.toContain("<script>");
+    expect(html).not.toContain("<img src=x onerror=");
+    expect(html).not.toContain("Customer ");
+    expect(html).not.toContain("Module ");
+    expect(html).not.toContain("Gesamt:");
+    expect(html).toContain("Kundentext erst nach Publish-Freigabe exportieren.");
+  });
+
+  it("prints explicit dish portions while retaining the publish gate", () => {
+    const draft = minimalOfferDraft({
+      proposedEventSpec: { menuPlan: [
+        { componentId: "chicken", label: "Hähnchenragout", servings: 55 },
+        { componentId: "veg", label: "Bratlinge", servings: 25, dietaryTags: ["vegetarian"] },
+        { componentId: "vegan", label: "Linsenragout", servings: 20, dietaryTags: ["vegan"] },
+        { componentId: "unknown", label: "Optionale Beilage" }
+      ] } as OfferDraft["proposedEventSpec"],
+      customerFacingText: "Unpublished customer text"
+    });
+    const html = renderOfferHtml(draft);
+    expect(html).toContain("Hähnchenragout: 55 Portionen");
+    expect(html).toContain("Bratlinge: 25 Portionen");
+    expect(html).toContain("Linsenragout: 20 Portionen");
+    expect(html).toContain("Optionale Beilage: Portionszahl offen");
+    expect(html).toContain("vegetarisch");
+    expect(html).toContain("vegan");
+    expect(html).not.toContain("Unpublished customer text");
+  });
+
   it("keeps unapproved offer customer text out of the HTML export", () => {
     const html = renderOfferHtml(
       minimalOfferDraft({

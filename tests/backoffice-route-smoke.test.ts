@@ -696,7 +696,7 @@ describe("backoffice route smoke", () => {
     const offer = await renderRouteWithFirstHistorySelection("/angebot");
     expect(offer.text).toContain("Aktueller Entwurf: Korridor Lunchangebot");
     expect(offer.text).toContain("aktueller Vorgang: Lunch · 64 Teilnehmer · 2026-09-15 (teilweise vollständig)");
-    expect(offer.text).toContain("Zur Produktion");
+    expect(offer.text).toContain("Produktionsübergabe: noch nicht erfolgt.");
 
     const offerDocument = new DOMParser().parseFromString(offer.html, "text/html");
     const offerExportLink = Array.from(offerDocument.querySelectorAll("a")).find((anchor) =>
@@ -707,7 +707,7 @@ describe("backoffice route smoke", () => {
     ) as HTMLAnchorElement | undefined;
 
     expect(offerExportLink?.getAttribute("href")).toBe("/api/exports/v1/exports/offers/corridor-draft-1/html");
-    expect(productionHandoffLink?.getAttribute("href")).toBe("/produktion");
+    expect(productionHandoffLink).toBeUndefined();
 
     const production = await renderRouteWithFirstHistorySelection("/produktion");
     expect(production.text).toContain("Lunch · 64 Teilnehmer · 2026-09-15");
@@ -1097,9 +1097,9 @@ describe("backoffice route smoke", () => {
     expect(text).toContain("Getränkepaket noch klären");
     expect(text).toContain("Variante freigeben: Klassisch");
     expect(createdExport?.getAttribute("href")).toBe("/api/exports/v1/exports/offers/c3-draft-created/html");
-    expect(text).toContain("Für die Produktion übernommene Veranstaltungen");
+    expect(text).toContain("Erfasste Veranstaltungsdaten");
     expect(text).toContain("Status: vollständig");
-    expect(text).toContain("Zur Produktion");
+    expect(text).toContain("Produktionsübergabe: noch nicht erfolgt.");
 
     await act(async () => {
       findButtonByText("Variante freigeben: Klassisch").click();
@@ -1259,7 +1259,7 @@ describe("backoffice route smoke", () => {
     const productionHandoffLink = Array.from(offerDocument.querySelectorAll("a")).find((anchor) =>
       (anchor.textContent ?? "").includes("Zur Produktion")
     ) as HTMLAnchorElement | undefined;
-    expect(productionHandoffLink?.getAttribute("href")).toBe("/produktion");
+    expect(productionHandoffLink).toBeUndefined();
 
     const production = await renderRouteWithFirstHistorySelection("/produktion");
 

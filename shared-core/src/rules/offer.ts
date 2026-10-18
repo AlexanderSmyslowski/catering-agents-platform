@@ -243,7 +243,7 @@ function createOfferDraftFromSpec(baseSpec: AcceptedEventSpec, draftId: string):
   const customerFacingText = [
     `Vielen Dank für Ihre Anfrage: ${eventTypeLabel}.`,
     `Wir schlagen eine ${serviceFormLabel} mit folgenden Leistungsbausteinen vor:`,
-    ...modules.map((module) => `- ${module.label}`),
+    ...modules.map((module) => `- ${module.label}${module.category === "food" && module.quantity !== undefined ? `: ${module.quantity} Portionen` : ""}`),
     `Gesamtschätzung: ${pricingSummary.subtotal.amount.toFixed(2)} EUR.`
   ].join("\n");
 
@@ -298,11 +298,17 @@ export function createCuratedOfferDraft(
 ): OfferDraft {
   const baseDraft = createOfferDraft(request);
   const attendeeCount = baseDraft.proposedEventSpec.attendees.expected ?? 0;
-  const modules = packageModules(packagePreset, attendeeCount);
+  const explicitMenu = baseDraft.proposedEventSpec.assumptions?.some((item) => item.code === "explicit_menu_portions");
+  const modules = explicitMenu
+    ? [
+        ...baseDraft.proposedEventSpec.menuPlan.map((item) => ({ moduleId: item.componentId, label: item.label, category: "food", quantity: item.servings })),
+        ...packageModules(packagePreset, attendeeCount).filter((item) => item.category !== "food")
+      ]
+    : packageModules(packagePreset, attendeeCount);
   const pricingSummary = packagePricingSummary(packagePreset, attendeeCount);
   const reviewStatus = reviewRequiredStatus();
   const portfolioMapping = createPortfolioMapping(packagePreset);
-  const menuPlan = (packagePreset.food_modules ?? []).map((label, index) => ({
+  const menuPlan = explicitMenu ? baseDraft.proposedEventSpec.menuPlan : (packagePreset.food_modules ?? []).map((label, index) => ({
     componentId: `${packagePreset.id}-menu-${index + 1}`,
     label,
     serviceStyle: baseDraft.proposedEventSpec.servicePlan.serviceForm,
@@ -380,7 +386,7 @@ export function createCuratedOfferDraft(
     customerFacingText: [
       `Vielen Dank für Ihre Anfrage. Wir schlagen ${packagePreset.name} vor.`,
       `Leistungsrahmen:`,
-      ...modules.map((module) => `- ${module.label}`),
+      ...modules.map((module) => `- ${module.label}${module.category === "food" && module.quantity !== undefined ? `: ${module.quantity} Portionen` : ""}`),
       `Arbeitsband: ${packagePreset.price_band_pp[0].toFixed(2)}-${packagePreset.price_band_pp[1].toFixed(2)} EUR p.P.`,
       `Voraussichtliche Gesamtschätzung: ${pricingSummary.subtotal.amount.toFixed(2)} EUR.`
     ].join("\n"),

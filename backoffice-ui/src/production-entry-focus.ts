@@ -8,12 +8,15 @@ export function productionDraftIdForHandoff(handoffId: string): string {
   return `production-draft-handoff-${handoffId}`;
 }
 
-export function productionDraftEntryUrl(draftId: string, productionCaseId?: string): string {
+export function productionDraftEntryUrl(draftId?: string, productionCaseId?: string): string {
+  if (!draftId) {
+    return productionCaseId ? `/produktion?productionCaseId=${encodeURIComponent(productionCaseId)}` : "/produktion";
+  }
   const encodedDraftId = encodeURIComponent(draftId);
   const encodedCaseId = productionCaseId ? `&productionCaseId=${encodeURIComponent(productionCaseId)}` : "";
   return `/produktion?productionDraftId=${encodedDraftId}${encodedCaseId}#${productionDraftEntryId(draftId)}`;
 }
 
-export function openProductionDraftEntry(draftId: string, productionCaseId?: string): void {
+export function openProductionDraftEntry(draftId?: string, productionCaseId?: string): void {
   if (typeof window !== "undefined") window.location.assign(productionDraftEntryUrl(draftId, productionCaseId));
 }

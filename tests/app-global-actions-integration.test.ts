@@ -13,7 +13,7 @@ import {
   buildOfferNextAction,
   runProductWorkspaceNextAction
 } from "../backoffice-ui/src/App.js";
-import { productionDraftEntryUrl } from "../backoffice-ui/src/production-entry-focus.js";
+import { productionDraftEntryUrl, productionDraftIdForHandoff } from "../backoffice-ui/src/production-entry-focus.js";
 import type { ApprovedOffer, ProductionHandoff } from "@catering/shared-core";
 import { loadProductionWorkspaceState } from "../backoffice-ui/src/api.js";
 import type { ProductionDraft } from "../backoffice-ui/src/api.js";
@@ -202,6 +202,15 @@ describe("global action integration contracts", () => {
     expect(state.offerWorkbenchState.selectedVariantId).toBe("variant-1");
   });
 
+  it("reopens the verified production case without a stale original draft after planning has advanced", () => {
+    expect(productionDraftEntryUrl(undefined, "production-case-1"))
+      .toBe("/produktion?productionCaseId=production-case-1");
+    expect(productionDraftEntryUrl("new-draft", "production-case-1"))
+      .toBe("/produktion?productionDraftId=new-draft&productionCaseId=production-case-1#production-draft-new-draft");
+    expect(productionDraftEntryUrl(undefined, "case?/&"))
+      .toBe("/produktion?productionCaseId=case%3F%2F%26");
+  });
+
   it("opens a persisted handoff through the real next-action runner after reload", async () => {
     const { approvedOffer, handoff } = persistedApproval();
     const binding: OfferApprovalBinding = buildOfferApprovalBinding(approvedOffer, handoff)!;
@@ -221,9 +230,82 @@ describe("global action integration contracts", () => {
     });
 
     expect(resolveProductionCaseFromHandoff).toHaveBeenCalledWith(handoff.handoffId);
-    expect(openProductionEntry).toHaveBeenCalledWith(`production-draft-handoff-${handoff.handoffId}`, "production-case-1");
+    expect(openProductionEntry).toHaveBeenCalledWith(undefined, "production-case-1");
     expect(productionDraftEntryUrl(`production-draft-handoff-${handoff.handoffId}`, "production-case-1"))
       .toContain("productionCaseId=production-case-1");
+  });
+
+  it("reopens from the persisted offer workbench through the existing guarded resolver", async () => {
+    const { approvedOffer, handoff } = persistedApproval();
+    const binding = buildOfferApprovalBinding(approvedOffer, handoff)!;
+    const openProductionEntry = vi.fn();
+    const resolveProductionCaseFromHandoff = vi.fn(async () => ({ caseId: "production-case-1" }));
+    const focusedDraft = {
+      draftId: approvedOffer.sourceDraft.draftId,
+      revision: approvedOffer.sourceDraft.revision,
+      eventSummary: "Synthetische Abendveranstaltung",
+      variantSet: [],
+      openQuestions: []
+    };
+    const boundary = buildAppOfferRouteAppBoundary(boundaryInput({
+      activeDraft: focusedDraft,
+      selectedDraft: focusedDraft,
+      approvalBinding: binding,
+      openProductionHandoff: async (handoffId: string) => {
+        await runProductWorkspaceNextAction({
+          route: "offer",
+          action: { kind: "inspect_handoff", label: "Übergabe öffnen", handoffId },
+          offerWorkbenchState: boundary.offerWorkbenchState,
+          offerApprovalBinding: binding,
+          openProductionEntry,
+          resolveProductionCaseFromHandoff,
+          setNotice: vi.fn(),
+          focus: vi.fn()
+        });
+      }
+    }) as never);
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => root.render(createElement(OfferConversationalWorkbench, boundary.offerWorkbenchState)));
+    const reopen = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent === "Produktionsauftrag öffnen"
+    );
+    expect(reopen).toBeDefined();
+    await act(async () => { reopen?.click(); });
+    expect(resolveProductionCaseFromHandoff).toHaveBeenCalledExactlyOnceWith(handoff.handoffId);
+    expect(openProductionEntry).toHaveBeenCalledExactlyOnceWith(
+      undefined, "production-case-1"
+    );
+    await act(async () => root.unmount());
+  });
+
+  it.each(["success", "failure"] as const)("ignores stale handoff %s after the offer context changes", async (outcome) => {
+    const { approvedOffer, handoff } = persistedApproval();
+    const binding = buildOfferApprovalBinding(approvedOffer, handoff)!;
+    let currentContext = true;
+    let resolve!: (value: { caseId: string }) => void;
+    let reject!: (error: Error) => void;
+    const pending = new Promise<{ caseId: string }>((accept, fail) => { resolve = accept; reject = fail; });
+    const openProductionEntry = vi.fn();
+    const setNotice = vi.fn();
+    const operation = runProductWorkspaceNextAction({
+      route: "offer",
+      action: { kind: "inspect_handoff", label: "Übergabe öffnen", handoffId: handoff.handoffId },
+      offerWorkbenchState: boundaryInput() as never,
+      offerApprovalBinding: binding,
+      resolveProductionCaseFromHandoff: () => pending,
+      isCurrentOfferContext: () => currentContext,
+      openProductionEntry,
+      setNotice,
+      focus: vi.fn()
+    });
+    currentContext = false;
+    if (outcome === "success") resolve({ caseId: "old-production-case" });
+    else reject(new Error("Fehler des zuvor geöffneten Auftrags"));
+    await expect(operation).resolves.toBeUndefined();
+    expect(openProductionEntry).not.toHaveBeenCalled();
+    expect(setNotice).not.toHaveBeenCalled();
   });
 
   it("reloads the resolved production case and exposes its handoff draft", async () => {

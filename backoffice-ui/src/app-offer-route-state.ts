@@ -48,6 +48,7 @@ export function buildAppOfferRouteState(input: AppOfferRouteStateInput): AppOffe
     offerSpecEditActions,
     offerWorkbenchState: buildOfferWorkbenchState({
       submitting: input.submitting,
+      hasActiveOfferCase: input.hasActiveOfferCase,
       latestSourceLabel: input.latestSourceLabel,
       offerText: input.offerText,
       setOfferText: input.setOfferText,
@@ -70,6 +71,9 @@ export function buildAppOfferRouteState(input: AppOfferRouteStateInput): AppOffe
       setSelectedVariantId: input.setSelectedVariantId,
       approveDraft: input.approveDraft,
       approvalBinding: input.approvalBinding,
+      openProductionHandoff: input.openProductionHandoff,
+      onMenuSaved: input.onMenuSaved,
+      onMenuEditingChange: input.onMenuEditingChange,
       createHandoff: input.createHandoff,
       filteredSpecs: input.filteredSpecs,
       activeSpec: input.activeSpec,

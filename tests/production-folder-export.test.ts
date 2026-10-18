@@ -1,11 +1,13 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { IntakeStore } from "@catering/intake-service";
-import { buildPrintExportApp, renderProductionFolderHtml } from "@catering/print-export";
+import { buildPrintExportApp, renderProductionFolderHtml, renderProductionPlanHtml } from "@catering/print-export";
 import { ProductionStore } from "@catering/production-service";
 import {
+  createEventRequestFromText,
+  normalizeEventRequestToSpec,
   RecipeLibrary,
   SCHEMA_VERSION,
   type AcceptedEventSpec,
@@ -310,6 +312,53 @@ describe("production folder export", () => {
     }
   });
 
+  it("renders a printable production sheet with grounded event facts and no duplicate recipe steps", () => {
+    const input = fixture();
+    const html = renderProductionPlanHtml(input.plan, input.spec);
+    expect(html).toContain('<html lang="de">');
+    expect(html).toContain("<title>CateringOS · Produktionsblatt</title>");
+    expect(html).toContain("size: A4; margin: 18mm");
+    expect(html).toContain("Datum: 2026-06-14 · Gäste: 45");
+    expect(html).toContain("Kunde: Köpff Testkunde");
+    expect(html).toContain("keine Zusicherung von Allergenfreiheit");
+    const instruction = input.plan.kitchenSheets[0]!.steps[0]!.instruction;
+    expect(html.split(instruction)).toHaveLength(2);
+  });
+
+  it("retains frozen batch station and every instruction when a matching sheet has empty or different steps", () => {
+    const input = fixture();
+    input.plan.productionBatches[0]!.station = "SYNTHETISCHER KALTPOSTEN";
+    input.plan.productionBatches[0]!.steps = [{ index: 1, instruction: "BATCH-ANWEISUNG behalten." }];
+    input.plan.kitchenSheets[0]!.steps = [];
+    const empty = renderProductionPlanHtml(input.plan, input.spec);
+    expect(empty).toContain("Station: SYNTHETISCHER KALTPOSTEN");
+    expect(empty).toContain("BATCH-ANWEISUNG behalten.");
+    input.plan.kitchenSheets[0]!.steps = [{ index: 1, instruction: "SHEET-ZUSATZ behalten." }];
+    const additional = renderProductionPlanHtml(input.plan, input.spec);
+    expect(additional).toContain("BATCH-ANWEISUNG behalten.");
+    expect(additional).toContain("SHEET-ZUSATZ behalten.");
+  });
+
+  it("uses the frozen batch factor rather than a changed live recipe factor", () => {
+    const input = fixture();
+    input.recipe.scalingRules.defaultLossFactor = 9.99;
+    const html = renderProductionFolderHtml({ plan: input.plan, spec: input.spec, recipes: [input.recipe] });
+    expect(html).toContain("Faktor 1,2 (Metadatum)");
+    expect(html).not.toContain("Faktor 9,99");
+  });
+
+  it("rejects unknown CSV modes after checking the existing operator boundary", async () => {
+    const dataRoot = createDataRoot(); dataRoots.push(dataRoot);
+    const app = buildPrintExportApp({ rootDir: dataRoot, trustedActorSecret: TRUSTED_SECRET, env: { CATERING_DEV_AUTH: "1" } });
+    try {
+      const invalid = await app.inject({ method: "GET", url: "/v1/exports/purchase-lists/missing/csv?format=unsafe", headers: trustedHeaders });
+      expect(invalid.statusCode).toBe(400);
+      const forbidden = await app.inject({ method: "GET", url: "/v1/exports/purchase-lists/missing/csv?format=excel-de",
+        headers: { ...trustedHeaders, "x-catering-actor-name": "Unbekannt" } });
+      expect(forbidden.statusCode).toBe(403);
+    } finally { await app.close(); }
+  });
+
   it("renders all 9 section headings in order", () => {
     const input = fixture();
     const html = renderProductionFolderHtml({
@@ -384,7 +433,8 @@ describe("production folder export", () => {
     expect(html).toContain("45 Personen");
     expect(html).toContain("1,2 Portionen p. P.");
     expect(html).toContain("54 Portionen");
-    expect(html).toContain("Verlustfaktor 1,2");
+    expect(html).toContain("Faktor 1,2 (Metadatum)");
+    expect(html).toContain("kein Nachweis eines eingerechneten Zuschlags");
     expect(html).not.toContain("defaultLossFactor");
     expect(html).not.toContain("servings");
     expect(html).not.toContain("PAX");
@@ -430,6 +480,8 @@ describe("production folder export", () => {
     });
 
     expect(html).toContain("<strong>Allergene:</strong> Keine ausgewiesenen Allergene");
+    expect(html).toContain("keine Zusicherung von Allergenfreiheit");
+    expect(html).toContain("Lieferantendeklaration und Kreuzkontakt gesondert prüfen");
     expect(html).not.toContain("<strong>Allergene:</strong> Milch");
   });
 
@@ -508,7 +560,8 @@ describe("production folder export", () => {
     expect(html).toContain('<section class="purchase-section">');
     expect(html.match(/<article class="purchase-group">/g)).toHaveLength(3);
     expect(html).toMatch(/\.recipe-section, \.purchase-section\s*{\s*break-before:\s*page;\s*page-break-before:\s*always;/);
-    expect(html).toMatch(/\.recipe-card, \.purchase-group\s*{\s*break-after:\s*page;\s*page-break-after:\s*always;/);
+    expect(html).toMatch(/\.purchase-group\s*{\s*break-after:\s*page;\s*page-break-after:\s*always;/);
+    expect(html).not.toMatch(/\.recipe-card[^}]*break-after:\s*page/);
   });
 
   it("covers every recipe ingredient in the purchase list", () => {
@@ -611,4 +664,44 @@ describe("production folder export", () => {
     expect(html).toContain("&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;");
     expect(html).not.toContain("<script>");
   });
+  it("prints normalized new-request diet and logistics instructions in both kitchen documents as unapproved context", () => {
+    const input = fixture();
+    const text = readFileSync(new URL("./fixtures/synthetic-100-guest-request.txt", import.meta.url), "utf8");
+    const normalized = normalizeEventRequestToSpec(createEventRequestFromText({ requestId: "print-source-context", channel: "text", rawText: text }));
+    input.spec.productionConstraints = normalized.productionConstraints;
+    input.spec.uncertainties = normalized.uncertainties;
+    const before = JSON.stringify(input);
+    const documents = [
+      renderProductionPlanHtml(input.plan, input.spec),
+      renderProductionFolderHtml({ plan: input.plan, spec: input.spec, recipes: [input.recipe], purchaseLists: [input.purchaseList] })
+    ];
+    for (const html of documents) {
+      for (const detail of ["4 Gäste benötigen glutenfreie Sonderkost", "3 Gäste Schalenfruchtvermeidung", "Empfang 18:00–19:00", "Abendbuffet 19:00–21:00", "Anlieferung 16:30", "Aufbau 17:45", "Abbau 21:00"]) expect(html).toContain(detail);
+      expect(html).toContain("ungeprüft");
+      expect(html).toContain("Keine Sonderkost-, Allergen- oder Hygienefreigabe");
+      expect(html).not.toContain("Keine blockierenden Rückfragen");
+    }
+    expect(JSON.stringify(input)).toBe(before);
+  });
+
+  it("keeps recorded special-diet and delivery instructions visible without granting a kitchen approval", () => {
+    const input = fixture();
+    input.spec.event.schedule = [{ label: "Anlieferung", start: "16:30" }, { label: "Buffet", start: "19:00", end: "21:00" }];
+    input.spec.productionConstraints = ["4 Gäste glutenfrei; 3 Schalenfruchtvermeidung – separat klären"];
+    input.spec.menuPlan[0]!.productionDecision = { mode: "scratch", notes: "Sonderkost ungeklärt <script>unsafe</script>" };
+    input.spec.uncertainties = [];
+    const before = JSON.stringify(input);
+    const html = renderProductionFolderHtml({ plan: input.plan, spec: input.spec, recipes: [input.recipe], purchaseLists: [input.purchaseList] });
+    expect(html).toContain("4 Gäste glutenfrei");
+    expect(html).toContain("3 Schalenfruchtvermeidung");
+    expect(html).toContain("Anlieferung: 16:30");
+    expect(html).toContain("Buffet: 19:00–21:00");
+    expect(html).toContain("Vitello Tonnato: Sonderkost ungeklärt");
+    expect(html).toContain("Keine Sonderkost-, Allergen- oder Hygienefreigabe");
+    expect(html).not.toContain("Keine blockierenden Rückfragen");
+    expect(html).toContain("&lt;script&gt;unsafe&lt;/script&gt;");
+    expect(html).not.toContain("<script>");
+    expect(JSON.stringify(input)).toBe(before);
+  });
+
 });

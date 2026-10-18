@@ -464,3 +464,28 @@ export function buildProductionClarificationQuestions(input: ProductionClarifica
 
   return stableQuestions(questions);
 }
+
+/** Keep recorded kitchen instructions visible without treating them as approvals. */
+export function productionContextNotes(spec?: { event?: unknown; menuPlan?: unknown; productionConstraints?: unknown }): string[] {
+  if (!spec) return [];
+  const strings = (value: unknown) => Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && Boolean(item.trim())).map(item => item.trim()) : [];
+  const notes = strings(spec.productionConstraints);
+  const event = spec.event && typeof spec.event === "object" ? spec.event as Record<string, unknown> : {};
+  if (Array.isArray(event.schedule)) for (const entry of event.schedule) {
+    if (!entry || typeof entry !== "object") continue;
+    const time = entry as Record<string, unknown>;
+    const parts = [time.start, time.end].filter((value): value is string => typeof value === "string" && Boolean(value.trim()));
+    if (parts.length) notes.push(`${typeof time.label === "string" ? time.label : "Zeitangabe"}: ${parts.join("–")}`);
+  }
+  const componentNotes = new Map<string, string[]>();
+  if (Array.isArray(spec.menuPlan)) for (const value of spec.menuPlan) {
+    if (!value || typeof value !== "object") continue;
+    const component = value as Record<string, unknown>;
+    const decision = component.productionDecision as { notes?: unknown } | undefined;
+    if (typeof decision?.notes !== "string" || !decision.notes.trim()) continue;
+    const text = decision.notes.trim();
+    componentNotes.set(text, [...(componentNotes.get(text) ?? []), typeof component.label === "string" ? component.label : "Menükomponente"]);
+  }
+  for (const [text, labels] of componentNotes) notes.push(`${[...new Set(labels)].join(" · ")}: ${text}`);
+  return [...new Set(notes)];
+}

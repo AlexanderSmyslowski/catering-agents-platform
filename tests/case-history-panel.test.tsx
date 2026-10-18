@@ -16,6 +16,7 @@ const item: CaseSummary = {
 
 afterEach(() => {
   document.body.innerHTML = "";
+  window.history.replaceState({}, "", "/");
 });
 
 describe("case history panel", () => {
@@ -61,6 +62,43 @@ describe("case history panel", () => {
     expect(onOpen).toHaveBeenCalledWith("case-a");
     expect(onCopy).toHaveBeenCalledWith("case-a");
 
+    await act(async () => root.unmount());
+  });
+
+  it("opens a linked history on first load and a later hash navigation without forcing it open on rerenders", async () => {
+    const container = document.body.appendChild(document.createElement("div"));
+    const root = createRoot(container);
+    const panelProps = { product: "offer" as const, items: [item], search: "",
+      onSearchChange: vi.fn(), onOpen: vi.fn(), onCopy: vi.fn(async () => undefined) };
+    window.history.replaceState({}, "", "/angebot#history");
+    await act(async () => root.render(createElement(CaseHistoryPanel, panelProps)));
+    const details = container.querySelector("details")!;
+    expect(details.open).toBe(true);
+    expect(container.textContent).toContain("Offen");
+    details.open = false;
+    await act(async () => root.render(createElement(CaseHistoryPanel, { ...panelProps, search: "sommer" })));
+    expect(details.open).toBe(false);
+    await act(async () => window.dispatchEvent(new HashChangeEvent("hashchange")));
+    expect(details.open).toBe(true);
+    await act(async () => root.unmount());
+    details.open = false;
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    expect(details.open).toBe(false);
+  });
+
+  it("distinguishes legacy duplicate names by their creation time and opens the chosen case", async () => {
+    const root = createRoot(document.body.appendChild(document.createElement("div")));
+    const onOpen = vi.fn();
+    await act(async () => root.render(createElement(CaseHistoryPanel, {
+      product: "offer", search: "", onSearchChange: vi.fn(), onCopy: vi.fn(async () => undefined), onOpen,
+      items: [item, { ...item, caseId: "case-b", createdAt: "2026-07-12T10:00:00.000Z" }]
+    })));
+    const buttons = [...document.querySelectorAll<HTMLButtonElement>('button[data-action="open-case"]')];
+    expect(buttons[0]!.querySelector("strong")?.textContent).toBe(buttons[1]!.querySelector("strong")?.textContent);
+    expect(buttons[0]!.textContent).toContain("Angelegt");
+    expect(buttons[0]!.textContent).not.toBe(buttons[1]!.textContent);
+    await act(async () => buttons[1]!.click());
+    expect(onOpen).toHaveBeenCalledExactlyOnceWith("case-b");
     await act(async () => root.unmount());
   });
 

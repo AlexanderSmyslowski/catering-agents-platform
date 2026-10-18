@@ -1,3 +1,4 @@
+import { announceProductionDraftRefresh } from "./production-draft-review-panel.js";
 import {
   buildProductionPlanSubmissionAction,
   type ProductionPlanSubmissionServices
@@ -73,6 +74,7 @@ export function buildProductionPlanningControls(
       contextForPreparation = { caseId: input.productionDraftContext!.caseId, draft };
       input.onDraftRevised?.(draft);
       input.showProductionDraftReview(draft.draftId);
+      announceProductionDraftRefresh();
     },
     editingSpecId: input.editingSpecId,
     updateAcceptedSpec: input.updateAcceptedSpec,

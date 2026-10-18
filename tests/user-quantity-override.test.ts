@@ -127,7 +127,7 @@ describe("user quantity override and bidirectional recalculation", () => {
     expect(result.previousAuthority.targetAmount).toBe(2750);
     expect(result.proposedAuthority).toMatchObject({ perUnitAmount: 60, targetAmount: 3000, targetUnit: "g" });
     expect(result.scaleFactor).toBeCloseTo(3000 / 2750);
-    expect(result.proportionalBaseline.ingredients.map((line) => line.quantity.amount)).toEqual([3000, 43.64]);
+    expect(result.proportionalBaseline.ingredients.map((line) => line.quantity.amount)).toEqual([3000, expect.closeTo(43.6363636363636, 12)]);
     expect(result.effectiveRecipeQuantity).toEqual(result.proportionalBaseline);
     expect(result.purchaseQuantities).toEqual(result.proportionalBaseline.ingredients);
     expect(result.staleArtifacts).toEqual(stale);
@@ -150,7 +150,7 @@ describe("user quantity override and bidirectional recalculation", () => {
     expect(result.scaleFactor).toBeCloseTo(3000 / 2750);
     expect(result.proposedAuthority.targetAmount).toBe(3000);
     expect(result.proportionalBaseline.ingredients[0]?.quantity.amount).toBe(3000);
-    expect(result.proportionalBaseline.ingredients[1]?.quantity.amount).toBe(43.64);
+    expect(result.proportionalBaseline.ingredients[1]?.quantity.amount).toBeCloseTo(43.6363636363636, 12);
   });
 
   it.each([
@@ -191,9 +191,9 @@ describe("user quantity override and bidirectional recalculation", () => {
       productionContext: []
     });
     expect(result.bridge.status).toBe("ready_for_scaling");
-    expect(result.proportionalBaseline?.ingredients.find((x) => x.ingredientId === "salt")?.quantity.amount).toBe(43.64);
-    expect(result.effectiveRecipeQuantity?.ingredients.find((x) => x.ingredientId === "salt")?.quantity.amount).toBe(34.91);
-    expect(result.purchaseQuantities?.find((x) => x.ingredientId === "salt")?.quantity.amount).toBe(34.91);
+    expect(result.proportionalBaseline?.ingredients.find((x) => x.ingredientId === "salt")?.quantity.amount).toBeCloseTo(43.6363636363636, 12);
+    expect(result.effectiveRecipeQuantity?.ingredients.find((x) => x.ingredientId === "salt")?.quantity.amount).toBeCloseTo(34.9090909090909, 12);
+    expect(result.purchaseQuantities?.find((x) => x.ingredientId === "salt")?.quantity.amount).toBeCloseTo(34.9090909090909, 12);
     expect(result.appliedProductionScalingRuleIds).toEqual(["salt-large-batch"]);
   });
 

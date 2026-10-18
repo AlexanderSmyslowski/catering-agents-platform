@@ -240,7 +240,7 @@ load_production_contract
 ssh_target() { cat; }
 remote_preflight ""
 ''', 'render-check', str(definitions_path), str(ROOT)], capture_output=True, text=True,
-            env=dict(os.environ, CATERING_TARGET_OPERATIONS_COMMIT='b' * 40), check=False)
+            env=dict(os.environ, CATERING_TARGET_OPERATIONS_COMMIT='b' * 40), check=False, timeout=30)
         self.assertEqual(rendered.returncode, 0, rendered.stderr)
         return rendered.stdout
 
@@ -269,14 +269,14 @@ elif sys.argv[2] == 'release':
 
     def readonly_shell(self, command, **kwargs):
         if not sys.platform.startswith('linux'):
-            return subprocess.run(command, **kwargs)
+            return subprocess.run(command, timeout=kwargs.pop('timeout', 30), **kwargs)
         tracer = shutil.which('strace')
         self.assertIsNotNone(tracer, 'Linux read-only gate requires strace; CI installs it explicitly')
         with tempfile.TemporaryDirectory(prefix='catering-observer-trace-') as directory:
             trace = Path(directory) / 'syscalls.log'
-            result = subprocess.run([tracer, '-f', '-yy', '-s', '256', '-o', str(trace), '-e',
+            result = subprocess.run([tracer, '--kill-on-exit', '-f', '-yy', '-s', '256', '-o', str(trace), '-e',
                 'trace=%file,write,writev,pwrite64,pwritev,pwritev2,ftruncate,fallocate,fchmod,fchown,flock,fcntl',
-                *command], **kwargs)
+                *command], timeout=kwargs.pop('timeout', 30), **kwargs)
             denied = self.forbidden_syscalls(trace.read_text())
             self.assertFalse(denied, '\n'.join(denied[:20]))
         return result
@@ -409,10 +409,10 @@ elif sys.argv[2] == 'release':
         tracer = shutil.which('strace')
         self.assertIsNotNone(tracer, 'Linux read-only gate requires strace')
         trace = self.base / 'heredoc-negative-control.log'
-        result = subprocess.run([tracer, '-f', '-yy', '-s', '256', '-o', str(trace), '-e',
+        result = subprocess.run([tracer, '--kill-on-exit', '-f', '-yy', '-s', '256', '-o', str(trace), '-e',
             'trace=%file,write,writev,flock,fcntl', '/bin/bash', '-c',
             "IFS= read -r -d '' value <<'LEGACY' || [[ -n \"$value\" ]]\n" + 'q' * 107595 + '\nLEGACY\n'],
-            capture_output=True, text=True, check=False)
+            capture_output=True, text=True, check=False, timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr)
         denied = self.forbidden_syscalls(trace.read_text())
         self.assertTrue(any('O_CREAT' in line for line in denied), trace.read_text())

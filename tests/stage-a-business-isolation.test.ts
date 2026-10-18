@@ -256,7 +256,8 @@ describe("Stage A profile-independent business isolation", () => {
         })),
         businessId: "alpha",
         eventSummary: "ALPHA-EXPORT-MARKER",
-        customerFacingText: "ALPHA-EXPORT-MARKER"
+        customerFacingText: "ALPHA-UNPUBLISHED-CUSTOMER-TEXT",
+        openQuestions: ["ALPHA-EXPORT-MARKER"]
       });
       const betaDraft = validateOfferDraft({
         ...createOfferDraft(createEventRequestFromText({
@@ -266,7 +267,8 @@ describe("Stage A profile-independent business isolation", () => {
         })),
         businessId: "beta",
         eventSummary: "BETA-EXPORT-MARKER",
-        customerFacingText: "BETA-EXPORT-MARKER"
+        customerFacingText: "BETA-UNPUBLISHED-CUSTOMER-TEXT",
+        openQuestions: ["BETA-EXPORT-MARKER"]
       });
       await offerStore.saveDraftForCase(alphaContext, alphaOfferCaseId, alphaDraft);
       await offerStore.saveDraftForCase(betaContext, betaOfferCaseId, betaDraft);
@@ -277,6 +279,11 @@ describe("Stage A profile-independent business isolation", () => {
       const betaOfferExport = await exportsBeta.inject({ method: "GET", url: `/v1/exports/offers/${alphaOfferDraftId}/html`, headers: betaSession.headers });
       expect(alphaOfferExport.statusCode).toBe(200);
       expect(betaOfferExport.statusCode).toBe(200);
+      for (const body of [alphaOfferExport.body, betaOfferExport.body]) {
+        expect(body).toContain("Kalkulation offen");
+        expect(body).not.toContain("ALPHA-UNPUBLISHED-CUSTOMER-TEXT");
+        expect(body).not.toContain("BETA-UNPUBLISHED-CUSTOMER-TEXT");
+      }
       expect(alphaOfferExport.body).toContain("ALPHA-EXPORT-MARKER");
       expect(alphaOfferExport.body).not.toContain("BETA-EXPORT-MARKER");
       expect(betaOfferExport.body).toContain("BETA-EXPORT-MARKER");

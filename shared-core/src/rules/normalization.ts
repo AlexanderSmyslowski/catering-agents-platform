@@ -12,7 +12,7 @@ import type {
 import { SCHEMA_VERSION } from "../types.js";
 import { evaluateReadiness } from "./readiness.js";
 
-type InferredMenuItem = Pick<MenuComponent, "label" | "menuCategory" | "dietaryTags">;
+type InferredMenuItem = Pick<MenuComponent, "label" | "menuCategory" | "dietaryTags" | "servings">;
 
 function slugify(value: string): string {
   return value
@@ -120,7 +120,7 @@ function sanitizeMenuLine(line: string): string {
 function inferMenuCategoryFromText(
   line: string
 ): MenuComponent["menuCategory"] | undefined {
-  if (/(^|[^a-z])(vegan)([^a-z]|$)/i.test(line)) {
+  if (/(^|[^a-z])(vegan(?:e[nmrs]?)?)([^a-z]|$)/i.test(line)) {
     return "vegan";
   }
   if (/(vegetarisch|vegetarian)/i.test(line)) {
@@ -235,7 +235,21 @@ function extractInlineMenuMarkerItems(text: string): InferredMenuItem[] {
   return labels.map((label) => inferMenuItemFromLabel(label));
 }
 
+function extractQuantifiedMenuItems(text: string): InferredMenuItem[] {
+  // Only explicit dish counts establish portions. Guest subgroups, gram weights
+  // and staff counts must not become additional menu servings.
+  return [...text.matchAll(/\b(\d{1,5})\s+Portion(?:en)?\s+(.+?)(?=,\s*\d+\s+Portion|[;.\n]|$)/gi)]
+    .filter((match) => Number(match[1]) > 0)
+    .map((match) => ({
+      ...inferMenuItemFromLabel(sanitizeMenuLine(match[2]!)),
+      servings: Number(match[1])
+    }));
+}
+
 function extractMenuItems(text: string, fallbackKeywords: string[]): InferredMenuItem[] {
+  const quantified = extractQuantifiedMenuItems(text);
+  if (quantified.length > 0) return quantified;
+
   const structuredSectionLabels = extractStructuredMenuSection(text);
   if (structuredSectionLabels.length > 0) {
     return structuredSectionLabels.slice(0, 12);
@@ -353,7 +367,7 @@ export function normalizeEventRequestToSpec(
   const serviceForm = request.event?.serviceForm ?? detectServiceForm(rawText, eventType);
   const attendees = request.attendees?.expected ?? signals.attendeeCount ?? parseAttendees(rawText);
   const eventDate = request.event?.date ?? signals.eventDate ?? parseDate(rawText);
-  const menuItems =
+  const menuItems: InferredMenuItem[] =
     request.source.channel === "manual_form" && (request.desiredCatering?.length ?? 0) > 0
       ? request.desiredCatering!.map((item) => ({
           label: item.label,
@@ -365,7 +379,9 @@ export function normalizeEventRequestToSpec(
           request.desiredCatering?.map((item) => item.label) ?? defaults.defaultMenuKeywords
         );
 
-  const assumptions: Assumption[] = [];
+  const assumptions: Assumption[] = menuItems.some((item) => item.servings !== undefined)
+    ? [{ code: "explicit_menu_portions", message: "Gerichte und Portionszahlen aus ausdrücklichen Portionsangaben übernommen; übrige Leistungen vor Freigabe ergänzen und prüfen.", applied: true }]
+    : [];
   const uncertainties: Uncertainty[] = uniqueUncertainties(request.uncertainties ?? [], signals.uncertainties);
 
   if (!request.event?.type) {
@@ -426,7 +442,7 @@ export function normalizeEventRequestToSpec(
     menuCategory: item.menuCategory,
     serviceStyle: serviceForm,
     desiredRecipeTags: [eventType],
-    servings: attendees,
+    servings: item.servings ?? attendees,
     dietaryTags: item.dietaryTags ?? []
   }));
 

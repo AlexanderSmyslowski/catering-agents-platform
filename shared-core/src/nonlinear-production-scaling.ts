@@ -51,7 +51,7 @@ function finitePositive(value: number): boolean {
 }
 
 function normalize(value: number): number {
-  return Number(value.toFixed(2));
+  return Number(value.toPrecision(15));
 }
 
 function contextMatches(required: string[] | undefined, actual: string[] | undefined): boolean {
