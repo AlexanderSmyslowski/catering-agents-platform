@@ -150,6 +150,29 @@ function ApprovalBindingHarness() {
 
 describe("offer workbench approval binding", () => {
 
+  it.each([
+    [undefined, "Angebotsfreigabe: noch nicht erfolgt. Produktionsübergabe: noch nicht erfolgt.", true, false, false],
+    [{ offerDraftId: "draft-a", offerDraftRevision: 1, approvedOfferId: "approved-a" },
+      "Angebotsfreigabe: intern freigegeben. Produktionsübergabe: noch nicht erfolgt.", false, true, false],
+    [{ offerDraftId: "draft-a", offerDraftRevision: 1, approvedOfferId: "approved-a", handoffId: "handoff-a" },
+      "Produktionsübergabe: erfolgt. Die Freigabe der Küchenplanung wird im Produktionsauftrag geprüft.", false, false, true]
+  ] as const)("separates captured data, offer approval and production handoff (%s)", (approvalBinding, status, canApprove, canHandoff, canOpen) => {
+    const html = renderToStaticMarkup(createElement(OfferConversationalWorkbench, props({
+      approvalBinding,
+      filteredSpecs: [draft("draft-a", "Angebot A").proposedEventSpec]
+    })));
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    expect(doc.querySelector('[role="status"]')?.textContent).toContain(status);
+    expect(doc.body.textContent).toContain("Veranstaltungsdaten: 1 vollständig");
+    expect(doc.body.textContent).not.toContain("Produktionsübergabe: 1 vollständig");
+    const actions = [...doc.querySelectorAll("button")].map(button => button.textContent);
+    expect(actions.includes("Variante freigeben: Klassisch")).toBe(canApprove);
+    expect(actions.includes("An Produktion übergeben")).toBe(canHandoff);
+    expect(actions.includes("Produktionsauftrag öffnen")).toBe(canOpen);
+    expect(doc.querySelector('a[href="/produktion"]')).toBeNull();
+    expect(doc.body.textContent).toContain("Erfasste Veranstaltungsdaten");
+  });
+
   it("keeps the focused draft and pending pricing inputs until saving or discarding", async () => {
     const setSelectedDraftId = vi.fn();
     const root = createRoot(document.body.appendChild(document.createElement("div")));
@@ -188,7 +211,7 @@ describe("offer workbench approval binding", () => {
     });
 
     const openButton = Array.from(container.querySelectorAll("button")).find((button) =>
-      button.textContent === "Produktionsentwurf öffnen"
+      button.textContent === "Produktionsauftrag öffnen"
     );
     expect(openButton).toBeDefined();
     expect(container.querySelector('a[href*="productionDraftId="]')).toBeNull();
@@ -203,7 +226,7 @@ describe("offer workbench approval binding", () => {
       root.render(createElement(OfferConversationalWorkbench, props({ approvalBinding: binding, openProductionHandoff, submitting: true })));
     });
     const busyButton = Array.from(container.querySelectorAll("button")).find((button) =>
-      button.textContent === "Produktionsentwurf öffnen"
+      button.textContent === "Produktionsauftrag öffnen"
     );
     expect(busyButton?.disabled).toBe(true);
     await act(async () => busyButton?.click());
@@ -253,7 +276,7 @@ describe("offer workbench approval binding", () => {
       await flushPromises();
     });
     expect(Array.from(document.querySelectorAll("button")).some((link) =>
-      link.textContent === "Produktionsentwurf öffnen"
+      link.textContent === "Produktionsauftrag öffnen"
     )).toBe(true);
 
     const draftBButton = Array.from(document.querySelectorAll("button")).find((button) =>
@@ -267,7 +290,7 @@ describe("offer workbench approval binding", () => {
       button.textContent === "An Produktion übergeben"
     )).toBe(false);
     expect(Array.from(document.querySelectorAll("button")).some((link) =>
-      link.textContent === "Produktionsentwurf öffnen"
+      link.textContent === "Produktionsauftrag öffnen"
     )).toBe(false);
     expect(document.body.textContent ?? "").not.toContain("approved-a");
     expect(document.body.textContent ?? "").not.toContain("handoff-a");
@@ -294,7 +317,7 @@ describe("offer workbench approval binding", () => {
 
     expect(markup).toContain("Angebot A, korrigiert");
     expect(markup).not.toContain("An Produktion übergeben");
-    expect(markup).not.toContain("Produktionsentwurf öffnen");
+    expect(markup).not.toContain("Produktionsauftrag öffnen");
     expect(markup).not.toContain("production-a-revision-1");
   });
 });

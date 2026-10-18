@@ -202,6 +202,15 @@ describe("global action integration contracts", () => {
     expect(state.offerWorkbenchState.selectedVariantId).toBe("variant-1");
   });
 
+  it("reopens the verified production case without a stale original draft after planning has advanced", () => {
+    expect(productionDraftEntryUrl(undefined, "production-case-1"))
+      .toBe("/produktion?productionCaseId=production-case-1");
+    expect(productionDraftEntryUrl("new-draft", "production-case-1"))
+      .toBe("/produktion?productionDraftId=new-draft&productionCaseId=production-case-1#production-draft-new-draft");
+    expect(productionDraftEntryUrl(undefined, "case?/&"))
+      .toBe("/produktion?productionCaseId=case%3F%2F%26");
+  });
+
   it("opens a persisted handoff through the real next-action runner after reload", async () => {
     const { approvedOffer, handoff } = persistedApproval();
     const binding: OfferApprovalBinding = buildOfferApprovalBinding(approvedOffer, handoff)!;
@@ -221,7 +230,7 @@ describe("global action integration contracts", () => {
     });
 
     expect(resolveProductionCaseFromHandoff).toHaveBeenCalledWith(handoff.handoffId);
-    expect(openProductionEntry).toHaveBeenCalledWith(`production-draft-handoff-${handoff.handoffId}`, "production-case-1");
+    expect(openProductionEntry).toHaveBeenCalledWith(undefined, "production-case-1");
     expect(productionDraftEntryUrl(`production-draft-handoff-${handoff.handoffId}`, "production-case-1"))
       .toContain("productionCaseId=production-case-1");
   });
@@ -260,13 +269,13 @@ describe("global action integration contracts", () => {
     const root = createRoot(container);
     await act(async () => root.render(createElement(OfferConversationalWorkbench, boundary.offerWorkbenchState)));
     const reopen = Array.from(container.querySelectorAll("button")).find((button) =>
-      button.textContent === "Produktionsentwurf öffnen"
+      button.textContent === "Produktionsauftrag öffnen"
     );
     expect(reopen).toBeDefined();
     await act(async () => { reopen?.click(); });
     expect(resolveProductionCaseFromHandoff).toHaveBeenCalledExactlyOnceWith(handoff.handoffId);
     expect(openProductionEntry).toHaveBeenCalledExactlyOnceWith(
-      productionDraftIdForHandoff(handoff.handoffId), "production-case-1"
+      undefined, "production-case-1"
     );
     await act(async () => root.unmount());
   });

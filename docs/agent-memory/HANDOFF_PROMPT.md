@@ -1,3 +1,16 @@
+# Aktuelle Übergabe — Version5.438 /18.10.2026
+
+## 5.438 — 18.10.2026: ehrlicher Übergabestatus und aktuelle Produktionswiederöffnung
+
+Die lokale UI unterscheidet erfasste Veranstaltungsdaten, tatsächlich revisionsgebundene interne Angebotsfreigabe und erfolgte Produktionsübergabe. Datenvollständigkeit ist kein Handoff und keine Küchenfreigabe. Bereits erledigte Freigabe-/Übergabeaktionen werden nicht erneut angeboten; neue Fassungen bleiben über die vorhandene Bindung wieder freigabefähig. Der irreführende generische Spec→Produktion-Link entfällt; die vorhandene bestätigte Übergabe öffnet den Produktionsauftrag. #history öffnet die eingeklappte Auftragshistorie, Fallstatus sind deutsch.
+
+Die tatsächliche Browsernachprüfung fand zusätzlich einen alten Handoff-Draft-Link: trotz richtigem Fall und vorhandenem Plan erschien „Entwurf nicht verfügbar“, weil der ursprüngliche Entwurf ersetzt war. inspect_handoff öffnet jetzt nach unveränderter serverseitiger Fallauflösung und Staleprüfung die bestätigte case-only URL. Deren bestehende Projektion zeigt den aktuellen Stand; neue Übergaben und explizite Reviewlinks behalten ihre Draftbindung. Kein Backend-/Freigabe-/Datenmodellwechsel.
+
+Gezielte67 Tests/5Dateien, danach29 Tests/4Dateien (überlappend) und finaler Build/gitdiff--check PASS. Ein unabhängiger Reviewer nahm Grunddelta und gezieltes Wiederöffnungsdelta ohne materielle Befunde an. Browser: unfreigegebener20-Gäste-Testfall wahrheitsgemäß ohne Handoff; ursprünglicher100-Gäste-Fall über den echten Angebotsbutton mit korrekter ProductionCase-ID geöffnet, kein veralteter Draftquery, keine falsche Nichtverfügbarkeitswarnung, vorhandener Plan/Einkauf und Sonderkostnotizen sichtbar. Alle13 Originalquellen bytegleich. Belege tmp/product-pilot-20261018/handoff-state-*.log/txt und handoff-reopen-targeted.log.
+
+VollständigerCI39080927362 auf vorigemHead1ea955e läuft regulär weiter; Browser/Compose/macOS PASS, Gesamtstatus noch offen. Nicht abbrechen oder als bestanden ausgeben. Für dieses neue UI-/Navigationsdelta ist die automatische CI am neuen Head separat maßgeblich. Kein Nürnberger Deployment oder Pilot-GO; tatsächlicher vollständiger eigener Opus-End-to-End-Ablauf, reale Fachentscheidungen und Nürnberger Backup→Restore→Cleanup/Monitoring bleiben offen. Nächster Produktpunkt: unterscheidbare Auftragsnamen/Suche, anschließend verbleibende konkret belegte P2-UX-Befunde. Gesamtziel ACTIVE.
+
+
 # Aktuelle Übergabe — Version5.437 /18.10.2026
 
 Vollständiger lokaler synthetischer100-Gäste-Ablauf aus5.417 erhalten: neun Rezepte/Batches,49 Zutatenbeiträge,29 Einkaufspositionen,55/25/20 und2gZimt exakt; CSV und18-seitigeA4-Mappe,Neustartnachweis. Tatsächliche unabhängige Produktprüfung mit Modell claude-opus-5-5 (canonicalModel/provider firstParty belegt) abgeschlossen; Bericht docs/product/OPUS_PRODUKTPRUEFUNG_20261018.md. Opus bediente vorhandenen Auftrag,Preis-/Mengenfehlerfälle,Desktop/Mobil undExporte selbst; Rezeptimporte/13Karten/Approval/Applywurden nur am gespeicherten Ergebnis geprüft, daher kein eigener vollständiger Opus-E2E-PASS.

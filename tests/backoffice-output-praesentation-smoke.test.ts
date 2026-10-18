@@ -592,9 +592,9 @@ describe("backoffice production presentation smoke", () => {
     expect(content).not.toContain("Aktualisieren");
     expect(content).toContain("Angebotsentwurf prüfen");
     expect(content).toContain("Alternative Erfassung");
-    expect(content).toContain("Für die Produktion übernommene Veranstaltungen");
+    expect(content).toContain("Erfasste Veranstaltungsdaten");
     expect(content).toContain("Lunch-Angebot für 45 Personen · 2 Varianten · 1 offener Punkt");
-    expect(content).toContain("Produktionsübergabe: 1 vollständig · 0 teilweise");
+    expect(content).toContain("Veranstaltungsdaten: 1 vollständig · 0 teilweise");
     expect(content).toContain("presentation-draft-success");
     expect(content).toContain("presentation-spec-success");
     expect(content).toContain("Angebot exportieren");

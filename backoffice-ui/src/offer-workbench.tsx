@@ -167,12 +167,18 @@ function renderDraftFocusLabel(draft?: Record<string, unknown>): string {
     : String(draft.eventSummary ?? "Unbenannter Entwurf");
 }
 
-function renderOfferNextStep(draft?: Record<string, unknown>): string {
+function renderOfferNextStep(draft?: Record<string, unknown>, approval?: OfferApprovalBinding): string {
   if (!draft) {
     return "Jetzt: Kundenanfrage einfügen und einen prüfbaren Entwurf erstellen.";
   }
 
-  return "Jetzt: offene Punkte prüfen und eine Variante übernehmen. Danach kannst du das Angebot exportieren oder an die Produktion übergeben.";
+  if (approval?.handoffId) {
+    return "Jetzt: den übergebenen Produktionsauftrag öffnen und die Küchenplanung fortsetzen. Änderungen am Angebot als neue Fassung speichern und erneut freigeben.";
+  }
+  if (approval) {
+    return "Jetzt: das intern freigegebene Angebot an die Produktion übergeben.";
+  }
+  return "Jetzt: offene Punkte und Kalkulation prüfen, dann eine Variante intern freigeben. Die Produktionsübergabe folgt als eigener Schritt.";
 }
 
 function getSpecRequestId(spec: Record<string, unknown>): string {
@@ -262,7 +268,7 @@ export function OfferConversationalWorkbench({
           <p className="eyebrow">Neue Anfrage</p>
           <h3>Kundenanfrage einfügen und Entwurf prüfen</h3>
           <p className="helper-text">
-            Die App erstellt einen prüfbaren Angebotsentwurf. Erst eine von dir gewählte Variante wird an die Produktion übergeben.
+            Die App erstellt einen prüfbaren Angebotsentwurf. Eine Variante wird erst intern freigegeben und anschließend ausdrücklich an die Produktion übergeben.
           </p>
         </header>
         <textarea
@@ -348,10 +354,17 @@ export function OfferConversationalWorkbench({
             <p className="helper-text">
               Bitte vor Freigabe prüfen: keine automatische Preis-, Margen- oder Produktionsfreigabe.
             </p>
-            <p className="helper-text">{renderOfferNextStep(focusedDraft)}</p>
+            <p className="helper-text">{renderOfferNextStep(focusedDraft, focusedApprovalBinding)}</p>
             <p className="helper-text">
-              Produktionsübergabe: {completeSpecCount} vollständig · {partialSpecCount} teilweise · aktueller Vorgang:{" "}
+              Veranstaltungsdaten: {completeSpecCount} vollständig · {partialSpecCount} teilweise · aktueller Vorgang:{" "}
               {summaryActiveSpec ? `${getSpecLabel(summaryActiveSpec)} (${getReadinessLabel(summaryActiveSpec)})` : "keine"}
+            </p>
+            <p className="helper-text" role="status">
+              {focusedHandoffId
+                ? "Produktionsübergabe: erfolgt. Die Freigabe der Küchenplanung wird im Produktionsauftrag geprüft."
+                : focusedApprovalBinding
+                  ? "Angebotsfreigabe: intern freigegeben. Produktionsübergabe: noch nicht erfolgt."
+                  : "Angebotsfreigabe: noch nicht erfolgt. Produktionsübergabe: noch nicht erfolgt."}
             </p>
             <p className="helper-text">
               {focusedDraft
@@ -491,7 +504,7 @@ export function OfferConversationalWorkbench({
                 </div>
               ) : null}
               <div className="quiet-action-row">
-                {focusedVariants.map((variant) => {
+                {!focusedApprovalBinding && focusedVariants.map((variant) => {
                   const variantId = String(variant.variantId);
                   return (
                     <button
@@ -517,7 +530,7 @@ export function OfferConversationalWorkbench({
                     Angebot exportieren
                   </a>
                 )}
-                {focusedApprovalBinding && createHandoff ? (
+                {focusedApprovalBinding && !focusedHandoffId && createHandoff ? (
                   <button
                     className="secondary-button"
                     disabled={submitting || editingMenu || editingPricing}
@@ -532,7 +545,7 @@ export function OfferConversationalWorkbench({
                     disabled={submitting || editingMenu || editingPricing}
                     onClick={() => void openProductionHandoff(focusedHandoffId)}
                   >
-                    Produktionsentwurf öffnen
+                    Produktionsauftrag öffnen
                   </button>
                 ) : null}
               </div>
@@ -612,7 +625,7 @@ export function OfferConversationalWorkbench({
 
         <details className="progressive-panel">
           <summary>
-            <span>Für die Produktion übernommene Veranstaltungen</span>
+            <span>Erfasste Veranstaltungsdaten</span>
             <strong>{formatOfferSummaryCount(filteredSpecs.length, "Vorgang", "Vorgänge")}</strong>
           </summary>
           <ul className="quiet-list">
@@ -631,9 +644,7 @@ export function OfferConversationalWorkbench({
                   <button className="secondary-button" disabled={submitting || editingMenu || editingPricing} onClick={() => specEditActions.beginSpecEdit(spec)}>
                     Bearbeiten
                   </button>
-                  <a className="button-link button-link--subtle" href="/produktion">
-                    Zur Produktion
-                  </a>
+                  <span className="helper-text">Die Produktionsübergabe erfolgt am freigegebenen Angebotsentwurf.</span>
                 </div>
               </li>
             ))}

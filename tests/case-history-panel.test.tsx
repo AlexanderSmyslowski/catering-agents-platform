@@ -16,6 +16,7 @@ const item: CaseSummary = {
 
 afterEach(() => {
   document.body.innerHTML = "";
+  window.history.replaceState({}, "", "/");
 });
 
 describe("case history panel", () => {
@@ -62,6 +63,27 @@ describe("case history panel", () => {
     expect(onCopy).toHaveBeenCalledWith("case-a");
 
     await act(async () => root.unmount());
+  });
+
+  it("opens a linked history on first load and a later hash navigation without forcing it open on rerenders", async () => {
+    const container = document.body.appendChild(document.createElement("div"));
+    const root = createRoot(container);
+    const panelProps = { product: "offer" as const, items: [item], search: "",
+      onSearchChange: vi.fn(), onOpen: vi.fn(), onCopy: vi.fn(async () => undefined) };
+    window.history.replaceState({}, "", "/angebot#history");
+    await act(async () => root.render(createElement(CaseHistoryPanel, panelProps)));
+    const details = container.querySelector("details")!;
+    expect(details.open).toBe(true);
+    expect(container.textContent).toContain("Offen");
+    details.open = false;
+    await act(async () => root.render(createElement(CaseHistoryPanel, { ...panelProps, search: "sommer" })));
+    expect(details.open).toBe(false);
+    await act(async () => window.dispatchEvent(new HashChangeEvent("hashchange")));
+    expect(details.open).toBe(true);
+    await act(async () => root.unmount());
+    details.open = false;
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    expect(details.open).toBe(false);
   });
 
   it("reports a copy failure without changing the active selection", async () => {

@@ -88,7 +88,7 @@ import { useProductionPlanProgress } from "./use-production-plan-progress.js";
 import { useProductionWindowFileDrop } from "./use-production-window-file-drop.js";
 import { useMiniPilotResultState } from "./use-mini-pilot-result-state.js";
 import { useRecipeUploadDraft } from "./use-recipe-upload-draft.js";
-import { openProductionDraftEntry, productionDraftIdForHandoff } from "./production-entry-focus.js";
+import { openProductionDraftEntry } from "./production-entry-focus.js";
 import {
   announceProductionDraftReview,
   announceProductionDraftRefresh,
@@ -243,7 +243,7 @@ export type ProductWorkspaceNextActionContext = {
   offerWorkbenchState: Pick<OfferWorkbenchProps, "approveDraft" | "createHandoff">;
   offerApprovalBinding?: OfferApprovalBinding;
   activeOfferDraft?: OfferDraft;
-  openProductionEntry?: (draftId: string, productionCaseId?: string) => void;
+  openProductionEntry?: (draftId: string | undefined, productionCaseId?: string) => void;
   resolveProductionCaseFromHandoff?: (handoffId: string) => Promise<{ caseId: string }>;
   isCurrentOfferContext?: () => boolean;
   setSelectedDraftId?: (draftId: string) => void;
@@ -328,7 +328,9 @@ export async function runProductWorkspaceNextAction(
       }
       if (input.isCurrentOfferContext?.() === false) return;
       input.setNotice(`Übergabe ${action.handoffId} wurde geöffnet.`);
-      input.openProductionEntry?.(productionDraftIdForHandoff(action.handoffId), productionCase.caseId);
+      // The original handoff draft may have been superseded or applied.
+      // Reopen the verified case so its current server-projected work is shown.
+      input.openProductionEntry?.(undefined, productionCase.caseId);
       return;
     case "approve_production":
       if (input.route !== "production" || !input.decideProductionDraft || !input.refreshDashboard) {

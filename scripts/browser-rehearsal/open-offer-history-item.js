@@ -69,7 +69,7 @@ async () => {
   );
 
   const handoffDetails = [...document.querySelectorAll("details")].find((details) =>
-    (details.querySelector("summary")?.textContent ?? "").includes("Für die Produktion übernommene Veranstaltungen")
+    (details.querySelector("summary")?.textContent ?? "").includes("Erfasste Veranstaltungsdaten")
   );
   if (!handoffDetails) throw new Error("Angebots-Handoff-Bereich fehlt nach bewusster Auftragsauswahl");
   handoffDetails.open = true;
