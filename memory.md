@@ -2,10 +2,28 @@
 
 **Korrektur der CI-Deutung, 18.10.2026 01:38 CEST:** Run39079338322 wurde vom Koordinator bei rund sechs Minuten voreilig abgebrochen. Das nun vollständige Log beweist regulären Fortschritt: unter anderem95 Operationsprüfungen in244s PASS; der Observer-Test war noch gar nicht gestartet. Der alte Run39075030417 hatte37 Minuten bis zum Abbruch regulär426 Dateien abgearbeitet; aus der fehlenden Observerausgabe allein ist weder sein Start noch ein tatsächlicher Hänger nachgewiesen. Die frühere Zuschreibung eines konkreten CI-Hängers zum Observer ist zurückgenommen. Das statisch belegte spawnSync-/Nachfahren-/Pipe-Risiko wurde lokal begrenzt und unabhängig geprüft, ist aber kein Nachweis der ursprünglichen CI-Ursache. Keine weitere Linux-Reparatur/Prüfarchitektur ohne Fehlerbeleg. Nach gebündelten tatsächlichen Opus-Produktbefunden einen erforderlichen Gesamt-CI-Lauf mit realistischer Dauer vollständig abwarten; keine manuellen unveränderten Vollsuiten und keine vorschnellen Abbrüche. Alle vier bisherigen CI-Runs sind CANCELLED, kein Full-Suite-PASS. Browser/Compose/macOS des letzten Heads waren PASS. Beleg tmp/product-pilot-20261018/ci-39079338322-build-cancelled.log.
 
-version: 5.442
+version: 5.443
 date: 2026-10-18
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
+
+## 5.443 — 18.10.2026: Release-Audit geschlossen und Nürnberger Betriebsbestand tatsächlich gelesen
+
+Die vorgeschriebenen npm-Audits deckten vier betroffene Abhängigkeiten auf. Ausschließlich kompatible Korrekturstände wurden im vorhandenen Overrides-/Lockfile-Verfahren gebunden: @fastify/busboy 3.2.2, fast-jwt 6.3.4, source-map-js 1.2.2 und das nur für Tests verwendete moment 2.31.0. Die vier Pakete bleiben innerhalb der vorhandenen Parent-Semverbereiche; keine weitere transitive Abhängigkeit oder Produkt-/Auth-/Upload-/Schemafunktion eingeführt. Beide Audits melden nach der Änderung Exit0 und null bekannte Schwachstellen. Dies ist keine allgemeine Sicherheitszertifizierung.
+
+Der neue enge JWT-Regressionstest reproduzierte vor der Korrektur tatsächlich die Akzeptanz eines abgelaufenen gecachten Tokens ohne optionales iat. Nachher wird ausdrücklich FAST_JWT_EXPIRED verlangt; der Uhrmock wird sicher zurückgesetzt. Das aktiviert keinen Cache in der Anwendung und behauptet weder ihre konkrete Ausnutzbarkeit noch einen Angriff. Offizielle Referenzen: https://github.com/advisories/GHSA-x937-hj6v-793p, https://github.com/advisories/GHSA-gxm5-99cw-xjw9, https://github.com/advisories/GHSA-68fv-2mgg-jv7q und https://github.com/advisories/GHSA-4p3w-j4w9-5jqw.
+
+Gezielte Auth-, Upload-, Dokumentupload-, Applied-Snapshot-/PGmem- und Criticalpath-Gruppe: 176 bestanden, ein konkreter alter Druck-Heading-Assert fehlgeschlagen. Dieser und der angrenzende Herkunftstest erwarten jetzt das eine kanonische h3-Küchenblatt; negative interne-ID-Guards gelten für h2 und h3, die Tomaten-Anweisung wird exakt einmal verlangt. Herkunft, Publisher und URL bleiben geprüft. Acht betroffene Tests in zwei Dateien danach bestanden; keine Wiederholung der unveränderten 176. Finaler Build, beide Audits und git diff --check bestanden. Ein unabhängiger Reviewer nahm das Paket-/Sicherheitsdelta ohne materielle Befunde an; die präzisen harmlosen Assertionkorrekturen benötigen keine weitere Gesamtreview.
+
+Tatsächliche erste vollständig grüne Gesamt-CI: 39084476486 auf fae89696ea934fbc82bf1b6fc0c9a2970d591011 ist SUCCESS. 432 Testdateien bestanden, eine übersprungen; 3.569 Tests bestanden, 21 übersprungen; reguläre Vitestdauer 2.288,74s (rund38 Minuten), zusätzlich64 Pythonprüfungen bestanden. Browser, Compose und macOS-Operator bestanden. Das ist der ältere Head vor 7c84ff6/57adea3 und ersetzt nicht die CI des späteren Releaseheads. 39086164314/57adea3 läuft separat weiter; dieses neue sicherheitsnotwendige Delta und die Druckassertkorrekturen werden gemeinsam einmal gepusht. Keine Läufe vorschnell abgebrochen.
+
+Zusätzlich tatsächlich rein lesende Nürnberger Zugangs-/Bestandsprüfung: authentifizierte aktuelle Provider-/Firewallseiten, beide Operator-IP-Quellen, unveränderte Schlüsselmetadaten und Hostkeypins sowie eigene Locks bestanden. Beide Catering-Server identisch zu den genehmigten IDs/IPs; Nürnberg AN, Helsinki AUS. Sieben ursprüngliche Dienste laufen auf den angenommenen 5.413-Images, PG17.9, exakt drei erforderliche Geschäfts-/Alt-/Probe-Datenbanken neben Systemdatenbanken, keine externen Tablespaces oder vorbereiteten Transaktionen. Rund67,39GiB frei. Keine Hostmutation, Writerpause, Installation oder neue Datenübernahme durchgeführt.
+
+Der aktuelle Zielbestand hat weder Restic noch Backup-/Restore-Units, Timer, Observerkonfiguration oder Backup-State. Das bestehende Repositoryskript wäre außerdem unzureichend: nur catering_agents, ohne Owner/ACL; Restore liest nur vier Tabellen. Ein unabhängiger Reviewer bestätigte diese konkrete Lücke und die wiederverwendbaren angenommenen Drei-DB-/Globals-/kalten PGDATA-/Dateivergleichsbausteine aus5.410. Alte Skripte sind wegen HEL-Bindung, echten Produktionsobjektnamen und globalem Docker-/Cron-Stopp NICHT unverändert auszuführen. Ein neuer begrenzter Lauf braucht aktuelle Dateiscope-/Imagebindung, nur eigene neue Probeobjekte, geschützte verschlüsselte Offhost-Sicherung, vollständigen Metadaten-/Datenvergleich und belegtes Cleanup. Ein Einmallauf allein belegt keine automatische Timer→Restore-/Observerkette.
+
+Die nötigen bestehenden Offhost-/Recoverymaterialien sind im geschützten Originalarchiv vorhanden. Ihre bisherigen Attestationen gelten zeitlich bis11.11.2026, sind aber an den bisherigen Host/Scope gebunden; sie wurden nicht für Nürnberg umetikettiert oder automatisch erneuert. Neue Host-/Adress-/Scopebindung und heutige Ressourcen müssen vor einer echten Kette gültig vorliegen. Keine Secrets oder Rohkundeninhalte in Chat/Git/Reports.
+
+Belege im bisherigen ignorierten tmp/product-pilot-20261018: dependency-security-*, release-npm-audit-*, ci-39084476486-completed.log, nue-current-provider-readonly-20261018.json, nue-current-backup-readiness.json, nue-backup-prerequisites-readonly.json und nue-backup-current-gap-proof.json. Gesamtziel ACTIVE, realer Pilot NO-GO. Nächste Schritte: neuer gebündelter Head mit vollständiger CI, zulässige Integration/Auslieferung, eigener vollständiger Nürnberger Backup/Restore-/Cleanup-/Monitoringnachweis und reale Fachentscheidungen. Helsinki bleibt ausgeschaltet und erhalten.
 
 ## 5.442 — 18.10.2026: nutzbare Küchenausgaben und deutsches Excel-CSV
 
@@ -2638,3 +2656,7 @@ Normaler Textanfrage→Freigabe→Handoff→Historien-/Suchweg nachgewiesen; off
 ### 5.442 — 18.10.2026: Küchenunterlagen und Excel-Einkauf
 
 Eingefrorene Küchenangaben vollständig erhalten, Allergenvorbehalt/Faktor-Metadatum präzisiert, deutsches CSV mit exakter 2-g-Umrechnung. Gezielte Tests, finaler Build, unabhängige Review und tatsächliche lokale UI-Exporte/29-Positionen-Vergleich/18-Seiten-Sichtprüfung PASS; CI/Release/Nürnberg und Gesamtziel offen.
+
+### 5.443 — 18.10.2026: kompatible Sicherheitskorrekturen und tatsächlicher Zielbestand
+
+Vier betroffene Pakete korrigiert, JWT-Regression vor/nach nachgewiesen, gezielte Prüfungen/Build/beide Audits und unabhängiger Delta-Review bestanden. Erste vollständige Gesamt-CI am älteren fae8969 grün; neuer Head benötigt eigene CI. Nürnberg rein lesend geprüft: Backup-/Observerinstallation tatsächlich fehlt. Kein Deployment oder Pilot-GO.

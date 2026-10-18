@@ -212,11 +212,11 @@ describe("export source metadata readability", () => {
     const html = renderProductionPlanHtml(plan, eventSpec(menuComponent));
     const csv = renderPurchaseListCsv(purchaseList);
 
-    expect(html).toContain("<h2>Tomato Soup</h2>");
-    expect(html).not.toContain("<h2>component-soup</h2>");
+    expect(html).toContain("<h3>Tomato Soup - Tomato Soup Export</h3>");
+    expect(html).not.toMatch(/<h[23]>component-soup<\/h[23]>/);
     expect(html).toContain("Status: vollständig");
     expect(html).not.toContain("Status: complete");
-    expect(html).toContain("Rezeptquelle:");
+    expect(html).toContain("<p>Quelle:");
     expect(html).toContain("Web-Rezept geprüft");
     expect(html).toContain("Example Recipes");
     expect(html).toContain("https://example.test/tomato-soup");

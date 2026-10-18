@@ -419,10 +419,10 @@ describe("critical path rehearsal", () => {
       });
       expect(planExport.statusCode).toBe(200);
       expect(planExport.headers["content-type"]).toContain("text/html");
-      expect(planExport.body).toContain("<h2>Vegetarische Tomatensuppe</h2>");
-      expect(planExport.body).not.toContain("<h2>critical-path-tomato-soup</h2>");
+      expect(planExport.body).toContain("<h3>Vegetarische Tomatensuppe - Vegetarische Tomatensuppe Bankett</h3>");
+      expect(planExport.body).not.toMatch(/<h[23]>critical-path-tomato-soup<\/h[23]>/);
       expect(planExport.body).toContain("internal/critical-path-tomato-soup");
-      expect(planExport.body).toContain("Tomaten garen");
+      expect(planExport.body.match(/Tomaten garen, passieren und fuer das Buffet heisshalten\./g)).toHaveLength(1);
 
       const purchaseExport = await exportApp.inject({
         method: "GET",
