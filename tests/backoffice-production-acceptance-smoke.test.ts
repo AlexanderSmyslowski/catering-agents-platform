@@ -1179,7 +1179,7 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Vorhandene Produktionspläne, Einkaufslisten und Exportanker bleiben prüfbare Ergebnisobjekte.");
     expect(content).toContain("Klärbereich");
     expect(content).toContain("1 offene Rückfrage");
-    expect(content).toContain("Prüfung vor Berechnung");
+    expect(content).toContain("Prüfung vor Neuberechnung");
     expect(content).toContain("Agent fragt");
     expect(content).toContain("Rückfrage offen");
     expect(content).toContain("Rückfragen beantworten");
@@ -1188,7 +1188,7 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Kein freier LLM-Chat");
     expect(content).toContain("Status");
     expect(content).toContain("unzureichend");
-    expect(content).toContain("Offene Punkte:");
+    expect(content).toContain("Berechnungshinweise:");
     expect(content).toContain("Glutenfrei-Konflikt bleibt ungelöst.");
     expect(content).toContain("Klassifikation für Brot-Baguette fehlt.");
     expect(content).toContain("Ursprüngliche Intake-Anfrage");
@@ -1807,7 +1807,7 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Produktionsarbeit prüfen");
     expect(content).toContain("Plan-Kontext: aktueller Produktionsplan");
     expect(content).toContain("Status: vollständig · Serviceform: Buffet · Arbeitsblätter: 9 · Rezeptblätter: 8 · Rezeptauswahl: 9");
-    expect(content).toContain("Offene Punkte: keine");
+    expect(content).toContain("Berechnungshinweise: keine");
     expect(content).toContain("KALBSBULETTEN | SCHMORZWIEBELN");
     expect(content).toContain("KARTOFFELSALAT | DE LUX");
     expect(content).toContain("NUDELSALAT | FRISCHGEDÖNS");

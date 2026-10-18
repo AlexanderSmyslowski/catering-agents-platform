@@ -4,6 +4,7 @@ export type ProductionQuestionPanelActionStateInput = {
   submitting: boolean;
   hasFocusedSpecEditChanges: boolean;
   openQuestionCount?: number;
+  hasExistingPlan?: boolean;
   sourceReviewRequired?: boolean;
   sourceReviewConfirmed?: boolean;
 };
@@ -25,6 +26,7 @@ export function buildProductionQuestionPanelActionState({
   submitting,
   hasFocusedSpecEditChanges,
   openQuestionCount = 0,
+  hasExistingPlan = false,
   sourceReviewRequired = false,
   sourceReviewConfirmed = false
 }: ProductionQuestionPanelActionStateInput): ProductionQuestionPanelActionState {
@@ -38,10 +40,14 @@ export function buildProductionQuestionPanelActionState({
     hasOpenQuestions && (!isFocusedSpecEditing || !hasFocusedSpecEditChanges);
   const blocksForSourceReview = sourceReviewRequired && !sourceReviewConfirmed;
   const sourceReviewHelperText = blocksForSourceReview
-    ? "Quellenprüfung bestätigen, bevor Mengen, Rezepte und Einkaufsliste berechnet werden."
+    ? hasExistingPlan
+      ? "Quellenprüfung bestätigen, bevor dieser Plan neu berechnet wird. Der bisherige Plan bleibt erhalten."
+      : "Quellenprüfung bestätigen, bevor Mengen, Rezepte und Einkaufsliste berechnet werden."
     : undefined;
   const openQuestionHelperText = blocksForOpenQuestions
-    ? "Rückfragen beantworten, bevor Mengen, Rezepte und Einkaufsliste berechnet werden."
+    ? hasExistingPlan
+      ? "Rückfragen beantworten, bevor dieser Plan neu berechnet wird. Der bisherige Plan bleibt erhalten."
+      : "Rückfragen beantworten, bevor Mengen, Rezepte und Einkaufsliste berechnet werden."
     : undefined;
 
   return {
@@ -50,7 +56,9 @@ export function buildProductionQuestionPanelActionState({
     editAnswersDisabled: submitting || isFocusedSpecEditing,
     showSaveAnswersButton: isFocusedSpecEditing,
     saveAnswersDisabled: submitting || !hasFocusedSpecEditChanges,
-    primaryActionLabel: isFocusedSpecEditing ? "Speichern und Berechnung starten" : "Berechnung starten",
+    primaryActionLabel: hasExistingPlan
+      ? isFocusedSpecEditing ? "Speichern und neu berechnen" : "Erneut berechnen"
+      : isFocusedSpecEditing ? "Speichern und Berechnung starten" : "Berechnung starten",
     primaryActionDisabled: submitting || blocksForSourceReview || blocksForOpenQuestions,
     sourceReviewHelperText: [sourceReviewHelperText, openQuestionHelperText].filter(Boolean).join(" ")
       || undefined

@@ -10,7 +10,6 @@ import { buildProductionSpecSwitchItems } from "./production-spec-switch-list-st
 import { buildProductionQuestionPanelActionState } from "./production-question-panel-action-state.js";
 import { buildProductionQuestionPanelVisibilityState } from "./production-question-panel-visibility-state.js";
 import { ProductionClarificationDraftPanel } from "./production-clarification-draft-panel.js";
-import { ProductionDraftReviewPanel } from "./production-draft-review-panel.js";
 import type { WorkbenchSpecFact } from "./production-question-thread.js";
 import { ProductionStructuredAnswerEditor } from "./production-structured-answer-editor.js";
 import type { ComponentEditState } from "./production-answer-types.js";
@@ -135,12 +134,14 @@ export function ProductionQuestionPanel({
     readinessLabelsBySpecId: focusedSpecId ? { [focusedSpecId]: focusedSpecReadinessLabel } : undefined
   });
   const sourceReviewRequired = hasUnsafeIntakeSource(intakeRequestDetail);
+  const hasExistingPlan = Boolean(focusedSpecId && String(selectedPlan?.eventSpecId ?? "").trim() === focusedSpecId);
   const actionState = buildProductionQuestionPanelActionState({
     focusedProductionSpec,
     editingSpecId,
     submitting,
     hasFocusedSpecEditChanges,
     openQuestionCount: productionQuestions.length,
+    hasExistingPlan,
     sourceReviewRequired,
     sourceReviewConfirmed
   });
@@ -163,10 +164,12 @@ export function ProductionQuestionPanel({
   return (
     <article id="production-question-panel" className="panel form-panel question-panel production-step-card">
       <header>
-        <p className="eyebrow">Prüfung vor Berechnung</p>
+        <p className="eyebrow">{hasExistingPlan ? "Prüfung vor Neuberechnung" : "Prüfung vor Berechnung"}</p>
         <h3>{productionQuestions.length > 0 ? questionCountLabel : "Erkannte Angaben prüfen"}</h3>
         <p className="helper-text">
-          Beantworte offene Punkte und prüfe die erkannten Komponenten. Erst danach entstehen belastbare Mengen, Rezepte und Einkaufslisten.
+          {hasExistingPlan
+            ? "Ein Produktionsplan ist bereits gespeichert. Offene Rückfragen vor einer Neuberechnung klären; der bisherige Stand bleibt erhalten."
+            : "Beantworte offene Punkte und prüfe die erkannten Komponenten. Erst danach entstehen belastbare Mengen, Rezepte und Einkaufslisten."}
         </p>
       </header>
       {focusedProductionSpec ? (
@@ -176,7 +179,9 @@ export function ProductionQuestionPanel({
               <strong>{productionQuestions.length > 0 ? questionCountLabel : "Keine offenen Rückfragen"}</strong>
               <p className="helper-text">
                 {productionQuestions.length > 0
-                  ? "Öffne die Antwortfelder, ergänze fehlende Angaben und starte danach die Berechnung."
+                  ? hasExistingPlan
+                    ? "Öffne die Antwortfelder und ergänze fehlende Angaben vor einer Neuberechnung."
+                    : "Öffne die Antwortfelder, ergänze fehlende Angaben und starte danach die Berechnung."
                   : "Prüfe Herstellungsart, Rezeptbezug und Quelle; die Berechnung bleibt eine bewusste Aktion."}
               </p>
             </div>
@@ -270,11 +275,6 @@ export function ProductionQuestionPanel({
             <ProductionClarificationDraftPanel
               specId={String(focusedProductionSpec.specId ?? "")}
               submitting={submitting}
-              onDraftChanged={refreshAfterDraftDecision}
-            />
-            <ProductionDraftReviewPanel
-              submitting={submitting}
-              caseId={activeCaseId}
               onDraftChanged={refreshAfterDraftDecision}
             />
           </div>

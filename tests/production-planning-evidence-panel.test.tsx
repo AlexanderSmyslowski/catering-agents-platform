@@ -48,6 +48,33 @@ async function completeReview() {
 afterEach(async () => { if (root) await act(async () => root.unmount()); container?.remove(); vi.restoreAllMocks(); });
 
 describe("planning evidence operator panel", () => {
+  it("shows immutable source evidence after preparation without empty confirmation controls or rebinding it", async () => {
+    const prepared = { ...draft(recipe.recipeId, 3), status: "approved" as const,
+      draftArtifacts: { ...draft().draftArtifacts, productionPlan: { planId: "plan-prepared" } }
+    };
+    await setup(prepared);
+    vi.mocked(api.loadProductionDrafts).mockResolvedValue({
+      items: [prepared], planningRecipes,
+      planningEvidence: [
+        { evidenceId: "evidence-source", caseId: "case-1", draftId: "draft-2", draftRevision: 2,
+          componentId: "coffee", recipeId: recipe.recipeId, eventSpecId: "spec-1",
+          quantityDecision: { targetAmount: 35, targetUnit: "servings", rationale: "SYNTHETISCH: 35 Gäste, je eine Portion",
+            evidence: { reference: "synthetic:source-revision-2" } } } as api.ProductionPlanningEvidence,
+        { evidenceId: "foreign", caseId: "case-other", draftId: "draft-2", draftRevision: 2,
+          componentId: "coffee", recipeId: recipe.recipeId, quantityDecision: { rationale: "FOREIGN_EVIDENCE" } } as api.ProductionPlanningEvidence
+      ]
+    });
+    await click("Planungsstand neu laden");
+    expect(container.textContent).toContain("Gespeicherter Planungsnachweis · Quellrevision 2");
+    expect(container.textContent).toContain("SYNTHETISCH: 35 Gäste, je eine Portion");
+    expect(container.textContent).toContain("synthetic:source-revision-2");
+    expect(container.textContent).toContain("weder auf eine andere Fassung übertragen noch erneut freigegeben");
+    expect(container.textContent).not.toContain("FOREIGN_EVIDENCE");
+    expect(container.querySelectorAll('input[type="checkbox"]')).toHaveLength(0);
+    expect(button("Menge und Eventprüfung speichern")).toBeUndefined();
+    expect(button("Rezeptzuordnung speichern")).toBeUndefined();
+  });
+
   it("allows corrected input after a definitive 422 and requires all confirmations again", async () => {
     await setup(); await completeReview();
     const transport = vi.spyOn(globalThis, "fetch").mockImplementation(async () =>

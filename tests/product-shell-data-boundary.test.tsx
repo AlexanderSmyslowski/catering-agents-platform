@@ -476,7 +476,7 @@ describe("independent product loader boundaries", () => {
     expect(container.textContent).not.toContain("Fall A");
   });
 
-  it("carries the active case through the real production question review path", async () => {
+  it("does not mount a second draft-review consumer in the question panel", async () => {
     const loadDrafts = vi.spyOn(api, "loadProductionDrafts").mockImplementation(async (caseId) => ({
       items: caseId === "case-a"
         ? [productionDraftSentinel("draft-a", "Fall A")]
@@ -494,16 +494,18 @@ describe("independent product loader boundaries", () => {
       root.render(createElement(ProductionQuestionPanel, productionQuestionPanelProps("case-a")));
       await flush();
     });
-    expect(loadDrafts).toHaveBeenCalledWith("case-a");
-    expect(container.textContent).toContain("Fall A");
+    expect(loadDrafts).not.toHaveBeenCalled();
+    expect(container.querySelector('[aria-label="Produktionsentwurf-Prüfung"]')).toBeNull();
+    expect(container.textContent).not.toContain("Fall A");
     expect(container.textContent).not.toContain("Fall B");
 
     await act(async () => {
       root.render(createElement(ProductionQuestionPanel, productionQuestionPanelProps("case-b")));
       await flush();
     });
-    expect(loadDrafts).toHaveBeenLastCalledWith("case-b");
-    expect(container.textContent).toContain("Fall B");
+    expect(loadDrafts).not.toHaveBeenCalled();
+    expect(container.querySelector('[aria-label="Produktionsentwurf-Prüfung"]')).toBeNull();
+    expect(container.textContent).not.toContain("Fall B");
     expect(container.textContent).not.toContain("Fall A");
 
     await act(async () => {
@@ -604,7 +606,8 @@ describe("independent product loader boundaries", () => {
     expect(activeCaseIds).toContain("case-a");
     expect(activeCaseIds.at(-1)).toBe("case-a");
     expect(loadDrafts).toHaveBeenCalledWith("case-a");
-    expect(loadDrafts.mock.calls.filter(([caseId]) => caseId === "case-a")).toHaveLength(3);
+    expect(loadDrafts.mock.calls.filter(([caseId]) => caseId === "case-a")).toHaveLength(2);
+    expect(container.querySelectorAll('[aria-label="Produktionsentwurf-Prüfung"]')).toHaveLength(1);
     expect(container.textContent).toContain("Fall A");
     expect(container.innerHTML).not.toContain("plan-b");
     expect(container.innerHTML).not.toContain("purchase-b");

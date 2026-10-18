@@ -123,7 +123,7 @@ export function ProductionPlanDownloadCard({
       ) : null}
       {unresolvedItems.length > 0 ? (
         <>
-          <p>Offene Punkte:</p>
+          <p>Berechnungshinweise:</p>
           <ul className="item-list compact">
             {unresolvedItems.map((entry) => (
               <li key={String(entry)}>{String(entry)}</li>
@@ -131,7 +131,7 @@ export function ProductionPlanDownloadCard({
           </ul>
         </>
       ) : (
-        <p>Offene Punkte: keine</p>
+        <p>Berechnungshinweise: keine. Fachliche Rückfragen und Freigaben separat prüfen.</p>
       )}
       {hasOperationalSheetsWithoutRecipeBatches ? (
         <p className="helper-text">

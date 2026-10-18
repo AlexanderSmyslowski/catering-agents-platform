@@ -321,9 +321,14 @@ export function ProductionDraftReviewPanel({
   const [changeEditor, setChangeEditor] = useState<{ draftId: string; cardId: string }>();
   const [changeRequest, setChangeRequest] = useState("");
   const [approvedSpecIds, setApprovedSpecIds] = useState<Record<string, string>>({});
+  const [appliedDraftIds, setAppliedDraftIds] = useState<string[]>([]);
   const panelRef = useRef<HTMLElement>(null);
   const reloadVersion = useRef(0);
   const previousCaseId = useRef(caseId);
+  const caseGeneration = useRef({ caseId, version: 0 });
+  if (caseGeneration.current.caseId !== caseId) {
+    caseGeneration.current = { caseId, version: caseGeneration.current.version + 1 };
+  }
   const [focusedDraftId, setFocusedDraftId] = useState<string | undefined>(() =>
     typeof window === "undefined"
       ? undefined
@@ -336,6 +341,7 @@ export function ProductionDraftReviewPanel({
     if (!activeCaseId) {
       setDrafts([]);
       setApprovedSpecIds({});
+      setAppliedDraftIds([]);
       setHasLoaded(true);
       setLoading(false);
       return;
@@ -348,10 +354,17 @@ export function ProductionDraftReviewPanel({
       if (version !== reloadVersion.current) return;
       setDrafts(response.items);
       setApprovedSpecIds(approvedSpecIdsFromProjection(response.approvedProductionSpecs));
+      // Only a server-confirmed application of this exact immutable revision
+      // distinguishes an applied draft from an unavailable or superseded one.
+      setAppliedDraftIds(response.items.filter((draft) => response.approvedProductionSpecs?.some((projection) =>
+        draft.status === "approved" && projection.applied && projection.sourceDraft.draftId === draft.draftId &&
+        projection.sourceDraft.revision === draft.revision
+      )).map((draft) => draft.draftId));
       if (options?.clearMessage !== false) {
         setMessage(undefined);
       }
     } catch (error) {
+      if (version !== reloadVersion.current) return;
       setLoadError(error instanceof Error ? error.message : "Unbekannter Ladefehler.");
     } finally {
       if (version === reloadVersion.current) {
@@ -364,6 +377,8 @@ export function ProductionDraftReviewPanel({
   useEffect(() => {
     setDrafts([]);
     setApprovedSpecIds({});
+    setAppliedDraftIds([]);
+    setMessage(undefined);
     if (previousCaseId.current !== caseId) {
       setFocusedDraftId(undefined);
     }
@@ -453,41 +468,53 @@ export function ProductionDraftReviewPanel({
     }
   }
 
+  function isCurrentCase(version: number) {
+    return caseGeneration.current.caseId === caseId && caseGeneration.current.version === version && Boolean(panelRef.current);
+  }
+
   async function decideDraft(draftId: string, decision: "approved" | "rejected") {
+    const version = caseGeneration.current.version;
     setLoading(true);
     try {
       const response = await decideProductionDraft(draftId, decision);
+      if (!isCurrentCase(version)) return;
       const approvedProductionSpecId = response.approvedProductionSpec?.approvedProductionSpecId;
       if (approvedProductionSpecId) {
         setApprovedSpecIds((current) => ({ ...current, [draftId]: approvedProductionSpecId }));
       }
       setMessage(decision === "approved" ? "Produktionsentwurf freigegeben." : "Produktionsentwurf verworfen.");
       await onDraftChanged?.();
+      if (!isCurrentCase(version)) return;
       await reloadDrafts({ clearMessage: false });
+      if (isCurrentCase(version)) announceProductionDraftRefresh();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Produktionsentwurf konnte nicht entschieden werden.");
+      if (isCurrentCase(version)) setMessage(error instanceof Error ? error.message : "Produktionsentwurf konnte nicht entschieden werden.");
     } finally {
-      setLoading(false);
+      if (isCurrentCase(version)) setLoading(false);
     }
   }
 
   async function applyDraft(draftId: string, approvedProductionSpecId: string) {
+    const version = caseGeneration.current.version;
     setLoading(true);
     try {
       const response = await applyApprovedProductionSpec(approvedProductionSpecId);
+      if (!isCurrentCase(version)) return;
       setMessage("Produktionsentwurf übernommen.");
       const specId = typeof response.eventSpec.specId === "string" ? response.eventSpec.specId : undefined;
       await onDraftChanged?.(specId);
+      if (!isCurrentCase(version)) return;
       setApprovedSpecIds((current) => {
         const next = { ...current };
         delete next[draftId];
         return next;
       });
       await reloadDrafts({ clearMessage: false });
+      if (isCurrentCase(version)) announceProductionDraftRefresh();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Produktionsentwurf konnte nicht übernommen werden.");
+      if (isCurrentCase(version)) setMessage(error instanceof Error ? error.message : "Produktionsentwurf konnte nicht übernommen werden.");
     } finally {
-      setLoading(false);
+      if (isCurrentCase(version)) setLoading(false);
     }
   }
 
@@ -502,7 +529,9 @@ export function ProductionDraftReviewPanel({
     : latestOnly
       ? visibleDrafts.slice(0, 1)
       : visibleDrafts;
-  const focusedDraftUnavailable = Boolean(focusedDraftId && hasLoaded && !loading && !loadError && !focusedDraft);
+  const hasApprovedDraft = displayedDrafts.some((draft) => Boolean(approvedSpecIds[draft.draftId]));
+  const focusedDraftApplied = Boolean(focusedDraftId && appliedDraftIds.includes(focusedDraftId));
+  const focusedDraftUnavailable = Boolean(focusedDraftId && hasLoaded && !loading && !loadError && !focusedDraft && !focusedDraftApplied);
 
   if (resumeMode && displayedDrafts.length === 0 && !message && !loadError && !focusedDraftId) {
     return null;
@@ -523,10 +552,12 @@ export function ProductionDraftReviewPanel({
     >
       {resumeMode && displayedDrafts.length > 0 ? (
         <header className="upload-result-summary__header">
-          <p className="eyebrow">Offener Entwurf</p>
-          <h3>Offenen KI-Entwurf weiter prüfen</h3>
+          <p className="eyebrow">{hasApprovedDraft ? "Freigegebener Entwurf" : "Offener Entwurf"}</p>
+          <h3>{hasApprovedDraft ? "Freigegebenen Produktionsentwurf übernehmen" : "Offenen KI-Entwurf weiter prüfen"}</h3>
           <p className="helper-text">
-            Dieser Entwurf wartet auf deine Prüfung. Noch nichts wurde freigegeben oder in die Produktion übernommen.
+            {hasApprovedDraft
+              ? "Dieser Entwurf ist intern freigegeben. Die Übernahme in Produktionsplan und Einkauf steht noch aus."
+              : "Dieser Entwurf wartet auf deine Prüfung. Noch nichts wurde freigegeben oder in die Produktion übernommen."}
           </p>
         </header>
       ) : !embedded ? (
@@ -553,6 +584,11 @@ export function ProductionDraftReviewPanel({
           >
             Erneut versuchen
           </button>
+        </div>
+      ) : focusedDraftApplied ? (
+        <div className="production-draft-state" role="status">
+          <strong>Dieser Produktionsentwurf wurde bereits übernommen.</strong>
+          <p>Der gespeicherte Produktionsplan und die Einkaufsliste stehen im Ergebnisbereich. Fachliche Rückfragen und Freigabegrenzen bleiben separat sichtbar.</p>
         </div>
       ) : focusedDraftUnavailable ? (
         <div className="production-draft-state production-draft-unavailable" role="status">
