@@ -1,8 +1,15 @@
 # memory.md
 
+## 5.448 — 18.10.2026: exakt gebundener Web-Snippetimport
+
+Der tatsächliche NUE-Buildpreflight auf main8f2b8e6 hielt vor Bundle-/Alias-/Imageänderungen, weil die bestehende catering-target.caddy den im Image definierten catering_app_routes-Snippet importiert und selbst keine root-Zeile benötigt. Ausschließlich diese rootlose Site ist nun beim exakten vollständigen Image-/Site-Hashpaar und exakt dieser Zweidateimenge zulässig. Die bestehende /srv-Prüfung für Inline-Konfigurationen, Mount-/Command-/M-Bindung und vollständige Vorher-/Nachherbeobachtung bleiben erhalten; keine neue Caddyinterpretation oder allgemeine rootlos-Erlaubnis.
+
+RED am bisherigen Code reproduziert; 38 gezielte NUE-Prüfungen unter Python3.11.15 bestanden, darunter geänderte Imports/Umleitungen/Snippets/Roots und zusätzliche Sites weiterhin HOLD. Keine unveränderte Gesamtsuite wiederholt. Dieser lokale Kandidat benötigt die unabhängige Delta-Review und reguläre PR-/main-CI; erfolgreicher Livebuild, Installation und fachlicher Pilot bleiben gesondert nachzuweisen. Keine Hostausführung oder Änderung bestehender Konfiguration/Daten durch diesen Fix.
+
+
 **Korrektur der CI-Deutung, 18.10.2026 01:38 CEST:** Run39079338322 wurde vom Koordinator bei rund sechs Minuten voreilig abgebrochen. Das nun vollständige Log beweist regulären Fortschritt: unter anderem95 Operationsprüfungen in244s PASS; der Observer-Test war noch gar nicht gestartet. Der alte Run39075030417 hatte37 Minuten bis zum Abbruch regulär426 Dateien abgearbeitet; aus der fehlenden Observerausgabe allein ist weder sein Start noch ein tatsächlicher Hänger nachgewiesen. Die frühere Zuschreibung eines konkreten CI-Hängers zum Observer ist zurückgenommen. Das statisch belegte spawnSync-/Nachfahren-/Pipe-Risiko wurde lokal begrenzt und unabhängig geprüft, ist aber kein Nachweis der ursprünglichen CI-Ursache. Keine weitere Linux-Reparatur/Prüfarchitektur ohne Fehlerbeleg. Nach gebündelten tatsächlichen Opus-Produktbefunden einen erforderlichen Gesamt-CI-Lauf mit realistischer Dauer vollständig abwarten; keine manuellen unveränderten Vollsuiten und keine vorschnellen Abbrüche. Alle vier bisherigen CI-Runs sind CANCELLED, kein Full-Suite-PASS. Browser/Compose/macOS des letzten Heads waren PASS. Beleg tmp/product-pilot-20261018/ci-39079338322-build-cancelled.log.
 
-version: 5.447
+version: 5.448
 date: 2026-10-18
 status: active
 repo: AlexanderSmyslowski/catering-agents-platform
@@ -2712,3 +2719,8 @@ ExitStack schließt reproduzierten älteren Python-Nestingfehler. Enger local-cu
 ### 5.447 — 18.10.2026: optionaler leerer Web-Entrypoint
 
 Tatsächlichen KeyError vor Imageänderung reproduziert und eng mit get-Zugriffen korrigiert; drei Omissionvarianten, erhaltene Beobachtungs-/Image-/Containerbindung und negative Entrypointfälle in 36 gezielten Tests bestanden. Integration, neuer main-CI und Livebuild weiterhin separate Grenzen.
+
+
+### 5.448 — 18.10.2026: gebundener Web-Snippetimport
+
+Tatsächlichen rootlosen Siteimport als falsche Fragmentannahme reproduziert und ausschließlich über das vollständige bekannte Image-/Site-Hashpaar zugelassen; 38 gezielte Prüfungen PASS. Unabhängige Review, reguläre CI und erfolgreicher Livebuild/Installation weiterhin offen.

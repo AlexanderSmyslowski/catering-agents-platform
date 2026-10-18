@@ -51,6 +51,8 @@ ADMISSION_LIMIT = 32768
 SIGNATURE_LIMIT = 8192
 CURRENT_RUNTIME_M = "sha256:fb26fe510fade286bbfa02c981a8abb910ef8624a802d26822db662d81befdeb"
 CURRENT_WEB_M = "sha256:b2ffe4694b983e4b4c1859676bf24df344900dfeaf8f2f7c07ad1ee23cbce25d"
+CURRENT_WEB_CADDY_SHA256 = "966049be4c99e87341b4b26e1830e7f33a626b5f88d77e498983e7ebb3a9207e"
+CURRENT_WEB_SNIPPET_SITE_SHA256 = "8e04176f94719bd20f924e0ef5f6d0ad0c224e6976d8813421359e35716aab2e"
 ORIGINAL_EDGE_CADDY = Path("/opt/catering-edge/Caddyfile")
 # The independently observed original remote_ip ACL denies loopback before auth.
 ORIGINAL_EDGE_CADDY_SHA256 = "2f432e92aba90d6f4c533cb3f0cc2cbbd854ba6cc7316a286fcde2e7b1585001"
@@ -368,10 +370,15 @@ def current_base_gate(oci, runtime_m, web_m):
             configurations = {"image": image_config}
             for path in sorted(site_root.glob("*.caddy")): configurations[str(path)] = protected(path).read_bytes()
             require(len(configurations) > 1, "NUE_CURRENT_SITES_REQUIRED")
-            for content in configurations.values():
+            configuration_hashes = {name: hashlib.sha256(content).hexdigest() for name, content in configurations.items()}
+            # This observed site inherits /srv through catering_app_routes. Bind both
+            # complete files and their scope; a rootless fragment alone proves nothing.
+            snippet_site = str(site_root / "catering-target.caddy")
+            bound_snippet = configuration_hashes == {"image": CURRENT_WEB_CADDY_SHA256, snippet_site: CURRENT_WEB_SNIPPET_SITE_SHA256}
+            for name, content in configurations.items():
                 roots = re.findall(rb"(?m)^\s*root\s+(?:\*\s+)?([^\s{}]+)\s*$", content)
-                require(roots and all(root == b"/srv" for root in roots) and b"/catering-previous-public" not in content, "NUE_CURRENT_WEB_SERVING_ROOT")
-            observations["caddyConfiguration"] = {name: hashlib.sha256(content).hexdigest() for name, content in configurations.items()}
+                require(((roots and all(root == b"/srv" for root in roots)) or (not roots and name == snippet_site and bound_snippet)) and b"/catering-previous-public" not in content, "NUE_CURRENT_WEB_SERVING_ROOT")
+            observations["caddyConfiguration"] = configuration_hashes
         observations[row["Name"]] = {"binding": container_binding(row), "cmd": config["Cmd"], "entrypoint": config.get("Entrypoint"), "workingDir": config["WorkingDir"]}
     observations["composeSha256"] = digest(COMPOSE)
     return observations

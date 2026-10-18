@@ -484,6 +484,45 @@ class NueTests(unittest.TestCase):
                 if omitted in ("container", "both"): state["rows"][-1]["Config"].pop("Entrypoint")
                 self.assertEqual(nue.current_base_gate(oci, nue.CURRENT_RUNTIME_M, nue.CURRENT_WEB_M), expected)
 
+    def test_current_web_rootless_site_imports_only_the_bound_image_snippet(self):
+        oci = nue.load_module("nue_current_snippet_oci", ROOT / "platform-infra/scripts/catering_target_oci.py")
+        site = b"http://:8082 {\n import catering_app_routes\n}\n"
+        self.assertEqual(nue.CURRENT_WEB_SNIPPET_SITE_SHA256, "8e04176f94719bd20f924e0ef5f6d0ad0c224e6976d8813421359e35716aab2e")
+        with self.synthetic_current_host() as state:
+            (state["sites"] / "accepted.caddy").rename(state["sites"] / "catering-target.caddy")
+            (state["sites"] / "catering-target.caddy").write_bytes(site)
+            state["imageConfig"] = (ROOT / "platform-infra/Caddyfile").read_bytes()
+            self.assertEqual(hashlib.sha256(state["imageConfig"]).hexdigest(), "966049be4c99e87341b4b26e1830e7f33a626b5f88d77e498983e7ebb3a9207e")
+            with patch.object(nue, "CURRENT_WEB_SNIPPET_SITE_SHA256", hashlib.sha256(site).hexdigest()):
+                first = nue.current_base_gate(oci, nue.CURRENT_RUNTIME_M, nue.CURRENT_WEB_M)
+                self.assertEqual(first, nue.current_base_gate(oci, nue.CURRENT_RUNTIME_M, nue.CURRENT_WEB_M))
+                self.assertEqual(first["caddyConfiguration"][str(state["sites"] / "catering-target.caddy")], hashlib.sha256(site).hexdigest())
+
+    def test_current_web_snippet_binding_rejects_unknown_or_changed_configurations(self):
+        oci = nue.load_module("nue_current_snippet_negative_oci", ROOT / "platform-infra/scripts/catering_target_oci.py")
+        site = b"http://:8082 {\n import catering_app_routes\n}\n"
+        for mutation in ("image", "image-import", "image-redirect", "image-snippet", "site-import", "redirect", "root", "file-server", "name", "extra-rootless", "extra-rooted", "previous-root", "unbound-site"):
+            with self.subTest(mutation=mutation), self.synthetic_current_host() as state:
+                path = state["sites"] / "catering-target.caddy"
+                (state["sites"] / "accepted.caddy").rename(path); path.write_bytes(site)
+                state["imageConfig"] = (ROOT / "platform-infra/Caddyfile").read_bytes()
+                if mutation == "image": state["imageConfig"] = state["imageConfig"].replace(b"root * /srv", b"root * /other")
+                if mutation == "image-import": state["imageConfig"] += b"\nimport /etc/unknown/*.caddy\n"
+                if mutation == "image-redirect": state["imageConfig"] = state["imageConfig"].replace(b"root * /srv", b"root * /srv\n redir https://unknown.invalid")
+                if mutation == "image-snippet": state["imageConfig"] = state["imageConfig"].replace(b"(catering_app_routes)", b"(unknown_routes)")
+                if mutation == "site-import": path.write_bytes(site.replace(b"catering_app_routes", b"unknown_routes"))
+                if mutation == "redirect": path.write_bytes(site.replace(b" import", b" redir https://unknown.invalid\n import"))
+                if mutation == "root": path.write_bytes(site.replace(b" import", b" root * /other\n import"))
+                if mutation == "file-server": path.write_bytes(site.replace(b" import", b" file_server\n import"))
+                if mutation == "name": path.rename(state["sites"] / "unknown.caddy")
+                if mutation == "extra-rootless": (state["sites"] / "extra.caddy").write_bytes(site)
+                if mutation == "extra-rooted": (state["sites"] / "extra.caddy").write_bytes(b":8090 {\n root * /srv\n file_server\n}\n")
+                if mutation == "previous-root": path.write_bytes(site.replace(b" import", b" root * /catering-previous-public\n import"))
+                expected_site = nue.CURRENT_WEB_SNIPPET_SITE_SHA256 if mutation == "unbound-site" else hashlib.sha256(site).hexdigest()
+                with patch.object(nue, "CURRENT_WEB_SNIPPET_SITE_SHA256", expected_site):
+                    with self.assertRaisesRegex(RuntimeError, "NUE_CURRENT_WEB_SERVING_ROOT"):
+                        nue.current_base_gate(oci, nue.CURRENT_RUNTIME_M, nue.CURRENT_WEB_M)
+
     def test_current_base_gate_rejects_image_root_command_mount_and_compose_drift(self):
         oci = nue.load_module("nue_current_negative_oci", ROOT / "platform-infra/scripts/catering_target_oci.py")
         for mutation in ("config-id", "index", "container", "command", "cwd", "mount", "site", "collision", "compose", "backend-entrypoint", "web-entrypoint", "web-image-entrypoint"):
