@@ -17,6 +17,7 @@ export type UseProductionSpecEditorOptions = {
 export function useProductionSpecEditor({ focusedProductionSpec }: UseProductionSpecEditorOptions = {}) {
   const [editingSpecId, setEditingSpecId] = useState<string>();
   const [dismissedProductionAnswerSpecId, setDismissedProductionAnswerSpecId] = useState<string>();
+  const [editingSpecialDietResponse, setEditingSpecialDietResponse] = useState("");
   const [editingEventType, setEditingEventType] = useState("");
   const [editingEventDate, setEditingEventDate] = useState("");
   const [editingEventSchedule, setEditingEventSchedule] = useState("");
@@ -42,9 +43,10 @@ export function useProductionSpecEditor({ focusedProductionSpec }: UseProduction
       components: Object.entries(editingComponentStates)
     };
 
-    return normalizedSpecEditSnapshot(baseline) !== normalizedSpecEditSnapshot(current);
+    return Boolean(editingSpecialDietResponse.trim()) || normalizedSpecEditSnapshot(baseline) !== normalizedSpecEditSnapshot(current);
   }, [
     editingAttendeeCount,
+    editingSpecialDietResponse,
     editingComponentStates,
     editingEventDate,
     editingEventSchedule,
@@ -61,6 +63,7 @@ export function useProductionSpecEditor({ focusedProductionSpec }: UseProduction
     const specId = String(spec.specId);
 
     setEditingSpecId(specId);
+    setEditingSpecialDietResponse("");
     setDismissedProductionAnswerSpecId(undefined);
     setEditingEventType(snapshot.eventType);
     setEditingEventDate(snapshot.eventDate);
@@ -85,6 +88,7 @@ export function useProductionSpecEditor({ focusedProductionSpec }: UseProduction
       setDismissedProductionAnswerSpecId(undefined);
     }
     setEditingSpecId(undefined);
+    setEditingSpecialDietResponse("");
     setEditingEventType("");
     setEditingEventDate("");
     setEditingEventSchedule("");
@@ -113,6 +117,7 @@ export function useProductionSpecEditor({ focusedProductionSpec }: UseProduction
 
   function buildCurrentSpecUpdateInput(): SpecEditUpdateInput {
     return buildSpecEditUpdateInput({
+      specialDietResponse: editingSpecialDietResponse,
       eventType: editingEventType,
       eventDate: editingEventDate,
       eventSchedule: editingEventSchedule,
@@ -125,6 +130,7 @@ export function useProductionSpecEditor({ focusedProductionSpec }: UseProduction
   }
 
   return {
+    editingSpecialDietResponse, setEditingSpecialDietResponse,
     editingSpecId,
     dismissedProductionAnswerSpecId,
     editingEventType,

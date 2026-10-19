@@ -80,6 +80,15 @@ describe("frozen production review content", () => {
     expect(rows[0]!.textContent).toContain("synthetic:coffee-fixture");
     expect(rows[3]!.textContent).toContain("procurement:purchase");
   });
+  it("shows the frozen special diet answer beside the event approval and keeps it as escaped text", async () => {
+    const draft = frozenDraft();
+    draft.draftArtifacts!.eventSpec!.productionConstraints = ["Sonderkost-Antwort: SYNTHETISCH <img src=x onerror=alert(1)> — Keine Allergen- oder Küchenfreigabe."];
+    await mount(draft);
+    expect(card("Event prüfen").textContent).toContain("Sonderkost-Antwort: SYNTHETISCH <img");
+    expect(card("Event prüfen").textContent).toContain("keine Allergen- oder Küchenfreigabe");
+    expect(card("Event prüfen").querySelector("img")).toBeNull();
+  });
+
   it("shows recipe base and linked scaling without transferring predecessor decisions or requesting live data", async () => {
     const fetchMock = await mount(frozenDraft());
     const text = card("Rezept prüfen").textContent;

@@ -1,3 +1,4 @@
+import { amendOfferEvent, validateOfferEventDetails } from "../offer-event-revision.js";
 import { reviseOfferPricing } from "../offer-pricing-revision.js";
 import { createHash } from "node:crypto";
 import type { FastifyInstance } from "fastify";
@@ -353,7 +354,7 @@ export function registerOfferDraftRoutes(
     });
   });
 
-  app.post<{ Params: { draftId: string }; Body: { revision?: unknown; menuPlan?: unknown } }>(
+  app.post<{ Params: { draftId: string }; Body: { revision?: unknown; menuPlan?: unknown; eventDetails?: unknown } }>(
     "/v1/offers/drafts/:draftId/menu", async (request, reply) => {
       const forbidden = requireOfferOperator(request, reply, trustedActorSecret, allowDevActorHeader);
       if (forbidden) return forbidden;
@@ -365,7 +366,7 @@ export function registerOfferDraftRoutes(
       }
       const body = request.body;
       if (!body || typeof body !== "object" || Array.isArray(body)
-        || Object.keys(body).some((key) => !["revision", "menuPlan"].includes(key))
+        || Object.keys(body).some((key) => !["revision", "menuPlan", "eventDetails"].includes(key))
         || !Number.isInteger(body.revision) || body.revision !== source.revision
         || !Array.isArray(body.menuPlan) || body.menuPlan.length < 1 || body.menuPlan.length > 100) {
         return reply.code(422).send({ message: "Aktuelle Revision und 1–100 Menüpositionen erforderlich." });
@@ -374,6 +375,9 @@ export function registerOfferDraftRoutes(
       if (!caseId) return reply.code(409).send({ message: "Entwurf ist keinem eindeutigen Auftrag zugeordnet." });
       let revised;
       try {
+        const details = validateOfferEventDetails(body.eventDetails);
+        const eventSpec = amendOfferEvent(source.proposedEventSpec, details);
+        const eventSummary = details ? (eventSpec.event.type ?? "Veranstaltung") + " für " + (eventSpec.attendees.expected ?? "offene") + " Gäste am " + (eventSpec.event.date ?? "offenen Termin") + "." : source.eventSummary;
         const menuPlan = body.menuPlan.map((raw, index) => {
           if (!raw || typeof raw !== "object" || Array.isArray(raw)
             || Object.keys(raw).some((key) => !["componentId", "label", "servings", "menuCategory", "dietaryTags"].includes(key))) throw new Error("Ungültige Menüposition.");
@@ -398,36 +402,40 @@ export function registerOfferDraftRoutes(
           };
         });
         if (new Set(menuPlan.map((item) => item.componentId)).size !== menuPlan.length) throw new Error("Doppelte Menüposition.");
-        const draftId = `draft-menu-${createHash("sha256").update(JSON.stringify([actor.businessId, caseId, source.draftId, source.revision, menuPlan])).digest("hex")}`;
+        const draftId = `draft-menu-${createHash("sha256").update(JSON.stringify([actor.businessId, caseId, source.draftId, source.revision, menuPlan, ...(details ? [details] : [])])).digest("hex")}`;
         // A menu revision keeps the old quote as history, never as a priced
         // statement about the changed menu. The existing amount is only a working reference.
         const withoutCalculation = (summary: typeof source.pricingSummary) => {
           const { calculation: _oldCalculation, ...working } = summary;
           return { ...working, ...(_oldCalculation || working.calculationRequired ? { calculationRequired: true as const } : {}),
-            notes: [...(working.notes ?? []), "Preisaufstellung nach Menüänderung erneut erfassen und prüfen."] };
+            notes: [...(working.notes ?? []), "Preisaufstellung nach Änderung von Menü oder Veranstaltungsdaten erneut erfassen und prüfen."] };
         };
         const pricingSummary = withoutCalculation(source.pricingSummary);
-        const proposedEventSpec = { ...source.proposedEventSpec, menuPlan,
+        const proposedEventSpec = { ...eventSpec, menuPlan,
           budgetContext: { ...source.proposedEventSpec.budgetContext, pricingSummary } };
+        const remainingQuestions = new Set(proposedEventSpec.uncertainties?.map(item => item.suggestedQuestion).filter(Boolean));
+        const answeredQuestions = new Set(source.proposedEventSpec.uncertainties?.filter(item =>
+          !proposedEventSpec.uncertainties?.some(next => areJsonValuesEqual(item, next))).map(item => item.suggestedQuestion).filter(Boolean));
+        const openQuestions = source.openQuestions.filter(question => !answeredQuestions.has(question) || remainingQuestions.has(question));
         const serviceModules = [
           ...menuPlan.map((item) => ({ moduleId: item.componentId, label: item.label, category: "food", quantity: item.servings })),
           ...source.serviceModules.filter((item) => item.category !== "food")
         ];
         revised = validateOfferDraft({
-          ...source, draftId, revision: 1, proposedEventSpec, serviceModules, pricingSummary,
+          ...source, draftId, revision: 1, eventSummary, proposedEventSpec, serviceModules, pricingSummary, openQuestions,
           variantSet: source.variantSet.map((variant) => ({
             ...variant,
             moduleIds: serviceModules.map((item) => item.moduleId),
-            proposedEventSpec: { ...variant.proposedEventSpec, menuPlan, servicePlan: { ...variant.proposedEventSpec.servicePlan, modules: serviceModules },
+            proposedEventSpec: { ...amendOfferEvent(variant.proposedEventSpec, details), menuPlan, servicePlan: { ...amendOfferEvent(variant.proposedEventSpec, details).servicePlan, modules: serviceModules },
               budgetContext: { ...variant.proposedEventSpec.budgetContext, pricingSummary: withoutCalculation(variant.proposedEventSpec.budgetContext?.pricingSummary ?? source.pricingSummary) } }
           })),
           customerFacingText: [
-            source.eventSummary, "Menü und Portionszahlen:",
+            eventSummary, "Menü und Portionszahlen:",
             ...menuPlan.map((item) => `- ${item.label}: ${item.servings} Portionen`),
             "Weitere Leistungen:", ...serviceModules.filter((item) => item.category !== "food").map((item) => `- ${item.label}`),
             `Vorläufige Gesamtschätzung: ${source.pricingSummary.subtotal.amount.toFixed(2)} EUR. Preis, Steuern und Leistungsumfang weiterhin prüfen.`
           ].join("\n"),
-          internalWorkingText: `Menübearbeitung aus ${source.draftId} / Revision ${source.revision}. Neue fachliche Prüfung erforderlich.\n${source.internalWorkingText}`,
+          internalWorkingText: `Menü-/Veranstaltungsdatenbearbeitung aus ${source.draftId} / Revision ${source.revision}. Neue fachliche Prüfung erforderlich.\n${source.internalWorkingText}`,
           reviewStatus: source.reviewStatus ? { ...source.reviewStatus, priceReviewStatus: "review_required", taxReviewStatus: "review_required", allergenReviewStatus: "review_required", hygieneTemperatureReviewStatus: "review_required", publishApproved: false } : undefined
         });
         revised.proposedEventSpec.servicePlan.modules = serviceModules;
@@ -438,7 +446,7 @@ export function registerOfferDraftRoutes(
       if (result !== "saved") return reply.code(409).send({ message: "Der Auftrag wurde inzwischen bearbeitet. Bitte neu laden." });
       await auditLog.logFor(actor, {
         action: "offer.menu_revised", entityType: "OfferDraft", entityId: revised.draftId, actor,
-        idempotencyKey: `menu-revised:${revised.draftId}`, summary: "Menü als neue Angebotsfassung gespeichert.",
+        idempotencyKey: `menu-revised:${revised.draftId}`, summary: "Menü oder Veranstaltungsdaten als neue Angebotsfassung gespeichert.",
         details: { sourceDraftId: source.draftId, sourceRevision: source.revision, caseId, menuItems: revised.proposedEventSpec.menuPlan.length }
       });
       return reply.code(201).send(revised);

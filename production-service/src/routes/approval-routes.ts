@@ -1,3 +1,4 @@
+import { isExtractedSpecialDietQuestion, replaySpecialDietResponse } from "../../../shared-core/src/special-diet-response.js";
 import { createHash } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import {
@@ -300,7 +301,12 @@ function acceptedEventSpecConsistencyError(
 
 function isAuthorizedProductionAmendment(previous: AcceptedEventSpec, next: AcceptedEventSpec): boolean {
   if (previous.menuPlan.length !== next.menuPlan.length) return false;
-  const expected = structuredClone(previous);
+  let expected = structuredClone(previous);
+  if (!areJsonValuesEqual({ constraints: previous.productionConstraints }, { constraints: next.productionConstraints })) {
+    const answered = replaySpecialDietResponse(previous, next);
+    if (!answered) return false;
+    expected = structuredClone(answered);
+  }
   const copyField = (target: object, source: object, key: string) => {
     const destination = target as Record<string, unknown>;
     const input = source as Record<string, unknown>;
@@ -1460,6 +1466,9 @@ export function registerProductionApprovalRoutes(
       }
 
       if (request.body.decision === "approved") {
+        if (draft.draftArtifacts.eventSpec?.uncertainties?.some(isExtractedSpecialDietQuestion)) {
+          return { kind: "unprocessable" as const, errors: ["Sonderkost-Rückfrage zuerst im Antwortweg klären; die Antwort benötigt anschließend fachliche Prüfung."] };
+        }
         const unresolvedCards = draft.reviewCards.filter((card) =>
           (card.requiredApproval === true || card.riskLevel === "blocking") && card.decision !== "fits"
         );
@@ -1609,6 +1618,9 @@ export function registerProductionApprovalRoutes(
       const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
       const approvedSpec = await store.getApprovedProductionSpec(actor, request.params.approvedProductionSpecId);
       if (!approvedSpec) return reply.code(404).send({ message: "ApprovedProductionSpec nicht gefunden." });
+      if (approvedSpec.artifacts.eventSpec.uncertainties?.some(isExtractedSpecialDietQuestion)) {
+        return reply.code(409).send({ message: "Sonderkost-Rückfrage ist noch offen. Bitte im Produktionsentwurf beantworten und erneut fachlich prüfen." });
+      }
       if (
         approvedSpec.artifacts.productionPlan.readiness.status === "insufficient" ||
         (approvedSpec.artifacts.productionPlan.blockingIssues?.length ?? 0) > 0

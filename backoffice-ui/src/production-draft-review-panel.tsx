@@ -1,3 +1,5 @@
+import { isExtractedSpecialDietQuestion } from "../../shared-core/src/special-diet-response.js";
+import type { Uncertainty } from "@catering/shared-core";
 import { useEffect, useRef, useState } from "react";
 import {
   applyApprovedProductionSpec,
@@ -174,6 +176,7 @@ export function hasCompleteProductionSnapshot(draft: ProductionDraft): boolean {
 }
 
 export function canApproveProductionDraft(draft: ProductionDraft): boolean {
+  if ((draft.draftArtifacts?.eventSpec?.uncertainties as Uncertainty[] | undefined)?.some(isExtractedSpecialDietQuestion)) return false;
   return draft.status === "pending_review" &&
     hasCompleteProductionSnapshot(draft) &&
     draft.reviewCards
@@ -725,6 +728,7 @@ export function ProductionDraftReviewPanel({
                     >
                       Entwurf freigeben
                     </button>
+                    {(draft.draftArtifacts?.eventSpec?.uncertainties as Uncertainty[] | undefined)?.some(isExtractedSpecialDietQuestion) ? <p role="status">Sonderkost-Rückfrage zuerst beantworten. Die neue Fassung muss anschließend fachlich geprüft werden.</p> : null}
                     <button
                       className="secondary-button"
                       disabled={submitting || loading}

@@ -187,6 +187,19 @@ function renderSourceAnchorsSection(record: Record<string, unknown>): string[] {
 }
 
 export function renderOfferHtml(draft: OfferDraft): string {
+  const spec = draft.proposedEventSpec;
+  const documentStart = '<!doctype html><html lang="de"><head><meta charset="utf-8"><title>CateringOS · Angebot</title><style>@page{size:A4;margin:18mm}body{font-family:Arial,sans-serif;color:#1f2933;font-size:12px;line-height:1.45}h1{font-size:22px;margin:0 0 8px}h2{font-size:16px;margin:22px 0 8px}header{border-bottom:1px solid #cbd5df;padding-bottom:12px}p{margin:6px 0}pre{font:inherit;white-space:pre-wrap}td,th{padding:6px;text-align:left}li,td{overflow-wrap:anywhere}@media print{h2{break-after:avoid-page}tr,header{break-inside:avoid-page}}</style></head><body>';
+  const eventHeader = [
+    "<header>",
+    "<h1>" + (draft.reviewStatus?.publishApproved ? "Angebot" : "Angebotsentwurf · interne Prüfung") + "</h1>",
+    "<p>Kunde: " + escapeHtml(spec.customer?.name ?? "offen") + "</p>",
+    "<p>Veranstaltung: " + escapeHtml(spec.event?.title ?? spec.event?.type ?? "offen") + "</p>",
+    "<p>Datum: " + escapeHtml(spec.event?.date ?? "offen") + " · Gäste: " + escapeHtml(spec.attendees?.expected ?? "offen") + "</p>",
+    "<p>Serviceform: " + escapeHtml(spec.event?.serviceForm ?? spec.servicePlan?.serviceForm ?? "offen") + "</p>",
+    ...(spec.event?.schedule?.map(slot => "<p>" + escapeHtml(slot.label) + ": " + escapeHtml(slot.start ?? "offen") + "–" + escapeHtml(slot.end ?? "offen") + "</p>") ?? []),
+    ...(spec.venue ? ["<p>Veranstaltungsort: " + escapeHtml([spec.venue.name, spec.venue.address].filter(Boolean).join(" · ") || "offen") + "</p>"] : []),
+    "</header>"
+  ].join("");
   const publishApproved = draft.reviewStatus?.publishApproved === true;
   const openQuestionsSection =
     draft.openQuestions.length > 0
@@ -225,7 +238,7 @@ export function renderOfferHtml(draft: OfferDraft): string {
       spec.attendees?.expected ? `${spec.attendees.expected} Gäste` : "Gästezahl offen"
     ].filter(Boolean).join(" · ");
     return [
-      "<html><body><h1>Angebotsentwurf · Kalkulation offen</h1>",
+      documentStart, eventHeader, "<h2>Kalkulation offen</h2>",
       "<p>Interne Arbeitsunterlage. Keine bestätigten Leistungen oder Angebotspreise.</p>",
       "<p>Vor einem Angebot Leistungsumfang prüfen und eine Preisaufstellung mit Quellen sowie Netto, Steuer und Brutto erfassen.</p>",
       `<h2>Veranstaltungsdaten</h2><p>${escapeHtml(eventDetails)}</p>`,
@@ -243,8 +256,7 @@ export function renderOfferHtml(draft: OfferDraft): string {
     : [];
 
   return [
-    "<html><body>",
-    "<h1>Angebot</h1>",
+    documentStart, eventHeader,
     `<p>${escapeHtml(draft.eventSummary)}</p>`,
     `<p>Varianten: ${draft.variantSet.length}</p>`,
     `<p>Offene Punkte: ${draft.openQuestions.length}</p>`,

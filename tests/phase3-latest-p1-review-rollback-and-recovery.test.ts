@@ -70,6 +70,10 @@ import {
 } from "./phase3-latest-p1-review-helpers.js";
 import type { PartialRollbackState } from "./phase3-latest-p1-review-helpers.js";
 
+// These cases run activation, an injected crash, and rollback resumption. Their
+// combined process startup cost needs headroom on shared CI runners.
+const rollbackRecoveryScenarioTimeout = 180_000;
+
 describe("latest independent Phase-3 P1 review reproducers", () => {
   test("RED: phase3.2 candidate before network creation explicitly rolls back absent targets", () => {
     const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-candidate-pre-network-rollback-red-"));
@@ -221,7 +225,7 @@ describe("latest independent Phase-3 P1 review reproducers", () => {
     expect(existsSync(path.join(root, "phase3.transaction-baseline.manifest"))).toBe(false);
     expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(false);
     expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
-  }, 120_000);
+  }, rollbackRecoveryScenarioTimeout);
 
   test("RED: preserves the private snapshot through ingress rollback", () => {
     const root = mkdtempSync(path.join(tmpdir(), "catering-phase3-private-snapshot-red-"));
@@ -264,7 +268,7 @@ describe("latest independent Phase-3 P1 review reproducers", () => {
     expect(existsSync(markerPath)).toBe(false);
     expect(existsSync(path.join(root, "locks/catering-agents-platform.deploy-lock"))).toBe(false);
     expect(existsSync(path.join(root, "locks/shared-edge.deploy-lock"))).toBe(false);
-  }, 120_000);
+  }, rollbackRecoveryScenarioTimeout);
 
   test.each([
     ["out-of-order subset", (state: PartialRollbackState, before: PartialRollbackState) => {

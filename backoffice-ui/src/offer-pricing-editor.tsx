@@ -145,7 +145,7 @@ export function OfferPricingEditor({ draftId, revision, variants, menuPlan, pric
       </li>)}</ul>
       <button type="button" className="secondary-button" disabled={disabled} onClick={begin}>Preisaufstellung bearbeiten</button>
     </> : <>
-      {pricingSummary?.calculationRequired ? <p role="status">Menü geändert – Preisaufstellung veraltet. Vor Freigabe neu kalkulieren.</p> : null}
+      {pricingSummary?.calculationRequired ? <p role="status">Angebot geändert – Preisaufstellung veraltet. Vor Freigabe neu kalkulieren.</p> : null}
       <p className="helper-text">Preis offen. Katalogrichtwerte sind keine geprüften Angebotspreise. Preisaufstellung mit Leistungsumfang, Quellen, Netto, Steuer und Brutto erfassen.</p>
       <button type="button" className="secondary-button" disabled={disabled} onClick={begin}>Preisaufstellung erfassen</button>
     </>}

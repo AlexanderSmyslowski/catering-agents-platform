@@ -73,19 +73,15 @@ function extractTimeHint(segment: string): string | undefined {
   return undefined;
 }
 
-function extractDate(segment: string): string | undefined {
-  const isoMatch = segment.match(/\b(20\d{2}-\d{2}-\d{2})\b/);
-  if (isoMatch) {
-    return isoMatch[1];
-  }
+export function isValidEventDate(value: string): boolean {
+  if (!/^20\d{2}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(value + "T00:00:00Z");
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
 
-  const germanMatch = segment.match(/\b(\d{1,2})\.(\d{1,2})\.(20\d{2})\b/);
-  if (!germanMatch) {
-    return undefined;
-  }
-
-  const [, day, month, year] = germanMatch;
-  return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+function extractDates(segment: string): string[] {
+  return [...segment.matchAll(/\b(20\d{2}-\d{2}-\d{2})\b|\b(\d{1,2})\.(\d{1,2})\.(20\d{2})\b/g)]
+    .map(match => match[1] ?? `${match[4]}-${match[3].padStart(2, "0")}-${match[2].padStart(2, "0")}`);
 }
 
 function extractAttendeeObservation(segment: string):
@@ -272,7 +268,20 @@ export function analyzeIntakeText(text: string): IntakeSignals {
     constraints,
     uncertainties
   };
-  const segments = text.split(/[,;\n]+|(?<=[.!?])\s+(?=[A-ZÄÖÜ])/).map(normalizeSegment).filter(Boolean);
+  // Dates in a customer label or document header do not describe the event.
+  const eventText = text.split(/\r?\n/).filter(line =>
+    !/^[ \t]*(?:Kunde|Kundenname|Auftraggeber|Anfragedatum|Angebotsdatum|Rechnungsdatum|Erstellt(?: am)?|Stand|Nachprüfung)\s*:/i.test(line)
+  ).join("\n");
+  const segments = eventText.split(/[,;\n]+|(?<=[.!?])\s+(?=[A-ZÄÖÜ])/).map(normalizeSegment).filter(Boolean);
+  const dates = [...new Set(segments.flatMap(extractDates))];
+  const selectedDate = dates.length === 1 && isValidEventDate(dates[0]) ? dates[0] : undefined;
+  if (dates.length && !selectedDate) {
+    addUniqueUncertainty(uncertainties, {
+      field: "event.date", severity: "medium",
+      message: "Mehrere oder ungültige Datumsangaben; Veranstaltungstermin nicht eindeutig.",
+      suggestedQuestion: "Welches gültige Veranstaltungsdatum gilt verbindlich?"
+    });
+  }
 
   for (const segment of segments) {
     const attendee = extractAttendeeObservation(segment);
@@ -294,7 +303,7 @@ export function analyzeIntakeText(text: string): IntakeSignals {
       }
     }
 
-    const date = extractDate(segment);
+    const date = selectedDate && extractDates(segment).includes(selectedDate) ? selectedDate : undefined;
     if (date) {
       addUniqueString(extractedFacts, `event.date=${date}`);
       if (result.eventDate === undefined) {

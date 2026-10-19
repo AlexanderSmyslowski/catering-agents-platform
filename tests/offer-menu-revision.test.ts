@@ -6,7 +6,7 @@ import { buildOfferApp } from "../offer-service/src/app.js";
 import { OfferStore } from "../offer-service/src/store.js";
 import { createEventRequestFromText, normalizeEventRequestToSpec } from "@catering/shared-core";
 
-const text = "SYNTHETISCH: Empfang und Abendbuffet für 100 Gäste am 12.11.2026. 55 Portionen Hähnchenragout, 25 Portionen vegetarische Gemüsebratlinge, 20 Portionen veganes Linsenragout; jeweils 150 g gegarte Hauptkomponente. Personal: 4 Servicekräfte für 6 Stunden.";
+const text = "SYNTHETISCH: Empfang und Abendbuffet für 100 Gäste am 12.11.2026. 55 Portionen Hähnchenragout, 25 Portionen vegetarische Gemüsebratlinge, 20 Portionen veganes Linsenragout; jeweils 150 g gegarte Hauptkomponente. Empfang 18 Uhr. Personal: 4 Servicekräfte für 6 Stunden.";
 const expected = [55, 25, 20];
 const secret = "synthetic-menu-test-secret";
 const headers = { "x-catering-trusted-secret": secret, "x-catering-actor-name": "Angebots-Mitarbeiter", "x-catering-business-id": "alpha" };
@@ -28,6 +28,75 @@ describe("explicit offer menu and persisted continuation", () => {
     expect(spec.menuPlan.map(x => x.servings)).toEqual(expected);
     expect(spec.menuPlan.map(x => x.label)).toEqual(["Hähnchenragout", "vegetarische Gemüsebratlinge", "veganes Linsenragout"]);
     expect(spec.menuPlan[2]?.dietaryTags).toContain("vegan");
+  });
+
+  it("ignores customer and document dates and refuses ambiguous or invalid event dates", () => {
+    const specFor = (rawText: string) => normalizeEventRequestToSpec(createEventRequestFromText({ requestId: "dates", channel: "text", rawText }));
+    expect(specFor("Kunde: SYNTHETISCH Nachprüfung 19.10.2026\nAnfragedatum: 18.10.2026\n" + text).event.date).toBe("2026-11-12");
+    expect(specFor("100 Gäste am 31.02.2026").event.date).toBeUndefined();
+    const ambiguous = specFor("100 Gäste, Termin 12.11.2026 oder 13.11.2026.");
+    expect(ambiguous.event.date).toBeUndefined();
+    expect(ambiguous.uncertainties?.some(item => item.field === "event.date")).toBe(true);
+  });
+
+  it("revises event data in every variant, preserves portions and historical snapshots, and exports the corrected header", async () => {
+    const { app, store, draft } = await harness();
+    try {
+      const { renderOfferHtml } = await import("../print-export/src/index.js");
+      const original = structuredClone(draft);
+      const eventDetails = { eventDate: "2026-11-13", attendeeCount: 100, eventType: "Wissenschaftlicher Abend", serviceForm: "buffet",
+        eventSchedule: [{ label: "Abendcatering", start: "18:00", end: "22:00" }] };
+      const payload = { revision: draft.revision, menuPlan: draft.proposedEventSpec.menuPlan, eventDetails };
+      // Only the established menu input fields are sent by the browser.
+      payload.menuPlan = payload.menuPlan.map(({componentId,label,servings,menuCategory,dietaryTags}: any) => ({componentId,label,servings,menuCategory,dietaryTags}));
+      const url = "/v1/offers/drafts/" + draft.draftId + "/menu";
+      const r = await app.inject({ method: "POST", url, headers, payload });
+      expect(r.statusCode, r.body).toBe(201);
+      const revised = r.json();
+      for (const spec of [revised.proposedEventSpec, ...revised.variantSet.map((v: any) => v.proposedEventSpec)]) {
+        expect(spec.event.date).toBe(eventDetails.eventDate);
+        expect(spec.event.schedule).toEqual(eventDetails.eventSchedule);
+        expect(spec.menuPlan.map((x: any) => x.servings)).toEqual(expected);
+      }
+      expect(revised.reviewStatus.publishApproved).toBe(false);
+      expect(revised.eventSummary).toContain("Wissenschaftlicher Abend");
+      expect(revised.openQuestions).not.toContain("Wie lautet das verbindliche Zeitfenster?");
+      expect(await store.getDraft({businessId:"alpha"}, draft.draftId)).toEqual(original);
+      const html = renderOfferHtml(revised);
+      expect(html).toContain("2026-11-13");
+      expect(html).toContain("Abendcatering");
+      expect(html).toContain("18:00");
+      expect(html).not.toContain("<h1>Angebot</h1>");
+      const unsafeHeader = {...revised,proposedEventSpec:{...revised.proposedEventSpec,customer:{name:"<img src=x onerror=alert(1)>"},
+        venue:{name:"<script>Ort</script>"},event:{...revised.proposedEventSpec.event,title:"<script>Abend</script>"}}};
+      for(const publishApproved of [false,true]) {
+        const headerHtml=renderOfferHtml({...unsafeHeader,reviewStatus:{...unsafeHeader.reviewStatus,publishApproved}});
+        expect(headerHtml).not.toContain("<script>");
+        expect(headerHtml).not.toContain("<img ");
+        expect(headerHtml).toContain("&lt;img");
+        expect(headerHtml).toContain("2026-11-13");
+        expect(headerHtml).toContain("18:00");
+      }
+      const stale = await app.inject({ method:"POST", url, headers, payload: {...payload, eventDetails:{...eventDetails,eventDate:"2026-11-14"}} });
+      expect(stale.statusCode).toBe(409);
+      const invalid = await app.inject({ method:"POST", url, headers, payload: {...payload, eventDetails:{...eventDetails,eventDate:"2026-02-31"}} });
+      expect(invalid.statusCode).toBe(422);
+    } finally { await app.close(); }
+  });
+
+  it("retains independently authored date and guest risks and does not answer unchanged source values", async () => {
+    const { amendOfferEvent } = await import("../offer-service/src/offer-event-revision.js");
+    const source = normalizeEventRequestToSpec(createEventRequestFromText({requestId:"independent-event",channel:"text",rawText:text}));
+    const independent = [
+      {field:"event.date",severity:"high" as const,message:"Venue not confirmed",suggestedQuestion:"Vertrag prüfen"},
+      {field:"attendees.expected",severity:"high" as const,message:"Safety capacity open",suggestedQuestion:"Kapazität prüfen"}
+    ];
+    const extracted = {field:"event.date",severity:"medium" as const,message:"Mehrere oder ungültige Datumsangaben; Veranstaltungstermin nicht eindeutig.",suggestedQuestion:"Welches gültige Veranstaltungsdatum gilt verbindlich?"};
+    source.uncertainties = [...independent, extracted];
+    expect(amendOfferEvent(source,{eventDate:source.event.date,attendeeCount:100,eventSchedule:[{label:"Service",start:"18:00",end:"22:00"}]}).uncertainties).toEqual(source.uncertainties);
+    const changed = amendOfferEvent(source,{eventDate:"2026-11-13",attendeeCount:101});
+    expect(changed.uncertainties).toEqual(independent);
+    expect(changed.menuPlan.map(x=>x.servings)).toEqual([55,25,20]);
   });
 
   it("keeps explicit dishes and portions in the curated offer, every variant and customer text", async () => {

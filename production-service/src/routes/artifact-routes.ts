@@ -1,3 +1,4 @@
+import { recordSpecialDietResponse } from "../../../shared-core/src/special-diet-response.js";
 import { validPurchasedQuantities, type PurchasedQuantity } from "@catering/shared-core";
 import type { FastifyInstance } from "fastify";
 import { createHash, randomUUID } from "node:crypto";
@@ -2816,16 +2817,17 @@ export function registerProductionArtifactRoutes(
         const classifications = input.componentClassifications ?? [];
         const componentUpdates = input.componentUpdates ?? [];
         const schedule = input.eventSchedule;
+        const specialDietResponse = input.specialDietResponse;
         const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === "object" && !Array.isArray(value));
         const has = (value: object, key: string) => Object.prototype.hasOwnProperty.call(value, key);
         const modes = ["scratch", "hybrid", "convenience_purchase", "external_finished"];
         if (
-          Object.keys(input).some((key) => !["caseId", "expectedRevision", "componentClassifications", "componentUpdates", "eventSchedule"].includes(key)) ||
+          Object.keys(input).some((key) => !["caseId", "expectedRevision", "componentClassifications", "componentUpdates", "eventSchedule", "specialDietResponse"].includes(key)) ||
           typeof input.caseId !== "string" || !input.caseId.trim() || !Number.isInteger(input.expectedRevision) ||
           (has(input, "componentClassifications") && !Array.isArray(input.componentClassifications)) ||
           (has(input, "componentUpdates") && !Array.isArray(input.componentUpdates)) ||
           !Array.isArray(classifications) || !Array.isArray(componentUpdates) ||
-          (classifications.length === 0 && componentUpdates.length === 0 && schedule === undefined) ||
+          (classifications.length === 0 && componentUpdates.length === 0 && schedule === undefined && specialDietResponse === undefined) ||
           classifications.some((item) => !isRecord(item) ||
             Object.keys(item).some((key) => !["componentId", "menuCategory"].includes(key)) ||
             typeof item.componentId !== "string" || (typeof item.menuCategory !== "string" || !["classic", "vegetarian", "vegan"].includes(item.menuCategory))) ||
@@ -2906,11 +2908,16 @@ export function registerProductionArtifactRoutes(
             }
           }
         }
-        const remainingUncertainties = scheduleChanged ? eventSpec.uncertainties?.filter(item => !(
+        let answeredSpec = eventSpec;
+        if (has(input, "specialDietResponse")) {
+          try { answeredSpec = recordSpecialDietResponse(eventSpec, specialDietResponse, actor.name); }
+          catch (error) { return reply.code(422).send({ message: error instanceof Error ? error.message : "Sonderkost-Antwort ungültig." }); }
+        }
+        const remainingUncertainties = scheduleChanged ? answeredSpec.uncertainties?.filter(item => !(
           item.field === "event.schedule" && item.severity === "low" &&
           item.suggestedQuestion === "Wie lautet das verbindliche Zeitfenster?" &&
           /^Zeitangabe in "[\s\S]*" ist nicht als vollständiger Termin belastbar\.$/.test(item.message)
-        )) : eventSpec.uncertainties;
+        )) : answeredSpec.uncertainties;
         // Only the known extraction question is answered by this control. Source
         // constraints and independently authored time questions stay open.
         for (const card of sourceReviewCards) {
@@ -2918,11 +2925,11 @@ export function registerProductionArtifactRoutes(
           if (!target) continue;
           const question = eventSpec.uncertainties?.[Number(target[1])];
           const index = question ? remainingUncertainties?.indexOf(question) ?? -1 : -1;
-          if (index < 0) return reply.code(422).send({ message: "Eine unabhängige Prüfpflicht zur Zeitangabe muss zuerst geklärt werden." });
+          if (index < 0) return reply.code(422).send({ message: "Eine unabhängige Prüfpflicht zu dieser Rückfrage muss zuerst geklärt werden." });
           card.targetPath = `$.draftArtifacts.eventSpec.uncertainties[${index}]${target[2]}`;
         }
         const revisedEventSpec = validateAcceptedEventSpec({
-          ...eventSpec,
+          ...answeredSpec,
           ...(revisedSchedule ? { event: { ...eventSpec.event, schedule: revisedSchedule } } : {}),
           ...(remainingUncertainties ? { uncertainties: remainingUncertainties } : {}),
           menuPlan: eventSpec.menuPlan.map((component) => {
@@ -2945,9 +2952,10 @@ export function registerProductionArtifactRoutes(
         // Keep the existing category-only command identity stable for interrupted retries.
         const commandHash = hashText(stableJson({ caseId, classifications: [...categories].sort(([left], [right]) => left.localeCompare(right)),
           ...(patches.size ? { componentUpdates: [...patches.values()].sort((left, right) => left.componentId.localeCompare(right.componentId)) } : {}),
-          ...(schedule ? { eventSchedule: schedule } : {})
+          ...(schedule ? { eventSchedule: schedule } : {}),
+          ...(specialDietResponse !== undefined ? { specialDietResponse } : {})
         }));
-        const planningChange = patches.size > 0 || Boolean(schedule);
+        const planningChange = patches.size > 0 || Boolean(schedule) || specialDietResponse !== undefined;
         const revision = validateProductionDraft({
           ...draft,
           draftId: productionDraftRevisionCommandIdentity(actor.businessId, draft, commandHash).draftId,
@@ -2965,7 +2973,7 @@ export function registerProductionArtifactRoutes(
           reviewCards: [...sourceReviewCards, {
             cardId: "card-classification-event-spec", kind: "event_data",
             title: planningChange ? "Eventdaten und Herstellungsangaben prüfen" : "Eventdaten und Klassifikationen prüfen",
-            summary: planningChange ? "Explizite Herstellungsangaben oder Zeitfenster geändert. Produktionsentwurf erneut vorbereiten und prüfen." : "Explizite Komponentenkategorien ergänzt. Produktionsentwurf erneut vorbereiten und prüfen.",
+            summary: planningChange ? "Herstellung, Zeitfenster oder Sonderkost-Antwort geändert. Antwort ist keine Allergen- oder Küchenfreigabe. Produktionsentwurf erneut vorbereiten und prüfen." : "Explizite Komponentenkategorien ergänzt. Produktionsentwurf erneut vorbereiten und prüfen.",
             decision: "pending", requiredApproval: true,
             targetPath: "$.draftArtifacts.eventSpec"
           }]

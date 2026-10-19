@@ -81,6 +81,7 @@ function buildClassificationUpdate(context: ProductionDraftEditContext, update: 
   const scheduleChanged = !equal(update.eventSchedule, baseline.eventSchedule);
   if (scheduleChanged && !update.eventSchedule?.length) throw new Error("Das Zeitfenster kann hier nicht gelöscht werden.");
   return { caseId, expectedRevision: draft.revision!, componentClassifications,
+    ...(update.specialDietResponse ? { specialDietResponse: update.specialDietResponse } : {}),
     ...(componentUpdates.length ? { componentUpdates } : {}),
     ...(scheduleChanged ? { eventSchedule: update.eventSchedule } : {})
   };
@@ -121,13 +122,15 @@ export function buildProductionSpecEditPersistAction({
     const update = buildCurrentSpecUpdateInput();
     let updatedSpec: Record<string, unknown>;
     const canonical = isHandoffDraftContext(productionDraftContext);
+    if (update.specialDietResponse && !canonical) throw new Error("Sonderkost-Antwort bitte im Produktionsentwurf aus dem Angebot speichern.");
+
     if (canonical) {
       assertCurrentProductionDraftContext(productionDraftContext!, getCurrentProductionDraftContext);
       if (!reviseProductionDraft || productionDraftContext!.draft.draftArtifacts?.eventSpec?.specId !== editingSpecId) {
         throw new Error("Die geöffneten Antworten gehören nicht eindeutig zu diesem Produktionsentwurf.");
       }
       const command = buildClassificationUpdate(productionDraftContext!, update);
-      if (command.componentClassifications.length === 0 && !command.componentUpdates?.length && !command.eventSchedule) {
+      if (command.componentClassifications.length === 0 && !command.componentUpdates?.length && !command.eventSchedule && !command.specialDietResponse) {
         return productionDraftContext!.draft.draftArtifacts!.eventSpec;
       }
       const response = await reviseProductionDraft(productionDraftContext!.draft.draftId, command);

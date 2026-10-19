@@ -81,6 +81,7 @@ function EventContent({ spec }: { spec: RecordValue }) {
       const slot = record(item);
       return <li key={index}>{value(slot?.label)}: {value(slot?.start)} – {value(slot?.end)}</li>;
     })}</ul> : <Warning>Zeitfenster nicht verfügbar.</Warning>}
+    <Strings items={spec.productionConstraints} label="Auftrags- und Sonderkosthinweise · keine Allergen- oder Küchenfreigabe" />
     <p><strong>Komponenten</strong></p>
     {Array.isArray(spec.menuPlan) && spec.menuPlan.length ? <ul>{spec.menuPlan.map((item, index) => {
       const component = record(item);
