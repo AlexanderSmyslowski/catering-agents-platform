@@ -193,10 +193,10 @@ export function renderOfferHtml(draft: OfferDraft): string {
     "<header>",
     "<h1>" + (draft.reviewStatus?.publishApproved ? "Angebot" : "Angebotsentwurf · interne Prüfung") + "</h1>",
     "<p>Kunde: " + escapeHtml(spec.customer?.name ?? "offen") + "</p>",
-    "<p>Veranstaltung: " + escapeHtml(spec.event.title ?? spec.event.type ?? "offen") + "</p>",
-    "<p>Datum: " + escapeHtml(spec.event.date ?? "offen") + " · Gäste: " + escapeHtml(spec.attendees.expected ?? "offen") + "</p>",
-    "<p>Serviceform: " + escapeHtml(spec.event.serviceForm ?? spec.servicePlan.serviceForm) + "</p>",
-    ...(spec.event.schedule?.map(slot => "<p>" + escapeHtml(slot.label) + ": " + escapeHtml(slot.start ?? "offen") + "–" + escapeHtml(slot.end ?? "offen") + "</p>") ?? []),
+    "<p>Veranstaltung: " + escapeHtml(spec.event?.title ?? spec.event?.type ?? "offen") + "</p>",
+    "<p>Datum: " + escapeHtml(spec.event?.date ?? "offen") + " · Gäste: " + escapeHtml(spec.attendees?.expected ?? "offen") + "</p>",
+    "<p>Serviceform: " + escapeHtml(spec.event?.serviceForm ?? spec.servicePlan?.serviceForm ?? "offen") + "</p>",
+    ...(spec.event?.schedule?.map(slot => "<p>" + escapeHtml(slot.label) + ": " + escapeHtml(slot.start ?? "offen") + "–" + escapeHtml(slot.end ?? "offen") + "</p>") ?? []),
     ...(spec.venue ? ["<p>Veranstaltungsort: " + escapeHtml([spec.venue.name, spec.venue.address].filter(Boolean).join(" · ") || "offen") + "</p>"] : []),
     "</header>"
   ].join("");

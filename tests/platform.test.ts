@@ -4160,7 +4160,8 @@ describe("catering agents platform", () => {
 
     expect(offerExportResponse.statusCode).toBe(200);
     expect(offerExportResponse.headers["content-type"]).toContain("text/html");
-    expect(offerExportResponse.body).toContain("<h1>Angebotsentwurf · Kalkulation offen</h1>");
+    expect(offerExportResponse.body).toContain("<h1>Angebotsentwurf · interne Prüfung</h1>");
+    expect(offerExportResponse.body).toContain("<h2>Kalkulation offen</h2>");
     expect(offerExportResponse.body).not.toContain(String(draft.draftId));
     expect(offerExportResponse.body).toContain("Interne Prüfung");
     expect(offerExportResponse.body).toContain("Kundentext erst nach Publish-Freigabe exportieren.");
@@ -4173,7 +4174,8 @@ describe("catering agents platform", () => {
 
     expect(partialOfferExportResponse.statusCode).toBe(200);
     expect(partialOfferExportResponse.headers["content-type"]).toContain("text/html");
-    expect(partialOfferExportResponse.body).toContain("<h1>Angebotsentwurf · Kalkulation offen</h1>");
+    expect(partialOfferExportResponse.body).toContain("<h1>Angebotsentwurf · interne Prüfung</h1>");
+    expect(partialOfferExportResponse.body).toContain("<h2>Kalkulation offen</h2>");
     expect(partialOfferExportResponse.body).not.toContain(String(partialDraft.draftId));
     expect(partialOfferExportResponse.body).toContain("Varianten: 3");
     expect(partialOfferExportResponse.body).toContain("Offene Punkte:");
