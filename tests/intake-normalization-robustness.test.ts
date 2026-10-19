@@ -144,8 +144,10 @@ describe("intake normalization robustness", () => {
         expect(spec.readiness.status).toBe(expectedReadiness);
       }
 
-      if (/ca\.|knapp|40-50|45 ist wahrscheinlicher|Vielleicht/i.test(text)) {
+      if (expectedAttendees !== undefined && expectedUncertainties.includes("attendees.expected")) {
         expect(assumptionCodes(spec)).toContain("attendees_expected_approximate");
+      } else if (expectedAttendees !== undefined) {
+        expect(assumptionCodes(spec)).not.toContain("attendees_expected_approximate");
       }
     }
   );

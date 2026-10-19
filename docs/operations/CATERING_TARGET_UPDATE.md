@@ -480,6 +480,22 @@ Drift bleiben gesperrt. Der manuelle Beleg wird nicht als `installed.json` oder
 erfolgreiche öffentliche Alt-CLI ausgegeben. Neue Installation, Backup/Restore,
 Signaturen und Smoke benötigen unverändert ihre eigenen aktuellen Nachweise.
 
+Der angenommene PR727-Webcontainer installiert beim Betrieb seine lokale Caddy-CA
+in den Container-Vertrauensspeicher. Am 19.10. wurde ausschließlich diese konkrete
+Änderung nachgewiesen: öffentliches Rootzertifikat SHA256
+`e70877424f5913ab6146fb751750fd1deb4a862c2820811287459d3b213e2b88`,
+exakt gleich dem Root im vorhandenen `platform-infra_caddy_data`-Volume.
+Der Image-CA-Bestand aus dem unveränderten angenommenen Webarchiv hat SHA256
+`657ca6ba4bc43138f89de75fb63794cbfaa897e0e110b069fd1367bd66a5bb6c`.
+Alle 146 ursprünglichen Zertifikate samt Multiplizität plus genau dieses eine
+Root ergeben den beobachteten Bundlebestand SHA256
+`f0cbbbeb86b1ca821634896f134c3c3b73db0bb525664b643ac80159242f9778`.
+Der PR727-Verifier bindet diese exakten Bytes, die beiden konkreten Symlinkziele,
+Dateitypen/Eigentümer/Rechte und die vollständige beobachtete Diffmenge inklusive
+des bereits gebundenen readonly-Sites-Mountpoints. Andere CA-/Datei-/Mountänderungen
+bleiben HOLD. Die Beobachtung ist Bestandteil des unveränderten Vorher-/Nachher-
+Vergleichs; keine generelle Pfadfreigabe und kein `caddy trust`-Aufruf.
+
 Ein vorhandener autorisierter Mac-Dockerbestand kann alternativ `nue-bundle` mit
 denselben Produkt-/Operations-/Quellparametern, `--output-dir`, `--node-base` und
 `--caddy-base` verwenden. Jeder neue Bundleaufbau bindet direkt die tatsächlichen
