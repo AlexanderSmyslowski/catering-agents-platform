@@ -461,6 +461,25 @@ Postflight prüft den neuen Backend-CWD/Schemaquellpfad und den frischen
 Webservierbaum. Der normale `repository@M`-Modus und historische Wege bleiben
 unverändert; Backup-/Stage-/signierte Apply-Gates werden dadurch nicht ersetzt.
 
+
+### Erneuter Build nach der manuell angenommenen PR727-Installation
+
+Der lokale Build verwendet weiterhin ausschließlich die ursprünglichen exakten
+fb26-/b2ffe-Basen. Die bereits laufenden Anwendungen sind davon getrennt:
+Zusätzlich zum ursprünglichen Installationszustand wird genau der akzeptierte
+PR727-Vorgänger erkannt. Sein vollständiges Manifest
+8e3bbad3b8445968a27d859f61c29bb99081e54341f267da9e4d35ce5ab5df50
+und der tatsächliche manuelle Recoverybeleg sind fest gebunden. Der unveränderte
+alte Bundleverifier prüft seine Quellen, Schema-, Helper- und Archiv-/OCI-Bindungen.
+Nur dieser lesende Verifier wird verwendet, keine historische Applyfunktion.
+
+Alle fünf laufenden Images, Commands, Arbeitsverzeichnisse, Mounts, vollständigen
+Backendquellen und die tatsächliche Webroot-/Sites-/Caddybindung werden separat
+geprüft und vor/nach dem Build identisch beobachtet. Unbekannte Vorgänger und
+Drift bleiben gesperrt. Der manuelle Beleg wird nicht als `installed.json` oder
+erfolgreiche öffentliche Alt-CLI ausgegeben. Neue Installation, Backup/Restore,
+Signaturen und Smoke benötigen unverändert ihre eigenen aktuellen Nachweise.
+
 Ein vorhandener autorisierter Mac-Dockerbestand kann alternativ `nue-bundle` mit
 denselben Produkt-/Operations-/Quellparametern, `--output-dir`, `--node-base` und
 `--caddy-base` verwenden. Jeder neue Bundleaufbau bindet direkt die tatsächlichen
