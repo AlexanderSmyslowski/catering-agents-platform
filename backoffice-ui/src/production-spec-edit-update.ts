@@ -3,6 +3,7 @@ import { formatEventSchedule } from "./production-spec-edit-snapshot.js";
 import type { ComponentEditState } from "./production-answer-types.js";
 
 export type SpecEditUpdateFormState = {
+  specialDietResponse?: string;
   eventType: string;
   eventDate: string;
   eventSchedule?: string;
@@ -24,6 +25,7 @@ export type SpecEditComponentUpdate = {
 };
 
 export type SpecEditUpdateInput = {
+  specialDietResponse?: string;
   eventDate?: string;
   eventSchedule?: Array<{ label: string; start?: string; end?: string }>;
   attendeeCount?: number;
@@ -99,6 +101,7 @@ export function buildSpecEditUpdateInput(state: SpecEditUpdateFormState): SpecEd
 
   return {
     eventType: state.eventType.trim() || undefined,
+    ...(state.specialDietResponse?.trim() ? { specialDietResponse: state.specialDietResponse.trim() } : {}),
     eventDate: state.eventDate.trim() || undefined,
     eventSchedule: parseEventSchedule(state.eventSchedule ?? "", state.originalEventSchedule),
     serviceForm: state.serviceForm.trim() || undefined,

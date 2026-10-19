@@ -217,3 +217,20 @@ it("refuses to silently lose structured quantities on the legacy intake save pat
   await expect(buildProductionSpecEditPersistAction(actionInput)()).rejects.toThrow(/Produktionsentwurf/);
   expect(actionInput.updateAcceptedSpec).not.toHaveBeenCalled();
 });
+
+
+it("persists a special-diet-only answer as a new canonical revision instead of treating it as a no-op", async () => {
+  const source = { specId:"spec-lunch",event:{type:"Abend",date:"2026-11-12",serviceForm:"buffet"},attendees:{expected:100},
+    menuPlan:[{componentId:"main",label:"Hauptgericht",servings:55}] };
+  const snapshot = specEditSnapshotFromSpec(source);
+  const draft = { draftId:"answer-r1",revision:1,status:"pending_review" as const,createdAt:"2026-10-19",
+    source:{sourceRef:"offer-handoff:h-1"},reviewCards:[],draftArtifacts:{eventSpec:source} };
+  const stored = {...source,productionConstraints:["SYNTHETISCH: Freigaben offen"]};
+  const actionInput = input({productionDraftContext:{caseId:"case-1",draft},
+    buildCurrentSpecUpdateInput:()=>buildSpecEditUpdateInput({...snapshot,componentStates:Object.fromEntries(snapshot.components),specialDietResponse:"SYNTHETISCH: Freigaben offen"}),
+    reviseProductionDraft:vi.fn(async()=>({draft:{...draft,draftId:"answer-r2",revision:2,draftArtifacts:{eventSpec:stored}}}))});
+  actionInput.getCurrentProductionDraftContext=()=>actionInput.productionDraftContext;
+  expect(await buildProductionSpecEditPersistAction(actionInput)()).toEqual(stored);
+  expect(actionInput.reviseProductionDraft).toHaveBeenCalledWith("answer-r1",{caseId:"case-1",expectedRevision:1,componentClassifications:[],specialDietResponse:"SYNTHETISCH: Freigaben offen"});
+  expect(actionInput.updateAcceptedSpec).not.toHaveBeenCalled();
+});

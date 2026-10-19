@@ -14,6 +14,7 @@ export type ProductionQuestionEditorStateInput = {
   editingEventType: string;
   editingEventDate: string;
   editingEventSchedule?: string;
+  editingSpecialDietResponse?: string;
   editingAttendeeCount: string;
   editingServiceForm: string;
   editingMenuItems: string;
@@ -28,6 +29,7 @@ export function buildProductionQuestionEditorState({
   editingEventType,
   editingEventDate,
   editingEventSchedule,
+  editingSpecialDietResponse,
   editingAttendeeCount,
   editingServiceForm,
   editingMenuItems,
@@ -41,6 +43,7 @@ export function buildProductionQuestionEditorState({
     editingEventType,
     editingEventDate,
     ...(editingEventSchedule !== undefined ? { editingEventSchedule } : {}),
+    ...(editingSpecialDietResponse !== undefined ? { editingSpecialDietResponse } : {}),
     editingAttendeeCount,
     editingServiceForm,
     editingMenuItems,

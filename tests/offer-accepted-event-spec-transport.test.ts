@@ -110,7 +110,7 @@ describe("AcceptedEventSpec production decision transport", () => {
       const c = await offerApp.inject({ method: "POST", url: "/v1/offers/cases", headers: offerHeaders, payload: {} });
       const caseId = c.json().case.caseId;
       const response = await offerApp.inject({ method: "POST", url: "/v1/offers/from-text", headers: offerHeaders,
-        payload: { caseId, requestId: "menu-apply-100", text: "SYNTHETISCH: Lunch für 100 Gäste am 12.11.2026. 55 Portionen Hähnchenragout, 25 Portionen Gemüsebratlinge, 20 Portionen Linsenragout." } });
+        payload: { caseId, requestId: "menu-apply-100", text: "Kunde: SYNTHETISCH Nachprüfung 19.10.2026\nLunch für 100 Gäste am 12.11.2026. 55 Portionen Hähnchenragout, 25 Portionen Gemüsebratlinge, 20 Portionen Linsenragout. 4 Gäste benötigen glutenfreie Sonderkost, 3 Gäste keine Schalenfrüchte; Gruppen können sich überschneiden." } });
       expectStatus(response, 201);
       const original = response.json() as OfferDraft;
       const baseline = structuredClone(original.sourceAcceptedEventSpecSnapshot);
@@ -118,7 +118,8 @@ describe("AcceptedEventSpec production decision transport", () => {
       // This fixture verifies transport/scaling with an existing test recipe;
       // it is not a claim that Caesar Salad is a real replacement for the mains.
       const edit = await offerApp.inject({ method: "POST", url: `/v1/offers/drafts/${original.draftId}/menu`, headers: offerHeaders,
-        payload: { revision: 1, menuPlan: [55, 25, 20].map(servings => ({ label: "Caesar Salad", servings, menuCategory: "vegetarian" })) } });
+        payload: { revision: 1, menuPlan: [55, 25, 20].map(servings => ({ label: "Caesar Salad", servings, menuCategory: "vegetarian" })),
+          eventDetails: { eventDate: "2026-11-13", eventType: "Wissenschaftlicher Abend", eventSchedule: [{label:"Abendcatering",start:"18:00",end:"22:00"}] } } });
       expectStatus(edit, 201);
       const revised = edit.json() as OfferDraft;
       const approved = await offerApp.inject({ method: "POST", url: `/v1/offers/drafts/${revised.draftId}/decision`, headers: offerHeaders,
@@ -133,11 +134,27 @@ describe("AcceptedEventSpec production decision transport", () => {
       const draftResponse = await productionApp.inject({ method: "POST", url: `/v1/production/drafts/from-handoff/${handoff.handoffId}`, headers: productionHeaders, payload: { caseId: productionCaseId } });
       expectStatus(draftResponse, 201);
       let draft = draftResponse.json().draft as ProductionDraft;
+      expect(draft.draftArtifacts.eventSpec!.event.date).toBe("2026-11-13");
+      const sourceDraft = structuredClone(draft);
+      const premature = await productionApp.inject({method:"POST",url:`/v1/production/drafts/${draft.draftId}/decision`,headers:productionHeaders,payload:{decision:"approved"}});
+      expectStatus(premature,422);
+      expect(premature.body).toContain("Sonderkost-Rückfrage zuerst");
+      const answer = "SYNTHETISCH: 4 glutenfreie und 3 schalenfruchtvermeidende Gäste, eine Person in beiden Gruppen. Separate gekennzeichnete Portionen; Lieferanten- und Küchenfreigabe vor realem Einsatz offen.";
+      const emptyAnswer = await productionApp.inject({method:"POST", url:`/v1/production/drafts/${draft.draftId}/revise`,headers:productionHeaders,
+        payload:{caseId:productionCaseId,expectedRevision:draft.revision,componentClassifications:[],specialDietResponse:" "}});
+      expectStatus(emptyAnswer,422);
       const operationalRevision = await productionApp.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/revise`, headers: productionHeaders,
-        payload: { caseId: productionCaseId, expectedRevision: draft.revision, componentClassifications: [],
+        payload: { caseId: productionCaseId, expectedRevision: draft.revision, componentClassifications: [], specialDietResponse: answer,
           componentUpdates: draft.draftArtifacts.eventSpec!.menuPlan.map(component => ({ componentId: component.componentId, productionMode: "scratch", purchasedElements: [], recipeOverrideId: "recipe-caesar-salad" })) } });
       expectStatus(operationalRevision, 201);
       draft = operationalRevision.json().draft as ProductionDraft;
+      expect(draft.draftArtifacts.eventSpec!.uncertainties?.some(item=>item.message === "Angefragte Sonderkostfälle benötigen eine gesonderte fachliche Klärung.")).toBe(false);
+      expect(draft.draftArtifacts.eventSpec!.productionConstraints?.join(" ")).toContain(answer);
+      expect(draft.reviewCards.some(card=>card.requiredApproval && card.decision==="pending")).toBe(true);
+      expect(sourceDraft.draftArtifacts.eventSpec!.uncertainties?.some(item=>item.field==="productionConstraints")).toBe(true);
+      const loaded = await productionApp.inject({method:"GET",url:`/v1/production/drafts?caseId=${productionCaseId}`,headers:productionHeaders});
+      expectStatus(loaded,200);
+      expect(loaded.body).toContain("Sonderkost-Antwort von Produktions-Mitarbeiter");
       for (const [index, component] of draft.draftArtifacts.eventSpec!.menuPlan.entries()) {
         const portions = [55, 25, 20][index]!;
         const evidence = await productionApp.inject({ method: "POST", url: `/v1/production/cases/${productionCaseId}/planning-evidence`, headers: productionHeaders, payload: {
@@ -163,6 +180,8 @@ describe("AcceptedEventSpec production decision transport", () => {
       expectStatus(decision, 201);
       const applied = await productionApp.inject({ method: "POST", url: `/v1/production/approved-specs/${decision.json().approvedProductionSpec.approvedProductionSpecId}/apply`, headers: productionHeaders, payload: {} });
       expectStatus(applied, 200);
+      expect(applied.json().eventSpec.event.date).toBe("2026-11-13");
+      expect(applied.json().eventSpec.productionConstraints.join(" ")).toContain(answer);
       expect(applied.json().eventSpec.menuPlan.map((x: any) => x.servings)).toEqual([55, 25, 20]);
       expect(await reader.getSpec({ businessId: "local" }, baseline!.specId)).toEqual(baseline);
       for (const url of [`/v1/exports/production-folders/${applied.json().plan.planId}/html`, `/v1/exports/purchase-lists/${applied.json().purchaseList.purchaseListId}/csv`]) {

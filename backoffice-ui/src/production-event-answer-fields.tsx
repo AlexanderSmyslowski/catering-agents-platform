@@ -38,6 +38,7 @@ export function ProductionEventAnswerFields({
             onChange={(event) => setEditingEventType(event.target.value)}
           >
             <option value="">Bitte wählen</option>
+            {editingEventType && !["meeting", "conference", "lunch", "reception", "dinner", "trade_fair"].includes(editingEventType) ? <option value={editingEventType}>{editingEventType}</option> : null}
             <option value="meeting">Besprechung</option>
             <option value="conference">Konferenz</option>
             <option value="lunch">Lunch</option>

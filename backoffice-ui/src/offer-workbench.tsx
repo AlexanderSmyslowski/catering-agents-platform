@@ -1,3 +1,4 @@
+import { OfferEventEditor } from "./offer-event-editor.js";
 import { OfferPricingEditor } from "./offer-pricing-editor.js";
 import type { PricingSummary } from "@catering/shared-core";
 import { OfferMenuEditor } from "./offer-menu-editor.js";
@@ -250,8 +251,9 @@ export function OfferConversationalWorkbench({
     ? (focusedDraft.openQuestions as string[])
     : [];
   const [editingMenu, setEditingMenu] = useState(false);
+  const [editingEvent, setEditingEvent] = useState(false);
   const [editingPricing, setEditingPricing] = useState(false);
-  useEffect(() => { setEditingMenu(false); setEditingPricing(false); onMenuEditingChange?.(false); }, [focusedDraftId]);
+  useEffect(() => { setEditingMenu(false); setEditingPricing(false); setEditingEvent(false); onMenuEditingChange?.(false); }, [focusedDraftId]);
   const [historySearch, setHistorySearch] = useState("");
   const visibleOfferDrafts = useMemo(() => {
     const query = historySearch.trim().toLowerCase();
@@ -312,13 +314,13 @@ export function OfferConversationalWorkbench({
           </label>
           {intakeFile ? <span>{intakeFile.name}</span> : null}
           {intakeFile ? (
-            <button disabled={submitting || editingMenu || editingPricing} onClick={() => void submitIntakeDocument()}>
+            <button disabled={submitting || editingMenu || editingPricing || editingEvent} onClick={() => void submitIntakeDocument()}>
               Datei als Anfrage erfassen
             </button>
           ) : null}
         </div>
         <div className="offer-composer__next-step">
-          <button disabled={submitting || editingMenu || editingPricing || !offerText.trim()} onClick={() => void submitOfferText()}>
+          <button disabled={submitting || editingMenu || editingPricing || editingEvent || !offerText.trim()} onClick={() => void submitOfferText()}>
             Entwurf aus Text erstellen
           </button>
           <span>{focusedDraft ? `Aktueller Entwurf: ${focusedDraftLabel}` : "Als Nächstes: Anfrage einfügen"}</span>
@@ -348,7 +350,7 @@ export function OfferConversationalWorkbench({
                   <button
                     type="button"
                     className="quiet-list__button"
-                    disabled={submitting || editingMenu || editingPricing}
+                    disabled={submitting || editingMenu || editingPricing || editingEvent}
                     onClick={() => setSelectedDraftId(String(draft.draftId))}
                   >
                     <strong>{renderDraftFocusLabel(draft)}</strong>
@@ -461,6 +463,14 @@ export function OfferConversationalWorkbench({
                   {focusedDraftSource ? <p className="helper-text">Entwurfs-Quelle: {focusedDraftSource}</p> : null}
                 </details>
               ) : null}
+        {focusedDraftSpec?.event && focusedDraftSpec.servicePlan && onMenuSaved ? <OfferEventEditor
+          key={"event-" + focusedDraftId}
+          draftId={focusedDraftId} revision={focusedDraftRevision ?? 1}
+          spec={focusedDraftSpec as unknown as import("@catering/shared-core").AcceptedEventSpec}
+          disabled={submitting || editingPricing || editingMenu}
+          onEditingChange={value => { setEditingEvent(value); onMenuEditingChange?.(value || editingMenu || editingPricing); }}
+          onSaved={onMenuSaved}
+        /> : null}
               {onMenuSaved && focusedDraftRevision !== undefined ? (
                 <OfferMenuEditor
                   key={focusedDraftId}
@@ -468,8 +478,8 @@ export function OfferConversationalWorkbench({
                   revision={focusedDraftRevision}
                   menuPlan={Array.isArray(focusedDraftSpec?.menuPlan) ? focusedDraftSpec.menuPlan as Array<Record<string, unknown>> : []}
                   onSaved={onMenuSaved}
-                  disabled={submitting || editingPricing}
-                  onEditingChange={(editing) => { setEditingMenu(editing); onMenuEditingChange?.(editing || editingPricing); }}
+                  disabled={submitting || editingPricing || editingEvent}
+                  onEditingChange={(editing) => { setEditingMenu(editing); onMenuEditingChange?.(editing || editingPricing || editingEvent); }}
                 />
               ) : null}
               {onMenuSaved && focusedDraftRevision !== undefined ? (
@@ -479,8 +489,8 @@ export function OfferConversationalWorkbench({
                     menuPlan: (item.proposedEventSpec as { menuPlan?: Array<Record<string, unknown>> } | undefined)?.menuPlan }))}
                   menuPlan={Array.isArray(focusedDraftSpec?.menuPlan) ? focusedDraftSpec.menuPlan as Array<Record<string, unknown>> : []}
                   pricingSummary={focusedDraft?.pricingSummary as PricingSummary | undefined}
-                  onSaved={onMenuSaved} disabled={submitting || editingMenu}
-                  onEditingChange={editing => { setEditingPricing(editing); onMenuEditingChange?.(editing || editingMenu); }} />
+                  onSaved={onMenuSaved} disabled={submitting || editingMenu || editingEvent}
+                  onEditingChange={editing => { setEditingPricing(editing); onMenuEditingChange?.(editing || editingMenu || editingEvent); }} />
               ) : null}
               {focusedOpenQuestions.length > 0 ? (
                 <ul className="item-list compact">
@@ -531,7 +541,7 @@ export function OfferConversationalWorkbench({
                       key={variantId}
                       className="secondary-button"
                       aria-pressed={selectedVariantId === variantId}
-                      disabled={submitting || editingMenu || editingPricing || incompletePricingTax || focusedDraftRevision === undefined}
+                      disabled={submitting || editingMenu || editingPricing || editingEvent || incompletePricingTax || focusedDraftRevision === undefined}
                       onClick={() => {
                         setSelectedVariantId(variantId);
                         if (focusedDraftRevision !== undefined) {
@@ -543,7 +553,7 @@ export function OfferConversationalWorkbench({
                     </button>
                   );
                 })}
-                {editingMenu || editingPricing ? (
+                {editingMenu || editingPricing || editingEvent ? (
                   <span className="helper-text">Vor dem Export Änderungen speichern oder verwerfen.</span>
                 ) : (
                   <a className="ghost-link" href={offerExportUrl(focusedDraftId)} target="_blank" rel="noreferrer">
@@ -553,7 +563,7 @@ export function OfferConversationalWorkbench({
                 {focusedApprovalBinding && !focusedHandoffId && createHandoff ? (
                   <button
                     className="secondary-button"
-                    disabled={submitting || editingMenu || editingPricing}
+                    disabled={submitting || editingMenu || editingPricing || editingEvent}
                     onClick={() => void createHandoff(focusedDraftId, focusedApprovalBinding.offerDraftRevision, focusedApprovalBinding.approvedOfferId)}
                   >
                     An Produktion übergeben
@@ -562,7 +572,7 @@ export function OfferConversationalWorkbench({
                 {focusedHandoffId && openProductionHandoff ? (
                   <button
                     className="secondary-button"
-                    disabled={submitting || editingMenu || editingPricing}
+                    disabled={submitting || editingMenu || editingPricing || editingEvent}
                     onClick={() => void openProductionHandoff(focusedHandoffId)}
                   >
                     Produktionsauftrag öffnen
@@ -595,7 +605,7 @@ export function OfferConversationalWorkbench({
                 onChange={(event) => setIntakeText(event.target.value)}
                 placeholder="Anfragetext einfügen"
               />
-              <button disabled={submitting || editingMenu || editingPricing} onClick={() => void submitIntakeText()}>
+              <button disabled={submitting || editingMenu || editingPricing || editingEvent} onClick={() => void submitIntakeText()}>
                 Text als Anfrage übernehmen
               </button>
             </section>
@@ -620,7 +630,7 @@ export function OfferConversationalWorkbench({
                 accept=".pdf,.txt,.md,.eml,text/plain,message/rfc822,application/pdf"
                 onChange={(event: ChangeEvent<HTMLInputElement>) => setIntakeFile(event.target.files?.[0] ?? null)}
               />
-              <button disabled={submitting || editingMenu || editingPricing} onClick={() => void submitIntakeDocument()}>
+              <button disabled={submitting || editingMenu || editingPricing || editingEvent} onClick={() => void submitIntakeDocument()}>
                 Datei als Anfrage übernehmen
               </button>
               {intakeFile ? <p className="helper-text">Ausgewählt: {intakeFile.name}</p> : null}
@@ -636,7 +646,7 @@ export function OfferConversationalWorkbench({
               <input value={manualInput.customerName} onChange={(event) => manualActions.setCustomerName(event.target.value)} placeholder="Kundenname" />
               <input value={manualInput.venueName} onChange={(event) => manualActions.setVenueName(event.target.value)} placeholder="Ort" />
               <textarea value={manualInput.notes} onChange={(event) => manualActions.setNotes(event.target.value)} placeholder="Interne Notizen" />
-              <button disabled={submitting || editingMenu || editingPricing} onClick={() => void manualActions.submitManualSpec()}>
+              <button disabled={submitting || editingMenu || editingPricing || editingEvent} onClick={() => void manualActions.submitManualSpec()}>
                 Angaben übernehmen
               </button>
             </section>
@@ -661,16 +671,16 @@ export function OfferConversationalWorkbench({
                   </details>
                 </div>
                 <div className="quiet-action-row">
-                  <button className="secondary-button" disabled={submitting || editingMenu || editingPricing} onClick={() => specEditActions.beginSpecEdit(spec)}>
+                  {!focusedDraft ? <button className="secondary-button" disabled={submitting || editingMenu || editingPricing || editingEvent} onClick={() => specEditActions.beginSpecEdit(spec)}>
                     Bearbeiten
-                  </button>
+                  </button> : <span className="helper-text">Unveränderter Anfrageursprung. Veranstaltungsdaten oben am Angebot als neue Fassung bearbeiten.</span>}
                   <span className="helper-text">Die Produktionsübergabe erfolgt am freigegebenen Angebotsentwurf.</span>
                 </div>
               </li>
             ))}
             {filteredSpecs.length === 0 ? <li>Noch keine Veranstaltungsdaten übernommen.</li> : null}
           </ul>
-          {specEdit.editingSpecId ? (
+          {!focusedDraft && specEdit.editingSpecId ? (
             <div className="compact-edit-form">
               <h3>Veranstaltungsdaten bearbeiten</h3>
               <input value={specEdit.eventType} onChange={(event) => specEditActions.setEventType(event.target.value)} placeholder="Veranstaltungstyp" />
@@ -679,10 +689,10 @@ export function OfferConversationalWorkbench({
               <input value={specEdit.serviceForm} onChange={(event) => specEditActions.setServiceForm(event.target.value)} placeholder="Serviceform" />
               <textarea value={specEdit.menuItems} onChange={(event) => specEditActions.setMenuItems(event.target.value)} placeholder="Menüpunkte" />
               <div className="quiet-action-row">
-                <button disabled={submitting || editingMenu || editingPricing} onClick={() => void specEditActions.saveSpecEdit()}>
+                <button disabled={submitting || editingMenu || editingPricing || editingEvent} onClick={() => void specEditActions.saveSpecEdit()}>
                   Änderungen speichern
                 </button>
-                <button className="secondary-button" disabled={submitting || editingMenu || editingPricing} onClick={specEditActions.resetSpecEdit}>
+                <button className="secondary-button" disabled={submitting || editingMenu || editingPricing || editingEvent} onClick={specEditActions.resetSpecEdit}>
                   Abbrechen
                 </button>
               </div>

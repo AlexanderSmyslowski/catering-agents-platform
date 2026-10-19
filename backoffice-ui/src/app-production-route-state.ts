@@ -43,6 +43,7 @@ export function buildAppProductionRouteState(
     setEditingEventType: input.setEditingEventType,
     setEditingEventDate: input.setEditingEventDate,
     setEditingEventSchedule: input.setEditingEventSchedule,
+    ...( input.setEditingSpecialDietResponse ? { setEditingSpecialDietResponse: input.setEditingSpecialDietResponse } : {}),
     setEditingAttendeeCount: input.setEditingAttendeeCount,
     setEditingServiceForm: input.setEditingServiceForm,
     setEditingMenuItems: input.setEditingMenuItems,

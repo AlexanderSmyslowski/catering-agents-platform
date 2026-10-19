@@ -22,6 +22,7 @@ export type ProductionQuestionEditorState = {
   editingEventType: string;
   editingEventDate: string;
   editingEventSchedule?: string;
+  editingSpecialDietResponse?: string;
   editingAttendeeCount: string;
   editingServiceForm: string;
   editingMenuItems: string;
@@ -34,6 +35,7 @@ export type ProductionQuestionEditorActions = {
   setEditingEventType: (value: string) => void;
   setEditingEventDate: (value: string) => void;
   setEditingEventSchedule?: (value: string) => void;
+  setEditingSpecialDietResponse?: (value: string) => void;
   setEditingAttendeeCount: (value: string) => void;
   setEditingServiceForm: (value: string) => void;
   setEditingMenuItems: (value: string) => void;
@@ -106,6 +108,7 @@ export function ProductionQuestionPanel({
     editingEventType,
     editingEventDate,
     editingEventSchedule,
+    editingSpecialDietResponse,
     editingAttendeeCount,
     editingServiceForm,
     editingMenuItems,
@@ -117,6 +120,7 @@ export function ProductionQuestionPanel({
     setEditingEventType,
     setEditingEventDate,
     setEditingEventSchedule,
+    setEditingSpecialDietResponse,
     setEditingAttendeeCount,
     setEditingServiceForm,
     setEditingMenuItems,
@@ -228,6 +232,7 @@ export function ProductionQuestionPanel({
                     editingEventType={editingEventType}
                     editingEventDate={editingEventDate}
                     editingEventSchedule={editingEventSchedule ?? ""}
+                    editingSpecialDietResponse={editingSpecialDietResponse}
                     editingAttendeeCount={editingAttendeeCount}
                     editingServiceForm={editingServiceForm}
                     editingMenuItems={editingMenuItems}
@@ -236,6 +241,7 @@ export function ProductionQuestionPanel({
                     setEditingEventType={setEditingEventType}
                     setEditingEventDate={setEditingEventDate}
                     setEditingEventSchedule={setEditingEventSchedule}
+                    setEditingSpecialDietResponse={canEditPurchasedQuantities ? setEditingSpecialDietResponse : undefined}
                     setEditingAttendeeCount={setEditingAttendeeCount}
                     setEditingServiceForm={setEditingServiceForm}
                     setEditingMenuItems={setEditingMenuItems}
