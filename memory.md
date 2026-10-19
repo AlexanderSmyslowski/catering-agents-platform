@@ -1,3 +1,11 @@
+## ENV-Bindung für künftige Imageupdates — Version 5.457 / 18.10.2026
+
+Der aufNürnberg tatsächlich nachgewiesene ENV-Reihenfolgenfehler ist im allgemeinen Imageupdate-Helper gezielt korrigiert: Containerbindung verwendet eine vollständige kanonische eindeutige Schlüssel/Wert-Map mit environmentFormat=unique-key-map-v1. Reihenfolge darf sich ändern, Werte/Schlüssel einschließlich Leerwerten und weiterem= bleiben exakt gebunden. Nichtlisten, ungültige/NUL-Einträge und doppelte Schlüssel führen vor Mutationen zumHOLD. Derselbe Containerbinder wirkt in verify_runtime und pause_applications; alle übrigen Sicherheits-/Datei-/Image-/Restart-/Datenbindungen bleiben unverändert.
+
+Regression vor Korrektur tatsächlich rot(10Fehlschläge), danach42gezielte ModultestsPASS; neue Fälle prüfen auch beide tatsächlichen Vorwärts-/Reversevergleichsfunktionen sowie Wertdrift→Reverseabbruch vor command. gitdiffcheckPASS, unabhängiges enges Konsequenzreview angenommen. Kein Hosteingriff und keine neue Produktversion durch dieses Delta. Gilt für künftig regulär neu mit diesem Helper erstellte Baselines/Stagings: alte gebundene Artefakte werden nicht umgeschrieben oder still kompatibel erklärt.
+
+Heutiger Zielstand bleibt der separat angenommene manuelle Recoveryabschluss5.456 (führende Gesamtübergabe im Hauptcheckout und RUNBOOK): Produktc3bf1e8 läuft und geschützter Authsmoke besteht; ursprünglicher öffentlicher ApplyHOLD/Verifyfalse/automaticRollbackRepairedfalse bleiben erhalten. Chrome zeigtERR_BLOCKED_BY_CLIENT; vollständiger100Gäste-Ziellauf noch offen. Helsinki/DNS/ADH unverändert.
+
 # memory.md
 
 ## 5.448 — 18.10.2026: exakt gebundener Web-Snippetimport
