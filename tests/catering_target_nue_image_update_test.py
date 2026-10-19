@@ -569,6 +569,78 @@ class NueTests(unittest.TestCase):
             self.assertEqual(nue.CURRENT_RUNTIME_M, "sha256:fb26fe510fade286bbfa02c981a8abb910ef8624a802d26822db662d81befdeb")
             self.assertEqual(nue.CURRENT_WEB_M, "sha256:b2ffe4694b983e4b4c1859676bf24df344900dfeaf8f2f7c07ad1ee23cbce25d")
 
+    @contextmanager
+    def synthetic_pr727_caddy_trust(self):
+        with self.synthetic_pr727_host() as state:
+            web = state["rows"][-1]
+            web["Mounts"].append({"Type": "volume", "Name": "platform-infra_caddy_data",
+                "Source": "/var/lib/docker/volumes/platform-infra_caddy_data/_data", "Destination": "/data", "RW": True})
+            crt = "/usr/local/share/ca-certificates/" + nue.PR727_CADDY_ROOT_NAME + ".crt"
+            pem = "/etc/ssl/certs/ca-cert-" + nue.PR727_CADDY_ROOT_NAME + ".pem"
+            root = "/data/caddy/pki/authorities/local/root.crt"
+            bundle = "/etc/ssl/certs/ca-certificates.crt"
+            rehash = "/etc/ssl/certs/fe4a7346.0"
+            directories = ["/usr", "/usr/local", "/usr/local/share", "/usr/local/share/ca-certificates",
+                           "/etc", "/etc/caddy", "/etc/ssl", "/etc/ssl/certs"]
+            trust = {"diff": [*("C " + p for p in directories), "A /etc/caddy/sites", "A " + crt,
+                              "A " + pem, "C " + bundle, "A " + rehash],
+                     "files": {root: b"synthetic-own-root\n", crt: b"synthetic-own-root\n",
+                               bundle: b"synthetic-base-ca-one\nsynthetic-base-ca-two\nsynthetic-own-root\n"},
+                     "links": {pem: crt, rehash: Path(pem).name},
+                     "metadata": {**{p: "41ed|0|0|1" for p in directories}, "/etc/caddy/sites": "41c0|0|0|2",
+                                  root: "8180|0|0|1", crt: "81a4|0|0|1", bundle: "81a4|0|0|1",
+                                  pem: "a1ff|0|0|1", rehash: "a1ff|0|0|1"}}
+            original = nue.command
+            def command(argv, **kwargs):
+                if argv[:2] == ["docker", "diff"]: return ("\n".join(trust["diff"]) + "\n").encode()
+                if argv[:3] == ["docker", "exec", web["Id"]]:
+                    if argv[3:5] == ["stat", "-c"]: return ("\n".join(trust["metadata"][p] for p in argv[6:]) + "\n").encode()
+                    if argv[3] == "cat" and argv[4] in trust["files"]: return trust["files"][argv[4]]
+                    if argv[3] == "readlink": return (trust["links"][argv[4]] + "\n").encode()
+                return original(argv, **kwargs)
+            with patch.object(nue, "command", side_effect=command), patch.multiple(nue,
+                    PR727_CADDY_ROOT_SHA256=hashlib.sha256(trust["files"][root]).hexdigest(),
+                    PR727_CADDY_CA_BUNDLE_SHA256=hashlib.sha256(trust["files"][bundle]).hexdigest()):
+                yield state, trust, (root, crt, bundle, pem, rehash)
+
+    def test_pr727_observed_caddy_trust_passes_and_is_bound_before_after(self):
+        oci = nue.load_module("nue_caddy_trust_oci", ROOT / "platform-infra/scripts/catering_target_oci.py")
+        with self.synthetic_pr727_caddy_trust() as (state, trust, paths):
+            first = nue.current_base_gate(oci, nue.CURRENT_RUNTIME_M, nue.CURRENT_WEB_M)
+            self.assertEqual(first, nue.current_base_gate(oci, nue.CURRENT_RUNTIME_M, nue.CURRENT_WEB_M))
+            self.assertEqual(first["webWritableState"]["diff"], sorted(trust["diff"]))
+            self.assertEqual(first["webWritableState"]["rootSha256"], nue.PR727_CADDY_ROOT_SHA256)
+            self.assertEqual(len([k for k in first if k.endswith(":source")]), 4)
+
+    def test_pr727_caddy_trust_rejects_unproven_files_certificates_metadata_and_mounts(self):
+        for mutation in ("extra-path", "deleted", "changed-status", "duplicate", "missing-path", "wrong-root",
+                         "wrong-added-root", "extra-ca", "missing-ca", "duplicate-ca", "pem-target", "rehash-target",
+                         "file-type", "owner", "mode", "links", "directory-type", "foreign-volume", "foreign-source", "bind-data"):
+            with self.subTest(mutation=mutation), self.synthetic_pr727_caddy_trust() as (state, trust, paths):
+                root, crt, bundle, pem, rehash = paths
+                if mutation == "extra-path": trust["diff"].append("A /etc/ssl/certs/unrelated.pem")
+                if mutation == "deleted": trust["diff"].append("D /etc/ssl/certs/original.pem")
+                if mutation == "changed-status": trust["diff"][0] = "A /usr"
+                if mutation == "duplicate": trust["diff"].append(trust["diff"][0])
+                if mutation == "missing-path": trust["diff"].pop()
+                if mutation == "wrong-root": trust["files"][root] = b"another-root\n"
+                if mutation == "wrong-added-root": trust["files"][crt] = b"another-root\n"
+                if mutation == "extra-ca": trust["files"][bundle] += b"unrelated-ca\n"
+                if mutation == "missing-ca": trust["files"][bundle] = trust["files"][bundle].replace(b"synthetic-base-ca-one\n", b"")
+                if mutation == "duplicate-ca": trust["files"][bundle] += b"synthetic-base-ca-two\n"
+                if mutation == "pem-target": trust["links"][pem] = "/data/caddy/pki/authorities/local/root.key"
+                if mutation == "rehash-target": trust["links"][rehash] = "unrelated.pem"
+                if mutation == "file-type": trust["metadata"][crt] = "a1ff|0|0|1"
+                if mutation == "owner": trust["metadata"][root] = "8180|1000|0|1"
+                if mutation == "mode": trust["metadata"][bundle] = "81b6|0|0|1"
+                if mutation == "links": trust["metadata"][crt] = "81a4|0|0|2"
+                if mutation == "directory-type": trust["metadata"]["/etc/ssl"] = "81a4|0|0|1"
+                if mutation == "foreign-volume": state["rows"][-1]["Mounts"][-1]["Name"] = "foreign"
+                if mutation == "foreign-source": state["rows"][-1]["Mounts"][-1]["Source"] = "/elsewhere"
+                if mutation == "bind-data": state["rows"][-1]["Mounts"][-1]["Type"] = "bind"
+                with self.assertRaisesRegex(RuntimeError, "NUE_PR727_WEB_"):
+                    nue.pr727_web_writable_state(state["rows"][-1])
+
     def test_pr727_predecessor_rejects_current_layout_identity_source_and_config_drift(self):
         oci = nue.load_module("nue_predecessor_negative_oci", ROOT / "platform-infra/scripts/catering_target_oci.py")
         for mutation in ("M", "C", "image", "cwd", "command", "entrypoint", "mount", "site", "compose", "source", "web-layout", "web-write"):

@@ -344,6 +344,54 @@ PR727_MANIFEST_SHA256 = "8e3bbad3b8445968a27d859f61c29bb99081e54341f267da9e4d35c
 PR727_RECOVERY_SHA256 = "8f588b754e6a617b6437e0781b3966c03b4aff720db3edf2473491c3f99a008b"
 PR727_IMAGES = {"runtime": "sha256:6df040c61e8ca857cc3a3e8b2c54da5a560f14ea19f49d8cbd322032cee1f52b",
                 "web": "sha256:ea6c1460fa5a015d0320625477de58d09f9c96c1c29fb27c624be660bd651f12"}
+PR727_CADDY_ROOT_NAME = "Caddy_Local_Authority_-_2026_ECC_Root_230535653603960188253814079773346015816"
+PR727_CADDY_ROOT_SHA256 = "e70877424f5913ab6146fb751750fd1deb4a862c2820811287459d3b213e2b88"
+PR727_CADDY_CA_BUNDLE_SHA256 = "f0cbbbeb86b1ca821634896f134c3c3b73db0bb525664b643ac80159242f9778"
+
+
+def pr727_web_writable_state(row):
+    changes = command(["docker", "diff", row["Id"]]).decode().splitlines()
+    if not changes:
+        return {"diff": []}
+    # Caddy installed its own public root and Docker created the readonly sites
+    # mountpoint. Only this observed PR727 state is accepted, never a path prefix.
+    crt = "/usr/local/share/ca-certificates/" + PR727_CADDY_ROOT_NAME + ".crt"
+    pem = "/etc/ssl/certs/ca-cert-" + PR727_CADDY_ROOT_NAME + ".pem"
+    bundle = "/etc/ssl/certs/ca-certificates.crt"
+    rehash = "/etc/ssl/certs/fe4a7346.0"
+    root = "/data/caddy/pki/authorities/local/root.crt"
+    directories = ("/usr", "/usr/local", "/usr/local/share", "/usr/local/share/ca-certificates",
+                   "/etc", "/etc/caddy", "/etc/ssl", "/etc/ssl/certs")
+    expected = [*("C " + p for p in directories), "A /etc/caddy/sites", "A " + crt,
+                "A " + pem, "C " + bundle, "A " + rehash]
+    require(sorted(changes) == sorted(expected), "NUE_PR727_WEB_WRITABLE_DRIFT")
+    data = [m for m in row["Mounts"] if m["Destination"] == "/data"]
+    require(len(data) == 1 and data[0]["Type"] == "volume" and data[0]["Name"] == "platform-infra_caddy_data"
+            and data[0]["Source"] == "/var/lib/docker/volumes/platform-infra_caddy_data/_data"
+            and data[0]["RW"] is True, "NUE_PR727_WEB_TRUST_VOLUME")
+    prefix = ["docker", "exec", row["Id"]]
+    paths = [*directories, "/etc/caddy/sites", root, crt, pem, bundle, rehash]
+    metadata = command(prefix + ["stat", "-c", "%f|%u|%g|%h", *paths]).decode().splitlines()
+    require(len(metadata) == len(paths), "NUE_PR727_WEB_TRUST_METADATA")
+    for path, line in zip(paths, metadata):
+        values = line.split("|")
+        require(len(values) == 4, "NUE_PR727_WEB_TRUST_METADATA")
+        mode, uid, gid, links = int(values[0], 16), *map(int, values[1:])
+        expected_mode = (stat.S_IFDIR | (0o700 if path == "/etc/caddy/sites" else 0o755)) if path in directories or path == "/etc/caddy/sites" else (
+            stat.S_IFLNK | 0o777 if path in (pem, rehash) else stat.S_IFREG | (0o600 if path == root else 0o644))
+        require(mode == expected_mode and uid == gid == 0 and (links >= 1 if stat.S_ISDIR(mode) else links == 1), "NUE_PR727_WEB_TRUST_METADATA")
+    root_body = command(prefix + ["cat", root])
+    require(hashlib.sha256(root_body).hexdigest() == PR727_CADDY_ROOT_SHA256 and
+            command(prefix + ["cat", crt]) == root_body, "NUE_PR727_WEB_TRUST_ROOT")
+    # The pinned bundle was independently compared with all 146 original image
+    # certificates plus exactly this root, preserving multiplicity. Any byte
+    # change (including missing/extra certificates) needs a new explicit review.
+    require(hashlib.sha256(command(prefix + ["cat", bundle])).hexdigest() == PR727_CADDY_CA_BUNDLE_SHA256, "NUE_PR727_WEB_TRUST_BUNDLE")
+    require(command(prefix + ["readlink", pem]).decode().strip() == crt and
+            command(prefix + ["readlink", rehash]).decode().strip() == Path(pem).name, "NUE_PR727_WEB_TRUST_LINK")
+    return {"diff": sorted(changes), "rootSha256": PR727_CADDY_ROOT_SHA256,
+            "caBundleSha256": PR727_CADDY_CA_BUNDLE_SHA256, "metadata": metadata,
+            "links": {pem: crt, rehash: Path(pem).name}}
 
 
 def accepted_pr727_bundle():
@@ -412,7 +460,7 @@ def pr727_running_gate(oci, rows):
                     "NUE_PR727_SERVING_CONFIG")
             command(["docker", "exec", row["Id"], "sh", "-ec",
                      'test -L /srv && test "$(readlink /srv)" = /catering-public && test -d /catering-public && test ! -L /catering-public && test -d /catering-previous-public && test ! -L /catering-previous-public'])
-            require(not command(["docker", "diff", row["Id"]]).strip(), "NUE_PR727_WEB_WRITABLE_DRIFT")
+            observations["webWritableState"] = pr727_web_writable_state(row)
             observations["caddyConfiguration"] = configurations
         observations[row["Name"]] = {"binding": container_binding(row), "cmd": config["Cmd"],
                                      "entrypoint": config.get("Entrypoint"), "workingDir": config["WorkingDir"]}
