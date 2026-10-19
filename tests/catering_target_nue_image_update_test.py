@@ -530,6 +530,99 @@ class NueTests(unittest.TestCase):
             self.assertEqual(len([key for key in first if key.startswith("/platform-infra-")]), 5)
             self.assertTrue(all(call[:3] in (["docker", "image", "inspect"], ["docker", "exec", call[2]]) for call in state["calls"]))
 
+
+    @contextmanager
+    def synthetic_pr727_host(self):
+        with self.synthetic_current_host() as state:
+            source = state["compose"].parent / "predecessor"
+            expected_files = {}
+            for directory in nue.RUNTIME_ROOTS:
+                path = source / "source" / directory / "fixture.ts"
+                path.parent.mkdir(parents=True); path.write_bytes(b"export const retained = true;\n")
+                expected_files[path.relative_to(source / "source").as_posix()] = path.read_bytes()
+            manifest = {"schemaBinding": {"migration": "same", "ddl": "same"}}
+            for row in state["rows"]:
+                service = row["Name"].removeprefix("/platform-infra-").removesuffix("-1")
+                identity = nue.PR727_IMAGES["web" if service == "web" else "runtime"]
+                row["Image"] = row["ImageManifestDescriptor"]["digest"] = identity
+                if service != "web": row["Config"]["WorkingDir"] = "/catering-product"
+                state["images"][identity] = {**state["images"][nue.CURRENT_WEB_M], "Id": identity,
+                    "Descriptor": {"digest": identity, "mediaType": "application/vnd.oci.image.manifest.v1+json"}}
+            (state["sites"] / "accepted.caddy").rename(state["sites"] / "catering-target.caddy")
+            site = state["sites"] / "catering-target.caddy"
+            state["imageConfig"] = (ROOT / "platform-infra/Caddyfile").read_bytes()
+            state["compose"].write_text(json.dumps({"services": {s: {"image": nue.PR727_IMAGES["web" if s == "web" else "runtime"]} for s in nue.SERVICES}}))
+            with patch.object(nue, "accepted_pr727_bundle", return_value=(source, manifest)), \
+                 patch.object(nue, "runtime_files", side_effect=lambda *a: dict(expected_files)) as runtime, \
+                 patch.object(nue, "schema_binding", return_value=manifest["schemaBinding"]), \
+                 patch.object(nue, "CURRENT_WEB_SNIPPET_SITE_SHA256", hashlib.sha256(site.read_bytes()).hexdigest()):
+                state.update(runtime=runtime, expectedFiles=expected_files)
+                yield state
+
+    def test_pr727_predecessor_keeps_original_bases_and_exact_current_source(self):
+        oci = nue.load_module("nue_predecessor_oci", ROOT / "platform-infra/scripts/catering_target_oci.py")
+        with self.synthetic_pr727_host() as state:
+            first = nue.current_base_gate(oci, nue.CURRENT_RUNTIME_M, nue.CURRENT_WEB_M)
+            self.assertEqual(first, nue.current_base_gate(oci, nue.CURRENT_RUNTIME_M, nue.CURRENT_WEB_M))
+            self.assertEqual(first["predecessorManifestSha256"], "8e3bbad3b8445968a27d859f61c29bb99081e54341f267da9e4d35ce5ab5df50")
+            self.assertEqual(len([k for k in first if k.endswith(":source")]), 4)
+            self.assertEqual(nue.CURRENT_RUNTIME_M, "sha256:fb26fe510fade286bbfa02c981a8abb910ef8624a802d26822db662d81befdeb")
+            self.assertEqual(nue.CURRENT_WEB_M, "sha256:b2ffe4694b983e4b4c1859676bf24df344900dfeaf8f2f7c07ad1ee23cbce25d")
+
+    def test_pr727_predecessor_rejects_current_layout_identity_source_and_config_drift(self):
+        oci = nue.load_module("nue_predecessor_negative_oci", ROOT / "platform-infra/scripts/catering_target_oci.py")
+        for mutation in ("M", "C", "image", "cwd", "command", "entrypoint", "mount", "site", "compose", "source", "web-layout", "web-write"):
+            with self.subTest(mutation=mutation), self.synthetic_pr727_host() as state:
+                if mutation == "M": state["rows"][0]["ImageManifestDescriptor"]["digest"] = "sha256:" + "a" * 64
+                if mutation == "C": state["rows"][0]["Image"] = "sha256:" + "b" * 64
+                if mutation == "image": state["images"][nue.PR727_IMAGES["runtime"]]["Id"] = "sha256:" + "c" * 64
+                if mutation == "cwd": state["rows"][0]["Config"]["WorkingDir"] = "/app"
+                if mutation == "command": state["rows"][0]["Config"]["Cmd"] = ["npm", "run", "other"]
+                if mutation == "entrypoint": state["rows"][0]["Config"]["Entrypoint"] = []
+                if mutation == "mount": state["rows"][0]["Mounts"] = [{"Type":"bind","Source":"/unrelated","Destination":"/catering-product","RW":True}]
+                if mutation == "site": (state["sites"] / "extra.caddy").write_bytes(b"root * /other")
+                if mutation == "compose": state["compose"].write_text(json.dumps({"services": {s: {"image": "unknown"} for s in nue.SERVICES}}))
+                if mutation == "source": state["runtime"].side_effect = lambda *a: {"shared-core/src/fixture.ts": b"changed"}
+                if mutation == "web-layout": state["collision"] = True
+                original = nue.command
+                def changed_command(argv, **kwargs):
+                    if argv[:2] == ["docker", "diff"]: return b"C /catering-public/index.html" if mutation == "web-write" else b""
+                    return original(argv, **kwargs)
+                with patch.object(nue, "command", side_effect=changed_command):
+                    with self.assertRaises((RuntimeError, ValueError)):
+                        nue.current_base_gate(oci, nue.CURRENT_RUNTIME_M, nue.CURRENT_WEB_M)
+
+    def test_pr727_record_requires_pinned_manifest_helper_recovery_and_old_verifier(self):
+        for mutation in (None, "manifest", "helper", "recovery", "product", "M", "verifier"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
+                releases=Path(temporary); root=releases/"fixture"; (root/"tools").mkdir(parents=True)
+                helper=root/"tools/catering_target_nue_image_update.py"; helper.write_bytes(b"accepted fixture")
+                manifest={"productCommit":"c3bf1e83127aa96442c3e48d00350ce1ad9c04a5",
+                    "operationsCommit":"6149d2723f5240a389693798a0e7ef7a3bfabbaf",
+                    "bases":dict(nue.CURRENT_BASE_LAYOUT),"helpers":{helper.name:hashlib.sha256(helper.read_bytes()).hexdigest()},
+                    "images":{k:{"platformManifestDigest":v} for k,v in nue.PR727_IMAGES.items()}}
+                if mutation=="product":manifest["productCommit"]="a"*40
+                if mutation=="M":manifest["images"]["runtime"]["platformManifestDigest"]="sha256:"+"b"*64
+                raw=nue.canonical(manifest); sha=hashlib.sha256(raw).hexdigest(); root.rename(releases/sha);root=releases/sha;helper=root/"tools"/helper.name
+                (root/"manifest.json").write_bytes(raw)
+                receipt={"status":"MANUAL_NUE_CANDIDATE_RUNTIME_VERIFIED","manifestSha256":sha,"originalApplyStatus":"HOLD",
+                    "currentAuthenticatedSmokePassed":True,"publicApplyPassed":False,"publicVerifyPassed":False}
+                receipt_raw=nue.canonical(receipt);receipt_sha=hashlib.sha256(receipt_raw).hexdigest()
+                (root/"manual-forward-recovery-verified.json").write_bytes(receipt_raw)
+                if mutation=="manifest":(root/"manifest.json").write_bytes(raw+b" ")
+                if mutation=="helper":helper.write_bytes(b"changed")
+                if mutation=="recovery":(root/"manual-forward-recovery-verified.json").write_bytes(receipt_raw+b" ")
+                verifier=SimpleNamespace(verify_bundle=__import__("unittest.mock",fromlist=["Mock"]).Mock(return_value=manifest))
+                if mutation=="verifier":verifier.verify_bundle.side_effect=RuntimeError("archive/source/C drift")
+                with patch.object(nue,"RELEASES",releases),patch.object(nue,"PR727_MANIFEST_SHA256",sha), \
+                     patch.object(nue,"PR727_RECOVERY_SHA256",receipt_sha),patch.object(nue,"protected",side_effect=lambda p,**kw:Path(p)), \
+                     patch.object(nue,"load_module",return_value=verifier):
+                    if mutation is None:
+                        self.assertEqual(nue.accepted_pr727_bundle(),(root,manifest))
+                        verifier.verify_bundle.assert_called_once_with(root,sha)
+                    else:
+                        with self.assertRaises(RuntimeError):nue.accepted_pr727_bundle()
+
     def test_current_web_optional_empty_entrypoint_can_be_omitted(self):
         oci = nue.load_module("nue_current_empty_entrypoint_oci", ROOT / "platform-infra/scripts/catering_target_oci.py")
         for omitted in ("image", "container", "both"):

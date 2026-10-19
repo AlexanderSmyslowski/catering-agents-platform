@@ -252,7 +252,7 @@ def source_schema(root):
     return schema_binding(files)
 
 
-def runtime_schema(container, application_root="/app"):
+def runtime_files(container, application_root="/app"):
     require(application_root in ("/app", "/catering-product"), "NUE_RUNTIME_SOURCE_ROOT")
     raw = command(["docker", "exec", container, "tar", "-C", application_root, "-cf", "-", *RUNTIME_ROOTS])
     files = {}
@@ -268,7 +268,11 @@ def runtime_schema(container, application_root="/app"):
                 require(name.as_posix() not in files, "RUNTIME_SOURCE_DUPLICATE")
                 files[name.as_posix()] = archive.extractfile(member).read()
     require(set(RUNTIME_ROOTS) <= roots, "RUNTIME_SOURCE_ROOTS")
-    return schema_binding(files)
+    return files
+
+
+def runtime_schema(container, application_root="/app"):
+    return schema_binding(runtime_files(container, application_root))
 
 
 def verify_bundle(bundle, manifest_sha):
@@ -334,6 +338,88 @@ def build_prepared(directory, request_sha, output, node_base, caddy_base, *, bas
     finally: unlock(token)
 
 
+
+# This is the one manually accepted first release, not a generic installed-status fallback.
+PR727_MANIFEST_SHA256 = "8e3bbad3b8445968a27d859f61c29bb99081e54341f267da9e4d35ce5ab5df50"
+PR727_RECOVERY_SHA256 = "8f588b754e6a617b6437e0781b3966c03b4aff720db3edf2473491c3f99a008b"
+PR727_IMAGES = {"runtime": "sha256:6df040c61e8ca857cc3a3e8b2c54da5a560f14ea19f49d8cbd322032cee1f52b",
+                "web": "sha256:ea6c1460fa5a015d0320625477de58d09f9c96c1c29fb27c624be660bd651f12"}
+
+
+def accepted_pr727_bundle():
+    root = protected(RELEASES / PR727_MANIFEST_SHA256, directory=True)
+    manifest = read_bound(protected(root / "manifest.json"), PR727_MANIFEST_SHA256)
+    require(manifest["productCommit"] == "c3bf1e83127aa96442c3e48d00350ce1ad9c04a5" and
+            manifest["operationsCommit"] == "6149d2723f5240a389693798a0e7ef7a3bfabbaf" and
+            manifest["bases"] == CURRENT_BASE_LAYOUT, "NUE_PR727_PREDECESSOR_BINDING")
+    helper = protected(root / "tools/catering_target_nue_image_update.py")
+    require(digest(helper) == manifest["helpers"][helper.name], "NUE_PR727_HELPER_BINDING")
+    # Its immutable accepted verifier checks its own helpers, complete source,
+    # schema and all archive R/M/C bindings. Never run its old Apply path.
+    predecessor = load_module("nue_accepted_pr727", helper)
+    require(predecessor.verify_bundle(root, PR727_MANIFEST_SHA256) == manifest, "NUE_PR727_BUNDLE_BINDING")
+    receipt = read_bound(protected(root / "manual-forward-recovery-verified.json"), PR727_RECOVERY_SHA256)
+    require(receipt["status"] == "MANUAL_NUE_CANDIDATE_RUNTIME_VERIFIED" and
+            receipt["manifestSha256"] == PR727_MANIFEST_SHA256 and
+            receipt["originalApplyStatus"] == "HOLD" and receipt["currentAuthenticatedSmokePassed"] is True and
+            receipt["publicApplyPassed"] is False and receipt["publicVerifyPassed"] is False,
+            "NUE_PR727_MANUAL_RECOVERY_BINDING")
+    for role, identity in PR727_IMAGES.items():
+        require(manifest["images"][role]["platformManifestDigest"] == identity, "NUE_PR727_IMAGE_BINDING")
+    return root, manifest
+
+
+def pr727_running_gate(oci, rows):
+    root, manifest = accepted_pr727_bundle()
+    compose = json.loads(protected(COMPOSE).read_bytes())
+    require(all(compose["services"][s]["image"] == PR727_IMAGES["web" if s == "web" else "runtime"] for s in SERVICES), "NUE_PR727_COMPOSE_IMAGES")
+    observations = {"predecessorManifestSha256": PR727_MANIFEST_SHA256, "manualRecoverySha256": PR727_RECOVERY_SHA256}
+    expected_files = {p.relative_to(root / "source").as_posix(): p.read_bytes()
+                      for directory in RUNTIME_ROOTS for p in (root / "source" / directory).rglob("*") if p.is_file()}
+    for row in rows:
+        service = row["Name"].removeprefix("/platform-infra-").removesuffix("-1")
+        role = "web" if service == "web" else "runtime"
+        identity = PR727_IMAGES[role]
+        oci.check_running_container(row, identity)
+        image = json.loads(command(["docker", "image", "inspect", identity]))[0]
+        oci.check_loaded_image(image, identity)
+        config = row["Config"]
+        require(row.get("ImageManifestDescriptor", {}).get("mediaType") == "application/vnd.oci.image.manifest.v1+json",
+                "NUE_PR727_CONTAINER_PLATFORM_MANIFEST")
+        if service != "web":
+            require(config["Cmd"] == ["npm", "run", "dev:" + service] and
+                    config["Entrypoint"] == ["docker-entrypoint.sh"] and
+                    config["WorkingDir"] == "/catering-product" and not row["Mounts"], "NUE_PR727_RUNTIME_LAYOUT")
+            files = runtime_files(row["Id"], "/catering-product")
+            require(files == expected_files and schema_binding(files) == manifest["schemaBinding"], "NUE_PR727_RUNTIME_SOURCE")
+            observations[row["Name"] + ":source"] = hashlib.sha256(canonical({k: hashlib.sha256(v).hexdigest() for k, v in sorted(files.items())})).hexdigest()
+        else:
+            require(config["Cmd"] == ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"] and
+                    not config.get("Entrypoint") and config["WorkingDir"] == "/srv", "NUE_PR727_WEB_COMMAND")
+            require(config["Cmd"] == image["Config"]["Cmd"] and config.get("Entrypoint") == image["Config"].get("Entrypoint"), "NUE_PR727_WEB_IMAGE_COMMAND")
+            mounts = row["Mounts"]
+            require(all(not any(m["Destination"] == r or r.startswith(m["Destination"].rstrip("/") + "/") or
+                                m["Destination"].startswith(r + "/")
+                                for r in ("/srv", "/catering-public", "/catering-previous-public")) for m in mounts),
+                    "NUE_PR727_WEB_ROOT_MOUNT")
+            site_mounts = [m for m in mounts if m["Type"] == "bind" and m["Destination"] == "/etc/caddy/sites"]
+            require(len(site_mounts) == 1 and not site_mounts[0]["RW"], "NUE_PR727_SITES_MOUNT")
+            sites = protected(Path(site_mounts[0]["Source"]), directory=True)
+            require(sites == COMPOSE.parent / "sites", "NUE_PR727_SITES_SOURCE")
+            configurations = {p.name: digest(protected(p)) for p in sites.glob("*.caddy")}
+            require(configurations == {"catering-target.caddy": CURRENT_WEB_SNIPPET_SITE_SHA256} and
+                    hashlib.sha256(command(["docker", "exec", row["Id"], "cat", "/etc/caddy/Caddyfile"])).hexdigest() == CURRENT_WEB_CADDY_SHA256,
+                    "NUE_PR727_SERVING_CONFIG")
+            command(["docker", "exec", row["Id"], "sh", "-ec",
+                     'test -L /srv && test "$(readlink /srv)" = /catering-public && test -d /catering-public && test ! -L /catering-public && test -d /catering-previous-public && test ! -L /catering-previous-public'])
+            require(not command(["docker", "diff", row["Id"]]).strip(), "NUE_PR727_WEB_WRITABLE_DRIFT")
+            observations["caddyConfiguration"] = configurations
+        observations[row["Name"]] = {"binding": container_binding(row), "cmd": config["Cmd"],
+                                     "entrypoint": config.get("Entrypoint"), "workingDir": config["WorkingDir"]}
+    observations["composeSha256"] = digest(COMPOSE)
+    return observations
+
+
 def current_base_gate(oci, runtime_m, web_m):
     host_identity()
     require(runtime_m == CURRENT_RUNTIME_M and web_m == CURRENT_WEB_M, "NUE_CURRENT_BASE_EXACT_M_REQUIRED")
@@ -347,6 +433,8 @@ def current_base_gate(oci, runtime_m, web_m):
         require(image.get("Descriptor", {}).get("mediaType") == "application/vnd.oci.image.manifest.v1+json", "NUE_CURRENT_BASE_NOT_PLATFORM_MANIFEST")
     rows = inspect(["platform-infra-" + service + "-1" for service in SERVICES])
     require({row["Name"] for row in rows} == {"/platform-infra-" + s + "-1" for s in SERVICES} and len(rows) == 5, "NUE_CURRENT_BASE_CONTAINER_SCOPE")
+    if all(row.get("ImageManifestDescriptor", {}).get("digest") == PR727_IMAGES["web" if row["Name"] == "/platform-infra-web-1" else "runtime"] for row in rows):
+        return pr727_running_gate(oci, rows)
     for row in rows:
         service = row["Name"].removeprefix("/platform-infra-").removesuffix("-1")
         oci.check_running_container(row, web_m if service == "web" else runtime_m)
