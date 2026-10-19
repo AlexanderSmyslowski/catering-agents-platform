@@ -80,8 +80,13 @@ export function isValidEventDate(value: string): boolean {
 }
 
 function extractDates(segment: string): string[] {
-  return [...segment.matchAll(/\b(20\d{2}-\d{2}-\d{2})\b|\b(\d{1,2})\.(\d{1,2})\.(20\d{2})\b/g)]
-    .map(match => match[1] ?? `${match[4]}-${match[3].padStart(2, "0")}-${match[2].padStart(2, "0")}`);
+  const months: Record<string, string> = {januar:"01",februar:"02",märz:"03",maerz:"03",april:"04",mai:"05",juni:"06",
+    juli:"07",august:"08",september:"09",oktober:"10",november:"11",dezember:"12"};
+  return [...segment.matchAll(/\b(20\d{2}-\d{2}-\d{2})\b|\b(\d{1,2})\.(\d{1,2})\.(20\d{2})\b|\b(\d{1,2})\.?\s+(Januar|Februar|März|Maerz|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)\s+(20\d{2})\b/gi)]
+    // Response deadlines are not event dates, even in the same paragraph.
+    .filter(match => !/(?:\b(?:angebot|rückmeldung|rueckmeldung|antwort|frist|deadline)\b[^0-9.!?;\n]{0,80}\bbis(?:\s+(?:zum|spätestens|spaetestens))?|\b(?:frist|deadline|gesendet|sent)\s*:?)\s*$/i.test(segment.slice(0, match.index)))
+    .map(match => match[1] ?? (match[5] ? `${match[7]}-${months[match[6].toLowerCase()]}-${match[5].padStart(2,"0")}` :
+      `${match[4]}-${match[3].padStart(2, "0")}-${match[2].padStart(2, "0")}`));
 }
 
 function extractAttendeeObservation(segment: string):
@@ -270,9 +275,17 @@ export function analyzeIntakeText(text: string): IntakeSignals {
   };
   // Dates in a customer label or document header do not describe the event.
   const eventText = text.split(/\r?\n/).filter(line =>
-    !/^[ \t]*(?:Kunde|Kundenname|Auftraggeber|Anfragedatum|Angebotsdatum|Rechnungsdatum|Erstellt(?: am)?|Stand|Nachprüfung)\s*:/i.test(line)
+    !/^[ \t]*(?:Kunde|Kundenname|Auftraggeber|Anfragedatum|Angebotsdatum|Rechnungsdatum|Erstellt(?: am)?|Gesendet|Sent|Stand|Nachprüfung)\s*:/i.test(line)
   ).join("\n");
   const segments = eventText.split(/[,;\n]+|(?<=[.!?])\s+(?=[A-ZÄÖÜ])/).map(normalizeSegment).filter(Boolean);
+  // A day followed by a written month is one date, not two sentences.
+  for (let index = 1; index < segments.length;) {
+    const day = segments[index - 1].match(/\b(\d{1,2}\.)$/)?.[1];
+    const month = segments[index].match(/^\p{L}+\s+20\d{2}\b/u)?.[0];
+    if (day && month && extractDates(day + " " + month).length) {
+      segments.splice(index - 1, 2, segments[index - 1] + " " + segments[index]);
+    } else index += 1;
+  }
   const dates = [...new Set(segments.flatMap(extractDates))];
   const selectedDate = dates.length === 1 && isValidEventDate(dates[0]) ? dates[0] : undefined;
   if (dates.length && !selectedDate) {

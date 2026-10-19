@@ -42,6 +42,8 @@ export function amendOfferEvent(spec: AcceptedEventSpec, details?: OfferEventDet
   if (!details) return spec;
   const dateChanged = details.eventDate !== undefined && details.eventDate !== spec.event.date;
   const attendeesChanged = details.attendeeCount !== undefined && details.attendeeCount !== spec.attendees.expected;
+  const typeChanged = details.eventType !== undefined && details.eventType.trim() !== spec.event.type;
+  const serviceChanged = details.serviceForm !== undefined && details.serviceForm.trim() !== spec.event.serviceForm;
   const scheduleChanged = details.eventSchedule !== undefined && JSON.stringify(details.eventSchedule) !== JSON.stringify(spec.event.schedule);
   const answeredExtraction = (question: Uncertainty): boolean => {
     if (dateChanged && question.field === "event.date") {
@@ -65,6 +67,8 @@ export function amendOfferEvent(spec: AcceptedEventSpec, details?: OfferEventDet
     attendees: { ...spec.attendees, ...(details.attendeeCount ? { expected: details.attendeeCount } : {}) },
     servicePlan: { ...spec.servicePlan, ...(details.eventType ? { eventType: details.eventType.trim() } : {}),
       ...(details.serviceForm ? { serviceForm: details.serviceForm.trim() } : {}) },
-    uncertainties: spec.uncertainties?.filter(item => !answeredExtraction(item))
+    uncertainties: spec.uncertainties?.filter(item => !answeredExtraction(item)),
+    assumptions: spec.assumptions?.filter(item => !(typeChanged && item.code === "event_type_defaulted") &&
+      !(serviceChanged && item.code === "service_form_defaulted") && !(attendeesChanged && item.code === "attendees_expected_approximate"))
   }));
 }

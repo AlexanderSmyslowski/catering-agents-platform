@@ -39,6 +39,45 @@ describe("explicit offer menu and persisted continuation", () => {
     expect(ambiguous.uncertainties?.some(item => item.field === "event.date")).toBe(true);
   });
 
+  it("distinguishes response deadlines from numeric and written German event dates", () => {
+    const dateFor = (rawText: string) => normalizeEventRequestToSpec(createEventRequestFromText({requestId:"deadline",channel:"text",rawText})).event.date;
+    expect(dateFor("Angebot bitte bis 30.10.2026; wissenschaftlicher Abend am 12. November 2026 für 100 Gäste.")).toBe("2026-11-12");
+    expect(dateFor("Angebot bitte bis 30.10.2026, Abend am 12.11.2026 für 100 Gäste.")).toBe("2026-11-12");
+    expect(dateFor("Rückmeldung bis zum 30.10.2026, Veranstaltung am 12. November 2026.")).toBe("2026-11-12");
+    expect(dateFor("Frist: 30.10.2026\n100 Gäste, Veranstaltungstermin noch offen.")).toBeUndefined();
+    expect(dateFor("Gesendet: Montag, 19.10.2026\nAbend am 12. November 2026 für 100 Gäste.")).toBe("2026-11-12");
+    expect(dateFor("100 Gäste am 31. Februar 2026")).toBeUndefined();
+    expect(dateFor("100 Gäste am 12. November 2026 oder 13. November 2026")).toBeUndefined();
+    expect(dateFor("Veranstaltung vom 12.11.2026 bis 13.11.2026 für 100 Gäste.")).toBeUndefined();
+    expect(dateFor("Angebot für Veranstaltung vom 12. November 2026 bis 13. November 2026 für 100 Gäste.")).toBeUndefined();
+    expect(dateFor("Kunde: Nachprüfung 19. Oktober 2026\n100 Gäste am 12. November 2026")).toBe("2026-11-12");
+  });
+
+  it("does not mark exact catering and canapé guest counts approximate", () => {
+    for (const rawText of ["Catering für 100 Gäste am 12.11.2026.", "100 Gäste am 12.11.2026; 100 Portionen Canapés; Allergene bleiben offen."]) {
+      const spec = normalizeEventRequestToSpec(createEventRequestFromText({requestId:"exact-count",channel:"text",rawText}));
+      expect(spec.attendees.expected).toBe(100);
+      expect(spec.assumptions?.some(x=>x.code==="attendees_expected_approximate")).toBe(false);
+    }
+    const approximate = normalizeEventRequestToSpec(createEventRequestFromText({requestId:"rough-count",channel:"text",rawText:"Catering für ca. 100 Gäste am 12.11.2026."}));
+    expect(approximate.assumptions?.some(x=>x.code==="attendees_expected_approximate")).toBe(true);
+  });
+
+  it("removes only superseded derived event assumptions from the new revision", async () => {
+    const {amendOfferEvent}=await import("../offer-service/src/offer-event-revision.js");
+    const source=normalizeEventRequestToSpec(createEventRequestFromText({requestId:"assumptions",channel:"text",rawText:text}));
+    source.assumptions=[{code:"event_type_defaulted",message:"Eventtyp abgeleitet: Empfang",applied:true},
+      {code:"service_form_defaulted",message:"Serviceform abgeleitet",applied:true},
+      {code:"attendees_expected_approximate",message:"Gästezahl näherungsweise",applied:true},
+      {code:"independent_kitchen_review",message:"Küchenprüfung bleibt offen",applied:true}];
+    const unchanged=amendOfferEvent(source,{eventType:source.event.type,serviceForm:source.event.serviceForm,attendeeCount:100});
+    expect(unchanged.assumptions).toEqual(source.assumptions);
+    const changed=amendOfferEvent(source,{eventType:"Wissenschaftlicher Abend",serviceForm:"flying",attendeeCount:110});
+    expect(changed.assumptions?.map(x=>x.code)).toEqual(["independent_kitchen_review"]);
+    expect(changed.menuPlan.map(x=>x.servings)).toEqual(expected);
+    expect(source.assumptions).toHaveLength(4);
+  });
+
   it("revises event data in every variant, preserves portions and historical snapshots, and exports the corrected header", async () => {
     const { app, store, draft } = await harness();
     try {

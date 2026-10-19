@@ -410,8 +410,7 @@ export function normalizeEventRequestToSpec(
   }
   if (
     !request.attendees?.expected &&
-    (signals.uncertainties.some((item) => item.field === "attendees.expected") ||
-      /(?:ca\.?|circa|etwa|ungef(?:ä|ae)hr|knapp|wahrscheinlich|eventuell|möglicherweise|moeglicherweise|vielleicht|vermutlich|unklar|offen|noch unklar)/i.test(rawText))
+    signals.approximateAttendeeCount === true
   ) {
     assumptions.push({
       code: "attendees_expected_approximate",
