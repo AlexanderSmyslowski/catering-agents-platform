@@ -570,6 +570,101 @@ class NueTests(unittest.TestCase):
             self.assertEqual(nue.CURRENT_WEB_M, "sha256:b2ffe4694b983e4b4c1859676bf24df344900dfeaf8f2f7c07ad1ee23cbce25d")
 
     @contextmanager
+    def synthetic_pr735_host(self):
+        images = {"runtime": "sha256:2c94cffb05807cedaab35bf9dcb10779962c9a8f38f9c0143233447f39061b63",
+                  "web": "sha256:029b327abb846b657dfc36822a36ed5dc4d6f648b4113c9d2379ecf6b8c13111"}
+        with self.synthetic_pr727_host() as state:
+            root, manifest = nue.accepted_pr727_bundle()
+            for row in state["rows"]:
+                role = "web" if row["Name"] == "/platform-infra-web-1" else "runtime"
+                identity = images[role]
+                state["images"][identity] = {**state["images"][row["Image"]], "Id": identity,
+                    "Descriptor": {"digest": identity, "mediaType": "application/vnd.oci.image.manifest.v1+json"}}
+                row["Image"] = row["ImageManifestDescriptor"]["digest"] = identity
+            state["compose"].write_text(json.dumps({"services": {s: {"image": images["web" if s == "web" else "runtime"]} for s in nue.SERVICES}}))
+            with patch.object(nue, "accepted_pr735_bundle", return_value=(root, manifest)):
+                yield state
+
+    def test_verified_pr735_predecessor_can_build_the_next_release(self):
+        oci = nue.load_module("nue_followup_oci", ROOT / "platform-infra/scripts/catering_target_oci.py")
+        with self.synthetic_pr735_host():
+            actual = nue.current_base_gate(oci, nue.CURRENT_RUNTIME_M, nue.CURRENT_WEB_M)
+            self.assertEqual(actual["predecessorManifestSha256"], "73d8886d9479b2930c08f7da14a37187ca97441168297ecbe0cadf82027199ce")
+            self.assertEqual(len([k for k in actual if k.endswith(":source")]), 4)
+
+    def test_pr735_predecessor_keeps_source_identity_and_serving_guards(self):
+        oci = nue.load_module("nue_followup_negative_oci", ROOT / "platform-infra/scripts/catering_target_oci.py")
+        for mutation in ("image", "source", "compose", "mount", "command", "site", "web-write"):
+            with self.subTest(mutation=mutation), self.synthetic_pr735_host() as state:
+                if mutation == "image": state["rows"][0]["Image"] = "sha256:" + "a" * 64
+                if mutation == "source": state["runtime"].side_effect = lambda *a: {"shared-core/src/fixture.ts": b"changed"}
+                if mutation == "compose": state["compose"].write_text(json.dumps({"services": {s: {"image": "unknown"} for s in nue.SERVICES}}))
+                if mutation == "mount": state["rows"][0]["Mounts"] = [{"Destination":"/catering-product", "RW":True}]
+                if mutation == "command": state["rows"][0]["Config"]["Cmd"] = ["npm", "run", "other"]
+                if mutation == "site": (state["sites"] / "extra.caddy").write_text("root * /other")
+                original = nue.command
+                def changed(argv, **kwargs):
+                    if argv[:2] == ["docker", "diff"] and mutation == "web-write": return b"C /catering-public/index.html"
+                    return original(argv, **kwargs)
+                with patch.object(nue, "command", side_effect=changed), self.assertRaises((RuntimeError, ValueError)):
+                    nue.current_base_gate(oci, nue.CURRENT_RUNTIME_M, nue.CURRENT_WEB_M)
+
+    def test_pr735_record_requires_pinned_source_helper_installed_receipt_and_runtime(self):
+        from unittest.mock import Mock
+        mutations = (None, "product", "operations", "bases", "manifest", "helper", "helper-pin", "M",
+                     "stage", "baseline", "installed", "receipt-manifest", "receipt-image", "compose", "bundle-verifier", "runtime-verifier")
+        for mutation in mutations:
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
+                releases = Path(temporary); root = releases / "fixture"; (root / "tools").mkdir(parents=True)
+                helper = root / "tools/catering_target_nue_image_update.py"; helper.write_bytes(b"accepted fixture")
+                helper_sha = hashlib.sha256(helper.read_bytes()).hexdigest()
+                manifest = {"productCommit":"61ea18f28ba47ed1266a903916c9c43240594b83",
+                    "operationsCommit":"5c7b44b8d474da0166a1f64a0a43f51e0fa7bc15", "bases":dict(nue.CURRENT_BASE_LAYOUT),
+                    "helpers":{helper.name:helper_sha}, "schemaBinding":{"migration":"same", "ddl":"same"},
+                    "images":{role:{"platformManifestDigest":identity} for role,identity in nue.PR735_IMAGES.items()}}
+                if mutation == "product": manifest["productCommit"] = "a" * 40
+                if mutation == "operations": manifest["operationsCommit"] = "b" * 40
+                if mutation == "bases": manifest["bases"]["runtimeRoot"] = "/other"
+                if mutation == "M": manifest["images"]["runtime"]["platformManifestDigest"] = "sha256:" + "c" * 64
+                raw = nue.canonical(manifest); sha = hashlib.sha256(raw).hexdigest()
+                root.rename(releases / sha); root = releases / sha; helper = root / "tools" / helper.name
+                (root / "manifest.json").write_bytes(raw)
+                baseline = {"fixture":"unchanged"}; baseline_raw = nue.canonical(baseline)
+                (root / "baseline.json").write_bytes(baseline_raw)
+                stage = {"manifestSha256":sha, "mode":"nue-image-only", "baselineSha256":hashlib.sha256(baseline_raw).hexdigest()}
+                if mutation == "stage": stage["manifestSha256"] = "d" * 64
+                (root / "stage.json").write_bytes(nue.canonical(stage))
+                images = {s:nue.PR735_IMAGES["web" if s == "web" else "runtime"] for s in nue.SERVICES}
+                candidate = nue.canonical({"services":images}); (root / "compose.candidate.json").write_bytes(candidate)
+                receipt = {"manifestSha256":sha, "status":"NUE_IMAGE_ONLY_INSTALLED", "images":dict(images),
+                           "composeSha256":hashlib.sha256(candidate).hexdigest()}
+                if mutation == "installed": receipt["status"] = "HOLD"
+                if mutation == "receipt-manifest": receipt["manifestSha256"] = "e" * 64
+                if mutation == "receipt-image": receipt["images"]["intake"] = "sha256:" + "f" * 64
+                (root / "installed.json").write_bytes(nue.canonical(receipt))
+                if mutation == "manifest": (root / "manifest.json").write_bytes(raw + b" ")
+                if mutation == "helper": helper.write_bytes(b"changed")
+                if mutation == "baseline": (root / "baseline.json").write_bytes(b"{}")
+                if mutation == "compose": (root / "compose.candidate.json").write_bytes(candidate + b" ")
+                verifier = SimpleNamespace(verify_bundle=Mock(return_value=manifest), verify_runtime=Mock())
+                if mutation == "bundle-verifier": verifier.verify_bundle.side_effect = RuntimeError("archive/source drift")
+                if mutation == "runtime-verifier": verifier.verify_runtime.side_effect = RuntimeError("current runtime drift")
+                with patch.object(nue, "RELEASES", releases), patch.object(nue, "PR735_MANIFEST_SHA256", sha), \
+                     patch.object(nue, "PR735_HELPER_SHA256", "0" * 64 if mutation == "helper-pin" else helper_sha), \
+                     patch.object(nue, "protected", side_effect=lambda p,**kw:Path(p)), \
+                     patch.object(nue, "load_module", return_value=verifier) as loader:
+                    if mutation is None:
+                        oci = object()
+                        self.assertEqual(nue.accepted_pr735_bundle(oci), (root, manifest))
+                        verifier.verify_bundle.assert_called_once_with(root, sha)
+                        verifier.verify_runtime.assert_called_once_with(baseline, images, candidate, candidate_oci=oci,
+                            candidate_layout=manifest["bases"], candidate_schema=manifest["schemaBinding"])
+                    else:
+                        with self.assertRaises(RuntimeError): nue.accepted_pr735_bundle(object())
+                        if mutation in ("helper", "helper-pin", "manifest", "product", "operations", "bases"):
+                            loader.assert_not_called()
+
+    @contextmanager
     def synthetic_pr727_caddy_trust(self):
         with self.synthetic_pr727_host() as state:
             web = state["rows"][-1]

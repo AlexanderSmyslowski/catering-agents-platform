@@ -1,3 +1,11 @@
+## Aktueller Handoff 5.494 — 21.10.2026
+
+Führender versionierter Zwischenstand: [PR735-Folgeupdate und Anmeldekorrektur](./CHECKPOINT_2026-10-21_PR735_FOLLOWUP_UPDATE.md). Neueste bestätigte Ergebnisse haben Vorrang vor den folgenden historischen Abschnitten.
+
+Nürnberg läuft auf PR735; PR737/ab4b0fa ist nach erfolgreicher PR-/Main-CI integriert, aber noch nicht installiert. Der echte Folgebuild hat den fehlenden PR735-Vorgängerpfad konkret bewiesen. Die eng begrenzte Korrektur in PR738 hat50gezielteTests und tatsächliches Opus5.5-ACCEPT; reguläre CI/Integration/erster echter Folgebuild und Installation bleiben offen. Aktueller b4505-Backup→Restore→Vergleich→Cleanup für alle3DB/Globals/8Dateibäume PASS; frisch bis21.10.04:27:49UTC. Keine persönlichePIN-/Terminaleingabe wartet; Testkonto inaktiv. Alte PR727-/5.480-Angaben unten sind Historie.
+
+Laufende Betriebsbindungen/Belege im primären Projektmemory und vorhandenen Runbook5.494 fortsetzen. Historischen akzeptierten Opscheckout5c7b44b nicht ändern; korrigierten Folgeupdatecheckout verwenden. Bestehende eigene Writerbindungen fortsetzen, keine fremden Locks/Guards übernehmen. HelsinkiOFF/erhalten, DNS/Firewall/ADH unverändert, KostenheartbeatPAUSED. Details und konkreter nächster Schritt ausschließlich im verlinkten Checkpoint und führenden Betriebsstand.
+
 ## CI-Testfixture an den tatsächlichen Auftragsvertrag angepasst — Version 5.480 / 20.10.2026
 
 CI39441428253 auf0882586 endete mit3.618PASS/21SKIP/einem Fehler im Test product-shell-data-boundary. Browser-Rehearsal, macOS-Operator undCompose erfolgreich. Fehler gezielt unverändert lokal reproduziert. Die Fixture enthielt nur globale offerDrafts, aber weder workspace.activeCase noch workspace.currentDraft. Früher verdeckte der stehengebliebene Eingabetext denselben Namen; das korrekte Leeren bestätigter Eingaben machte den falschen Nachweis sichtbar. Keine produktive Ladelogikänderung erforderlich.
