@@ -1213,9 +1213,11 @@ function ProductWorkspaceView({
       if (offerFocusRef.current.caseId !== activeOfferCaseId || offerFocusRef.current.draftId !== activeOfferDraftId) return;
       setOfferApprovalBinding(undefined);
       setSelectedVariantId(undefined);
-      setSelectedDraftId(draftId);
-      await refreshDashboard();
-      if (offerFocusRef.current.caseId === activeOfferCaseId) setNotice("Neue Angebotsfassung gespeichert. Bitte erneut prüfen.");
+      await refreshDashboard({ requiredOfferDraftId: draftId });
+      if (offerFocusRef.current.caseId === activeOfferCaseId) {
+        setSelectedDraftId(draftId);
+        setNotice("Neue Angebotsfassung gespeichert. Bitte erneut prüfen.");
+      }
     },
     setSelectedDraftId,
     selectedVariantId,
@@ -1381,7 +1383,8 @@ function ProductWorkspaceView({
       <CaseNextActionBar
         action={nextAction}
         onAction={(action) => void runNextAction(action).catch((cause) => setError(cause instanceof Error ? cause.message : "Nächster Schritt konnte nicht ausgeführt werden."))}
-        busy={submitting || (route === "offer" && offerMenuEditing)}
+        busy={submitting}
+        disabled={route === "offer" && offerMenuEditing}
         error={error}
       />
 

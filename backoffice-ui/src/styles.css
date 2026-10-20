@@ -2519,3 +2519,20 @@ button:disabled {
 .offer-pricing__totals dt { color: #454b53; }
 .offer-pricing__totals dd { margin: 0; text-align: right; font-weight: 600; }
 @media (max-width: 700px) { .offer-pricing__fields { grid-template-columns: minmax(0, 1fr); } }
+
+/* Keep event fields together without changing the other workbench forms. */
+.offer-event-editor form { display: grid; gap: 1rem; }
+.event-editor__fields, .event-editor__times { display: grid; gap: 1rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.offer-event-editor label { display: grid; align-content: start; gap: .4rem; min-width: 0; }
+.offer-event-editor .operator-input { box-sizing: border-box; width: 100%; min-width: 0; min-height: 44px; }
+.event-editor__slot { margin: 0; padding: 1rem; border: 1px solid rgba(15, 23, 34, .15); border-radius: 12px; min-width: 0; }
+.event-editor__slot legend { padding: 0 .4rem; font-weight: 600; }
+.event-editor__slot > button { margin-top: .75rem; }
+.event-editor__times { grid-template-columns: 2fr 1fr 1fr; }
+.event-editor__error { color: #a32727; line-height: 1.5; }
+.event-editor__saved { color: #215d3f; line-height: 1.5; }
+.offer-event-editor [aria-invalid="true"] { border-color: #a32727; }
+@media (max-width: 640px) {
+  .event-editor__fields, .event-editor__times { grid-template-columns: minmax(0, 1fr); }
+  .offer-event-editor .quiet-action-row { align-items: stretch; flex-direction: column; }
+}

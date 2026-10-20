@@ -417,6 +417,11 @@ export function registerOfferDraftRoutes(
         const answeredQuestions = new Set(source.proposedEventSpec.uncertainties?.filter(item =>
           !proposedEventSpec.uncertainties?.some(next => areJsonValuesEqual(item, next))).map(item => item.suggestedQuestion).filter(Boolean));
         const openQuestions = source.openQuestions.filter(question => !answeredQuestions.has(question) || remainingQuestions.has(question));
+        for (const uncertainty of proposedEventSpec.uncertainties ?? []) {
+          if (uncertainty.suggestedQuestion && !source.proposedEventSpec.uncertainties?.some(previous => areJsonValuesEqual(previous, uncertainty)) && !openQuestions.includes(uncertainty.suggestedQuestion)) {
+            openQuestions.push(uncertainty.suggestedQuestion);
+          }
+        }
         const serviceModules = [
           ...menuPlan.map((item) => ({ moduleId: item.componentId, label: item.label, category: "food", quantity: item.servings })),
           ...source.serviceModules.filter((item) => item.category !== "food")

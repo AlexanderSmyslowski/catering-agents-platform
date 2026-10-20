@@ -1,4 +1,4 @@
-import { formatRecipeApprovalStateLabel, recipeSourceOriginLabel, recipeSourceReferenceLabel, type KitchenSheet, type ProductionPlan, type PurchaseList } from "@catering/shared-core";
+import { formatRecipeApprovalStateLabel, productionContextNotes, recipeSourceOriginLabel, recipeSourceReferenceLabel, type AcceptedEventSpec, type KitchenSheet, type ProductionPlan, type PurchaseList } from "@catering/shared-core";
 import type { AppliedProductionSnapshot } from "./applied-production-snapshot.js";
 
 function escapeHtml(value: string | number): string {
@@ -29,7 +29,15 @@ export function renderFrozenKitchenAllergens(sheet?: KitchenSheet): string {
   return `<p class="recipe-allergens"><strong>Allergene:</strong> ${escapeHtml(label)}</p><p class="allergen-caution">Planangabe, keine Zusicherung von Allergenfreiheit. Lieferantendeklaration und Kreuzkontakt gesondert prüfen.</p>`;
 }
 
-export function renderProductionKitchenSheets(plan: ProductionPlan): string {
+export function renderProductionOrderContext(spec?: AcceptedEventSpec): string {
+  const notes = productionContextNotes(spec);
+  if (!notes.length) return "";
+  // Individual cards may leave the folder. Keep all recorded order instructions
+  // with each card; their presence does not assign a diet to this recipe.
+  return `<div class="production-order-context"><p><strong>Auftrags- und Sonderkosthinweise</strong></p><p>Gelten für den gesamten Auftrag. Zuordnung vor Produktion prüfen.</p><p>Keine Sonderkost-, Allergen- oder Hygienefreigabe. Angefragte Sonderkost separat klären.</p><ul>${notes.map(note => `<li>${escapeHtml(note)}</li>`).join("")}</ul></div>`;
+}
+
+export function renderProductionKitchenSheets(plan: ProductionPlan, spec?: AcceptedEventSpec): string {
   return `<section><h2>Küchenblätter</h2>${plan.kitchenSheets.map(sheet => {
     const batch = plan.productionBatches.find(item => item.componentId === sheet.componentId && item.recipeId === sheet.recipeId);
     const source = sheet.recipeSource ?? batch?.recipeSource;
@@ -37,7 +45,7 @@ export function renderProductionKitchenSheets(plan: ProductionPlan): string {
     const steps = [...sheet.steps, ...(batch?.steps ?? []).filter(step =>
       !sheet.steps.some(sheetStep => sheetStep.instruction === step.instruction)
     )];
-    return `<article class="kitchen-sheet"><h3>${escapeHtml(sheet.title)}</h3>${renderFrozenKitchenAllergens(sheet)}<p>Gesamtmenge: ${escapeHtml(quantity(batch?.scaledYield ?? sheet.productionQty))}${batch ? ` · Chargen: ${escapeHtml(batch.batchCount)}` : ""}</p><p>Station: ${escapeHtml(batch?.station ?? sheet.station)} · Vorbereitung (Planangabe, prüfen): ${escapeHtml(batch?.prepWindow ?? sheet.prepWindow)}</p><p>Quelle: ${escapeHtml(recipeSourceOriginLabel(source))} · ${escapeHtml(recipeSourceReferenceLabel(source))} · Status: ${escapeHtml(formatRecipeApprovalStateLabel(source?.approvalState) ?? "Status offen")}</p><ul>${ingredients.map(ingredient => `<li>${escapeHtml(ingredient.name)}: ${escapeHtml(quantity(ingredient.quantity))}</li>`).join("")}</ul><ol>${steps.map(step => `<li>${escapeHtml(step.instruction)}</li>`).join("")}</ol></article>`;
+    return `<article class="kitchen-sheet"><h3>${escapeHtml(sheet.title)}</h3>${renderProductionOrderContext(spec)}${renderFrozenKitchenAllergens(sheet)}<p>Gesamtmenge: ${escapeHtml(quantity(batch?.scaledYield ?? sheet.productionQty))}${batch ? ` · Chargen: ${escapeHtml(batch.batchCount)}` : ""}</p><p>Station: ${escapeHtml(batch?.station ?? sheet.station)} · Vorbereitung (Planangabe, prüfen): ${escapeHtml(batch?.prepWindow ?? sheet.prepWindow)}</p><p>Quelle: ${escapeHtml(recipeSourceOriginLabel(source))} · ${escapeHtml(recipeSourceReferenceLabel(source))} · Status: ${escapeHtml(formatRecipeApprovalStateLabel(source?.approvalState) ?? "Status offen")}</p><ul>${ingredients.map(ingredient => `<li>${escapeHtml(ingredient.name)}: ${escapeHtml(quantity(ingredient.quantity))}</li>`).join("")}</ul><ol>${steps.map(step => `<li>${escapeHtml(step.instruction)}</li>`).join("")}</ol></article>`;
   }).join("")}</section>`;
 }
 

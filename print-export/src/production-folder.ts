@@ -19,7 +19,7 @@ import {
   type RecipeStep
 } from "@catering/shared-core";
 import type { AppliedProductionSnapshot } from "./applied-production-snapshot.js";
-import { renderAppliedProductionContext, renderFrozenKitchenAllergens, renderProductionKitchenSheets } from "./production-snapshot-html.js";
+import { renderAppliedProductionContext, renderFrozenKitchenAllergens, renderProductionKitchenSheets, renderProductionOrderContext } from "./production-snapshot-html.js";
 
 export interface RenderProductionFolderInput {
   plan: ProductionPlan;
@@ -218,7 +218,7 @@ function renderSection3(input: RenderProductionFolderInput): string {
       return `${question} → ${answer.answerText.value}`;
     });
   const entries = [...uncertaintyRows, ...answerRows];
-  const notes = productionContextNotes(input.spec);
+  const notes = productionContextNotes(input.appliedSnapshot?.approvedSpec.artifacts.eventSpec ?? input.spec);
 
   return `<section><h2>3. Rückfragen</h2>${
     entries.length > 0 ? list(entries) : "<p>Keine weiteren strukturierten Rückfragen erfasst. Auftrags- und Küchenhinweise sowie Freigaben separat prüfen.</p>"
@@ -319,7 +319,7 @@ function renderSection7(input: RenderProductionFolderInput, recipeById: Map<stri
 
     const approvalStateLabel = formatRecipeApprovalStateLabel(recipe.source.approvalState) ?? "Status offen";
 
-    return [`<article class="recipe-card"><h3>${escapeHtml(recipe.name)}</h3><p>Quelle: ${escapeHtml(recipe.source.reference)} · Status: ${escapeHtml(approvalStateLabel)}</p>${renderFrozenKitchenAllergens(sheet)}<table><thead><tr><th>Zutat</th><th>Menge</th><th>Warengruppe</th></tr></thead><tbody>${renderIngredientRows(ingredients)}</tbody></table>${renderSteps(stepsFor(recipe, sheet, batch))}</article>`];
+    return [`<article class="recipe-card"><h3>${escapeHtml(recipe.name)}</h3><p>Quelle: ${escapeHtml(recipe.source.reference)} · Status: ${escapeHtml(approvalStateLabel)}</p>${renderProductionOrderContext(input.appliedSnapshot?.approvedSpec.artifacts.eventSpec ?? input.spec)}${renderFrozenKitchenAllergens(sheet)}<table><thead><tr><th>Zutat</th><th>Menge</th><th>Warengruppe</th></tr></thead><tbody>${renderIngredientRows(ingredients)}</tbody></table>${renderSteps(stepsFor(recipe, sheet, batch))}</article>`];
   });
   const missingRecipeIds = linkedRecipeIds.filter((recipeId) => !recipeById.has(recipeId));
 
@@ -384,7 +384,7 @@ function renderSection8(
 
   const content = groups.map(({ group, items }) =>
     `<article class="purchase-group"><h3>${escapeHtml(formatMetroGroupLabel(group))}</h3><table><thead><tr><th>Artikel</th><th>Menge</th><th>Einkaufshinweis</th><th>Verwendung</th></tr></thead><tbody>${items.map((item) =>
-      `<tr><td>${escapeHtml(item.displayName)}</td><td>${escapeHtml(`${formatQuantityNumber(item.purchaseQty)} ${item.purchaseUnit}`)}</td><td>${escapeHtml(item.supplierHint ?? "")}</td><td>${escapeHtml(purchaseItemUsage(item, recipeById, spec))}</td></tr>`
+      `<tr><td>${escapeHtml(item.displayName)}</td><td>${escapeHtml(`${formatQuantityNumber(item.purchaseQty)} ${item.purchaseUnit}`)}</td><td>${escapeHtml(item.supplierHint?.trim() ? item.supplierHint : "nicht hinterlegt")}</td><td>${escapeHtml(purchaseItemUsage(item, recipeById, spec))}</td></tr>`
     ).join("")}</tbody></table></article>`
   ).join("");
 
@@ -502,6 +502,8 @@ th, td { border: 1px solid #d9e2ec; padding: 5px 6px; text-align: left; vertical
 th { background: #f4f7fa; font-weight: 700; }
 .facts th { width: 32%; }
 .recipe-card { break-inside: auto; margin: 12px 0; }
+.production-order-context { overflow-wrap: anywhere; }
+.production-order-context > p { break-after: avoid-page; }
 .coverage-table { border-left: 1px solid #d9e2ec; margin: 8px 0 12px; }
 .coverage-row { display: grid; grid-template-columns: minmax(78px, .55fr) minmax(0, 2fr) minmax(0, 2fr); }
 .coverage-cell { border-bottom: 1px solid #d9e2ec; border-right: 1px solid #d9e2ec; padding: 5px 6px; }
@@ -527,7 +529,7 @@ footer { border-top: 1px solid #cbd5df; color: #52616f; margin-top: 24px; paddin
     renderSection5(input.spec),
     renderSection6(input, recipeById),
     renderSection7(input, recipeById),
-    renderProductionKitchenSheets(input.plan),
+    renderProductionKitchenSheets(input.plan, input.appliedSnapshot?.approvedSpec.artifacts.eventSpec ?? input.spec),
     renderSection8(purchaseList, recipeById, input.spec),
     renderSection9(input.plan, purchaseList, input.spec.event.date)
   ].join("")}<footer>Arbeitsdokument – Mengen, Allergene und Preise vor Produktion prüfen.</footer></body></html>`;

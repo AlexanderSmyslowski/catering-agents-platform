@@ -35,7 +35,7 @@ import {
 } from "@catering/shared-core";
 import { renderProductionFolderHtml } from "./production-folder.js";
 import { resolveAppliedProductionSnapshot, type AppliedProductionSnapshot } from "./applied-production-snapshot.js";
-import { renderAppliedProductionContext, renderAppliedPurchaseQuantities, renderProductionKitchenSheets } from "./production-snapshot-html.js";
+import { renderAppliedProductionContext, renderAppliedPurchaseQuantities, renderProductionKitchenSheets, renderProductionOrderContext } from "./production-snapshot-html.js";
 
 export { renderProductionFolderHtml } from "./production-folder.js";
 
@@ -278,19 +278,20 @@ export function renderOfferHtml(draft: OfferDraft): string {
 }
 
 export function renderProductionPlanHtml(plan: ProductionPlan, spec?: AcceptedEventSpec, appliedSnapshot?: AppliedProductionSnapshot): string {
+  const contextSpec = appliedSnapshot?.approvedSpec.artifacts.eventSpec ?? spec;
   const unresolvedSection =
     plan.unresolvedItems.length > 0
       ? [`<section><h2>Offene Punkte</h2><ul>${plan.unresolvedItems.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></section>`]
       : [];
   return [
     '<!doctype html><html lang="de"><head><meta charset="utf-8"><title>CateringOS · Produktionsblatt</title><style>',
-    "@page { size: A4; margin: 18mm; } body { color: #1f2933; font-family: Arial, sans-serif; font-size: 12px; line-height: 1.45; margin: 0; } h1 { font-size: 22px; margin: 0 0 8px; } h2 { font-size: 16px; margin: 22px 0 8px; } h3 { font-size: 14px; margin: 16px 0 6px; } p { margin: 6px 0; } header { border-bottom: 1px solid #cbd5df; padding-bottom: 12px; } section { margin: 16px 0; } li { overflow-wrap: anywhere; } .kitchen-sheet { margin-bottom: 20px; } .allergen-caution { font-size: 11px; } footer { border-top: 1px solid #cbd5df; padding-top: 8px; margin-top: 20px; } @media print { h2,h3 { break-after: avoid-page; } .kitchen-sheet { break-inside: avoid-page; } }",
+    "@page { size: A4; margin: 18mm; } body { color: #1f2933; font-family: Arial, sans-serif; font-size: 12px; line-height: 1.45; margin: 0; } h1 { font-size: 22px; margin: 0 0 8px; } h2 { font-size: 16px; margin: 22px 0 8px; } h3 { font-size: 14px; margin: 16px 0 6px; } p { margin: 6px 0; } header { border-bottom: 1px solid #cbd5df; padding-bottom: 12px; } section { margin: 16px 0; } li { overflow-wrap: anywhere; } .kitchen-sheet { margin-bottom: 20px; } .production-order-context { overflow-wrap: anywhere; } .production-order-context > p { break-after: avoid-page; } .allergen-caution { font-size: 11px; } footer { border-top: 1px solid #cbd5df; padding-top: 8px; margin-top: 20px; } @media print { h2,h3 { break-after: avoid-page; } .kitchen-sheet { break-inside: avoid-page; } }",
     "</style></head><body><header><p>CateringOS · Internes Arbeitsdokument</p><h1>Produktionsplan</h1>",
     `<p>Datum: ${escapeHtml(spec?.event?.date ?? "offen")} · Gäste: ${escapeHtml(spec?.attendees?.expected ?? "offen")}</p>`,
     ...(spec?.customer?.name ? [`<p>Kunde: ${escapeHtml(spec.customer.name)}</p>`] : []),
     "</header>",
     renderAppliedProductionContext(appliedSnapshot),
-    ...((notes) => notes.length ? ["<section><h2>Auftrags- und Küchenhinweise</h2><p>Keine Sonderkost-, Allergen- oder Hygienefreigabe. Vorgaben separat prüfen.</p><ul>" + notes.map(note => "<li>" + escapeHtml(note) + "</li>").join("") + "</ul></section>"] : [])(productionContextNotes(spec)),
+    ...((notes) => notes.length ? ["<section><h2>Auftrags- und Küchenhinweise</h2><p>Keine Sonderkost-, Allergen- oder Hygienefreigabe. Vorgaben separat prüfen.</p><ul>" + notes.map(note => "<li>" + escapeHtml(note) + "</li>").join("") + "</ul></section>"] : [])(productionContextNotes(contextSpec)),
     `<p>Status: ${escapeHtml(formatProductionReadinessStatusLabel(plan.readiness.status))}</p>`,
     `<p>Rezeptauswahl: ${plan.recipeSelections.length}</p>`,
     ...renderSourceAnchorsSection(plan as unknown as Record<string, unknown>),
@@ -304,12 +305,12 @@ export function renderProductionPlanHtml(plan: ProductionPlan, spec?: AcceptedEv
         );
         const sourceLabel = formatProductionPlanRecipeSourceLabel(batch.recipeSource ?? kitchenSheet?.recipeSource);
 
-        return `<section><h2>${escapeHtml(productionComponentLabel(batch.componentId, plan, spec))}</h2><p>Station: ${escapeHtml(batch.station)}</p><p>Rezeptquelle: ${escapeHtml(sourceLabel)}</p><ol>${batch.steps
+        return `<section><h2>${escapeHtml(productionComponentLabel(batch.componentId, plan, spec))}</h2>${renderProductionOrderContext(contextSpec)}<p>Station: ${escapeHtml(batch.station)}</p><p>Rezeptquelle: ${escapeHtml(sourceLabel)}</p><ol>${batch.steps
           .map((step) => `<li>${escapeHtml(step.instruction)}</li>`)
           .join("")}</ol></section>`;
       }
     ),
-    renderProductionKitchenSheets(plan),
+    renderProductionKitchenSheets(plan, contextSpec),
     renderAppliedPurchaseQuantities(appliedSnapshot?.approvedSpec.artifacts.purchaseList),
     "<footer>Arbeitsdokument – Mengen, Allergene und Preise vor Produktion prüfen.</footer>",
     "</body></html>"
@@ -328,7 +329,7 @@ export function renderPurchaseListCsv(list: PurchaseList, format: "standard" | "
         "Küchenmenge (Umrechnung)", "Lieferantenhinweis", "Quellrezepte", "Rezeptherkunft", "Quellenreferenzen"],
       ...list.items.map(item => [
         formatMetroGroupLabel(item.group), item.displayName, decimal(item.normalizedQty), item.normalizedUnit,
-        decimal(item.purchaseQty), item.purchaseUnit, kitchenQuantity(item.purchaseQty, item.purchaseUnit), item.supplierHint ?? "",
+        decimal(item.purchaseQty), item.purchaseUnit, kitchenQuantity(item.purchaseQty, item.purchaseUnit), item.supplierHint?.trim() ? item.supplierHint : "nicht hinterlegt",
         item.sourceRecipes.join("; "),
         (item.sourceRecipeMetadata?.length ? item.sourceRecipeMetadata.map(recipeSourceOriginLabel) : [recipeSourceOriginLabel()]).join("; "),
         (item.sourceRecipeMetadata?.length ? item.sourceRecipeMetadata.map(recipeSourceReferenceLabel) : [recipeSourceReferenceLabel()]).join("; ")

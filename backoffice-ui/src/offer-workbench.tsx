@@ -464,7 +464,6 @@ export function OfferConversationalWorkbench({
                 </details>
               ) : null}
         {focusedDraftSpec?.event && focusedDraftSpec.servicePlan && onMenuSaved ? <OfferEventEditor
-          key={"event-" + focusedDraftId}
           draftId={focusedDraftId} revision={focusedDraftRevision ?? 1}
           spec={focusedDraftSpec as unknown as import("@catering/shared-core").AcceptedEventSpec}
           disabled={submitting || editingPricing || editingMenu}
