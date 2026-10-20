@@ -51,7 +51,7 @@ async () => {
   }
 
   const historyDetails = [...document.querySelectorAll("details")].find((details) =>
-    (details.querySelector("summary")?.textContent ?? "").includes("Frühere Angebotsaufträge öffnen") &&
+    (details.querySelector("summary")?.textContent ?? "").includes("Auftrag öffnen") &&
     details.querySelectorAll("button[data-action='open-case']").length > 0
   );
   if (!historyDetails) throw new Error("Angebots-Historie fehlt");
@@ -64,7 +64,7 @@ async () => {
   historyButton.click();
   await waitFor("Fallauswahl", () =>
     location.pathname === "/angebot" && historyButton.getAttribute("aria-pressed") === "true" &&
-    document.body.innerText.includes("Aktueller Entwurf: Besprechung für 35 Teilnehmer als Kaffeepause.") &&
+    document.body.innerText.includes("Besprechung für 35 Teilnehmer als Kaffeepause.") &&
     document.querySelector("[aria-label='Kompakte Ergebniszusammenfassung']")
   );
 

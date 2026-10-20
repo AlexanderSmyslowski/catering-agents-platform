@@ -76,4 +76,12 @@ describe("case next action bar", () => {
     expect(styles).toMatch(/\.case-next-action-bar\s*\{[^}]*position:\s*sticky[^}]*bottom:\s*0/s);
     await act(async () => root.unmount());
   });
+  it("explains the task in the product route and names the editing barrier without changing its command", async () => {
+    const node=document.body.appendChild(document.createElement("div"));const root=createRoot(node);const onAction=vi.fn();
+    await act(async()=>root.render(createElement(CaseNextActionBar,{product:"offer",action:{kind:"review_draft",label:"Nächsten Prüfpunkt öffnen",targetId:"draft-a"},onAction,disabled:true})));
+    expect(node.textContent).toContain("Änderungen zuerst speichern oder abbrechen");
+    expect(node.querySelector("button")?.textContent).toBe("Angebot prüfen");
+    await act(async()=>root.unmount());
+  });
+
 });

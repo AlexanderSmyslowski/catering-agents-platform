@@ -71,7 +71,7 @@ describe("useProductionManualSpecForm", () => {
     });
   });
 
-  it("resets draft fields after successful creation while preserving stable defaults", () => {
+  it("resets all consumed fields to their initial defaults after successful creation", () => {
     const probe = renderManualSpecForm();
 
     act(() => {
@@ -88,8 +88,8 @@ describe("useProductionManualSpecForm", () => {
       probe.form.resetManualSpecDraft();
     });
 
-    expect(probe.form.manualEventType).toBe("lunch");
-    expect(probe.form.manualServiceForm).toBe("flying buffet");
+    expect(probe.form.manualEventType).toBe("conference");
+    expect(probe.form.manualServiceForm).toBe("buffet");
     expect(probe.form.manualEventDate).toBe("");
     expect(probe.form.manualAttendeeCount).toBe("");
     expect(probe.form.manualMenuItems).toBe("");

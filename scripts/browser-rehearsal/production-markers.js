@@ -2,12 +2,12 @@ async () => {
   const text = document.body.innerText;
   const missing = [
     "Produktionsagent",
-    "Angebot hochladen oder Produktionsauftrag beschreiben",
-    "Ablauf: Quelle → KI-Entwurf → Prüfung → Plan",
-    "BESTANDSDATEN IM HINTERGRUND",
+    "Auftragsstand Küche",
+    "Nächster Schritt",
+    "Auftragsstand Küche",
     "Konferenz · 90 Teilnehmer · 2026-12-02",
     "Rückfragen und Antworten",
-    "PRÜFUNG VOR BERECHNUNG",
+    "Interne Produktionsfreigabe:",
     "Produktionsplan nacharbeiten",
     "Produktionsblatt exportieren",
     "1 Liste ohne Positionen",

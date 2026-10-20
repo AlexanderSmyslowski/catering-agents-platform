@@ -38,7 +38,15 @@ export function CaseHistoryPanel({
   const [copyingCaseId, setCopyingCaseId] = useState<string>();
   const [copyError, setCopyError] = useState<string>();
   const label = productLabel(product);
+  const [showAll, setShowAll] = useState(false);
+  const visibleItems = !activeCaseId && !search.trim() && !showAll ? items.slice(0, 5) : items;
   const historyRef = useRef<HTMLDetailsElement>(null);
+  const firstHistoryRender = useRef(true);
+  useEffect(() => {
+    if (historyRef.current) historyRef.current.open = !activeCaseId || (firstHistoryRender.current && window.location.hash === "#history");
+    firstHistoryRender.current = false;
+    setShowAll(false);
+  }, [activeCaseId]);
   useEffect(() => {
     const revealLinkedHistory = () => {
       if (window.location.hash === "#history" && historyRef.current) {
@@ -69,28 +77,28 @@ export function CaseHistoryPanel({
       className={`panel secondary-workspace ${product === "offer" ? "offer-history-details" : "production-history-details"}`}
     >
       <summary>
-        Frühere {label}aufträge öffnen · {items.length} {items.length === 1 ? "Auftrag" : "Aufträge"}
+        {activeCaseId ? "Anderen Auftrag öffnen" : "Bestehenden Auftrag öffnen"} · {items.length} {items.length === 1 ? "Auftrag" : "Aufträge"}
       </summary>
       <div className="case-history-panel__body">
         <label className="field-label" htmlFor={`${product}-case-history-search`}>
-          Suche nach Auftrag oder Quelldatei
+          Auftrag suchen
         </label>
         <input
           id={`${product}-case-history-search`}
           type="search"
           value={search}
           onChange={(event) => onSearchChange(event.target.value)}
-          placeholder={product === "production" ? "Kunde, Anlass, Datum oder Speise suchen" : "Name oder Dateiname"}
+          placeholder="Kunde, Anlass oder Datum"
           autoComplete="off"
         />
         {loading ? <p className="helper-text">Aufträge werden geladen ...</p> : null}
-        {error ? <p className="form-error" role="alert">{error}</p> : null}
+        {error ? <p className="form-error" role="alert">Aufträge konnten nicht geladen werden. Bitte die Seite neu laden. {error}</p> : null}
         {copyError ? <p className="form-error" role="alert">{copyError}</p> : null}
-        {items.length === 0 && !loading ? (
-          <p className="helper-text">Keine passenden Aufträge gefunden.</p>
+        {items.length === 0 && !loading && !error ? (
+          <p className="helper-text">{search.trim() ? "Kein Auftrag passt zur Suche." : "Noch keine Aufträge. Beginne mit einer neuen Anfrage."}{search.trim() ? <button type="button" className="secondary-button" onClick={() => onSearchChange("")}>Suche löschen</button> : null}</p>
         ) : (
           <ul className="quiet-list" aria-label={`Frühere ${label}aufträge`}>
-            {items.map((item) => {
+            {visibleItems.map((item) => {
               const active = item.caseId === activeCaseId;
               return (
                 <li key={item.caseId}>
@@ -107,13 +115,13 @@ export function CaseHistoryPanel({
                       <span>{{ open: "Offen", completed: "Abgeschlossen", archived: "Archiviert" }[item.status]}{active ? " · geöffnet" : ""}</span>
                     </button>
                     <button
-                      className="quiet-list__copy"
+                      className="quiet-list__copy secondary-button"
                       type="button"
                       data-action="copy-case"
                       disabled={copyingCaseId === item.caseId}
                       onClick={() => void copyCase(item.caseId)}
                     >
-                      {copyingCaseId === item.caseId ? "Wird kopiert ..." : "Als neuen Auftrag verwenden"}
+                      {copyingCaseId === item.caseId ? "Wird kopiert ..." : "Als Vorlage für neuen Auftrag"}
                     </button>
                   </div>
                 </li>
@@ -121,6 +129,7 @@ export function CaseHistoryPanel({
             })}
           </ul>
         )}
+        {visibleItems.length < items.length ? <button type="button" className="secondary-button" onClick={() => setShowAll(true)}>Alle {items.length} Aufträge anzeigen</button> : null}
       </div>
     </details>
   );

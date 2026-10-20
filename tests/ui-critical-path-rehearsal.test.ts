@@ -503,10 +503,10 @@ describe("UI critical path rehearsal", () => {
       expect(offerText).toContain("UI Critical Path Lunch");
       expect(offerText).toContain(offerDraft.draftId);
       expect(offerText).toContain("42 Personen");
-      expect(offerText).toContain("Export: Angebots-HTML");
-      expect(offerText).toContain("Veranstaltungsdaten im Entwurf");
+      expect(offerText).toContain("Export als Entwurf; Kalkulation unvollständig");
+      expect(offerText).toContain("Veranstaltungsdaten");
       expect(offerText).toContain("manual_input");
-      expect(offerText).toContain("Grenze: nur interne Demo- oder Testdaten");
+      expect(offerText).toContain("Nur interne Demo- oder Testdaten");
       expect(findAnchorByText("Angebot exportieren").getAttribute("href")).toBe(
         `/api/exports/v1/exports/offers/${offerDraft.draftId}/html`
       );
@@ -539,7 +539,7 @@ describe("UI critical path rehearsal", () => {
 
       const productionRoute = await renderAppRoute("/produktion");
       const productionText = document.body.textContent ?? "";
-      expect(productionText).toContain("Angebot hochladen oder Produktionsauftrag beschreiben");
+      expect(productionText).toContain("Angebot hochladen oder Auftrag beschreiben");
 
       expect(fetchCalls.every((call) => call.url.startsWith("/api/"))).toBe(true);
       expect(fetchCalls.map((call) => call.url).join("\n")).not.toContain("openai");

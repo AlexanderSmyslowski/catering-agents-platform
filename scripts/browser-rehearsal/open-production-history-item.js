@@ -16,7 +16,7 @@ async () => {
   }
 
   const historyDetails = [...document.querySelectorAll("details")].find((details) =>
-    (details.querySelector("summary")?.textContent ?? "").includes("Frühere Produktionsaufträge öffnen")
+    (details.querySelector("summary")?.textContent ?? "").includes("Auftrag öffnen")
   );
   if (!historyDetails) throw new Error("Produktions-Historie fehlt");
   historyDetails.open = true;

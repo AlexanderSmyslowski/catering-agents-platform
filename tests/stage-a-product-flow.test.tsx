@@ -134,7 +134,7 @@ describe("Stage A product route flow", () => {
       onCopy: async () => undefined
     }));
     expect(historyMarkup).toContain('aria-label="Frühere Angebotsaufträge"');
-    expect(historyMarkup).toContain("Als neuen Auftrag verwenden");
+    expect(historyMarkup).toContain("Als Vorlage für neuen Auftrag");
 
     const action = buildCaseNextAction({
       product: "offer",
@@ -262,7 +262,7 @@ describe("Stage A product route flow", () => {
     });
     const openCase = container.querySelector("button[data-action='open-case']") as HTMLButtonElement | null;
     expect(openCase).not.toBeNull();
-    expect(container.querySelector("[data-testid='case-next-action-bar']")?.textContent).toContain("Quelle");
+    expect(container.querySelector("[data-testid='case-next-action-bar']")?.textContent).toContain("Anfrage");
 
     await act(async () => {
       openCase!.click();

@@ -567,7 +567,7 @@ describe("Linux browser rehearsal governance", () => {
       open: false,
       querySelector: (selector: string) =>
         selector === "summary"
-          ? { textContent: "Frühere Angebotsaufträge öffnen · 1 Auftrag" }
+          ? { textContent: "Bestehenden Auftrag öffnen · 1 Auftrag" }
           : null,
       querySelectorAll: (selector: string) =>
         selector === "button[data-action='open-case']" ? [selectedCaseButton] : [],
@@ -590,7 +590,7 @@ describe("Linux browser rehearsal governance", () => {
     };
     const document = {
       body: {
-        innerText: "Aktueller Entwurf: Besprechung für 35 Teilnehmer als Kaffeepause. Angebotsvariante wurde freigegeben.",
+        innerText: "Besprechung für 35 Teilnehmer als Kaffeepause. Angebotsvariante wurde freigegeben.",
       },
       querySelectorAll: (selector: string) => {
         if (selector === "details") return [historyDetails, handoffDetails];
@@ -641,7 +641,7 @@ describe("Linux browser rehearsal governance", () => {
     const historyDetails = {
       open: false,
       querySelector: (selector: string) => selector === "summary"
-        ? { textContent: "Frühere Angebotsaufträge öffnen · 1 Auftrag" }
+        ? { textContent: "Bestehenden Auftrag öffnen · 1 Auftrag" }
         : null,
       querySelectorAll: (selector: string) => selector === "button[data-action='open-case']"
         ? [selectedCaseButton]
@@ -656,7 +656,7 @@ describe("Linux browser rehearsal governance", () => {
     };
     const approvalButton = { textContent: "Variante freigeben: Standard", click: () => undefined };
     const document = {
-      body: { innerText: "Aktueller Entwurf: Besprechung für 35 Teilnehmer als Kaffeepause. Angebotsvariante wurde freigegeben." },
+      body: { innerText: "Besprechung für 35 Teilnehmer als Kaffeepause. Angebotsvariante wurde freigegeben." },
       querySelectorAll: (selector: string) => {
         if (selector === "details") return [historyDetails, handoffDetails];
         if (selector === "button") return [approvalButton];
@@ -708,7 +708,7 @@ describe("Linux browser rehearsal governance", () => {
     };
     const historyDetails = {
       open: false,
-      querySelector: (selector: string) => selector === "summary" ? { textContent: "Frühere Angebotsaufträge öffnen · 1 Auftrag" } : null,
+      querySelector: (selector: string) => selector === "summary" ? { textContent: "Bestehenden Auftrag öffnen · 1 Auftrag" } : null,
       querySelectorAll: (selector: string) => selector === "button[data-action='open-case']" ? [selectedCaseButton] : [],
     };
     const handoffDetails = {
@@ -720,7 +720,7 @@ describe("Linux browser rehearsal governance", () => {
       body: {
         get innerText() {
           return [
-            "Aktueller Entwurf: Besprechung für 35 Teilnehmer als Kaffeepause.",
+            "Besprechung für 35 Teilnehmer als Kaffeepause.",
             approved ? "Angebotsvariante wurde freigegeben." : "",
             handoffCreated ? "Freigegebenes Angebot wurde an die Produktion übergeben." : "",
           ].join(" ");
@@ -1093,7 +1093,7 @@ describe("Linux browser rehearsal governance", () => {
     const historyDetails = {
       open: false,
       querySelector: (selector: string) => selector === "summary"
-        ? { textContent: "Frühere Angebotsaufträge öffnen · 1 Auftrag" }
+        ? { textContent: "Bestehenden Auftrag öffnen · 1 Auftrag" }
         : null,
       querySelectorAll: (selector: string) => selector === "button[data-action='open-case']"
         ? [selectedCaseButton]
@@ -1117,7 +1117,7 @@ describe("Linux browser rehearsal governance", () => {
       body: {
         get innerText() {
           return [
-            "Aktueller Entwurf: Besprechung für 35 Teilnehmer als Kaffeepause.",
+            "Besprechung für 35 Teilnehmer als Kaffeepause.",
             approved ? "Angebotsvariante wurde freigegeben." : "",
             handoffCreated ? "Freigegebenes Angebot wurde an die Produktion übergeben." : "",
           ].join(" ");
@@ -1224,7 +1224,7 @@ describe("Linux browser rehearsal governance", () => {
       open: false,
       querySelector: (selector: string) =>
         selector === "summary"
-          ? { textContent: "Frühere Angebotsaufträge öffnen · 1 Auftrag" }
+          ? { textContent: "Bestehenden Auftrag öffnen · 1 Auftrag" }
           : null,
       querySelectorAll: (selector: string) =>
         selector === "button[data-action='open-case']" ? [selectedCaseButton] : [],
@@ -1244,7 +1244,7 @@ describe("Linux browser rehearsal governance", () => {
     const handoffLink = { offsetParent: {}, textContent: "Zur Produktion" };
     const document = {
       body: {
-        innerText: "Aktueller Entwurf: Besprechung für 35 Teilnehmer als Kaffeepause. Angebotsvariante wurde freigegeben.",
+        innerText: "Besprechung für 35 Teilnehmer als Kaffeepause. Angebotsvariante wurde freigegeben.",
       },
       querySelectorAll: (selector: string) => {
         if (selector === "details") return [historyDetails, handoffDetails];
@@ -1314,7 +1314,7 @@ describe("Linux browser rehearsal governance", () => {
       open: false,
       querySelector: (selector: string) =>
         selector === "summary"
-          ? { textContent: "Frühere Angebotsaufträge öffnen · 1 Auftrag" }
+          ? { textContent: "Bestehenden Auftrag öffnen · 1 Auftrag" }
           : null,
       querySelectorAll: (selector: string) =>
         selector === "button[data-action='open-case']" ? [selectedCaseButton] : [],
@@ -1331,8 +1331,8 @@ describe("Linux browser rehearsal governance", () => {
       body: {
         get innerText() {
           return serverApprovalState === "approved"
-            ? "Aktueller Entwurf: Besprechung für 35 Teilnehmer als Kaffeepause. Angebotsvariante wurde freigegeben."
-            : "Aktueller Entwurf: Besprechung für 35 Teilnehmer als Kaffeepause.";
+            ? "Besprechung für 35 Teilnehmer als Kaffeepause. Angebotsvariante wurde freigegeben."
+            : "Besprechung für 35 Teilnehmer als Kaffeepause.";
         },
       },
       querySelectorAll: (selector: string) => {
@@ -1536,7 +1536,7 @@ describe("Linux browser rehearsal governance", () => {
     const legacyDetails = {
       open: false,
       querySelector: (selector: string) =>
-        selector === "summary" ? { textContent: "Frühere Angebotsaufträge öffnen" } : null,
+        selector === "summary" ? { textContent: "Bestehenden Auftrag öffnen" } : null,
       querySelectorAll: (selector: string) => selector === "button" ? [legacyButton] : [],
     };
     const legacyDocument = {
@@ -1593,9 +1593,9 @@ describe("Linux browser rehearsal governance", () => {
   it("binds the empty offer marker to a fresh zero-count state", () => {
     const requiredText = [
       "Angebotsagent",
-      "Kundenanfrage einfügen und Entwurf prüfen",
+      "Kundenanfrage einfügen",
       "Die App erstellt einen prüfbaren Angebotsentwurf.",
-      "Frühere Angebotsaufträge öffnen",
+      "Bestehenden Auftrag öffnen",
       "0 Aufträge"
     ].join("\n");
     const buildMarkerCheck = (innerText: string) => {
@@ -1616,8 +1616,8 @@ describe("Linux browser rehearsal governance", () => {
         "0 Aufträge"
       );
     }
-    expect(() => buildMarkerCheck(requiredText.replace("Frühere Angebotsaufträge öffnen", ""))()).toThrow(
-      "Frühere Angebotsaufträge öffnen"
+    expect(() => buildMarkerCheck(requiredText.replace("Bestehenden Auftrag öffnen", ""))()).toThrow(
+      "Bestehenden Auftrag öffnen"
     );
   });
 
@@ -1625,9 +1625,9 @@ describe("Linux browser rehearsal governance", () => {
     const buildMarkerCheck = (orderCount: string) => {
       const freshProductionText = [
       "Produktionsagent",
-      "Angebot hochladen oder Produktionsauftrag beschreiben",
-      "Ablauf: Quelle → KI-Entwurf → Prüfung → Plan",
-      "Frühere Produktionsaufträge öffnen",
+      "Angebot hochladen oder Auftrag beschreiben",
+      "Nächster Schritt",
+      "Bestehenden Auftrag öffnen",
         orderCount,
       ].join("\n");
       const document = {
@@ -1650,8 +1650,8 @@ describe("Linux browser rehearsal governance", () => {
 
   it("binds the fresh production handoff marker to the generated case list before explicit opening", () => {
     expect(productionHandoffMarkers).toContain("Produktionsagent");
-    expect(productionHandoffMarkers).toContain("Angebot hochladen oder Produktionsauftrag beschreiben");
-    expect(productionHandoffMarkers).toContain("Frühere Produktionsaufträge öffnen · 1 Auftrag");
+    expect(productionHandoffMarkers).toContain("Angebot hochladen oder Auftrag beschreiben");
+    expect(productionHandoffMarkers).toContain("Bestehenden Auftrag öffnen · 1 Auftrag");
     expect(productionHandoffMarkers).toContain("veralteter Demo-Produktionsfall");
     expect(productionHandoffMarkers).not.toContain("Produktionsplan-Exportlink fehlt");
   });
@@ -1661,9 +1661,9 @@ describe("Linux browser rehearsal governance", () => {
       body: {
         innerText: [
           "Produktionsagent",
-          "Angebot hochladen oder Produktionsauftrag beschreiben",
-          "Ablauf: Quelle → KI-Entwurf → Prüfung → Plan",
-          "Frühere Produktionsaufträge öffnen · 1 Auftrag",
+          "Angebot hochladen oder Auftrag beschreiben",
+          "Nächster Schritt",
+          "Bestehenden Auftrag öffnen · 1 Auftrag",
         ].join("\n"),
       },
       querySelectorAll: () => [],
@@ -1694,7 +1694,7 @@ describe("Linux browser rehearsal governance", () => {
     const historyDetails = {
       open: false,
       querySelector: (selector: string) => selector === "summary"
-        ? { textContent: "Frühere Produktionsaufträge öffnen · 1 Auftrag" }
+        ? { textContent: "Bestehenden Auftrag öffnen · 1 Auftrag" }
         : null,
       querySelectorAll: (selector: string) => selector === "button[data-action='open-case']"
         ? [historyButton]

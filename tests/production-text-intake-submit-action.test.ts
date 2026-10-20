@@ -24,6 +24,18 @@ function input(overrides: Partial<ProductionTextIntakeSubmitInput> = {}): Produc
 }
 
 describe("production text intake submit action", () => {
+  it("marks only successfully persisted source text as consumed", async () => {
+    const onTextAccepted = vi.fn();
+    const accepted = input({ onTextAccepted });
+    await buildProductionTextIntakeSubmitAction(accepted)();
+    expect(onTextAccepted).toHaveBeenCalledExactlyOnceWith(accepted.intakeText);
+    onTextAccepted.mockClear();
+    await buildProductionTextIntakeSubmitAction(input({ onTextAccepted,
+      createProductionDraftFromAcceptedEventSpec: async () => { throw new Error("Nicht gespeichert"); }
+    }))();
+    expect(onTextAccepted).not.toHaveBeenCalled();
+  });
+
   it.each(["", " \n\t "])("rejects blank production intake text before calling the write action", async (intakeText) => {
     const actionsInput = input({ intakeText });
     const submitIntakeText = buildProductionTextIntakeSubmitAction(actionsInput);

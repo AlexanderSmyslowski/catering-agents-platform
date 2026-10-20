@@ -1107,13 +1107,72 @@ afterEach(() => {
 });
 
 describe("backoffice production acceptance smoke", () => {
+  it("allows opening another production order after successful text submission", async () => {
+    installProductionAcceptanceMocks({ withSearchTargetSpec: true });
+    const fetchMock = fetch as ReturnType<typeof vi.fn>;
+    const previousFetch = fetchMock.getMockImplementation()! as typeof fetch;
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === "POST" && url.endsWith("/intake/normalize")) return Response.json({ acceptedEventSpec: { specId: "spec-production-fallback-1" } });
+      if (init?.method === "POST" && url.endsWith("/production/cases")) return Response.json({ case: { caseId: "production-case-fallback-1" } });
+      if (init?.method === "POST" && url.endsWith("/production/drafts")) return Response.json({ draft: { draftId: "submitted-draft" } });
+      return previousFetch(input, init);
+    });
+    const { container, root } = await renderProductionRouteInteractive({ openFirstJob: false });
+    const text = container.querySelector<HTMLTextAreaElement>('textarea[placeholder^="Beispiel: Bitte"]')!;
+    await act(async () => { setNativeValue(text, "Synthetischer Auftrag für 36 Gäste"); await flushProductionRouteUpdates(); });
+    await act(async () => {
+      (Array.from(container.querySelectorAll("button")).find(button => button.textContent === "Text auswerten") as HTMLButtonElement).click();
+      await flushProductionRouteUpdates(12);
+    });
+    expect(text.value).toBe("");
+    await act(async () => {
+      (Array.from(container.querySelectorAll("button[data-action='open-case']")).find(button => button.textContent?.includes("Archivsuche Ziel")) as HTMLButtonElement).click();
+      await flushProductionRouteUpdates(12);
+    });
+    expect(container.querySelector('[aria-label="Geöffneter Auftrag"]')?.textContent).toContain("Archivsuche Ziel");
+    expect(container.textContent).not.toContain("Begonnene Eingaben zuerst übernehmen");
+    await act(async () => root.unmount());
+    container.remove();
+  });
+
+  it("blocks opening or copying another production case while source text is unsubmitted", async () => {
+    installProductionAcceptanceMocks();
+    const { container, root } = await renderProductionRouteInteractive({ openFirstJob: false });
+    const text = container.querySelector<HTMLTextAreaElement>('textarea[placeholder^="Beispiel: Bitte"]')!;
+    await act(async () => {
+      setNativeValue(text, "Ungesendeter Auftrag für Kunde C");
+      await flushProductionRouteUpdates();
+    });
+    await act(async () => {
+      (container.querySelector("button[data-action='open-case']") as HTMLButtonElement).click();
+      (container.querySelector("button[data-action='copy-case']") as HTMLButtonElement).click();
+      await flushProductionRouteUpdates();
+    });
+    expect(container.querySelector('[aria-label="Geöffneter Auftrag"]')).toBeNull();
+    expect(text.value).toBe("Ungesendeter Auftrag für Kunde C");
+    expect(container.textContent).toContain("Begonnene Eingaben zuerst übernehmen");
+    expect((fetch as ReturnType<typeof vi.fn>).mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
+    await act(async () => {
+      (Array.from(container.querySelectorAll("button")).find(button => button.textContent === "Eingabefelder leeren") as HTMLButtonElement).click();
+      await flushProductionRouteUpdates();
+      (container.querySelector("button[data-action='open-case']") as HTMLButtonElement).click();
+      await flushProductionRouteUpdates();
+    });
+    expect(text.value).toBe("");
+    expect(container.querySelector('[aria-label="Geöffneter Auftrag"]')).not.toBeNull();
+    expect(container.textContent).not.toContain("Begonnene Eingaben zuerst übernehmen");
+    await act(async () => root.unmount());
+    container.remove();
+  });
+
   it("starts empty even when previous production data exists", async () => {
     installProductionAcceptanceMocks({ withCurrentPurchaseList: true });
 
     const rendered = await renderProductionRouteMarkup({ openFirstJob: false });
 
-    expect(rendered.text).toContain("Angebot hochladen oder Produktionsauftrag beschreiben");
-    expect(rendered.text).toContain("Frühere Produktionsaufträge öffnen");
+    expect(rendered.text).toContain("Angebot hochladen oder Auftrag beschreiben");
+    expect(rendered.text).toContain("Bestehenden Auftrag öffnen");
     expect(rendered.text).not.toContain("Aktueller Vorgang");
     expect(rendered.text).not.toContain("Produktionsplan aus gespeicherter Spezifikation");
     expect(rendered.text).not.toContain("Bestandsdaten im Hintergrund");
@@ -1129,10 +1188,9 @@ describe("backoffice production acceptance smoke", () => {
     const content = rendered.text;
 
     expect(content).toContain("Produktionsagent");
-    expect(content).toContain("Produktionsagent-Chat");
-    expect(content).toContain("Angebot hochladen oder Produktionsauftrag beschreiben");
-    expect(content).toContain("Quelle einfügen, dann prüfst du die erkannten Daten.");
-    expect(content).toContain("Ablauf: Quelle → KI-Entwurf → Prüfung → Plan");
+    expect(content).toContain("Auftragsstand Küche");
+    expect(content).toContain("Weitere Unterlage zu diesem Produktionsauftrag");
+    expect(content).toContain("Nächster Schritt");
     expect(rendered.html).not.toContain('class="production-flow-steps"');
     expect(content).toContain("Angebot als KI-Entwurf prüfen");
     expect(content).toContain("Unterstützt PDF, E-Mail und Textdateien bis 25 MB");
@@ -1143,19 +1201,15 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Fehlgeschlagenen Demo-Upload ausblenden");
     expect(content).toContain("Datei hier ablegen");
     expect(content).toContain("Downloadbereich");
-    expect(content).toContain("Aktueller Produktionsauftrag");
-    expect(content).toContain("Dieser Arbeitsstand gehört zum geöffneten Produktionsauftrag.");
-    expect(content.indexOf("Angebot hochladen oder Produktionsauftrag beschreiben")).toBeLessThan(
-      content.indexOf("Aktueller Produktionsauftrag")
-    );
-    expect(content.indexOf("Kundenanfrage übernehmen")).toBeLessThan(content.indexOf("Nächster Schritt"));
+    expect(content.indexOf("Auftragsstand Küche")).toBeLessThan(content.indexOf("Weitere Unterlage zu diesem Produktionsauftrag"));
+    expect(content.indexOf("Nächster Schritt")).toBeLessThan(content.indexOf("Auftragsstand Küche"));
     expect(content.indexOf("Kundenanfrage übernehmen")).toBeLessThan(content.indexOf("Produktionsblatt exportieren"));
     expect(rendered.html).toContain('aria-label="Kompakte Produktionszusammenfassung"');
     expect(rendered.html).toContain('aria-label="Datenstand Produktionsauftrag"');
     expect(content).toContain("Mengen, Herkunft, Allergene, Preise und Freigabegrenzen bleiben vor Produktion zu prüfen.");
     expect(content).not.toContain("Reviewer-Hinweis");
     expect(content).not.toContain("Option-A-Zeitfenster");
-    expect(content).toContain("Nächster Arbeitsschritt");
+    expect(rendered.html).toContain('aria-label="Ergebnisse der Produktion"');
     expect(content).toContain("Produktionsplan nacharbeiten");
     expect(content).toContain("Produktionsplan ist unzureichend. Bitte offene Punkte, Rezeptquellen und Mengen klären.");
     expect(content).toContain("Produktionsplan");
@@ -1319,7 +1373,7 @@ describe("backoffice production acceptance smoke", () => {
       expect(content).toContain("Upload passt nicht zum Angebot.");
       expect(content).toContain("Ausgewählt: falsches-angebot.txt");
       expect(content).toContain("Kein aktiver Vorgang");
-      expect(content).toContain("Angebot hochladen oder Produktionsauftrag beschreiben");
+      expect(content).toContain("Angebot hochladen oder Auftrag beschreiben");
       expect(content).not.toContain("requestId: request-production-fallback-1");
       expect(content).not.toContain("Glutenfrei-Konflikt bleibt ungelöst.");
       expect(content).not.toContain("Klassifikation für Brot-Baguette fehlt.");
@@ -1378,7 +1432,7 @@ describe("backoffice production acceptance smoke", () => {
       expect(content).toContain("Kein aktiver Vorgang");
       expect(content).not.toContain("Rückfragen: keine offenen Rückfragen");
       expect(content).not.toContain("Rückfragen: offen 0 · beantwortet 0");
-      expect(content).toContain("Angebot hochladen oder Produktionsauftrag beschreiben");
+      expect(content).toContain("Angebot hochladen oder Auftrag beschreiben");
       expect(content).not.toContain("requestId: request-production-fallback-1");
       expect(content).not.toContain("Rückfragen: 1 offene Rückfrage");
       expect(content).not.toContain("Glutenfrei-Konflikt bleibt ungelöst.");
@@ -1447,7 +1501,7 @@ describe("backoffice production acceptance smoke", () => {
 
       expect(content).toContain("Aktueller Upload wurde lokal verworfen. Rückfragen und Ergebnisse wurden aus dem Fokus geleert.");
       expect(content).toContain("Kein aktiver Vorgang");
-      expect(content).toContain("Angebot hochladen oder Produktionsauftrag beschreiben");
+      expect(content).toContain("Angebot hochladen oder Auftrag beschreiben");
       expect(content).not.toContain("requestId: request-production-fallback-1");
       expect(content).not.toContain("Plan-Kontext: aktueller Produktionsplan");
       expect(content).not.toContain("purchase-production-current-1");
@@ -1512,7 +1566,7 @@ describe("backoffice production acceptance smoke", () => {
         filterDetails.open = true;
       }
       const searchInput = container.querySelector(
-        "input[placeholder='Kunde, Anlass, Datum oder Speise suchen']"
+        "#production-workspace-search"
       ) as HTMLInputElement | null;
 
       expect(searchInput).toBeTruthy();
@@ -1634,7 +1688,7 @@ describe("backoffice production acceptance smoke", () => {
 
     const content = await renderProductionRoute();
 
-    expect(content).toContain("Frühere Produktionsaufträge öffnen");
+    expect(content).toContain("Bestehenden Auftrag öffnen");
     expect(content).not.toContain("Bestandsdaten im Hintergrund");
     expect(content).not.toContain("Produktionsplan aus gespeicherter Spezifikation");
     expect(content).not.toContain("Plan plan-production-fallback-1");
@@ -1740,7 +1794,7 @@ describe("backoffice production acceptance smoke", () => {
     const content = await renderProductionRoute();
 
     expect(content).toContain("Produktionsplan berechnen");
-    expect(content).toContain("Aus der Spezifikation kann jetzt ein Produktionsplan mit Einkaufsliste vorbereitet werden.");
+    expect(content).toContain("Noch kein Produktionsplan");
     expect(content).toContain("Noch kein Produktionsplan für den aktuellen Vorgang. Nächster Schritt: Berechnung starten.");
     expect(content).toContain("Noch keine Einkaufsliste für den aktuellen Vorgang. Sie entsteht mit dem Produktionsplan.");
     expect(content).toContain("Exportlinks erscheinen erst, wenn Produktionsplan und Einkaufsliste vorhanden sind.");
@@ -1759,8 +1813,7 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Produktionsplan");
     expect(content).toContain("Produktionsblatt exportieren");
     expect(content).toContain("Produktionsblatt vorhanden · Einkaufsliste offen");
-    expect(content).toContain("Einkaufsliste noch offen");
-    expect(content).toContain("Produktionsplan ist vorhanden; Einkaufsliste und Einkaufslisten-Export fehlen noch.");
+    expect(content).toContain("Einkaufsliste offen");
     expect(content).toContain("Produktionsplan liegt vor. Einkaufsliste und Einkaufslisten-Export sind noch nicht verfügbar.");
     expect(content).toContain("Noch keine Einkaufsliste für den aktuellen Vorgang. Sie entsteht mit dem Produktionsplan.");
     expect(content).not.toContain("Produktionsplan, Einkaufsliste und Exporte liegen bereit.");
@@ -1923,7 +1976,6 @@ describe("backoffice production acceptance smoke", () => {
 
     const content = document.body.textContent ?? "";
 
-    expect(content).toContain("Rückfragen: 7 offene Rückfragen");
     expect(content).toContain("Rückfragen: offen 7 · beantwortet 0");
     expect(content).toContain("offen 7 · beantwortet 0");
     expect(content).not.toContain("Rückfragen: offen 1 · beantwortet 0");

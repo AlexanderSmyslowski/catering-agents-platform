@@ -63,7 +63,7 @@ async () => {
     const text = document.body.innerText;
     const html = document.body.innerHTML;
     if (
-      text.includes("Angebot hochladen oder Produktionsauftrag beschreiben") &&
+      text.includes("Angebot hochladen oder Auftrag beschreiben") &&
       text.includes("Aktueller Upload wurde lokal verworfen. Rückfragen und Ergebnisse wurden aus dem Fokus geleert.") &&
       !text.includes("Plan-Kontext: aktueller Produktionsplan") &&
       !text.includes(`Plan-Kontext: planId ${planId}`) &&
@@ -87,7 +87,7 @@ async () => {
     button.text.startsWith("Fehlgeschlagenen Demo-Upload ausblenden")
   );
 
-  if (!afterText.includes("Angebot hochladen oder Produktionsauftrag beschreiben")) {
+  if (!afterText.includes("Angebot hochladen oder Auftrag beschreiben")) {
     missing.push("Clear-Check nach Klick ohne Empty-first-Einstieg");
   }
   if (

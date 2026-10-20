@@ -169,20 +169,6 @@ function renderDraftFocusLabel(draft?: Record<string, unknown>): string {
     : String(draft.eventSummary ?? "Unbenannter Entwurf");
 }
 
-function renderOfferNextStep(draft?: Record<string, unknown>, approval?: OfferApprovalBinding): string {
-  if (!draft) {
-    return "Jetzt: Kundenanfrage einfügen und einen prüfbaren Entwurf erstellen.";
-  }
-
-  if (approval?.handoffId) {
-    return "Jetzt: den übergebenen Produktionsauftrag öffnen und die Küchenplanung fortsetzen. Änderungen am Angebot als neue Fassung speichern und erneut freigeben.";
-  }
-  if (approval) {
-    return "Jetzt: das intern freigegebene Angebot an die Produktion übergeben.";
-  }
-  return "Jetzt: offene Punkte und Kalkulation prüfen, dann eine Variante intern freigeben. Die Produktionsübergabe folgt als eigener Schritt.";
-}
-
 function getSpecRequestId(spec: Record<string, unknown>): string {
   const requestId = spec.requestId;
   return typeof requestId === "string" && requestId.trim() ? requestId.trim() : "-";
@@ -240,7 +226,6 @@ export function OfferConversationalWorkbench({
     ? approvalBinding
     : undefined;
   const focusedHandoffId = focusedApprovalBinding?.handoffId;
-  const focusedDraftLabel = renderDraftFocusLabel(focusedDraft);
   const focusedDraftSpec = getDraftProposedSpec(focusedDraft);
   const focusedDraftSource = formatDraftSourceLineage(focusedDraftSpec);
   const summaryActiveSpec = focusedDraftSpec ?? activeSpec;
@@ -267,10 +252,11 @@ export function OfferConversationalWorkbench({
 
   return (
     <section className="offer-conversation-layout" aria-label="Angebotsagent Conversational Workbench">
-      <article className="offer-composer" aria-label="Zentrale Angebotsarbeit">
+      <details className="offer-composer" aria-label="Zentrale Angebotsarbeit" open={!hasActiveOfferCase && !focusedDraft}>
+        <summary>{hasActiveOfferCase || focusedDraft ? "Weitere Unterlage zu diesem Auftrag" : "Neue Kundenanfrage"}</summary>
         <header className="offer-composer__header">
-          <p className="eyebrow">Neue Anfrage</p>
-          <h3>Kundenanfrage einfügen und Entwurf prüfen</h3>
+
+          <h3>{hasActiveOfferCase || focusedDraft ? "Text oder Datei ergänzen" : "Kundenanfrage einfügen"}</h3>
           <p className="helper-text">
             Die App erstellt einen prüfbaren Angebotsentwurf. Eine Variante wird erst intern freigegeben und anschließend ausdrücklich an die Produktion übergeben.
           </p>
@@ -323,76 +309,28 @@ export function OfferConversationalWorkbench({
           <button disabled={submitting || editingMenu || editingPricing || editingEvent || !offerText.trim()} onClick={() => void submitOfferText()}>
             Entwurf aus Text erstellen
           </button>
-          <span>{focusedDraft ? `Aktueller Entwurf: ${focusedDraftLabel}` : "Als Nächstes: Anfrage einfügen"}</span>
-        </div>
-      </article>
 
-      {hasActiveOfferCase || focusedDraft || filteredOfferDrafts.length > 0 ? (
-        <details className="panel secondary-workspace offer-history-details">
-          <summary>
-            <span className="eyebrow">Aktueller Auftrag</span>
-            <span className="subsection-title">Angebotsentwürfe dieses Auftrags</span>
-            <span className="helper-text">
-              {filteredOfferDrafts.length === 1 ? "1 Entwurf" : `${filteredOfferDrafts.length} Entwürfe`}
-            </span>
-          </summary>
-          <div className="secondary-workspace__content">
-            <input
-              className="search"
-              aria-label="Angebotsentwürfe durchsuchen"
-              placeholder="Kunde, Anlass, Datum oder Personen suchen"
-              value={historySearch}
-              onChange={(event) => setHistorySearch(event.target.value)}
-            />
-            <ul className="quiet-list">
-              {visibleOfferDrafts.map((draft) => (
-                <li key={String(draft.draftId)}>
-                  <button
-                    type="button"
-                    className="quiet-list__button"
-                    disabled={submitting || editingMenu || editingPricing || editingEvent}
-                    onClick={() => setSelectedDraftId(String(draft.draftId))}
-                  >
-                    <strong>{renderDraftFocusLabel(draft)}</strong>
-                    <span>{renderDraftSummary(draft)}</span>
-                  </button>
-                </li>
-              ))}
-              {visibleOfferDrafts.length === 0 ? <li>Keine passenden Entwürfe gefunden.</li> : null}
-            </ul>
-          </div>
-        </details>
-      ) : null}
+        </div>
+      </details>
+
+
 
       {focusedDraft ? (
         <>
-          <aside className="offer-calm-summary" aria-label="Kompakte Ergebniszusammenfassung">
-            <p className="eyebrow">Zusammenfassung</p>
+          <aside className="offer-calm-summary" aria-label="Kompakte Ergebniszusammenfassung" tabIndex={-1}>
+            <h3>Auftragsstand</h3>
             <strong>{renderDraftSummary(focusedDraft)}</strong>
-            <p className="helper-text">Arbeitsstand: Anfrage, Entwurf, Export und Übergabe bleiben sichtbar.</p>
-            <p className="helper-text">
-              Grenze: nur interne Demo- oder Testdaten; keine echten Kundendaten, keine externe Freigabe.
-            </p>
-            <p className="helper-text">
-              Bitte vor Freigabe prüfen: keine automatische Preis-, Margen- oder Produktionsfreigabe.
-            </p>
-            <p className="helper-text">{renderOfferNextStep(focusedDraft, focusedApprovalBinding)}</p>
-            <p className="helper-text">
-              Veranstaltungsdaten: {completeSpecCount} vollständig · {partialSpecCount} teilweise · aktueller Vorgang:{" "}
-              {summaryActiveSpec ? `${getSpecLabel(summaryActiveSpec)} (${getReadinessLabel(summaryActiveSpec)})` : "keine"}
-            </p>
-            <p className="helper-text" role="status">
-              {focusedHandoffId
-                ? "Produktionsübergabe: erfolgt. Die Freigabe der Küchenplanung wird im Produktionsauftrag geprüft."
-                : focusedApprovalBinding
-                  ? "Angebotsfreigabe: intern freigegeben. Produktionsübergabe: noch nicht erfolgt."
-                  : "Angebotsfreigabe: noch nicht erfolgt. Produktionsübergabe: noch nicht erfolgt."}
-            </p>
-            <p className="helper-text">
-              {focusedDraft
-                ? "Export: Angebots-HTML für den aktuellen Entwurf bereit"
-                : "Export/Freigabe: noch kein Entwurf, kein Exportartefakt und keine Freigabe vorhanden."}
-            </p>
+            <dl className="order-status-facts" role="status">
+              <div><dt>Angebot</dt><dd>{focusedApprovalBinding ? "Intern freigegeben" : "Noch nicht freigegeben"}</dd></div>
+              <div><dt>Küche</dt><dd>{focusedHandoffId ? "Übergeben – Planung im Produktionsauftrag" : "Noch nicht übergeben"}</dd></div>
+              <div><dt>Unterlagen</dt><dd>{editingMenu || editingPricing || editingEvent ? "Nach dem Speichern verfügbar" : incompletePricingTax || !focusedPricing?.calculation ? "Export als Entwurf; Kalkulation unvollständig" : "Angebot zum Drucken und Exportieren verfügbar"}</dd></div>
+            </dl>
+            <section className="order-safety-notes" aria-label="Vor jeder Freigabe prüfen">
+              <h4>Vor jeder Freigabe prüfen</h4>
+              <p>Nur interne Demo- oder Testdaten; keine echten Kundendaten, keine externe Freigabe.</p>
+              <p>Keine automatische Preis-, Margen- oder Produktionsfreigabe.</p>
+              {incompletePricingTax ? <p>Kalkulation unvollständig. Preise und Steuer vor Freigabe erfassen.</p> : null}
+            </section>
             {focusedDraft || summaryActiveSpec || focusedDraftSource || latestSourceLabel ? (
               <details className="technical-context-details">
                 <summary>Technische Details</summary>
@@ -443,15 +381,6 @@ export function OfferConversationalWorkbench({
           </summary>
           {focusedDraft ? (
             <div className="progressive-panel__body">
-              <p>{String(focusedDraft.eventSummary ?? "-")}</p>
-              <p className="helper-text">
-                Varianten: {focusedVariants.length} · Offene Punkte: {focusedOpenQuestions.length}
-              </p>
-              {focusedDraftSpec ? (
-                <p className="helper-text">
-                  Veranstaltungsdaten im Entwurf: {getSpecLabel(focusedDraftSpec)} ({getReadinessLabel(focusedDraftSpec)})
-                </p>
-              ) : null}
               {focusedDraftSpec || focusedDraftSource ? (
                 <details className="technical-context-details">
                   <summary>Technische Details</summary>
@@ -463,6 +392,15 @@ export function OfferConversationalWorkbench({
                   {focusedDraftSource ? <p className="helper-text">Entwurfs-Quelle: {focusedDraftSource}</p> : null}
                 </details>
               ) : null}
+              {focusedOpenQuestions.length > 0 ? (
+                <section aria-label="Offene Punkte"><h3>Offene Punkte ({focusedOpenQuestions.length})</h3><ul className="item-list compact">
+                  {focusedOpenQuestions.map((question) => (
+                    <li key={question}>{question}</li>
+                  ))}
+                </ul></section>
+              ) : (
+                <p className="helper-text">Offene Punkte: keine</p>
+              )}
         {focusedDraftSpec?.event && focusedDraftSpec.servicePlan && onMenuSaved ? <OfferEventEditor
           draftId={focusedDraftId} revision={focusedDraftRevision ?? 1}
           spec={focusedDraftSpec as unknown as import("@catering/shared-core").AcceptedEventSpec}
@@ -491,15 +429,6 @@ export function OfferConversationalWorkbench({
                   onSaved={onMenuSaved} disabled={submitting || editingMenu || editingEvent}
                   onEditingChange={editing => { setEditingPricing(editing); onMenuEditingChange?.(editing || editingMenu || editingEvent); }} />
               ) : null}
-              {focusedOpenQuestions.length > 0 ? (
-                <ul className="item-list compact">
-                  {focusedOpenQuestions.map((question) => (
-                    <li key={question}>{question}</li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="helper-text">Offene Punkte: keine</p>
-              )}
               {showMiniPilotPanel ? (
                 <div className="search-trace" aria-label="Mini-Pilot-Status vor Uebernahme">
                   <p className="eyebrow">{miniPilotActionState.eyebrow}</p>
@@ -559,6 +488,7 @@ export function OfferConversationalWorkbench({
                     Angebot exportieren
                   </a>
                 )}
+                {(focusedApprovalBinding || focusedHandoffId) ? <details className="technical-context-details"><summary>Übergabeaktionen anzeigen</summary>
                 {focusedApprovalBinding && !focusedHandoffId && createHandoff ? (
                   <button
                     className="secondary-button"
@@ -577,6 +507,7 @@ export function OfferConversationalWorkbench({
                     Produktionsauftrag öffnen
                   </button>
                 ) : null}
+                </details> : null}
               </div>
               <details className="nested-details">
                 <summary>Angebotstexte anzeigen</summary>
@@ -588,6 +519,43 @@ export function OfferConversationalWorkbench({
             <p className="helper-text">Noch kein Entwurf ausgewählt.</p>
           )}
         </details>
+
+      {filteredOfferDrafts.length > 1 ? (
+        <details className="panel secondary-workspace offer-history-details">
+          <summary>
+
+            <span className="subsection-title">Fassungen dieses Auftrags</span>
+            <span className="helper-text">
+              {filteredOfferDrafts.length === 1 ? "1 Entwurf" : `${filteredOfferDrafts.length} Entwürfe`}
+            </span>
+          </summary>
+          <div className="secondary-workspace__content">
+            <input
+              className="search"
+              aria-label="Angebotsentwürfe durchsuchen"
+              placeholder="Kunde, Anlass, Datum oder Personen suchen"
+              value={historySearch}
+              onChange={(event) => setHistorySearch(event.target.value)}
+            />
+            <ul className="quiet-list">
+              {visibleOfferDrafts.map((draft) => (
+                <li key={String(draft.draftId)}>
+                  <button
+                    type="button"
+                    className="quiet-list__button"
+                    disabled={submitting || editingMenu || editingPricing || editingEvent}
+                    onClick={() => setSelectedDraftId(String(draft.draftId))}
+                  >
+                    <strong>{renderDraftFocusLabel(draft)}</strong>
+                    <span>{renderDraftSummary(draft)}</span>
+                  </button>
+                </li>
+              ))}
+              {visibleOfferDrafts.length === 0 ? <li>Keine passenden Entwürfe gefunden.</li> : null}
+            </ul>
+          </div>
+        </details>
+      ) : null}
 
         <details className="progressive-panel">
           <summary>
@@ -655,6 +623,7 @@ export function OfferConversationalWorkbench({
         <details className="progressive-panel">
           <summary>
             <span>Erfasste Veranstaltungsdaten</span>
+            <span>Erfasste Daten: {completeSpecCount} vollständig · {partialSpecCount} teilweise</span>
             <strong>{formatOfferSummaryCount(filteredSpecs.length, "Vorgang", "Vorgänge")}</strong>
           </summary>
           <ul className="quiet-list">

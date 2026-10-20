@@ -46,16 +46,6 @@ type ProductionConversationalWorkbenchProps = {
   slots: ProductionWorkbenchSlots;
 };
 
-function formatQuestionStatus(questionCount: number): string {
-  if (questionCount === 0) {
-    return "keine strukturierten Rückfragen erfasst; Auftrags- und Küchenhinweise separat prüfen";
-  }
-  if (questionCount === 1) {
-    return "1 offene Rückfrage";
-  }
-  return `${questionCount} offene Rückfragen`;
-}
-
 function countOpenVisibleQuestions(
   questionCount: number,
   answeredQuestionCount: number,
@@ -153,7 +143,6 @@ function hasVisibleProductionContext(input: {
 
 export function ProductionConversationalWorkbench({
   summary,
-  nextStep,
   miniPilotRawResult,
   setMiniPilotRawResult,
   miniPilotReportState,
@@ -187,7 +176,6 @@ export function ProductionConversationalWorkbench({
     purchaseItemCount,
     planStatusLabel
   });
-  const hasProductionResults = productionObjectCount > 0 || purchaseListCount > 0;
   const productionOutputAnchorId = "production-output-anchor";
   const summaryFacts = buildProductionSummaryFacts({
     approvalState: summary.approvalState,
@@ -210,46 +198,27 @@ export function ProductionConversationalWorkbench({
     ? "production-conversation-layout production-conversation-layout--active-context"
     : "production-conversation-layout";
 
-  return (
-    <section className={layoutClassName} aria-label="Produktionsagent Conversational Workbench">
+  const inputPanel = (
       <article className="production-composer" aria-label="Zentrale Produktionsarbeit">
-        <header className="production-composer__header">
-          <p className="eyebrow">Produktionsagent-Chat</p>
-          <h3>Angebot hochladen oder Produktionsauftrag beschreiben</h3>
+        {!hasActiveContext ? <header className="production-composer__header">
+
+          <h3>Angebot hochladen oder Auftrag beschreiben</h3>
           <p className="helper-text">
             Quelle einfügen, dann prüfst du die erkannten Daten. Produktionsplan, Einkaufsliste und Exporte entstehen erst nach diesem Review.
           </p>
-          <p className="production-flow-summary" aria-label="Produktionsablauf">
-            Ablauf: Quelle → KI-Entwurf → Prüfung → Plan
-          </p>
-        </header>
+        </header> : null}
         {slots.inputSlot}
-        {hasActiveContext ? (
-          <div className="production-next-step" aria-label="Nächster Produktionsschritt">
-            <p className="eyebrow">Nächster Schritt</p>
-            <strong>{nextStep.title}</strong>
-            <p className="helper-text">{nextStep.description}</p>
-            {openVisibleQuestionCount > 0 ? (
-              <a className="ghost-link" href="#production-question-panel">
-                Rückfragen beantworten
-              </a>
-            ) : hasProductionResults ? (
-              <a className="ghost-link" href={`#${productionOutputAnchorId}`}>
-                Ergebnisse prüfen
-              </a>
-            ) : null}
-          </div>
-        ) : null}
       </article>
+  );
 
+  return (
+    <section className={layoutClassName} aria-label="Produktionsagent Conversational Workbench">
       {hasActiveContext ? (
         <>
           <aside className="production-calm-summary" aria-label="Kompakte Produktionszusammenfassung">
-            <p className="eyebrow">{summary.hasActiveContext ? "Aktueller Produktionsauftrag" : "Bestandsdaten im Hintergrund"}</p>
+            <h3>{summary.hasActiveContext ? "Auftragsstand Küche" : "Bestandsdaten im Hintergrund"}</h3>
             <strong>{activeSpecLabel}</strong>
-            <p className="helper-text">
-              {summary.hasActiveContext ? "Dieser Arbeitsstand gehört zum geöffneten Produktionsauftrag." : "Kontext aus Demo, Bestand oder vorherigem Lauf. Starte oben mit einer Datei oder Texteingabe, wenn du einen neuen Auftrag prüfen willst."}
-            </p>
+            {!summary.hasActiveContext ? <p className="helper-text">Kontext aus Demo, Bestand oder vorherigem Lauf. Für einen neuen Auftrag zuerst eine Datei oder Texteingabe übernehmen.</p> : null}
             {summary.productionNotes?.length ? <section aria-label="Auftrags- und Küchenhinweise"><h4>Auftrags- und Küchenhinweise</h4><p>Vorgaben separat prüfen. Dies ist keine Sonderkost-, Allergen- oder Hygienefreigabe.</p><ul>{summary.productionNotes.map(note => <li key={note}>{note}</li>)}</ul></section> : null}
             <ul className="production-calm-summary__facts" aria-label="Datenstand Produktionsauftrag">
               {summaryFacts.map((fact) => (
@@ -262,12 +231,7 @@ export function ProductionConversationalWorkbench({
             <p className="helper-text">
               Mengen, Herkunft, Allergene, Preise und Freigabegrenzen bleiben vor Produktion zu prüfen.
             </p>
-            <p className="helper-text">Rückfragen: {formatQuestionStatus(questionCount)}.</p>
-            {hasProductionResults ? (
-              <a className="ghost-link" href={`#${productionOutputAnchorId}`}>
-                {productionOutputAnchor.title}
-              </a>
-            ) : null}
+
             {activeTechnicalContextLabel ? (
               <details className="technical-context-details">
                 <summary>Technische Details</summary>
@@ -298,7 +262,11 @@ export function ProductionConversationalWorkbench({
               </>
             ) : null}
           </aside>
-
+        </>
+      ) : null}
+      {inputPanel}
+      {hasActiveContext ? (
+        <>
           <div className="production-progressive-zone">
         <details className="progressive-panel" open={questionCount > 0}>
           <summary>
@@ -313,9 +281,9 @@ export function ProductionConversationalWorkbench({
         <article
           id={productionOutputAnchorId}
           className="production-output-anchor"
-          aria-label="Nächster Schritt zur Produktionsarbeit"
+          aria-label="Ergebnisse der Produktion"
         >
-          <p className="eyebrow">Nächster Arbeitsschritt</p>
+
           <h3>{productionOutputAnchor.title}</h3>
           <p className="helper-text">{productionOutputAnchor.description}</p>
           <p className="helper-text">{productionOutputAnchor.grouping}</p>

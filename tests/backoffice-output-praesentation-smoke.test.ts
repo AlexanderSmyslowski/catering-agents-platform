@@ -586,7 +586,7 @@ describe("backoffice production presentation smoke", () => {
     const content = await renderOfferRoute();
 
     expect(content).toContain("Angebotsagent");
-    expect(content).toContain("Kundenanfrage einfügen und Entwurf prüfen");
+    expect(content).toContain("Weitere Unterlage zu diesem Auftrag");
     expect(content).not.toContain("Catering-Betriebssystem");
     expect(content).not.toContain("Demo-Daten laden");
     expect(content).not.toContain("Aktualisieren");
@@ -594,7 +594,7 @@ describe("backoffice production presentation smoke", () => {
     expect(content).toContain("Alternative Erfassung");
     expect(content).toContain("Erfasste Veranstaltungsdaten");
     expect(content).toContain("Lunch-Angebot für 45 Personen · 2 Varianten · 1 offener Punkt");
-    expect(content).toContain("Veranstaltungsdaten: 1 vollständig · 0 teilweise");
+    expect(content).toContain("Erfasste Daten: 1 vollständig · 0 teilweise");
     expect(content).toContain("presentation-draft-success");
     expect(content).toContain("presentation-spec-success");
     expect(content).toContain("Angebot exportieren");
@@ -613,14 +613,14 @@ describe("backoffice production presentation smoke", () => {
     const content = await renderProductionRoute();
 
     expect(content).toContain("Produktionsagent");
-    expect(content).toContain("Produktionsagent-Chat");
+    expect(content).toContain("Auftragsstand Küche");
     expect(content).toContain("Angebot als KI-Entwurf prüfen");
     expect(content).toContain("Unterstützt PDF, E-Mail und Textdateien bis 25 MB");
     expect(content).toContain("Datei auswählen");
     expect(content).toContain("Erkannte Eckdaten");
     expect(content).toContain("Klärbereich");
-    expect(content).toContain("Nächster Arbeitsschritt");
     expect(content).toContain("Produktionsplan");
+    expect(content).toContain("Mengen, Herkunft, Allergene, Preise und Freigabegrenzen bleiben vor Produktion zu prüfen.");
     expect(content).toContain("Produktionsarbeit prüfen");
     expect(content).not.toContain("Produktionsobjekte und Downloads prüfen");
     expect(content).not.toContain("Produktions-Draft lokal gegen den Mini-Pilot-Rahmen prüfen");

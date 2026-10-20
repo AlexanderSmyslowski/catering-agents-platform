@@ -67,6 +67,18 @@ function input(overrides: Partial<ProductionDocumentSubmitActionInput> = {}): Pr
 }
 
 describe("production document submit action", () => {
+  it("marks only a fully successful file submission as consumed and retains failed files", async () => {
+    const onFileAccepted = vi.fn();
+    const accepted = input({ onFileAccepted });
+    await buildProductionDocumentSubmitActions(accepted).submitSelectedDocument();
+    expect(onFileAccepted).toHaveBeenCalledExactlyOnceWith(accepted.intakeFile);
+    onFileAccepted.mockClear();
+    await buildProductionDocumentSubmitActions(input({ onFileAccepted,
+      createProductionDraftFromDocument: async () => { throw new Error("Nicht gespeichert"); }
+    })).submitSelectedDocument();
+    expect(onFileAccepted).not.toHaveBeenCalled();
+  });
+
   it("asks for a file before submitting the selected document", async () => {
     const actionsInput = input({ intakeFile: undefined });
     const { submitSelectedDocument } = buildProductionDocumentSubmitActions(actionsInput);
