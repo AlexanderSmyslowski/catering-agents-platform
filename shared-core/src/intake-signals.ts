@@ -277,7 +277,9 @@ export function analyzeIntakeText(text: string): IntakeSignals {
   const eventText = text.split(/\r?\n/).filter(line =>
     !/^[ \t]*(?:Kunde|Kundenname|Auftraggeber|Anfragedatum|Angebotsdatum|Rechnungsdatum|Erstellt(?: am)?|Gesendet|Sent|Stand|Nachprüfung)\s*:/i.test(line)
   ).join("\n");
-  const segments = eventText.split(/[,;\n]+|(?<=[.!?])\s+(?=[A-ZÄÖÜ])/).map(normalizeSegment).filter(Boolean);
+  // Separate numbered guest instructions from the previous sentence, but
+  // keep planning counts with their uncertainty and decimal quantities intact.
+  const segments = eventText.split(/(?<!\d),|,(?!\d)|[;\n]+|(?<!\b[cC][aA]\.)(?<=[.!?])\s+(?=[A-ZÄÖÜ]|\d+\s+(?:Gäste|Gaeste|Personen|Teilnehmer)\s+(?:(?:benötigen|benoetigen|brauchen|wünschen|wuenschen|müssen|muessen)\s+)?(?:(?:gluten|laktose|milch|nuss)frei|[Ss]chalenfrucht))/).map(normalizeSegment).filter(Boolean);
   // A day followed by a written month is one date, not two sentences.
   for (let index = 1; index < segments.length;) {
     const day = segments[index - 1].match(/\b(\d{1,2}\.)$/)?.[1];
@@ -344,7 +346,8 @@ export function analyzeIntakeText(text: string): IntakeSignals {
     }
 
     const labelledSchedule = /\b(?:Anlieferung|Lieferung|Aufbau|Abbau|Empfang|Abendbuffet|Buffet|Service|Beginn|Start|Ende|Abfahrt)\b/i.test(segment);
-    if (labelledSchedule && (timeHint || /\b(?:[01]?\d|2[0-3]):[0-5]\d\b/.test(segment))) {
+    const driverDuration = /\bFahrt\b/i.test(segment) && /\b\d+(?:[.,]\d+)?\s+Stunden?\b/i.test(segment);
+    if (driverDuration || (labelledSchedule && (timeHint || /\b(?:[01]?\d|2[0-3]):[0-5]\d\b/.test(segment)))) {
       // Keep the source wording through handoff and frozen snapshots;
       // parsing a clock time is not an agreed operational schedule.
       addUniqueString(constraints, `Zeit-/Logistikangabe aus Anfrage (ungeprüft): ${segment}`);

@@ -242,6 +242,35 @@ describe("intake normalization robustness", () => {
     expect(spec.attendees.expected).toBe(100);
   });
 
+  it("separates numbered guest instructions from driver hours without splitting dates or approximate counts", () => {
+    const text = readFileSync(new URL("./fixtures/synthetic-100-guest-request.txt", import.meta.url), "utf8");
+    const request = createEventRequestFromText({ requestId: "driver-diet-separation", channel: "text", rawText: text });
+    const spec = normalizeEventRequestToSpec(request);
+    const diets = spec.productionConstraints?.filter(note => note.startsWith("Sonderkost angefragt; separat klären:"));
+    expect(diets).toEqual([
+      "Sonderkost angefragt; separat klären: 4 Gäste benötigen glutenfreie Sonderkost",
+      "Sonderkost angefragt; separat klären: 3 Gäste Schalenfruchtvermeidung"
+    ]);
+    expect(spec.productionConstraints).toContain("Zeit-/Logistikangabe aus Anfrage (ungeprüft): Fahrt 1 Person 5 Stunden.");
+    expect(spec.attendees.expected).toBe(100);
+    expect(spec.event.date).toBe("2026-11-12");
+    expect(spec.productionConstraints).not.toContain("gluten_free");
+    expect(spec.productionConstraints).not.toContain("nut_free");
+    const approximate = createEventRequestFromText({ requestId: "driver-diet-approximate", channel: "text",
+      rawText: "Veranstaltung am 12. November 2026 für ca. 50 Personen. Fahrt 1 Person 2,5 Stunden. 4 Gäste benötigen glutenfreie Sonderkost." });
+    const approximateSpec = normalizeEventRequestToSpec(approximate);
+    expect(approximateSpec.attendees.expected).toBe(50);
+    expect(assumptionCodes(approximateSpec)).toContain("attendees_expected_approximate");
+    expect(approximateSpec.event.date).toBe("2026-11-12");
+    expect(approximateSpec.productionConstraints?.join(" ")).toContain("Fahrt 1 Person 2,5 Stunden.");
+    for (const instruction of ["als Planungsgröße", "benötigen Mittagessen", "müssen versorgt werden"]) {
+      const planningCount = normalizeEventRequestToSpec(createEventRequestFromText({ requestId: "planning-count-stays-uncertain", channel: "text",
+        rawText: `Teilnehmerzahl noch unklar. 80 Gäste ${instruction}.` }));
+      expect(planningCount.attendees.expected).toBe(80);
+      expect(assumptionCodes(planningCount)).toContain("attendees_expected_approximate");
+    }
+  });
+
   it.each(["glutenfreie", "glutenfreies", "laktosefreie", "milchfreie", "nussfreie"])(
     "retains inflected guest-subset instructions without creating a global free-from claim: %s", word => {
       const text = `4 Gäste benötigen ${word} Sonderkost.`;
