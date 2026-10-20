@@ -13,7 +13,7 @@ async () => {
     const html = document.body.innerHTML;
     if (
       text.includes("Produktionsagent") &&
-      text.includes("Angebot hochladen oder Produktionsauftrag beschreiben") &&
+      text.includes("Angebot hochladen oder Auftrag beschreiben") &&
       !/\/api\/exports\/v1\/exports\/(?:production-plans|purchase-lists)\//.test(html)
     ) {
       break;
@@ -33,7 +33,7 @@ async () => {
   const reloadedArchiveButton = reloadedButtons.find((button) =>
     button.text.startsWith("Fehlgeschlagenen Demo-Upload ausblenden")
   );
-  if (!reloadedText.includes("Angebot hochladen oder Produktionsauftrag beschreiben")) {
+  if (!reloadedText.includes("Angebot hochladen oder Auftrag beschreiben")) {
     missing.push("Clear-Check Reload ohne stabilen Empty-first-Einstieg");
   }
   if (reloadedText.includes("Plan-Kontext: aktueller Produktionsplan")) {

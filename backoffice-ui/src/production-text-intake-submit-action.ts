@@ -9,6 +9,7 @@ export type ProductionTextIntakeSubmitInput = {
     spec: Record<string, unknown>
   ) => Promise<{ draft: { draftId: string } }>;
   intakeText: string;
+  onTextAccepted?: (text: string) => void;
   setSubmitting: (submitting: boolean) => void;
   setProductionWorkspaceCleared: (cleared: boolean) => void;
   clearMessages: () => void;
@@ -25,6 +26,7 @@ export function buildProductionTextIntakeSubmitAction({
   createProductionCase,
   createProductionDraftFromAcceptedEventSpec,
   intakeText,
+  onTextAccepted,
   setSubmitting,
   setProductionWorkspaceCleared,
   clearMessages,
@@ -52,6 +54,7 @@ export function buildProductionTextIntakeSubmitAction({
       setActiveProductionCaseId(productionCase.case.caseId);
       setActiveProductionCaseSpecId(specId);
       setFocusedProductionSpecId(specId);
+      onTextAccepted?.(intakeText);
       setNotice("Freitext wurde in eine operative Spezifikation überführt.");
     } catch (submitError) {
       setError(

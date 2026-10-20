@@ -123,6 +123,63 @@ describe("explicit offer menu and persisted continuation", () => {
     } finally { await app.close(); }
   });
 
+  it("explicitly clears all time slots in a new draft without answering the unresolved time question", async () => {
+    const { app, store, draft } = await harness();
+    try {
+      const original = structuredClone(draft);
+      const response = await app.inject({ method: "POST", url: `/v1/offers/drafts/${draft.draftId}/menu`, headers,
+        payload: { revision: draft.revision, menuPlan: draft.proposedEventSpec.menuPlan.map(({componentId,label,servings,menuCategory,dietaryTags}: any) => ({componentId,label,servings,menuCategory,dietaryTags})), eventDetails: { eventSchedule: [] } } });
+      expect(response.statusCode, response.body).toBe(201);
+      const revised = response.json();
+      for (const spec of [revised.proposedEventSpec, ...revised.variantSet.map((v: any) => v.proposedEventSpec)]) {
+        expect(spec.event.schedule).toEqual([]);
+        expect(spec.menuPlan.map((x: any) => x.servings)).toEqual(expected);
+      }
+      expect(revised.openQuestions).toContain("Wie lautet das verbindliche Zeitfenster?");
+      expect(revised.reviewStatus.publishApproved).toBe(false);
+      expect(await store.getDraft({ businessId: "alpha" }, draft.draftId)).toEqual(original);
+    } finally { await app.close(); }
+  });
+
+  it("shows a newly missing time plan in the actual revised offer's open questions", async () => {
+    const { app, store, caseId, draft } = await harness();
+    try {
+      const source = structuredClone(draft);
+      source.draftId = "synthetic-complete-times";
+      source.proposedEventSpec.event.schedule = [{label:"Empfang",start:"18:00",end:"19:00"}];
+      source.proposedEventSpec.uncertainties = [];
+      source.openQuestions = [];
+      await store.saveDraftForCase({businessId:"alpha"},caseId,source);
+      const response = await app.inject({method:"POST",url:`/v1/offers/drafts/${source.draftId}/menu`,headers,payload:{revision:1,
+        menuPlan:source.proposedEventSpec.menuPlan.map(({componentId,label,servings,menuCategory,dietaryTags}: any)=>({componentId,label,servings,menuCategory,dietaryTags})),eventDetails:{eventSchedule:[]}}});
+      expect(response.statusCode,response.body).toBe(201);
+      expect(response.json().openQuestions).toContain("Wie lautet das verbindliche Zeitfenster?");
+      expect((await store.getDraft({businessId:"alpha"},source.draftId))?.openQuestions).toEqual([]);
+    } finally { await app.close(); }
+  });
+
+  it("does not claim an absent time plan was removed when saving other event fields", async () => {
+    const {amendOfferEvent}=await import("../offer-service/src/offer-event-revision.js");
+    const source=normalizeEventRequestToSpec(createEventRequestFromText({requestId:"no-times",channel:"text",rawText:text}));
+    delete source.event.schedule;source.uncertainties=[];
+    expect(amendOfferEvent(source,{eventSchedule:[],attendeeCount:101}).uncertainties).toEqual([]);
+  });
+
+  it("marks removed formerly complete times open and only resolves that marker when new times are supplied", async () => {
+    const { amendOfferEvent } = await import("../offer-service/src/offer-event-revision.js");
+    const source = normalizeEventRequestToSpec(createEventRequestFromText({requestId:"clear-times",channel:"text",rawText:text}));
+    source.event.schedule = [{label:"Empfang",start:"18:00",end:"19:00"}];
+    source.uncertainties = [{field:"event.schedule",severity:"high",message:"Venue access unconfirmed",suggestedQuestion:"Zugang prüfen"}];
+    expect(amendOfferEvent(source,{eventSchedule:[]}).uncertainties).toEqual(source.uncertainties);
+    source.uncertainties = [];
+    const cleared = amendOfferEvent(source,{eventSchedule:[]});
+    expect(cleared.uncertainties).toHaveLength(1);
+    expect(cleared.uncertainties![0]!.message).toContain("Uhrzeiten sind offen");
+    expect(amendOfferEvent(cleared,{eventSchedule:[]}).uncertainties).toEqual(cleared.uncertainties);
+    expect(amendOfferEvent(cleared,{eventSchedule:[{label:"Service",start:"19:00",end:"22:00"}]}).uncertainties).toEqual([]);
+    expect(source.event.schedule).toHaveLength(1);
+  });
+
   it("retains independently authored date and guest risks and does not answer unchanged source values", async () => {
     const { amendOfferEvent } = await import("../offer-service/src/offer-event-revision.js");
     const source = normalizeEventRequestToSpec(createEventRequestFromText({requestId:"independent-event",channel:"text",rawText:text}));

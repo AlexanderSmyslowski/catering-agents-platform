@@ -518,9 +518,20 @@ describe("independent product loader boundaries", () => {
 
   it("reloads the actual offer shell with the newly created case reference", async () => {
     const activeCaseIds: Array<string | undefined> = [];
-    const loadProduct = vi.spyOn(api, "loadOfferProductData").mockImplementation(async (activeCaseId) => {
+    const currentDraft = offerDraft("draft-a", "Geladenes Angebot Fall A");
+    vi.spyOn(api, "loadOfferProductData").mockImplementation(async (activeCaseId) => {
       activeCaseIds.push(activeCaseId);
-      return offerProductData(activeCaseId ? offerDraft("draft-a", "Fall A") : undefined);
+      // The shell displays the case-bound draft, never an arbitrary global draft.
+      return {
+        ...(offerProductData(offerDraft("unrelated-draft", "Fremdes Angebot")) as api.OfferProductData),
+        workspace: {
+          cases: [], activeEvents: [], activeSources: [],
+          ...(activeCaseId ? {
+            activeCase: { caseId: activeCaseId, product: "offer", displayName: "Fall A", status: "open" },
+            currentDraft
+          } : {})
+        }
+      } as never;
     });
     const { container, fetchMock } = await renderAt("/angebot");
     fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -543,20 +554,15 @@ describe("independent product loader boundaries", () => {
       submit?.click();
       await flush();
     });
-    await act(async () => {
-      await flush();
-    });
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      await flush();
+    await vi.waitFor(async () => {
+      await act(async () => { await flush(); });
+      expect(container.textContent).toContain("Geladenes Angebot Fall A");
     });
 
     expect(activeCaseIds).toContain("case-a");
     expect(activeCaseIds.at(-1)).toBe("case-a");
-    expect(container.textContent).toContain("Fall A");
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    });
+    expect(input.value).toBe("");
+    expect(container.textContent).not.toContain("Fremdes Angebot");
   });
 
   it("reloads the production shell with a selected case instead of retaining global artifacts", async () => {

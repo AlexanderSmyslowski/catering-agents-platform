@@ -171,6 +171,22 @@ export function ProductionInputPanel({
   const reviewAnchorRef = useRef<HTMLDivElement>(null);
   const reviewWasVisibleRef = useRef(hasUploadReview);
   const [sourcePreviewUrl, setSourcePreviewUrl] = useState<string>();
+  const sourceEntryRef = useRef<HTMLDetailsElement>(null);
+  const initialSourceOpen = useRef(!hasFocusedProductionContext || hasUploadReview);
+  const sourceContextRef = useRef({ caseId: activeCaseId, resolved: hasFocusedProductionContext });
+  useEffect(() => {
+    const changedCase = sourceContextRef.current.caseId !== activeCaseId;
+    const contextArrived = !sourceContextRef.current.resolved && hasFocusedProductionContext;
+    if (sourceEntryRef.current && (changedCase || contextArrived)) {
+      sourceEntryRef.current.open = !hasFocusedProductionContext || hasUploadReview || Boolean(sourceInput.intakeText.trim()) || Boolean(sourceInput.intakeFile);
+    }
+    sourceContextRef.current = { caseId: activeCaseId, resolved: hasFocusedProductionContext };
+  }, [activeCaseId, hasFocusedProductionContext]);
+  useEffect(() => {
+    if (sourceEntryRef.current && (hasUploadReview || sourceInput.documentPhase === "analysing" || sourceInput.intakeFile)) {
+      sourceEntryRef.current.open = true;
+    }
+  }, [hasUploadReview, sourceInput.documentPhase, sourceInput.intakeFile]);
 
   useEffect(() => {
     const reviewBecameVisible = !reviewWasVisibleRef.current && hasUploadReview;
@@ -208,6 +224,8 @@ export function ProductionInputPanel({
           onDraftChanged={onDraftChanged}
         />
       ) : null}
+      <details className="production-source-entry" ref={sourceEntryRef} open={initialSourceOpen.current}>
+        <summary>{hasFocusedProductionContext ? "Weitere Unterlage zu diesem Produktionsauftrag" : "Angebot oder Auftrag übernehmen"}</summary>
       {compactInputMode ? (
         <input
           ref={sourceInputActions.uploadInputRef}
@@ -592,6 +610,7 @@ export function ProductionInputPanel({
             </div>
           </details>
         </div>
+      </details>
       </details>
     </article>
   );

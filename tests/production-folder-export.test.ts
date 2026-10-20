@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { IntakeStore } from "@catering/intake-service";
 import { buildPrintExportApp, renderProductionFolderHtml, renderProductionPlanHtml } from "@catering/print-export";
 import { ProductionStore } from "@catering/production-service";
+import type { AppliedProductionSnapshot } from "../print-export/src/applied-production-snapshot.js";
 import {
   createEventRequestFromText,
   normalizeEventRequestToSpec,
@@ -310,6 +311,69 @@ describe("production folder export", () => {
     for (const dataRoot of dataRoots.splice(0)) {
       rmSync(dataRoot, { recursive: true, force: true });
     }
+  });
+
+  it("repeats complete, escaped order context on every recipe and kitchen card without granting approval", () => {
+    const input = fixture();
+    input.spec.productionConstraints = ["4 Gäste glutenfrei; separat klären", "Hinweis <script>nicht ausführen</script>", "Langer Hinweis " + "vollständig ".repeat(300)];
+    input.spec.event.schedule = [{ label: "Buffet", start: "19:00", end: "21:00" }];
+    input.spec.menuPlan[0]!.productionDecision = { mode: "scratch", notes: "Schalenfruchtvermeidung ungeklärt" };
+    const before = JSON.stringify(input);
+    const documents = [renderProductionPlanHtml(input.plan, input.spec), renderProductionFolderHtml({ plan: input.plan, spec: input.spec, recipes: [input.recipe], purchaseLists: [input.purchaseList] })];
+    for (const html of documents) {
+      const cards = html.match(/<article class="(?:recipe-card|kitchen-sheet)">[\s\S]*?<\/article>/g) ?? [];
+      expect(cards.length).toBeGreaterThan(0);
+      for (const card of cards) {
+        expect(card).toContain("4 Gäste glutenfrei; separat klären");
+        expect(card).toContain("Buffet: 19:00–21:00");
+        expect(card).toContain("Schalenfruchtvermeidung ungeklärt");
+        expect(card).toContain("&lt;script&gt;nicht ausführen&lt;/script&gt;");
+        expect(card).toContain(input.spec.productionConstraints[2]!.trim());
+        expect(card).toContain("Keine Sonderkost-, Allergen- oder Hygienefreigabe");
+        expect(card).toContain("Zuordnung vor Produktion prüfen");
+        expect(card).not.toContain("<script>");
+      }
+    }
+    expect(JSON.stringify(input)).toBe(before);
+  });
+
+  it("uses applied order notes instead of later live changes, while keeping commercial projection intact", () => {
+    const input = fixture();
+    const frozenSpec = structuredClone(input.spec);
+    frozenSpec.productionConstraints = ["FROZEN Sonderkost separat klären"];
+    input.spec.productionConstraints = ["LIVE Änderung darf nicht erscheinen"];
+    delete input.spec.budgetContext;
+    // The renderer reads these anchors only; Apply-chain validation is covered at the export route.
+    const snapshot = { productionCase: { caseId: "synthetic" }, approvedSpec: { approvedProductionSpecId: "approved", sourceDraft: { draftId: "draft", revision: 1 }, artifacts: { eventSpec: frozenSpec } }, manifest: { approvedProductionSpecId: "approved", appliedAt: "2026-10-20", planId: input.plan.planId } } as unknown as AppliedProductionSnapshot;
+    for (const html of [renderProductionPlanHtml(input.plan, input.spec, snapshot), renderProductionFolderHtml({ plan: input.plan, spec: input.spec, recipes: [input.recipe], appliedSnapshot: snapshot })]) {
+      expect(html).toContain("FROZEN Sonderkost separat klären");
+      expect(html).not.toContain("LIVE Änderung darf nicht erscheinen");
+      expect(html).not.toContain("1.800");
+      for (const card of html.match(/<article class="(?:recipe-card|kitchen-sheet)">[\s\S]*?<\/article>/g) ?? []) {
+        expect(card).toContain("FROZEN Sonderkost separat klären");
+      }
+    }
+  });
+
+  it("keeps order instructions with a batch that has no kitchen sheet and makes no empty diet claim", () => {
+    const input = fixture();
+    expect(renderProductionPlanHtml(input.plan, input.spec)).not.toContain('class="production-order-context"');
+    input.spec.productionConstraints = ["Sonderkost ungeklärt"];
+    input.plan.kitchenSheets = [];
+    const html = renderProductionPlanHtml(input.plan, input.spec);
+    expect(html).toContain('<h2>Vitello Tonnato</h2><div class="production-order-context">');
+    expect(html).toContain("Sonderkost ungeklärt");
+  });
+
+  it("prints an open supplier explicitly and retains an already recorded supplier", () => {
+    const input = fixture();
+    delete input.purchaseList.items[0]!.supplierHint;
+    input.purchaseList.items[1]!.supplierHint = "  ";
+    const before = JSON.stringify(input.purchaseList);
+    const html = renderProductionFolderHtml({ plan: input.plan, spec: input.spec, recipes: [input.recipe], purchaseLists: [input.purchaseList] });
+    expect(html.match(/<td>nicht hinterlegt<\/td>/g)).toHaveLength(2);
+    expect(html).toContain("<td>Metro Fresh</td>");
+    expect(JSON.stringify(input.purchaseList)).toBe(before);
   });
 
   it("renders a printable production sheet with grounded event facts and no duplicate recipe steps", () => {

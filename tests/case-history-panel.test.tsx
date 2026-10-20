@@ -20,7 +20,7 @@ afterEach(() => {
 });
 
 describe("case history panel", () => {
-  it("keeps the history closed until the operator asks for earlier cases", async () => {
+  it("shows existing orders immediately before a case has been selected", async () => {
     const onSearchChange = vi.fn();
     const onOpen = vi.fn();
     const onCopy = vi.fn(async () => undefined);
@@ -41,10 +41,10 @@ describe("case history panel", () => {
     });
 
     const details = container.querySelector("details");
-    expect(details?.open).toBe(false);
-    expect(container.textContent).toContain("Frühere Produktionsaufträge");
+    expect(details?.open).toBe(true);
+    expect(container.textContent).toContain("Bestehenden Auftrag öffnen");
     expect(container.textContent).toContain("Fall A - Sommerfest");
-    expect(container.textContent).toContain("Als neuen Auftrag verwenden");
+    expect(container.textContent).toContain("Als Vorlage für neuen Auftrag");
 
     await act(async () => {
       const input = container.querySelector("input") as HTMLInputElement;
@@ -62,6 +62,17 @@ describe("case history panel", () => {
     expect(onOpen).toHaveBeenCalledWith("case-a");
     expect(onCopy).toHaveBeenCalledWith("case-a");
 
+    await act(async () => root.unmount());
+  });
+
+  it("collapses the picker after selection even when the history hash remains", async () => {
+    window.history.replaceState({}, "", "/angebot#history");
+    const root = createRoot(document.body.appendChild(document.createElement("div")));
+    const panelProps = { product: "offer" as const, items: [item], search: "", onSearchChange: vi.fn(), onOpen: vi.fn(), onCopy: vi.fn(async () => undefined) };
+    await act(async () => root.render(createElement(CaseHistoryPanel, panelProps)));
+    expect(document.querySelector("details")?.open).toBe(true);
+    await act(async () => root.render(createElement(CaseHistoryPanel, { ...panelProps, activeCaseId: item.caseId })));
+    expect(document.querySelector("details")?.open).toBe(false);
     await act(async () => root.unmount());
   });
 

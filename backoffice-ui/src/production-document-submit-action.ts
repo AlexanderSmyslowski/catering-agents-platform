@@ -44,6 +44,7 @@ export type ProductionDocumentSubmitCallbacks =
     getStagedProductionDocument?: () => StagedProductionDocument | undefined;
     setStagedProductionDocument?: (stage: StagedProductionDocument) => void;
     clearStagedProductionDocument?: () => void;
+    onFileAccepted?: (file: File) => void;
     setProductionWorkspaceCleared: (cleared: boolean) => void;
     clearMessages: () => void;
     startIncomingProductionFile: (file: File, channel: IntakeDocumentChannel) => void;
@@ -87,6 +88,7 @@ export function buildProductionDocumentSubmitActions({
   setSubmitting,
   setProductionWorkspaceCleared,
   clearMessages,
+  onFileAccepted,
   startIncomingProductionFile,
   startDocumentProgress,
   setFocusedProductionSpecId,
@@ -169,6 +171,7 @@ export function buildProductionDocumentSubmitActions({
           setNotice
         });
       }
+      onFileAccepted?.(file);
     } catch (submitError) {
       resetProductionStateAfterDocumentFailure(file, {
         failIncomingProductionFile,

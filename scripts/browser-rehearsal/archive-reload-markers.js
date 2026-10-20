@@ -8,7 +8,7 @@ async () => {
     const reloadedText = document.body.innerText;
     const reloadedHtml = document.body.innerHTML;
     if (
-      reloadedText.includes("Angebot hochladen oder Produktionsauftrag beschreiben") &&
+      reloadedText.includes("Angebot hochladen oder Auftrag beschreiben") &&
       !reloadedHtml.includes("/api/intake/v1/intake/requests/demo-production-answered-clarification") &&
       !/\/api\/exports\/v1\/exports\/(?:production-plans|purchase-lists)\//.test(reloadedHtml)
     ) {
@@ -26,7 +26,7 @@ async () => {
   const reloadedArchiveButton = reloadedButtons.find((button) =>
     button.text.startsWith("Fehlgeschlagenen Demo-Upload ausblenden")
   );
-  if (!reloadedText.includes("Angebot hochladen oder Produktionsauftrag beschreiben")) {
+  if (!reloadedText.includes("Angebot hochladen oder Auftrag beschreiben")) {
     missing.push("Archive-Rehearsal Reload ohne stabilen Empty-first-Einstieg");
   }
   if (reloadedText.includes("requestId: demo-production-answered-clarification")) {

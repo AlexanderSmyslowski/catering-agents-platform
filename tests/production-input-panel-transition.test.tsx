@@ -9,6 +9,8 @@ import {
   type ProductionSourceInputValues
 } from "../backoffice-ui/src/production-input-panel.js";
 
+import { ProductionConversationalWorkbench, type ProductionWorkbenchSummary } from "../backoffice-ui/src/production-workbench.js";
+
 const noop = () => undefined;
 const noopAsync = async () => undefined;
 const originalFetch = globalThis.fetch;
@@ -99,6 +101,65 @@ afterEach(() => {
 });
 
 describe("production input panel upload transition", () => {
+  it("preserves the input DOM and user value when a production context arrives", async () => {
+    const container = document.body.appendChild(document.createElement("div"));
+    const root = createRoot(container);
+    const summary: ProductionWorkbenchSummary = {
+      activeSpecLabel: "Testauftrag", readinessLabel: "offen", planStatusLabel: "offen", purchaseStatusLabel: "noch keine Liste",
+      questionCount: 0, answeredQuestionCount: 0, unansweredQuestionCount: 0,
+      productionObjectCount: 0, productionObjectStatusLabel: "noch kein Plan", purchaseListCount: 0
+    };
+    const render = (hasActiveContext: boolean) => createElement(ProductionConversationalWorkbench, {
+      summary: { ...summary, hasActiveContext }, nextStep: { title: "Prüfen", description: "Prüfen" },
+      miniPilotRawResult: "", setMiniPilotRawResult: noop, miniPilotReportState: { status: "empty", summary: "" } as never,
+      slots: { inputSlot: createElement("input", { "aria-label": "Begonnene Eingabe", defaultValue: "" }), questionsSlot: null, productionObjectsSlot: null, purchaseListSlot: null, lowerSlots: null }
+    });
+    await act(async () => root.render(render(false)));
+    const input = container.querySelector<HTMLInputElement>('input[aria-label="Begonnene Eingabe"]')!;
+    input.value = "Eingabe erhalten";
+    await act(async () => root.render(render(true)));
+    expect(container.querySelector('input[aria-label="Begonnene Eingabe"]')).toBe(input);
+    expect(input.value).toBe("Eingabe erhalten");
+    await act(async () => root.unmount());
+  });
+
+  it("collapses an empty source when the selected case context resolves asynchronously", async () => {
+    globalThis.fetch = vi.fn(async () => Response.json({ items: [] }));
+    const file = new File(["synthetic"], "request.txt", { type: "text/plain" });
+    const base = panel(file, "idle", false).props;
+    const root = createRoot(document.body.appendChild(document.createElement("div")));
+    const render = (resolved: boolean) => createElement(ProductionInputPanel, { ...base,
+      hasActiveProductionContext: resolved, sourceInput: { ...base.sourceInput, intakeFile: null }
+    });
+    await act(async () => { root.render(render(false)); await Promise.resolve(); });
+    expect(document.querySelector<HTMLDetailsElement>(".production-source-entry")?.open).toBe(true);
+    await act(async () => root.render(render(true)));
+    expect(document.querySelector<HTMLDetailsElement>(".production-source-entry")?.open).toBe(false);
+    await act(async () => root.unmount());
+  });
+
+  it("keeps a manually opened source and focused field visible when text is cleared", async () => {
+    globalThis.fetch = vi.fn(async () => Response.json({ items: [] }));
+    const file = new File(["synthetic"], "request.txt", { type: "text/plain" });
+    const container = document.body.appendChild(document.createElement("div"));
+    const root = createRoot(container);
+    const base = panel(file, "idle").props;
+    const render = (text: string) => createElement(ProductionInputPanel, {
+      ...base, sourceInput: { ...base.sourceInput, intakeFile: null, intakeText: text }, hasActiveProductionContext: true
+    });
+    await act(async () => { root.render(render("")); await Promise.resolve(); });
+    const disclosure = container.querySelector<HTMLDetailsElement>(".production-source-entry")!;
+    expect(disclosure.open).toBe(false);
+    disclosure.open = true;
+    const text = container.querySelector<HTMLTextAreaElement>('textarea[placeholder^="Beispiel: Bitte"]')!;
+    text.focus();
+    await act(async () => root.render(render("Zwischenstand")));
+    await act(async () => root.render(render("")));
+    expect(disclosure.open).toBe(true);
+    expect(document.activeElement).toBe(text);
+    await act(async () => root.unmount());
+  });
+
   it("moves a completed PDF analysis to the review start and exposes the local original on demand", async () => {
     const file = new File(["%PDF-1.4 fixture"], "angebot.pdf", { type: "application/pdf" });
     const createObjectUrl = vi.fn(() => "blob:production-upload-review");
@@ -272,6 +333,7 @@ describe("production input panel upload transition", () => {
         },
         sourceInputActions,
         activeCaseId,
+        hasActiveProductionContext: true,
         manualInput: {
           eventType: "",
           eventDate: "",
@@ -292,6 +354,10 @@ describe("production input panel upload transition", () => {
     expect(container.textContent).toContain("Offenen KI-Entwurf weiter prüfen");
     expect(container.textContent).toContain("Flying Buffet · 45 Personen");
     expect(container.textContent).toContain("Kokos-Cheesecake | Brombeere");
+    expect(container.querySelector<HTMLDetailsElement>(".production-source-entry")?.open).toBe(false);
+    const review = container.querySelector('[aria-label="Produktionsentwurf-Prüfung"]');
+    expect(review).not.toBeNull();
+    expect(review?.closest("details.production-source-entry")).toBeNull();
     await act(async () => root.unmount());
   });
 });

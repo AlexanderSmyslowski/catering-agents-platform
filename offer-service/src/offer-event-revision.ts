@@ -27,7 +27,7 @@ export function validateOfferEventDetails(raw: unknown): OfferEventDetails | und
   if ("attendeeCount" in details && (!Number.isInteger(details.attendeeCount) || details.attendeeCount! <= 0 || details.attendeeCount! > 100000)) {
     throw new Error("Positive ganze Gästezahl erforderlich.");
   }
-  if ("eventSchedule" in details && (!Array.isArray(details.eventSchedule) || !details.eventSchedule.length || details.eventSchedule.length > 20 ||
+  if ("eventSchedule" in details && (!Array.isArray(details.eventSchedule) || details.eventSchedule.length > 20 ||
     details.eventSchedule.some(slot => !slot || typeof slot !== "object" || Array.isArray(slot) ||
       Object.keys(slot).some(key => !["label", "start", "end"].includes(key)) ||
       typeof slot.label !== "string" || !slot.label.trim() || slot.label.length > 200 ||
@@ -44,7 +44,13 @@ export function amendOfferEvent(spec: AcceptedEventSpec, details?: OfferEventDet
   const attendeesChanged = details.attendeeCount !== undefined && details.attendeeCount !== spec.attendees.expected;
   const typeChanged = details.eventType !== undefined && details.eventType.trim() !== spec.event.type;
   const serviceChanged = details.serviceForm !== undefined && details.serviceForm.trim() !== spec.event.serviceForm;
-  const scheduleChanged = details.eventSchedule !== undefined && JSON.stringify(details.eventSchedule) !== JSON.stringify(spec.event.schedule);
+  const scheduleChanged = details.eventSchedule !== undefined && JSON.stringify(details.eventSchedule) !== JSON.stringify(spec.event.schedule ?? []);
+  const removedTimeMessage = "Zeitplan wurde entfernt; Uhrzeiten sind offen.";
+  const remainingQuestions = spec.uncertainties ?? [];
+  const timeCleared = scheduleChanged && details.eventSchedule?.length === 0;
+  const questions = timeCleared && !remainingQuestions.some(question => question.field === "event.schedule")
+    ? [...remainingQuestions, { field: "event.schedule", severity: "low" as const, message: removedTimeMessage, suggestedQuestion: "Wie lautet das verbindliche Zeitfenster?" }]
+    : remainingQuestions;
   const answeredExtraction = (question: Uncertainty): boolean => {
     if (dateChanged && question.field === "event.date") {
       return (question.severity === "high" && question.message === "No exact event date could be extracted." && question.suggestedQuestion === "An welchem Datum findet das Event statt?") ||
@@ -55,8 +61,8 @@ export function amendOfferEvent(spec: AcceptedEventSpec, details?: OfferEventDet
     if (attendeesChanged && question.field === "attendees.expected") return question.suggestedQuestion === "Wie viele Teilnehmer werden verbindlich erwartet?" &&
       ((question.severity === "high" && question.message === "Participant count could not be extracted reliably.") ||
         (question.severity === "medium" && /^Teilnehmerzahl nur ungefähr aus "[\s\S]*" abgeleitet\.$/.test(question.message)));
-    return scheduleChanged && question.field === "event.schedule" && question.severity === "low" &&
-      question.suggestedQuestion === "Wie lautet das verbindliche Zeitfenster?" && /^Zeitangabe in "[\s\S]*" ist nicht als vollständiger Termin belastbar\.$/.test(question.message);
+    return scheduleChanged && Boolean(details.eventSchedule?.length) && question.field === "event.schedule" && question.severity === "low" &&
+      question.suggestedQuestion === "Wie lautet das verbindliche Zeitfenster?" && (/^Zeitangabe in "[\s\S]*" ist nicht als vollständiger Termin belastbar\.$/.test(question.message) || question.message === removedTimeMessage);
   };
   return validateAcceptedEventSpec(withEvaluatedReadiness({
     ...spec,
@@ -67,7 +73,7 @@ export function amendOfferEvent(spec: AcceptedEventSpec, details?: OfferEventDet
     attendees: { ...spec.attendees, ...(details.attendeeCount ? { expected: details.attendeeCount } : {}) },
     servicePlan: { ...spec.servicePlan, ...(details.eventType ? { eventType: details.eventType.trim() } : {}),
       ...(details.serviceForm ? { serviceForm: details.serviceForm.trim() } : {}) },
-    uncertainties: spec.uncertainties?.filter(item => !answeredExtraction(item)),
+    uncertainties: questions.filter(item => !answeredExtraction(item)),
     assumptions: spec.assumptions?.filter(item => !(typeChanged && item.code === "event_type_defaulted") &&
       !(serviceChanged && item.code === "service_form_defaulted") && !(attendeesChanged && item.code === "attendees_expected_approximate"))
   }));

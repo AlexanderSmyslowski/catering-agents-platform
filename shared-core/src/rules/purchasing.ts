@@ -131,7 +131,6 @@ export function aggregatePurchaseList(
         purchaseQty: purchaseQtyFor(ingredient.quantity.amount, ingredient.quantity.unit),
         purchaseUnit: purchaseUnitFor(ingredient.quantity.amount, ingredient.quantity.unit),
         group: ingredient.group,
-        supplierHint: ingredient.group === "getraenke_als_zutat" ? "Metro Drinks" : "Metro Fresh",
         sourceRecipes: [batch.recipeId],
         sourceRecipeMetadata: batch.recipeSource ? [batch.recipeSource] : [],
         mappingConfidence: 0.95

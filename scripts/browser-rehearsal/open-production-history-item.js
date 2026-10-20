@@ -16,7 +16,7 @@ async () => {
   }
 
   const historyDetails = [...document.querySelectorAll("details")].find((details) =>
-    (details.querySelector("summary")?.textContent ?? "").includes("Frühere Produktionsaufträge öffnen")
+    (details.querySelector("summary")?.textContent ?? "").includes("Auftrag öffnen")
   );
   if (!historyDetails) throw new Error("Produktions-Historie fehlt");
   historyDetails.open = true;
@@ -44,7 +44,7 @@ async () => {
   for (let attempt = 0; attempt < 60; attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, 100));
     const text = document.body.innerText;
-    const hasWorkflowContext = ["Produktionsplan berechnen", "Rückfragen beantworten", "Produktionsarbeit prüfen"]
+    const hasWorkflowContext = ["Produktionsentwurf prüfen", "Produktionsplan berechnen", "Rückfragen beantworten", "Produktionsarbeit prüfen"]
       .some((marker) => text.includes(marker));
     if (historyButton.getAttribute("aria-pressed") === "true" && hasWorkflowContext) {
       return { selected: expectedCaseId, caseId: expectedCaseId, handoffId: expectedHandoffId, sourceSpecId: expectedSpecId };

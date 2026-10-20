@@ -65,7 +65,7 @@ async () => {
     if (
       text.includes("Dateityp .exe ist nicht erlaubt.") &&
       text.includes("Ausgewählt: falsches-angebot.exe") &&
-      text.includes("Angebot hochladen oder Produktionsauftrag beschreiben") &&
+      text.includes("Angebot hochladen oder Auftrag beschreiben") &&
       !text.includes("Plan-Kontext: aktueller Produktionsplan") &&
       !html.includes(currentPlanExport) &&
       !/\/api\/exports\/v1\/exports\/(?:production-plans|purchase-lists)\//.test(html)
@@ -93,7 +93,7 @@ async () => {
   if (!afterText.includes("Ausgewählt: falsches-angebot.exe")) {
     missing.push("Failed-Upload-Rehearsal verliert die retrybare Fehldatei");
   }
-  if (!afterText.includes("Angebot hochladen oder Produktionsauftrag beschreiben")) {
+  if (!afterText.includes("Angebot hochladen oder Auftrag beschreiben")) {
     missing.push("Failed-Upload-Rehearsal ohne Empty-first-Einstieg nach Fehler");
   }
   if (afterText.includes("Plan-Kontext: aktueller Produktionsplan") || afterHtml.includes(currentPlanExport)) {

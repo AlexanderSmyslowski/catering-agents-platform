@@ -25,6 +25,8 @@ export function useProductionManualSpecForm() {
   }
 
   function resetManualSpecDraft() {
+    setManualEventType("conference");
+    setManualServiceForm("buffet");
     setManualEventDate("");
     setManualAttendeeCount("");
     setManualMenuItems("");

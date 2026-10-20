@@ -109,6 +109,16 @@ function props(overrides: Partial<OfferWorkbenchProps> = {}): OfferWorkbenchProp
   };
 }
 
+it("keeps source entry secondary for an opened draft and puts open questions before editors", () => {
+  const data=props({onMenuSaved:async()=>undefined,activeDraft:{...draft("active","SYNTHETISCH 100 Gäste"),openQuestions:["Sonderkost klären"]},selectedDraft:undefined});
+  const container=document.createElement("div");container.innerHTML=renderToStaticMarkup(createElement(OfferConversationalWorkbench,data));
+  const source=container.querySelector(".offer-composer") as HTMLDetailsElement;
+  expect(source.tagName).toBe("DETAILS");expect(source.open).toBe(false);
+  expect(source.querySelector("summary")?.textContent).toContain("diesem Auftrag");
+  expect(container.querySelector(".offer-calm-summary")?.textContent).not.toContain("Jetzt:");
+  expect(container.querySelector(".offer-calm-summary")?.textContent).toContain("keine externe Freigabe");
+});
+
 afterEach(() => {
   document.body.innerHTML = "";
 });
@@ -151,19 +161,19 @@ function ApprovalBindingHarness() {
 describe("offer workbench approval binding", () => {
 
   it.each([
-    [undefined, "Angebotsfreigabe: noch nicht erfolgt. Produktionsübergabe: noch nicht erfolgt.", true, false, false],
+    [undefined, ["Noch nicht freigegeben", "Noch nicht übergeben"], true, false, false],
     [{ offerDraftId: "draft-a", offerDraftRevision: 1, approvedOfferId: "approved-a" },
-      "Angebotsfreigabe: intern freigegeben. Produktionsübergabe: noch nicht erfolgt.", false, true, false],
+      ["Intern freigegeben", "Noch nicht übergeben"], false, true, false],
     [{ offerDraftId: "draft-a", offerDraftRevision: 1, approvedOfferId: "approved-a", handoffId: "handoff-a" },
-      "Produktionsübergabe: erfolgt. Die Freigabe der Küchenplanung wird im Produktionsauftrag geprüft.", false, false, true]
+      ["Intern freigegeben", "Übergeben – Planung im Produktionsauftrag"], false, false, true]
   ] as const)("separates captured data, offer approval and production handoff (%s)", (approvalBinding, status, canApprove, canHandoff, canOpen) => {
     const html = renderToStaticMarkup(createElement(OfferConversationalWorkbench, props({
       approvalBinding,
       filteredSpecs: [draft("draft-a", "Angebot A").proposedEventSpec]
     })));
     const doc = new DOMParser().parseFromString(html, "text/html");
-    expect(doc.querySelector('[role="status"]')?.textContent).toContain(status);
-    expect(doc.body.textContent).toContain("Veranstaltungsdaten: 1 vollständig");
+    for (const fact of status) expect(doc.querySelector('[role="status"]')?.textContent).toContain(fact);
+    expect(doc.body.textContent).toContain("Erfasste Daten: 1 vollständig");
     expect(doc.body.textContent).not.toContain("Produktionsübergabe: 1 vollständig");
     const actions = [...doc.querySelectorAll("button")].map(button => button.textContent);
     expect(actions.includes("Variante freigeben: Klassisch")).toBe(canApprove);
@@ -206,6 +216,7 @@ describe("offer workbench approval binding", () => {
     expect(setSelectedDraftId).not.toHaveBeenCalled();
     const newDraft = Array.from(document.querySelectorAll("button")).find(button => button.textContent === "Entwurf aus Text erstellen");
     expect(newDraft?.disabled).toBe(true);
+    expect(document.querySelector(".order-status-facts")?.textContent).toContain("Nach dem Speichern verfügbar");
     expect(document.body.textContent).toContain("Vor dem Export Änderungen speichern oder verwerfen.");
     const discard = Array.from(document.querySelectorAll("button")).find(button => button.textContent === "Verwerfen");
     await act(async () => discard?.click());

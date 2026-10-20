@@ -106,7 +106,7 @@ async () => {
           archivedText.includes(
             "Fehlupload wurde per Soft-Archiv aus dem aktiven Arbeitsfokus genommen."
           ) &&
-          archivedText.includes("Angebot hochladen oder Produktionsauftrag beschreiben") &&
+          archivedText.includes("Angebot hochladen oder Auftrag beschreiben") &&
           !archivedText.includes("requestId:")
         ) {
           break;
@@ -130,7 +130,7 @@ async () => {
       ) {
         missing.push("Archive-Rehearsal ohne Soft-Archiv-Erfolgsmeldung");
       }
-      if (!archivedText.includes("Angebot hochladen oder Produktionsauftrag beschreiben")) {
+      if (!archivedText.includes("Angebot hochladen oder Auftrag beschreiben")) {
         missing.push("Archive-Rehearsal ohne sichere naechste Eingabe nach Klick");
       }
       if (archivedText.includes("requestId:")) {

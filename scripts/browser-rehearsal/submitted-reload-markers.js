@@ -1,7 +1,7 @@
 async () => {
   const expectedLabel = "Lunch · 43 Teilnehmer · 2026-12-16";
   const historyDetails = [...document.querySelectorAll("details")].find((details) =>
-    (details.querySelector("summary")?.textContent ?? "").includes("Frühere Produktionsaufträge öffnen")
+    (details.querySelector("summary")?.textContent ?? "").includes("Auftrag öffnen")
   );
   if (!historyDetails) {
     throw new Error("Answer-Submit-Rehearsal Reload ohne Produktions-Historie");

@@ -576,12 +576,13 @@ function ProductWorkspaceView({
   };
 
   const handleHistoryCopy = async (caseId: string) => {
-    if (route === "offer" && offerMenuEditingRef.current) {
-      setError("Bitte Angebotsbearbeitung zuerst speichern oder abbrechen."); return;
-    }
+    if (!canChangeHistoryCase()) return;
     const copied = route === "offer"
       ? await copyOfferCase(caseId)
       : await copyProductionCase(caseId);
+    setHistoryItems(items => [copied.case, ...items.filter(item => item.caseId !== copied.case.caseId)]);
+    // Copying can finish after the operator has started a new input or editor.
+    if (!historySwitchGuardRef.current?.()) return;
     if (route === "offer") {
       setActiveOfferCaseId(copied.case.caseId);
     } else {
@@ -589,7 +590,6 @@ function ProductWorkspaceView({
     }
     setHistorySearch("");
     setHistoryServerFiltered(false);
-    setHistoryItems([copied.case, ...historyItems.filter((item) => item.caseId !== copied.case.caseId)]);
     await refreshDashboard();
   };
 
@@ -646,6 +646,49 @@ function ProductWorkspaceView({
   } = useProductionPlanProgress();
   const manualSpecForm = useProductionManualSpecForm();
   const [workspaceSearchText, setWorkspaceSearchText] = useState("");
+  const workspaceFilterRef = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    if (workspaceSearchText && workspaceFilterRef.current) workspaceFilterRef.current.open = true;
+  }, [workspaceSearchText]);
+  const acceptedSourceFileRef = useRef<File | undefined>(undefined);
+  const sourceSwitchError = "Begonnene Eingaben zuerst übernehmen oder über „Eingabefelder leeren“ verwerfen. Gespeicherte Aufträge bleiben erhalten.";
+  const hasSourceInputs = Boolean(offerText.trim() || intakeText.trim() || (intakeFile && intakeFile !== acceptedSourceFileRef.current) ||
+    manualSpecForm.manualCustomerName.trim() || manualSpecForm.manualEventDate.trim() ||
+    manualSpecForm.manualAttendeeCount.trim() || manualSpecForm.manualMenuItems.trim() ||
+    manualSpecForm.manualVenueName.trim() || manualSpecForm.manualNotes.trim() ||
+    manualSpecForm.manualEventType !== "conference" || manualSpecForm.manualServiceForm !== "buffet");
+  function canChangeHistoryCase() {
+    if (submitting) { setError("Bitte den laufenden Vorgang abwarten."); return false; }
+    if (route === "offer" && offerMenuEditingRef.current) {
+      setError("Bitte Angebotsbearbeitung zuerst speichern oder abbrechen."); return false;
+    }
+    if (hasSourceInputs) { setError(sourceSwitchError); return false; }
+    if (intakeFile && intakeFile === acceptedSourceFileRef.current) {
+      setIntakeFile(null);
+      resetDocumentProgress();
+      acceptedSourceFileRef.current = undefined;
+    }
+    return true;
+  }
+  const historySwitchGuardRef = useRef<(() => boolean) | undefined>(canChangeHistoryCase);
+  historySwitchGuardRef.current = canChangeHistoryCase;
+  useEffect(() => {
+    historySwitchGuardRef.current = canChangeHistoryCase;
+    return () => { historySwitchGuardRef.current = undefined; };
+  }, []);
+  function clearSourceInputs() {
+    setOfferText("");
+    stagedOfferTextRequestRef.current = undefined;
+    stagedProductionDocumentRef.current = undefined;
+    acceptedSourceFileRef.current = undefined;
+    setIntakeText("");
+    resetIntakeDraft();
+    resetDocumentProgress();
+    manualSpecForm.resetManualSpecDraft();
+    manualSpecForm.setManualEventType("conference");
+    manualSpecForm.setManualServiceForm("buffet");
+    setError(undefined);
+  }
   const miniPilotReportState = useMemo(() => buildMiniPilotCheckReportState(miniPilotRawResult), [miniPilotRawResult]);
   const productionUploadInputRef = useRef<HTMLInputElement | null>(null);
   const stagedProductionDocumentRef = useRef<StagedProductionDocument | undefined>(undefined);
@@ -948,6 +991,8 @@ function ProductWorkspaceView({
   } = buildProductionIntakeActionsAppBoundary({
     createAcceptedSpecFromText,
     intakeText,
+    onTextAccepted: (submittedText) => setIntakeText(current => current === submittedText ? "" : current),
+    onFileAccepted: (file) => { acceptedSourceFileRef.current = file; },
     createAcceptedSpecFromDocument,
     uploadSourceDocument,
     createProductionCase,
@@ -1168,6 +1213,8 @@ function ProductWorkspaceView({
     },
     completeOfferRequestId: (requestId) => {
       if (stagedOfferTextRequestRef.current?.requestId === requestId) {
+        const submittedText = stagedOfferTextRequestRef.current.text;
+        setOfferText(current => current === submittedText ? "" : current);
         stagedOfferTextRequestRef.current = undefined;
       }
     },
@@ -1213,9 +1260,11 @@ function ProductWorkspaceView({
       if (offerFocusRef.current.caseId !== activeOfferCaseId || offerFocusRef.current.draftId !== activeOfferDraftId) return;
       setOfferApprovalBinding(undefined);
       setSelectedVariantId(undefined);
-      setSelectedDraftId(draftId);
-      await refreshDashboard();
-      if (offerFocusRef.current.caseId === activeOfferCaseId) setNotice("Neue Angebotsfassung gespeichert. Bitte erneut prüfen.");
+      await refreshDashboard({ requiredOfferDraftId: draftId });
+      if (offerFocusRef.current.caseId === activeOfferCaseId) {
+        setSelectedDraftId(draftId);
+        setNotice("Neue Angebotsfassung gespeichert. Bitte erneut prüfen.");
+      }
     },
     setSelectedDraftId,
     selectedVariantId,
@@ -1243,9 +1292,8 @@ function ProductWorkspaceView({
     saveSpecEdit: handleSaveSpecEdit,
     resetSpecEdit
   });
-  const activeCaseStatus = availableCases.find((candidate) =>
-    candidate.caseId === (route === "offer" ? activeOfferCaseId : activeProductionCaseId)
-  )?.status ?? "open";
+  const activeCase = availableCases.find(candidate => candidate.caseId === (route === "offer" ? activeOfferCaseId : activeProductionCaseId));
+  const activeCaseStatus = activeCase?.status ?? "open";
   const nextActionInput: CaseNextActionInput = {
     product: route,
     caseStatus: activeCaseStatus,
@@ -1298,6 +1346,10 @@ function ProductWorkspaceView({
     }
     const focus = (selector: string) => {
       const element = document.querySelector<HTMLElement>(selector);
+      // Focusing a task inside collapsed native details must reveal it first.
+      for (let parent = element?.parentElement; parent; parent = parent.parentElement) {
+        if (parent instanceof HTMLDetailsElement) parent.open = true;
+      }
       element?.focus({ preventScroll: true });
       element?.scrollIntoView?.({ block: "start", inline: "nearest", behavior: "auto" });
     };
@@ -1336,27 +1388,17 @@ function ProductWorkspaceView({
     <>
       <AppFeedbackShell error={loaderError ?? error} notice={notice} loading={loading} route={route} />
 
-      <section className="panel secondary-workspace" aria-labelledby={`${route}-workspace-filter-label`}>
-        <label
-          className="field-label"
-          id={`${route}-workspace-filter-label`}
-          htmlFor={`${route}-workspace-search`}
-        >
-          Aktiven Arbeitsbereich filtern
-        </label>
-        <input
-          id={`${route}-workspace-search`}
-          type="search"
-          value={workspaceSearchText}
-          onChange={(event) => setWorkspaceSearchText(event.target.value)}
-          placeholder="Spec, Plan, Rezept oder Audit suchen"
-          autoComplete="off"
-        />
-        <p className="helper-text">
-          Filtert nur sichtbare Arbeitsbereichsdaten; die Auftragshistorie bleibt unabhängig.
-        </p>
-      </section>
+      {(route === "offer" ? activeOfferCaseId : activeProductionCaseId) ? <section className="panel current-order-header" aria-label="Geöffneter Auftrag">
+        <h2>{activeCase?.displayName ?? "Auftrag geöffnet"}</h2>
+        <p role="status">{activeCase ? {open:"Offen",completed:"Abgeschlossen",archived:"Archiviert"}[activeCase.status] : loaderError ? "Auftragsname nicht verfügbar. Der Auftrag bleibt geöffnet." : "Auftragsdaten werden geladen …"}</p>
+        <a className="ghost-link" href="#history" onClick={() => {
+          const history = document.querySelector<HTMLDetailsElement>("#history");
+          if (history) { history.open = true; history.querySelector("summary")?.focus(); }
+        }}>Anderen Auftrag öffnen</a>
+      </section> : null}
+      {workspaceSearchText ? <p className="workspace-filter-notice" role="status">Ansicht ist gefiltert: „{workspaceSearchText}“ <button type="button" className="secondary-button" onClick={() => setWorkspaceSearchText("")}>Filter aufheben</button></p> : null}
 
+      {error === sourceSwitchError && hasSourceInputs ? <p className="workspace-filter-notice"><button type="button" className="secondary-button" disabled={submitting} onClick={clearSourceInputs}>Eingabefelder leeren</button><span>Nur aktuelle Eingaben; gespeicherte Aufträge bleiben erhalten.</span></p> : null}
       <CaseHistoryPanel
         product={route === "offer" ? "offer" : "production"}
         items={historyState.items}
@@ -1364,9 +1406,7 @@ function ProductWorkspaceView({
         search={historySearch}
         onSearchChange={(value) => void handleHistorySearchChange(value)}
         onOpen={(caseId) => {
-          if (route === "offer" && offerMenuEditingRef.current) {
-            setError("Bitte Angebotsbearbeitung zuerst speichern oder abbrechen."); return;
-          }
+          if (!canChangeHistoryCase()) return;
           if (route === "offer") {
             setActiveOfferCaseId(caseId);
           } else {
@@ -1379,9 +1419,11 @@ function ProductWorkspaceView({
       />
 
       <CaseNextActionBar
+        product={route}
         action={nextAction}
         onAction={(action) => void runNextAction(action).catch((cause) => setError(cause instanceof Error ? cause.message : "Nächster Schritt konnte nicht ausgeführt werden."))}
-        busy={submitting || (route === "offer" && offerMenuEditing)}
+        busy={submitting}
+        disabled={route === "offer" && offerMenuEditing}
         error={error}
       />
 
@@ -1394,6 +1436,27 @@ function ProductWorkspaceView({
             : "pending"
         }}
       /> : null}
+      <details className="technical-context-details workspace-filter-details" ref={workspaceFilterRef} aria-labelledby={`${route}-workspace-filter-label`}>
+        <summary>Einträge auf dieser Seite filtern</summary>
+        <label
+          className="field-label"
+          id={`${route}-workspace-filter-label`}
+          htmlFor={`${route}-workspace-search`}
+        >
+          Aktiven Arbeitsbereich filtern
+        </label>
+        <input
+          id={`${route}-workspace-search`}
+          type="search"
+          value={workspaceSearchText}
+          onChange={(event) => setWorkspaceSearchText(event.target.value)}
+          placeholder="Veranstaltung, Planung oder Rezept suchen"
+          autoComplete="off"
+        />
+        <p className="helper-text">
+          Filtert nur sichtbare Arbeitsbereichsdaten; die Auftragshistorie bleibt unabhängig.
+        </p>
+      </details>
     </>
   );
 

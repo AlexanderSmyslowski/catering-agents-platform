@@ -2,9 +2,9 @@
   const text = document.body.innerText;
   const missing = [
     "Angebotsagent",
-    "Kundenanfrage einfügen und Entwurf prüfen",
+    "Kundenanfrage einfügen",
     "Die App erstellt einen prüfbaren Angebotsentwurf.",
-    "Frühere Angebotsaufträge öffnen"
+    "Bestehenden Auftrag öffnen"
   ].filter((marker) => !text.includes(marker));
   if (!/(?:^|\s)0 Aufträge(?:$|\s)/u.test(text)) {
     missing.push("0 Aufträge");

@@ -2,9 +2,9 @@
   const text = document.body.innerText;
   const missing = [
     "Produktionsagent",
-    "Angebot hochladen oder Produktionsauftrag beschreiben",
-    "Ablauf: Quelle → KI-Entwurf → Prüfung → Plan",
-    "Frühere Produktionsaufträge öffnen"
+    "Angebot hochladen oder Auftrag beschreiben",
+    "Nächster Schritt",
+    "Bestehenden Auftrag öffnen"
   ].filter((marker) => !text.includes(marker));
   if (!/(?:^|\s)0 Aufträge(?:$|\s)/u.test(text)) {
     missing.push("0 Aufträge");

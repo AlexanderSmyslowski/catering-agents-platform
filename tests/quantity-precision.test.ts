@@ -14,6 +14,23 @@ function batch(recipe = model(), servings = 20, componentId = "compote"): Produc
 }
 
 describe("quantity precision through production, purchasing and print", () => {
+  it("leaves unrecorded suppliers open and preserves an explicit hint when contributions merge", () => {
+    const b = batch();
+    const original = aggregatePurchaseList("supplier-open", [b]);
+    expect(original.items[0]!.supplierHint).toBeUndefined();
+    expect(renderPurchaseListCsv(original)).toContain('"0.002","kg","0.002","kg",""');
+    expect(renderPurchaseListCsv(original, "excel-de")).toContain('"2 g";"nicht hinterlegt"');
+    const explicit = { ...original.items[0]!, supplierHint: "Bestätigter Testlieferant", normalizedQty: 0.001, purchaseQty: 0.001 };
+    const combined = aggregatePurchaseList("supplier-explicit", [b], [explicit]);
+    expect(combined.items[0]).toMatchObject({ supplierHint: explicit.supplierHint, normalizedQty: 0.003, purchaseQty: 0.003 });
+    expect(original.items[0]!.purchaseQty).toBe(0.002);
+    original.items[0]!.supplierHint = "  ";
+    expect(renderPurchaseListCsv(original, "excel-de")).toContain('"2 g";"nicht hinterlegt"');
+    expect(renderPurchaseListCsv(original)).toContain('"0.002","kg","0.002","kg","  "');
+    const beverage = structuredClone(b);
+    beverage.ingredients[0]!.group = "getraenke_als_zutat";
+    expect(aggregatePurchaseList("supplier-beverage-open", [beverage]).items[0]!.supplierHint).toBeUndefined();
+  });
   it("exports precise German Excel quantities while preserving the original CSV contract", () => {
     const list = aggregatePurchaseList("excel-precision", [batch(model(), 20)]);
     const original = renderPurchaseListCsv(list);

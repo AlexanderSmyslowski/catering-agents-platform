@@ -283,6 +283,7 @@ export interface ProductionRouteAccessData {
 }
 
 export interface WorkspaceRefreshOptions {
+  requiredOfferDraftId?: string;
   focusedSpecId?: string;
   focusedOfferCaseId?: string;
 }

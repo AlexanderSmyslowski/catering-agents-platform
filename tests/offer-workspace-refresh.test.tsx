@@ -71,4 +71,23 @@ describe("offer workspace refresh after case creation", () => {
     expect(current.data.activeCase?.caseId).toBe("case-other");
     expect(current.loading).toBe(false);
   });
+  it("requires the saved draft before acknowledging a revision, and propagates refresh failure only for that explicit path", async () => {
+    load.mockImplementation(async caseId => result(caseId));
+    await render("case-edit");
+    await act(async () => {
+      await expect(current.refresh({requiredOfferDraftId:"saved"})).rejects.toThrow("neue Angebotsfassung");
+    });
+    expect(current.data.activeCase?.caseId).toBe("case-edit");
+    load.mockRejectedValueOnce(new Error("Netz unterbrochen"));
+    await act(async () => { await expect(current.refresh({requiredOfferDraftId:"saved"})).rejects.toThrow("Netz unterbrochen"); });
+    load.mockRejectedValueOnce(new Error("Normales Laden fehlgeschlagen"));
+    await act(async () => { await expect(current.refresh()).resolves.toBeUndefined(); });
+    const data = result("case-edit");
+    data.offerDrafts = [{draftId:"saved"}] as ProductData["offerDrafts"];
+    load.mockResolvedValueOnce(data);
+    await act(async () => { await current.refresh({requiredOfferDraftId:"saved"}); });
+    expect(current.offerDrafts[0]?.draftId).toBe("saved");
+    expect(current.error).toBeUndefined();
+  });
+
 });

@@ -645,7 +645,7 @@ describe("backoffice internal usage smoke", () => {
     const offerRoute = await renderAppRoute(offerStartLink.getAttribute("href") ?? "/angebot");
 
     expect(document.body.textContent ?? "").toContain("Angebotsagent");
-    expect(document.body.textContent ?? "").toContain("Kundenanfrage einfügen und Entwurf prüfen");
+    expect(document.body.textContent ?? "").toContain("Kundenanfrage einfügen");
     expect(document.body.textContent ?? "").toContain("Produktionsagent");
     const productionHandoffLink = findAnchorByText("Produktionsagent");
     expect(productionHandoffLink.getAttribute("href")).toBe("/produktion");
@@ -657,7 +657,7 @@ describe("backoffice internal usage smoke", () => {
 
     const productionRoute = await renderAppRoute(productionHandoffLink.getAttribute("href") ?? "/produktion");
 
-    expect(document.body.textContent ?? "").toContain("Angebot hochladen oder Produktionsauftrag beschreiben");
+    expect(document.body.textContent ?? "").toContain("Angebot hochladen oder Auftrag beschreiben");
     expect(document.body.textContent ?? "").not.toContain("Bestandsdaten im Hintergrund");
     expect(document.body.textContent ?? "").toContain("Angebot als KI-Entwurf prüfen");
 

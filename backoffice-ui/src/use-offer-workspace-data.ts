@@ -39,6 +39,9 @@ export function useOfferWorkspaceData(activeCaseId?: string) {
       ) {
         return;
       }
+      if (options?.requiredOfferDraftId && !productData.offerDrafts.some(draft => draft.draftId === options.requiredOfferDraftId)) {
+        throw new Error("Die neue Angebotsfassung konnte noch nicht geladen werden. Bitte erneut laden.");
+      }
       loadedCaseId.current = requestedActiveCaseId;
       setData(productData.workspace);
       setIntakeRequests(productData.intakeRequests);
@@ -54,6 +57,7 @@ export function useOfferWorkspaceData(activeCaseId?: string) {
         return;
       }
       setError(cause instanceof Error ? cause.message : "Angebotsdaten konnten nicht geladen werden.");
+      if (options?.requiredOfferDraftId) throw cause;
     } finally {
       if (version === refreshVersion.current) {
         setLoading(false);
