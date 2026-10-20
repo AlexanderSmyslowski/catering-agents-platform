@@ -344,6 +344,10 @@ PR727_MANIFEST_SHA256 = "8e3bbad3b8445968a27d859f61c29bb99081e54341f267da9e4d35c
 PR727_RECOVERY_SHA256 = "8f588b754e6a617b6437e0781b3966c03b4aff720db3edf2473491c3f99a008b"
 PR727_IMAGES = {"runtime": "sha256:6df040c61e8ca857cc3a3e8b2c54da5a560f14ea19f49d8cbd322032cee1f52b",
                 "web": "sha256:ea6c1460fa5a015d0320625477de58d09f9c96c1c29fb27c624be660bd651f12"}
+PR735_MANIFEST_SHA256 = "73d8886d9479b2930c08f7da14a37187ca97441168297ecbe0cadf82027199ce"
+PR735_HELPER_SHA256 = "51c16f5790446772dca3916769103a3037a0350fb2d8795641d438ad6bedfbeb"
+PR735_IMAGES = {"runtime": "sha256:2c94cffb05807cedaab35bf9dcb10779962c9a8f38f9c0143233447f39061b63",
+                "web": "sha256:029b327abb846b657dfc36822a36ed5dc4d6f648b4113c9d2379ecf6b8c13111"}
 PR727_CADDY_ROOT_NAME = "Caddy_Local_Authority_-_2026_ECC_Root_230535653603960188253814079773346015816"
 PR727_CADDY_ROOT_SHA256 = "e70877424f5913ab6146fb751750fd1deb4a862c2820811287459d3b213e2b88"
 PR727_CADDY_CA_BUNDLE_SHA256 = "f0cbbbeb86b1ca821634896f134c3c3b73db0bb525664b643ac80159242f9778"
@@ -417,17 +421,56 @@ def accepted_pr727_bundle():
     return root, manifest
 
 
+def accepted_pr735_bundle(oci):
+    root = protected(RELEASES / PR735_MANIFEST_SHA256, directory=True)
+    manifest = read_bound(protected(root / "manifest.json"), PR735_MANIFEST_SHA256)
+    require(manifest["productCommit"] == "61ea18f28ba47ed1266a903916c9c43240594b83" and
+            manifest["operationsCommit"] == "5c7b44b8d474da0166a1f64a0a43f51e0fa7bc15" and
+            manifest["bases"] == CURRENT_BASE_LAYOUT, "NUE_PR735_PREDECESSOR_BINDING")
+    helper = protected(root / "tools/catering_target_nue_image_update.py")
+    require(digest(helper) == PR735_HELPER_SHA256 == manifest["helpers"][helper.name], "NUE_PR735_HELPER_BINDING")
+    predecessor = load_module("nue_accepted_pr735", helper)
+    require(predecessor.verify_bundle(root, PR735_MANIFEST_SHA256) == manifest, "NUE_PR735_BUNDLE_BINDING")
+    require(all(manifest["images"][role]["platformManifestDigest"] == identity for role, identity in PR735_IMAGES.items()),
+            "NUE_PR735_IMAGE_BINDING")
+    stage_receipt = json.loads(protected(root / "stage.json").read_bytes())
+    require(stage_receipt["manifestSha256"] == PR735_MANIFEST_SHA256 and stage_receipt["mode"] == "nue-image-only",
+            "NUE_PR735_STAGE_BINDING")
+    baseline = read_bound(protected(root / "baseline.json"), stage_receipt["baselineSha256"])
+    installed = json.loads(protected(root / "installed.json").read_bytes())
+    candidate = protected(root / "compose.candidate.json").read_bytes()
+    images = {s: PR735_IMAGES["web" if s == "web" else "runtime"] for s in SERVICES}
+    require(installed["manifestSha256"] == PR735_MANIFEST_SHA256 and installed["status"] == "NUE_IMAGE_ONLY_INSTALLED" and
+            installed["images"] == images and hashlib.sha256(candidate).hexdigest() == installed["composeSha256"],
+            "NUE_PR735_INSTALL_BINDING")
+    # Build already owns the update lock. Reuse the accepted read-only verifier
+    # checks here; the public Verify entry point correctly refuses any live lock.
+    predecessor.verify_runtime(baseline, images, candidate, candidate_oci=oci,
+                               candidate_layout=manifest["bases"], candidate_schema=manifest["schemaBinding"])
+    return root, manifest
+
+
 def pr727_running_gate(oci, rows):
     root, manifest = accepted_pr727_bundle()
+    return verified_product_running_gate(oci, rows, root, manifest, PR727_IMAGES,
+        {"predecessorManifestSha256": PR727_MANIFEST_SHA256, "manualRecoverySha256": PR727_RECOVERY_SHA256})
+
+
+def pr735_running_gate(oci, rows):
+    root, manifest = accepted_pr735_bundle(oci)
+    return verified_product_running_gate(oci, rows, root, manifest, PR735_IMAGES,
+        {"predecessorManifestSha256": PR735_MANIFEST_SHA256})
+
+
+def verified_product_running_gate(oci, rows, root, manifest, identities, observations):
     compose = json.loads(protected(COMPOSE).read_bytes())
-    require(all(compose["services"][s]["image"] == PR727_IMAGES["web" if s == "web" else "runtime"] for s in SERVICES), "NUE_PR727_COMPOSE_IMAGES")
-    observations = {"predecessorManifestSha256": PR727_MANIFEST_SHA256, "manualRecoverySha256": PR727_RECOVERY_SHA256}
+    require(all(compose["services"][s]["image"] == identities["web" if s == "web" else "runtime"] for s in SERVICES), "NUE_PR727_COMPOSE_IMAGES")
     expected_files = {p.relative_to(root / "source").as_posix(): p.read_bytes()
                       for directory in RUNTIME_ROOTS for p in (root / "source" / directory).rglob("*") if p.is_file()}
     for row in rows:
         service = row["Name"].removeprefix("/platform-infra-").removesuffix("-1")
         role = "web" if service == "web" else "runtime"
-        identity = PR727_IMAGES[role]
+        identity = identities[role]
         oci.check_running_container(row, identity)
         image = json.loads(command(["docker", "image", "inspect", identity]))[0]
         oci.check_loaded_image(image, identity)
@@ -483,6 +526,8 @@ def current_base_gate(oci, runtime_m, web_m):
     require({row["Name"] for row in rows} == {"/platform-infra-" + s + "-1" for s in SERVICES} and len(rows) == 5, "NUE_CURRENT_BASE_CONTAINER_SCOPE")
     if all(row.get("ImageManifestDescriptor", {}).get("digest") == PR727_IMAGES["web" if row["Name"] == "/platform-infra-web-1" else "runtime"] for row in rows):
         return pr727_running_gate(oci, rows)
+    if all(row.get("ImageManifestDescriptor", {}).get("digest") == PR735_IMAGES["web" if row["Name"] == "/platform-infra-web-1" else "runtime"] for row in rows):
+        return pr735_running_gate(oci, rows)
     for row in rows:
         service = row["Name"].removeprefix("/platform-infra-").removesuffix("-1")
         oci.check_running_container(row, web_m if service == "web" else runtime_m)
