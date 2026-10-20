@@ -1677,7 +1677,15 @@ describe("Linux browser rehearsal governance", () => {
     await expect(runMarker()).resolves.toEqual({ route: "/produktion", markers: "production-handoff-ok" });
   });
 
-  it("opens the rendered production case through its stored case identity without a display-name fallback", async () => {
+  it("accepts the same fresh handoff when the application has already opened its case", async () => {
+    const document = { body: { innerText: ["Produktionsagent", "Auftragsstand Küche", "Nächster Schritt", "Anderen Auftrag öffnen · 1 Auftrag"].join("\n") }, querySelectorAll: () => [] };
+    const check = new Function("document", "location", `return (${productionHandoffMarkers});`)(document, { pathname: "/produktion" });
+    await expect(check()).resolves.toEqual({ route: "/produktion", markers: "production-handoff-ok" });
+    document.body.innerText += "\nPlan-Kontext: aktueller Produktionsplan";
+    await expect(check()).rejects.toThrow("Fresh-Handoff darf keinen noch nicht erzeugten Produktionsplan vortäuschen");
+  });
+
+  it.each(["Produktionsplan berechnen", "Produktionsentwurf prüfen"])("opens the rendered production case through its stored case identity without a display-name fallback (%s)", async (phase) => {
     const caseId = "production-case-browser-rehearsal";
     const handoffId = "handoff-browser-rehearsal";
     const sourceSpecId = "spec-browser-rehearsal-offer-case";
@@ -1704,7 +1712,7 @@ describe("Linux browser rehearsal governance", () => {
       body: {
         get innerText() {
           return selected
-            ? "Besprechung - 06.11.2026 - 35 Personen Produktionsplan berechnen"
+            ? `Besprechung - 06.11.2026 - 35 Personen ${phase}`
             : "Besprechung - 06.11.2026 - 35 Personen";
         },
       },

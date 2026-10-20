@@ -44,7 +44,7 @@ async () => {
   for (let attempt = 0; attempt < 60; attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, 100));
     const text = document.body.innerText;
-    const hasWorkflowContext = ["Produktionsplan berechnen", "Rückfragen beantworten", "Produktionsarbeit prüfen"]
+    const hasWorkflowContext = ["Produktionsentwurf prüfen", "Produktionsplan berechnen", "Rückfragen beantworten", "Produktionsarbeit prüfen"]
       .some((marker) => text.includes(marker));
     if (historyButton.getAttribute("aria-pressed") === "true" && hasWorkflowContext) {
       return { selected: expectedCaseId, caseId: expectedCaseId, handoffId: expectedHandoffId, sourceSpecId: expectedSpecId };
