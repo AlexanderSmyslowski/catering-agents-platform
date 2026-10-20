@@ -857,7 +857,11 @@ describe("Hosted Session E2E mit drei echten Catering-Rollen", () => {
           headers
         })
       ]);
-      expect(responses.map((response) => response.statusCode)).toEqual([401, 401, 401, 401]);
+      expect(responses.map((response) => response.statusCode)).toEqual([403, 403, 403, 403]);
+      for (const response of responses) {
+        expect(response.headers["x-catering-session-status"]).toBe("required");
+        expect(response.headers["www-authenticate"]).toBeUndefined();
+      }
     }
 
     const forgedAdmin = forgedRoleHeaders(harness.cookies.production, "Administrator", "admin");

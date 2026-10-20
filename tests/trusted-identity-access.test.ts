@@ -96,7 +96,7 @@ describe("trusted identity access guards", () => {
       }
     });
 
-    expect(response.statusCode).toBe(401);
+    expect(response.statusCode).toBe(403);
 
     await app.close();
     rmSync(dataRoot, { recursive: true, force: true });

@@ -1,3 +1,19 @@
+## Technische Anmeldung nach PIN stabilisieren — Version 5.491 / 20.10.2026
+
+Ursache tatsächlich mit echtem Chrome und fiktiven Localhost-Basic-Credentials reproduziert: innere App401 ohne Challenge verwirft den äußeren Basic-Cache; nächster LoginPOST löst erneut die technische Anmeldung aus. Kontrolllauf mit403 behält Basic ohne zweite Challenge. Fehlende/ungültige Appsession liefert jetzt403 mit response-only `x-catering-session-status: required`; falsche/unbekannte/inaktive Anmeldung generisch403, RateLimit429 unverändert. UI unterscheidet markiertes Sitzungsende von normalem Berechtigungs-/Origin403 und behält Legacy401-Kompatibilität im Updateübergang. Cookie/JWT/AuthEpoch/onlyCookie, Rollen/Betrieb, Same-Origin, Basic und IP-Schutz unverändert; keine Credential-, Caddy-, DB- oder Schemaänderung.
+
+197gezielte Tests/8Dateien und Projekt-Typecheck PASS; tatsächliches unabhängiges Opus5.5-Review5d90fc5a-84e9-4b5d-b100-79104527c204 ACCEPT. Nachprüfung: Operator401 nur technischer Root, Erfolgsmoke200 unverändert; Production-Handoffreader nur404 speziell/andere nonOK generisch, kein401-Retryvertrag. Responseheader werden in vorhandenen Caddys nicht entfernt. Tatsächliche Ingressheader-/Login-/Logoutprüfung bleibt nach Installation offen. Kein Livefix als bereits erfolgt ausgeben.
+
+Unveränderte bereits separat abgenommene Fahrt-/Sonderkostkorrektur ausPR736 ist in derselben Auslieferung enthalten; ihre77Tests/Opus-N1-Abnahme werden für unveränderten Inhalt wiederverwendet. Der gemeinsame PR braucht unveränderte vollständige CI vor Integration und frische Main-CI vor normalem signiertem Zielupdate. Keine Schutzprüfung überspringen oder alte CI als neue Kopfannahme ausgeben. Auf Nürnberg bleibt bis zur tatsächlichen Ausführung PR735 installiert; Testkonto inaktiv, keine PINeingabe wartet. Technischer Zugang bleibt aus vorhandener geschützter Quelle, persönliche PIN erst bei konkret vorbereitetem Caller anfordern. Führender Betriebsstand: primäres Projektmemory/Runbook5.491. Helsinki/DNS/ADH unverändert; Produktziel weiter offen.
+
+## Fahrt und Sonderkost im tatsächlichen 100-Gäste-Fall trennen — Version 5.490 / 20.10.2026
+
+Auf installiertem PR735 wurde der synthetische 100-Gäste-Fall über die echte Nürnberger Oberfläche vollständig bearbeitet, intern freigegeben und in Produktion übernommen. 9 Rezepte, 29 Einkaufspositionen, 55/25/20 Hauptgerichte und 0,002 kg = 2 g Zimt bleiben rechnerisch/CSV/Druck konsistent. Die manuelle Veranstaltungsänderung vom 12. auf den 13.11.2026 blieb im Angebot und der Produktion erhalten. Tatsächliche HTML/PDF/CSV-Exporte sowie finaler approved/applied-Readback liegen privat im bestehenden `tmp/product-pilot-20261018/`; keine realen Kunden-/Preis-/Küchenfreigaben. Opus-5.5-Produktreview a9796cc9 bestätigt Mengen/Kalkulation, bleibt NO-GO für unbegleitetes Büro und reale Küche.
+
+Gezielte Folgereparatur: Satzgrenze vor nummerierten Gäste-/Sonderkostanweisungen erkennen, Fahrtstunden separat als ungeprüften Logistikkontext erhalten. Keine neue Schnittstelle/Architektur oder Freigabelogik. Der reproduzierte Fehler hing „Fahrt 1 Person 5 Stunden.“ fälschlich an glutenfreie Sonderkost. 77 gezielte Tests decken Normalisierung, ca.-/unsichere Gästezahlen, Datums-/Dezimalerhalt, Angebotsübergabe und beide Produktionsdrucke ab. Projekt-Typecheck erfolgreich mit unveränderten Compileroptionen und nur lokal ausgeschlossenen ignorierten tmp-Quellarchiven; unveränderte CI bleibt Pflicht. Der normale lokale Typecheck hatte 9308 archivierte tmp-TypeScriptdateien aufgenommen und die 4-GB-Heapgrenze erreicht; kein Quell-/CI-Gate dafür geändert.
+
+Unabhängige tatsächliche Opus-5.5-Prüfung: c60b56b9 (Grundpatch), 4092a208 (Befund N1), nach reproduzierter/geprüfter N1-Korrektur 3367c0bc-45ab-4690-af53-021bc281f369 ACCEPT. Canonical model claude-opus-5-5/firstParty, keine verbleibenden wesentlichen Befunde im geprüften Umfang. CI bleibt vor Integration erforderlich. Dieser Patch ist noch NICHT auf Nürnberg installiert, bestehende angewendete Produktionsstände bleiben unverändert. Doppelte technische HTTP-Anmeldung, versteckte Rezeptprüfschritte, alter Produktions-Deep-Link, Stations-/Warengruppenvorgaben und Drucklesbarkeit bleiben offene produktrelevante Befunde. Testkonto nach regulärem Abmelden wieder deaktiviert, PIN/Rolle erhalten; keine Eingabe wartet. Helsinki OFF/erhalten, DNS/ADH unverändert, Kostenheartbeat PAUSED. Führender Betriebsstand bleibt primäres Projektmemory/Runbook5.490.
+
 ## CI-Testfixture an den tatsächlichen Auftragsvertrag angepasst — Version 5.480 / 20.10.2026
 
 CI39441428253 auf0882586 endete mit3.618PASS/21SKIP/einem Fehler im Test product-shell-data-boundary. Browser-Rehearsal, macOS-Operator undCompose erfolgreich. Fehler gezielt unverändert lokal reproduziert. Die Fixture enthielt nur globale offerDrafts, aber weder workspace.activeCase noch workspace.currentDraft. Früher verdeckte der stehengebliebene Eingabetext denselben Namen; das korrekte Leeren bestätigter Eingaben machte den falschen Nachweis sichtbar. Keine produktive Ladelogikänderung erforderlich.
@@ -2894,3 +2910,11 @@ Lokalen Bedienbarkeitsbaustein (Editor/Speicherweg/Küchenhinweise/Lieferanten) 
 
 ### Version 5.479 — 20.10.2026
 Auftragsnavigation und klare Aufgabenführung umgesetzt, tatsächliche Opus-5.5-Befunde korrigiert/angenommen, Desktop-/Mobile-Nachprüfung lokal. Keine Zielinstallation oder Laien-/Pilotfreigabe; führender aktueller Abschnitt oben.
+
+
+### Version 5.490 — 20.10.2026
+Tatsächlicher synthetischer Nürnberger End-to-End-Test, Opus-Produktbefunde und eng begrenzte Fahrt-/Sonderkostkorrektur dokumentiert. Kein Pilot-GO und keine Zielinstallation des Folgepatches.
+
+
+### Version5.491 — 20.10.2026
+Doppelte technische Anmeldung im echten Chrome reproduziert, gezielte bestehende Authkorrektur197Tests/Typecheck/Opus5.5ACCEPT. Gemeinsame Auslieferung mit unverändertem PR736-Patch vorbereitet; Liveprüfung offen.

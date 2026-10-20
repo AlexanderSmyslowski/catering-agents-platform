@@ -120,9 +120,9 @@ describe("narrow internal service principals", () => {
     for (const triple of triples) {
       const app = triple.target === "intake" ? intake : offer;
       const attempts = [
-        { method: neighboringMethod(triple.method), url: triple.path, headers: serviceHeaders(triple.service) },
-        { method: triple.method, url: `${triple.path}/neighbor`, headers: serviceHeaders(triple.service) },
-        { method: triple.method, url: triple.path, headers: serviceHeaders(`${triple.service}-Neighbor`) }
+        { method: neighboringMethod(triple.method), url: triple.path, headers: serviceHeaders(triple.service), status: 403 },
+        { method: triple.method, url: `${triple.path}/neighbor`, headers: serviceHeaders(triple.service), status: 403 },
+        { method: triple.method, url: triple.path, headers: serviceHeaders(`${triple.service}-Neighbor`), status: triple.target === "intake" ? 401 : 403 }
       ];
       for (const attempt of attempts) {
         const response = await app.inject({
@@ -131,7 +131,9 @@ describe("narrow internal service principals", () => {
           headers: attempt.headers,
           ...((attempt.method === "PUT" || attempt.method === "PATCH") ? { payload: {} } : {})
         });
-        expect(response.statusCode, `${attempt.method} ${attempt.url}`).toBe(401);
+        expect(response.statusCode, `${attempt.method} ${attempt.url}`).toBe(attempt.status);
+        expect(response.headers["x-catering-session-status"]).toBe(attempt.status === 403 ? "required" : undefined);
+        expect(response.headers["www-authenticate"]).toBeUndefined();
       }
     }
   });
@@ -202,7 +204,7 @@ describe("narrow internal service principals", () => {
       })
     ]);
 
-    expect(responses.map((response) => response.statusCode)).toEqual([401, 401, 401, 401]);
+    expect(responses.map((response) => response.statusCode)).toEqual([403, 403, 403, 403]);
   });
 
   it("never treats a session userId that equals a service name as an internal principal", async () => {

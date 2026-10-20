@@ -119,6 +119,11 @@ describe("offer production handoff", () => {
       const snapshot = response.json().handoff.eventSpecSnapshot;
       const notes = snapshot.productionConstraints.join("\n");
       for (const detail of ["4 Gäste benötigen glutenfreie Sonderkost", "3 Gäste Schalenfruchtvermeidung", "Empfang 18:00–19:00", "Abendbuffet 19:00–21:00", "Anlieferung 16:30", "Aufbau 17:45", "Abbau 21:00"]) expect(notes).toContain(detail);
+      expect(snapshot.productionConstraints.filter((note: string) => note.startsWith("Sonderkost angefragt; separat klären:"))).toEqual([
+        "Sonderkost angefragt; separat klären: 4 Gäste benötigen glutenfreie Sonderkost",
+        "Sonderkost angefragt; separat klären: 3 Gäste Schalenfruchtvermeidung"
+      ]);
+      expect(snapshot.productionConstraints).toContain("Zeit-/Logistikangabe aus Anfrage (ungeprüft): Fahrt 1 Person 5 Stunden.");
       expect(snapshot.productionConstraints).not.toContain("gluten_free");
       expect(snapshot.uncertainties.some((item: { field: string }) => item.field === "productionConstraints")).toBe(true);
       expect(snapshot.productionConstraints).toEqual(draft.variantSet[0]!.proposedEventSpec.productionConstraints);
