@@ -192,8 +192,24 @@ describe("Catering Session-Authentifizierung", () => {
       }
     });
 
-    expect(response.statusCode).toBe(401);
+    expect(response.statusCode).toBe(403);
     expect(response.json()).toEqual({ message: "Ungültige Sitzung." });
+  });
+
+  it("rejects browser sessions and wrong PINs without issuing an HTTP authentication failure", async () => {
+    const { app } = await fixture();
+    const missing = await app.inject({ method: "GET", url: "/v1/auth/session" });
+    expect(missing.statusCode).toBe(403);
+    expect(missing.headers["x-catering-session-status"]).toBe("required");
+    expect(missing.headers["www-authenticate"]).toBeUndefined();
+    expect(missing.json()).toEqual({ message: "Ungültige Sitzung." });
+    const wrongPin = await login(app, { loginCode: "admin", pin: "000000" });
+    expect(wrongPin.statusCode).toBe(403);
+    expect(wrongPin.headers["www-authenticate"]).toBeUndefined();
+    expect(wrongPin.headers["set-cookie"]).toBeUndefined();
+    const good = await login(app);
+    expect(good.statusCode).toBe(200);
+    expect((await app.inject({ method: "GET", url: "/v1/auth/session", headers: { cookie: cookieValue(good) } })).statusCode).toBe(200);
   });
 
   it("setzt nur das sichere Host-Cookie und gibt nie Token oder Credentialdaten zurück", async () => {
@@ -254,8 +270,8 @@ describe("Catering Session-Authentifizierung", () => {
       })
     ]);
 
-    expect(bearer.statusCode).toBe(401);
-    expect(headerOnly.statusCode).toBe(401);
+    expect(bearer.statusCode).toBe(403);
+    expect(headerOnly.statusCode).toBe(403);
   });
 
   it.each([
@@ -272,7 +288,7 @@ describe("Catering Session-Authentifizierung", () => {
       headers: cookieHeader(tokenFor(user, overrides))
     });
 
-    expect(response.statusCode).toBe(401);
+    expect(response.statusCode).toBe(403);
   });
 
   it("weist fehlende Subjects, inaktive Benutzer und generisch fehlerhafte Anmeldungen zurück", async () => {
@@ -297,9 +313,9 @@ describe("Catering Session-Authentifizierung", () => {
       login(app)
     ]);
 
-    expect(missingSubject.statusCode).toBe(401);
-    expect(inactiveSession.statusCode).toBe(401);
-    expect([unknownLogin.statusCode, wrongPinLogin.statusCode, inactiveLogin.statusCode]).toEqual([401, 401, 401]);
+    expect(missingSubject.statusCode).toBe(403);
+    expect(inactiveSession.statusCode).toBe(403);
+    expect([unknownLogin.statusCode, wrongPinLogin.statusCode, inactiveLogin.statusCode]).toEqual([403, 403, 403]);
     expect([unknownLogin.json(), wrongPinLogin.json(), inactiveLogin.json()]).toEqual([
       unknownLogin.json(),
       unknownLogin.json(),
@@ -335,8 +351,8 @@ describe("Catering Session-Authentifizierung", () => {
       headers: { cookie }
     });
 
-    expect(staleAfterRole.statusCode).toBe(401);
-    expect(staleAfterPin.statusCode).toBe(401);
+    expect(staleAfterRole.statusCode).toBe(403);
+    expect(staleAfterPin.statusCode).toBe(403);
   });
 
   it("belebt ein altes Cookie nach Deaktivierung und Reaktivierung nicht wieder", async () => {
@@ -356,7 +372,7 @@ describe("Catering Session-Authentifizierung", () => {
       url: "/v1/auth/session",
       headers: { cookie }
     });
-    expect(response.statusCode).toBe(401);
+    expect(response.statusCode).toBe(403);
   });
 
   it("setzt die aktuelle User-Store-Rolle serverseitig in die Sessionantwort", async () => {

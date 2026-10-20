@@ -1,6 +1,8 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import {
   CATERING_SESSION_COOKIE,
+  CATERING_SESSION_REQUIRED_HEADER,
+  CATERING_SESSION_REQUIRED_VALUE,
   CateringLoginService,
   CateringUserStore,
   MINIMAL_MVP_CAPABILITIES,
@@ -104,7 +106,7 @@ export function registerCateringAuthRoutes(input: RegisterCateringAuthRoutesInpu
     });
     if (result.kind !== "success") {
       if (result.kind === "rate_limited") reply.header("retry-after", String(result.retryAfterSeconds));
-      return reply.code(result.kind === "rate_limited" ? 429 : 401).send({ message: "Anmeldung nicht möglich." });
+      return reply.code(result.kind === "rate_limited" ? 429 : 403).send({ message: "Anmeldung nicht möglich." });
     }
 
     const claims: Omit<CateringSessionClaims, "iat" | "exp"> = {
@@ -134,7 +136,8 @@ export function registerCateringAuthRoutes(input: RegisterCateringAuthRoutesInpu
     const actor = input.requestAuth.actorForRequest(request);
     const user = await input.userStore.getById(input.businessContext, actor.name);
     if (!user || !user.active || user.role !== actor.role) {
-      return reply.code(401).send({ message: "Ungültige Sitzung." });
+      return reply.header(CATERING_SESSION_REQUIRED_HEADER, CATERING_SESSION_REQUIRED_VALUE)
+        .code(403).send({ message: "Ungültige Sitzung." });
     }
     return reply.code(200).send(sessionResponse(user, actor));
   });

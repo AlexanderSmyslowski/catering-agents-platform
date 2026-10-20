@@ -43,7 +43,7 @@ describe("hosted builder actor boundary", () => {
         headers: trustedHeaders("Betriebs-/Audit-Operator")
       });
 
-      expect(response.statusCode).toBe(401);
+      expect(response.statusCode).toBe(403);
       expect(response.json()).toEqual({ message: "Ungültige Sitzung." });
       expect(storeAccess).not.toHaveBeenCalled();
     } finally {
@@ -61,7 +61,7 @@ describe("hosted builder actor boundary", () => {
         headers: trustedHeaders("Angebots-Mitarbeiter")
       });
 
-      expect(response.statusCode).toBe(401);
+      expect(response.statusCode).toBe(403);
       expect(response.json()).toEqual({ message: "Ungültige Sitzung." });
       expect(storeAccess).not.toHaveBeenCalled();
     } finally {
@@ -79,7 +79,7 @@ describe("hosted builder actor boundary", () => {
         headers: trustedHeaders("Betriebs-/Audit-Operator")
       });
 
-      expect(response.statusCode).toBe(401);
+      expect(response.statusCode).toBe(403);
       expect(response.json()).toEqual({ message: "Ungültige Sitzung." });
       expect(storeAccess).not.toHaveBeenCalled();
     } finally {
@@ -97,7 +97,7 @@ describe("hosted builder actor boundary", () => {
         headers: trustedHeaders("Angebots-Mitarbeiter")
       });
 
-      expect(response.statusCode).toBe(401);
+      expect(response.statusCode).toBe(403);
       expect(response.json()).toEqual({ message: "Ungültige Sitzung." });
       expect(storeAccess).not.toHaveBeenCalled();
     } finally {

@@ -507,9 +507,9 @@ async function inject(
     headers?: Record<string, string>;
     payload?: object | string | Buffer;
   }
-): Promise<{ statusCode: number; json: <T = unknown>() => T }> {
+): Promise<{ statusCode: number; headers: Record<string, string | string[] | number | undefined>; json: <T = unknown>() => T }> {
   return (app as {
-    inject: (input: typeof options) => Promise<{ statusCode: number; json: <T = unknown>() => T }>;
+    inject: (input: typeof options) => Promise<{ statusCode: number; headers: Record<string, string | string[] | number | undefined>; json: <T = unknown>() => T }>;
   }).inject(options);
 }
 
@@ -679,7 +679,9 @@ describe("mutating MVP route auth matrix", () => {
           payload: routePayload(route) as object | string | Buffer | undefined
         });
 
-        expect(response.statusCode).toBe(401);
+        expect(response.statusCode).toBe(403);
+        expect(response.headers["x-catering-session-status"]).toBe("required");
+        expect(response.headers["www-authenticate"]).toBeUndefined();
       } finally {
         await app.close();
       }
@@ -702,6 +704,7 @@ describe("mutating MVP route auth matrix", () => {
         });
 
         expect(response.statusCode).toBe(403);
+        expect(response.headers["x-catering-session-status"]).toBeUndefined();
       } finally {
         await app.close();
       }

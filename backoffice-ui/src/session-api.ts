@@ -1,3 +1,4 @@
+import { CATERING_SESSION_REQUIRED_HEADER, CATERING_SESSION_REQUIRED_VALUE } from "../../shared-core/src/catering-browser-session.js";
 import {
   MINIMAL_MVP_CAPABILITIES,
   type MinimalMvpCapability
@@ -126,13 +127,19 @@ export function subscribeCateringSessionInvalidation(listener: () => void): () =
   return () => sessionInvalidationListeners.delete(listener);
 }
 
+function isSessionRequiredResponse(response: Response): boolean {
+  // Keep 401 support while old services are still present during an update.
+  return response.status === 401 || (response.status === 403
+    && response.headers.get(CATERING_SESSION_REQUIRED_HEADER) === CATERING_SESSION_REQUIRED_VALUE);
+}
+
 /** Fail closed on an expired Fachrequest without letting an old aborted request invalidate a newer session. */
 export function assertCateringSessionBoundResponse(
   response: Response,
   signal?: AbortSignal | null
 ): void {
   if (signal?.aborted) throw sessionEndedError();
-  if (response.status !== 401) return;
+  if (!isSessionRequiredResponse(response)) return;
 
   deactivateCateringSessionRequests();
   for (const listener of [...sessionInvalidationListeners]) listener();
@@ -142,7 +149,7 @@ export function assertCateringSessionBoundResponse(
 export async function resolveCateringSession(): Promise<CateringSessionResolution> {
   try {
     const response = await fetch(SESSION_ENDPOINT, buildCateringBrowserRequestInit());
-    if (response.status === 401) return { kind: "unauthenticated" };
+    if (isSessionRequiredResponse(response)) return { kind: "unauthenticated" };
     if (!response.ok) return { kind: "unavailable" };
     const session = parseSession(await response.json());
     return session ? { kind: "authenticated", session } : { kind: "unavailable" };

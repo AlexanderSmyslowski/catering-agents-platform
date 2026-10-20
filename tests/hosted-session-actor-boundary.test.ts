@@ -104,7 +104,11 @@ describe("hosted session actor boundary", () => {
       print.inject({ method: "GET", url: "/v1/exports/offers/missing/html", headers: historicalHeaders })
     ]);
 
-    expect(responses.map((response) => response.statusCode)).toEqual([401, 401, 401, 401]);
+    expect(responses.map((response) => response.statusCode)).toEqual([403, 403, 403, 403]);
+    for (const response of responses) {
+      expect(response.headers["x-catering-session-status"]).toBe("required");
+      expect(response.headers["www-authenticate"]).toBeUndefined();
+    }
     expect(intakeRead).not.toHaveBeenCalled();
     expect(offerRead).not.toHaveBeenCalled();
     expect(productionRead).not.toHaveBeenCalled();
@@ -131,7 +135,11 @@ describe("hosted session actor boundary", () => {
       print.inject({ method: "GET", url: "/v1/exports/production-plans/missing/html", headers })
     ]);
 
-    expect(responses.map((response) => response.statusCode)).toEqual([401, 401, 401, 401]);
+    expect(responses.map((response) => response.statusCode)).toEqual([403, 403, 403, 403]);
+    for (const response of responses) {
+      expect(response.headers["x-catering-session-status"]).toBe("required");
+      expect(response.headers["www-authenticate"]).toBeUndefined();
+    }
     expect(intakeRead).not.toHaveBeenCalled();
     expect(offerRead).not.toHaveBeenCalled();
     expect(productionRead).not.toHaveBeenCalled();

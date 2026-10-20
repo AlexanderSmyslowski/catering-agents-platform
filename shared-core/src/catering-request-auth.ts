@@ -15,6 +15,7 @@ import {
   type CateringSessionClaims
 } from "./catering-session-auth.js";
 import type { TrustedActor } from "./access-control.js";
+import { CATERING_SESSION_REQUIRED_HEADER, CATERING_SESSION_REQUIRED_VALUE } from "./catering-browser-session.js";
 
 export interface CateringJwtRequest {
   jwtVerify<Claims extends object>(options: { onlyCookie: true }): Promise<Claims>;
@@ -266,7 +267,8 @@ export function registerCateringRequestAuth(input: RegisterCateringRequestAuthIn
       }
       requestAuth.attachActor(request, actor);
     } catch {
-      return reply.code(401).send({ message: "Ungültige Sitzung." });
+      return reply.header(CATERING_SESSION_REQUIRED_HEADER, CATERING_SESSION_REQUIRED_VALUE)
+        .code(403).send({ message: "Ungültige Sitzung." });
     }
   });
   return requestAuth;

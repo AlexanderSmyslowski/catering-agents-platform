@@ -46,6 +46,12 @@ function jsonResponse(payload: unknown, status = 200) {
   return Response.json(payload, { status });
 }
 
+function sessionRequiredResponse() {
+  return Response.json({ message: "Ungültige Sitzung." }, {
+    status: 403, headers: { "x-catering-session-status": "required" }
+  });
+}
+
 function offerRouteResponse(url: string) {
   if (url.endsWith("/api/offers/v1/offers/cases")) {
     return jsonResponse({ items: [] });
@@ -118,13 +124,13 @@ afterEach(() => {
 });
 
 describe("Catering session boundary", () => {
-  it("shows only Kennung and PIN after a 401 without starting a Fachloader", async () => {
+  it.each([401, 403])("shows only Kennung and PIN after a session denial %s without starting a Fachloader", async (status) => {
     const calls: Array<{ url: string; init?: RequestInit }> = [];
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       calls.push({ url, init });
       if (url.endsWith("/api/intake/v1/auth/session")) {
-        return jsonResponse({ message: "Ungültige Sitzung." }, 401);
+        return status === 403 ? sessionRequiredResponse() : jsonResponse({ message: "Ungültige Sitzung." }, 401);
       }
       return offerRouteResponse(url);
     }));
@@ -139,6 +145,13 @@ describe("Catering session boundary", () => {
     expect(calls.map(({ url }) => url)).toEqual(["/api/intake/v1/auth/session"]);
     expect(calls[0]?.init?.credentials).toBe("same-origin");
     expect(forbiddenIdentityHeaders(calls[0]?.init)).toEqual([]);
+  });
+
+  it("does not mistake an unmarked access denial for a missing session", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ message: "Zugriff verweigert." }, 403)));
+    const container = await renderApp();
+    expect(container.textContent).toContain("Anwendung ist derzeit nicht verfügbar");
+    expect(container.querySelector("input[name='pin']")).toBeNull();
   });
 
   it.each([
@@ -337,14 +350,14 @@ describe("Catering session boundary", () => {
     expect(JSON.stringify(storageWrites)).not.toMatch(/server-token-must-be-ignored|123456|admin|actor/iu);
   });
 
-  it("uses one generic login error without exposing backend or account details", async () => {
+  it.each([403, 429])("uses one generic login error without exposing backend or account details (%s)", async (status) => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith("/api/intake/v1/auth/session")) {
         return jsonResponse({ message: "Ungültige Sitzung." }, 401);
       }
       if (url.endsWith("/api/intake/v1/auth/login")) {
-        return jsonResponse({ message: "Konto ANNA-01 ist gesperrt; Rate-Limit intern 57" }, 429);
+        return jsonResponse({ message: "Konto ANNA-01 ist gesperrt; Rate-Limit intern 57" }, status);
       }
       return offerRouteResponse(url);
     }));
@@ -367,7 +380,8 @@ describe("Catering session boundary", () => {
   });
 
   it.each([
-    ["JSON API", () => createAcceptedSpecFromText("Sitzung abgelaufen")],
+    ["JSON API legacy", () => createAcceptedSpecFromText("Sitzung abgelaufen"), 401],
+    ["JSON API", () => createAcceptedSpecFromText("Sitzung abgelaufen"), 403],
     ["document upload", () => createAcceptedSpecFromDocument(
       new File(["Dokument"], "auftrag.pdf", { type: "application/pdf" }),
       "pdf_upload"
@@ -380,7 +394,7 @@ describe("Catering session boundary", () => {
       new File(["Rezept"], "rezept.txt", { type: "text/plain" })
     )],
     ["quantity API", () => fetchProductionQuantityWorkflow("production-case-expired")]
-  ])("unmounts loaded Fachdata and closes the request gate after a later %s 401", async (_label, issueRequest) => {
+  ])("unmounts loaded Fachdata and closes the request gate after a later %s session rejection", async (_label, issueRequest, status = 403) => {
     const calls: Array<{ url: string; init?: RequestInit }> = [];
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
@@ -405,7 +419,7 @@ describe("Catering session boundary", () => {
         url.endsWith("/api/offers/v1/offers/recipes/upload") ||
         url.endsWith("/api/production/v1/production/cases/production-case-expired/quantity-workflow")
       ) {
-        return jsonResponse({ message: "Veraltete Sitzung mit interner Diagnose" }, 401);
+        return status === 401 ? jsonResponse({ message: "Veraltete Sitzung mit interner Diagnose" }, 401) : sessionRequiredResponse();
       }
       return offerRouteResponse(url);
     }));
@@ -437,7 +451,21 @@ describe("Catering session boundary", () => {
     expect(calls).toHaveLength(callCountAfterInvalidation);
   });
 
-  it("does not let an aborted request generation invalidate a newly authenticated session", async () => {
+  it("keeps the signed-in UI and future requests alive after an ordinary capability denial", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/intake/v1/auth/session")) return jsonResponse(authenticatedSession);
+      if (url.includes("search=forbidden")) return jsonResponse({ message: "Nicht erlaubt." }, 403);
+      return offerRouteResponse(url);
+    }));
+    const container = await renderApp();
+    await expect(loadOfferCaseSummaries("forbidden")).rejects.toMatchObject({ status: 403 });
+    expect(container.textContent).toContain("Anna Beispiel");
+    expect(container.querySelector("input[name='pin']")).toBeNull();
+    await expect(loadOfferCaseSummaries()).resolves.toEqual([]);
+  });
+
+  it.each([401, 403])("does not let an aborted request generation invalidate a newly authenticated session (%s)", async (status) => {
     const calls: Array<{ url: string; init?: RequestInit }> = [];
     let resolveOldResponse!: (response: Response) => void;
     const oldResponse = new Promise<Response>((resolve) => {
@@ -485,7 +513,7 @@ describe("Catering session boundary", () => {
     expect(container.textContent).toContain("Angebotsassistent");
 
     await act(async () => {
-      resolveOldResponse(jsonResponse({ message: "Alte Sitzung" }, 401));
+      resolveOldResponse(status === 401 ? jsonResponse({ message: "Alte Sitzung" }, 401) : sessionRequiredResponse());
       await settle(8);
     });
 
