@@ -523,7 +523,7 @@ describe("independent product loader boundaries", () => {
       activeCaseIds.push(activeCaseId);
       // The shell displays the case-bound draft, never an arbitrary global draft.
       return {
-        ...offerProductData(offerDraft("unrelated-draft", "Fremdes Angebot")),
+        ...(offerProductData(offerDraft("unrelated-draft", "Fremdes Angebot")) as api.OfferProductData),
         workspace: {
           cases: [], activeEvents: [], activeSources: [],
           ...(activeCaseId ? {
