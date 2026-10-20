@@ -580,6 +580,9 @@ function ProductWorkspaceView({
     const copied = route === "offer"
       ? await copyOfferCase(caseId)
       : await copyProductionCase(caseId);
+    setHistoryItems(items => [copied.case, ...items.filter(item => item.caseId !== copied.case.caseId)]);
+    // Copying can finish after the operator has started a new input or editor.
+    if (!historySwitchGuardRef.current?.()) return;
     if (route === "offer") {
       setActiveOfferCaseId(copied.case.caseId);
     } else {
@@ -587,7 +590,6 @@ function ProductWorkspaceView({
     }
     setHistorySearch("");
     setHistoryServerFiltered(false);
-    setHistoryItems([copied.case, ...historyItems.filter((item) => item.caseId !== copied.case.caseId)]);
     await refreshDashboard();
   };
 
@@ -668,6 +670,12 @@ function ProductWorkspaceView({
     }
     return true;
   }
+  const historySwitchGuardRef = useRef<(() => boolean) | undefined>(canChangeHistoryCase);
+  historySwitchGuardRef.current = canChangeHistoryCase;
+  useEffect(() => {
+    historySwitchGuardRef.current = canChangeHistoryCase;
+    return () => { historySwitchGuardRef.current = undefined; };
+  }, []);
   function clearSourceInputs() {
     setOfferText("");
     stagedOfferTextRequestRef.current = undefined;

@@ -34,8 +34,10 @@ describe("case history in the rendered offer route", () => {
     window.history.replaceState({}, "", "/");
   });
 
-  it("opens only the selected case and copies through the product-scoped route", async () => {
+  it.each([false, true])("opens only the selected case and protects inputs while copying (delayed=%s)", async (copyDelayed) => {
     const cases = [caseSummary("case-a", "Fall A"), caseSummary("case-b", "Fall B")];
+    let releaseCopy: () => void = () => undefined;
+    const copyBarrier = copyDelayed ? new Promise<void>(resolve => { releaseCopy = resolve; }) : Promise.resolve();
     const calls: Array<{ method: string; url: string }> = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
@@ -64,6 +66,7 @@ describe("case history in the rendered offer route", () => {
         });
       }
       if (method === "POST" && url.endsWith("/api/offers/v1/offers/cases/case-a/copies")) {
+        await copyBarrier;
         const copied = caseSummary("case-copy", "Fall A (Kopie)");
         cases.unshift(copied);
         return Response.json({ case: copied, events: [] }, { status: 201 });
@@ -156,6 +159,25 @@ describe("case history in the rendered offer route", () => {
       (container.querySelector("button[data-action='copy-case']") as HTMLButtonElement).click();
       await flush();
     });
+    if (copyDelayed) {
+      container.querySelector<HTMLDetailsElement>(".offer-composer")!.open = true;
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(requestInput, "Neue Eingabe während Kopieren");
+        requestInput.dispatchEvent(new Event("input", { bubbles: true }));
+        await flush();
+        releaseCopy();
+        await flush();
+      });
+      expect(container.querySelector('[aria-label="Geöffneter Auftrag"] h2')?.textContent).toBe("Fall A");
+      expect(requestInput.value).toBe("Neue Eingabe während Kopieren");
+      expect(calls.some(({ method, url }) => method === "GET" && url.endsWith("/cases/case-copy"))).toBe(false);
+      await act(async () => {
+        (Array.from(container.querySelectorAll("button")).find(button => button.textContent === "Eingabefelder leeren") as HTMLButtonElement).click();
+        await flush();
+        (openButtons()[0] as HTMLButtonElement).click();
+        await flush();
+      });
+    }
     expect(calls.some(({ method, url }) => method === "POST" && url.endsWith("/cases/case-a/copies"))).toBe(true);
     expect(calls.some(({ method, url }) => method === "GET" && url.endsWith("/cases/case-copy"))).toBe(true);
     expect(container.textContent).toContain("Fall A (Kopie)");
