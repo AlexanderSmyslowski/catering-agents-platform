@@ -30,6 +30,7 @@ export type ProductionWorkbenchNextStep = {
 
 export type ProductionWorkbenchSlots = {
   inputSlot: ReactNode;
+  planningSlot?: ReactNode;
   questionsSlot: ReactNode;
   productionObjectsSlot: ReactNode;
   purchaseListSlot: ReactNode;
@@ -268,6 +269,7 @@ export function ProductionConversationalWorkbench({
       {hasActiveContext ? (
         <>
           <div className="production-progressive-zone">
+        {slots.planningSlot}
         <details className="progressive-panel" open={questionCount > 0}>
           <summary>
             <span>Rückfragen und Antworten</span>
