@@ -1,6 +1,10 @@
-import { createElement } from "react";
+// @vitest-environment jsdom
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import * as api from "../backoffice-ui/src/api.js";
+import * as session from "../backoffice-ui/src/session-boundary.js";
 import {
   ProductionRouteMainLayout,
   type ProductionRouteMainLayoutProps
@@ -201,6 +205,41 @@ function buildProps(
 }
 
 describe("production route main layout", () => {
+  it("keeps event recipe checks visible when no clarification questions remain", async () => {
+    const props = buildProps({ activeProductionCaseId: "synthetic-planning-case" });
+    const sessionSpy = vi.spyOn(session, "useCateringSession").mockReturnValue({
+      session: { authenticated: true, user: { userId: "synthetic-user", displayName: "Synthetischer Test" }, access: { capabilities: [] } },
+      logout: vi.fn()
+    });
+    const draftSpy = vi.spyOn(api, "loadProductionDrafts").mockResolvedValue({
+      items: [{ draftId: "synthetic-draft", revision: 1, status: "pending_review", createdAt: "2026-10-21",
+        source: { sourceRef: "offer-handoff:synthetic" }, reviewCards: [],
+        draftArtifacts: { eventSpec: { specId: "synthetic-spec", attendees: { expected: 100 },
+          servicePlan: { eventType: "conference", serviceForm: "buffet" },
+          menuPlan: [{ componentId: "main", label: "Synthetisches Hauptgericht", servings: 55,
+            productionDecision: { mode: "scratch" } }] } } }],
+      planningEvidence: [], planningRecipes: []
+    });
+    const recipesSpy = vi.spyOn(api, "loadProductionRecipeLibrary").mockResolvedValue({ items: [] });
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    try {
+      await act(async () => root.render(createElement(ProductionRouteMainLayout, props)));
+      const planning = container.querySelector('[aria-label="Rezept und Mengenplanung"]');
+      expect(planning).not.toBeNull();
+      expect(planning?.textContent).toContain("Synthetisches Hauptgericht");
+      expect(planning?.textContent).toContain("Bibliotheksfreigabe, Allergenverifizierung und endgültige Produktionsfreigabe");
+      expect(container.querySelector('details.progressive-panel')?.hasAttribute("open")).toBe(false);
+      expect(planning?.closest("details")).toBeNull();
+      expect(draftSpy).toHaveBeenCalledWith("synthetic-planning-case");
+    } finally {
+      await act(async () => root.unmount());
+      container.remove();
+      sessionSpy.mockRestore(); draftSpy.mockRestore(); recipesSpy.mockRestore();
+    }
+  });
+
   it("uses the selected plan spec for the upload summary without focusing the question panel", () => {
     const markup = renderToStaticMarkup(createElement(ProductionRouteMainLayout, buildProps()));
 

@@ -141,10 +141,12 @@ export function ProductionRouteMainLayout({
             />
           </div>
         ),
+        planningSlot: (
+          <ProductionPlanningEvidencePanel caseId={activeProductionCaseId}
+            submitting={submitting} onChanged={questionActions.refreshAfterDraftDecision} />
+        ),
         questionsSlot: (
           <div className="production-column production-column--questions">
-            <ProductionPlanningEvidencePanel caseId={activeProductionCaseId}
-              submitting={submitting} onChanged={questionActions.refreshAfterDraftDecision} />
             <ProductionQuestionPanel
               activeCaseId={activeProductionCaseId}
               questionState={questionState}
