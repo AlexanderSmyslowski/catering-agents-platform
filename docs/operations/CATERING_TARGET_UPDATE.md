@@ -496,6 +496,18 @@ des bereits gebundenen readonly-Sites-Mountpoints. Andere CA-/Datei-/Mountänder
 bleiben HOLD. Die Beobachtung ist Bestandteil des unveränderten Vorher-/Nachher-
 Vergleichs; keine generelle Pfadfreigabe und kein `caddy trust`-Aufruf.
 
+Zusätzlich sind die regulär installierten Vorgänger PR735 (Manifest
+`73d8886d9479b2930c08f7da14a37187ca97441168297ecbe0cadf82027199ce`)
+und Produkt-/Operationscommit `3d287d83ef489bda6bcf581b5e93e0b1009d5639`
+(Manifest `1361de764a3bb012ede94b2c6d29a8dd0d7bdd0ad2a99d7162509e47ae99c3b4`)
+explizit gebunden. Für beide gelten feste Helper- und Runtime-/Web-Identitäten,
+vollständige Bundleprüfung sowie zusammenpassende Stage-, Baseline-, Installed-
+und Candidate-Compose-Belege. Der jeweilige angenommene Helper prüft den realen
+Runtimezustand lesend; anschließend gelten dieselben Quellen-/Mount-/Kommando-/
+Caddyprüfungen. Ein fremdes oder unvollständiges `installed.json` erweitert diese
+Liste nicht. Die ursprünglichen Buildbasen und alle neuen Stage-/Apply-Gates
+bleiben unverändert. Lokale Tests ersetzen keinen tatsächlichen Folgebuild.
+
 Ein vorhandener autorisierter Mac-Dockerbestand kann alternativ `nue-bundle` mit
 denselben Produkt-/Operations-/Quellparametern, `--output-dir`, `--node-base` und
 `--caddy-base` verwenden. Jeder neue Bundleaufbau bindet direkt die tatsächlichen

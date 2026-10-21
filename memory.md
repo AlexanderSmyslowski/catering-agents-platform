@@ -1,3 +1,18 @@
+## Nürnberger Folgeupdate nach PR737/738 — 21.10.2026
+
+Entwicklungsbasis ist main `681213b775851d32fe2c5823a229b7f5b3d739d8` (PR739).
+Der Updatehelfer akzeptiert zusätzlich ausschließlich den belegten installierten
+Vorgänger `3d287d83ef489bda6bcf581b5e93e0b1009d5639` / Manifest
+`1361de764a3bb012ede94b2c6d29a8dd0d7bdd0ad2a99d7162509e47ae99c3b4`.
+Vollständige Bundle-, Helper-, Receipt-, Runtime- und Quellenprüfungen bleiben
+erforderlich; unbekannte Vorgänger bleiben gesperrt. Details und Prüfgrenzen:
+[Updatevertrag](docs/operations/CATERING_TARGET_UPDATE.md).
+
+Diese lokale Korrektur ist noch kein Installationsnachweis. Vor Ausführung
+bleiben reguläre Annahme/CI, aktuelle Nürnberg-Zugangsbindung und vollständiger
+frischer Backup-/Restore-/Vergleichs-/Cleanupbeleg erforderlich. Historische
+Helsinki-Bindungen und akzeptierte Pakete werden nicht umgeschrieben.
+
 ## Bestehenden PR735-Stand als Updatevorgänger nachweisen — Version 5.494 / 21.10.2026
 
 Versionierter Zwischenstand und aktuelle Übergabe: [Checkpoint](docs/agent-memory/CHECKPOINT_2026-10-21_PR735_FOLLOWUP_UPDATE.md).
