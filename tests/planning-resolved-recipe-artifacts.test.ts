@@ -96,7 +96,7 @@ describe("planning resolved recipe artifacts", () => {
       batchId: "batch-spec-resolved-artifacts-component-tomato-soup",
       componentId: "component-tomato-soup",
       recipeId: "recipe-tomato-soup",
-      station: "hot-kitchen",
+      station: "Vorschlag: Warme Küche (ungeprüft)",
       prepWindow: "2026-06-01 T-1",
       gnPlan: [{ container: "GN 1/2", count: 2 }]
     });
@@ -104,7 +104,7 @@ describe("planning resolved recipe artifacts", () => {
       title: "Tomatensuppe - Tomatensuppe Bankett",
       componentId: "component-tomato-soup",
       recipeId: "recipe-tomato-soup",
-      station: "hot-kitchen",
+      station: "Vorschlag: Warme Küche (ungeprüft)",
       prepWindow: "2026-06-01 T-1",
       allergens: ["celery"],
       dietTags: ["vegetarian"],

@@ -232,6 +232,7 @@ export const commonSchema = {
         menuCategory: { enum: ["classic", "vegetarian", "vegan"] },
         serviceStyle: { type: "string" },
         recipeOverrideId: { type: "string" },
+        productionStation: { enum: ["hot-kitchen", "cold-kitchen", "beverage-station", "pastry"] },
         desiredRecipeTags: {
           type: "array",
           items: { type: "string" }

@@ -74,6 +74,7 @@ function buildClassificationUpdate(context: ProductionDraftEditContext, update: 
     if (changed("purchasedElements")) patch.purchasedElements = component.purchasedElements ?? [];
     if (changed("purchasedQuantities")) patch.purchasedQuantities = component.purchasedQuantities;
     if (changed("recipeOverrideId")) patch.recipeOverrideId = component.recipeOverrideId ?? "";
+    if (changed("productionStation")) patch.productionStation = component.productionStation ?? "";
     if (changed("notes")) patch.notes = component.notes ?? "";
     if (Object.keys(patch).length > 1) componentUpdates.push(patch);
   }

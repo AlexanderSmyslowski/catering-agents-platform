@@ -21,6 +21,7 @@ export type SpecEditComponentUpdate = {
   purchasedElements?: string[];
   purchasedQuantities?: PurchasedQuantity[];
   recipeOverrideId?: string;
+  productionStation?: "" | "hot-kitchen" | "cold-kitchen" | "beverage-station" | "pastry";
   notes?: string;
 };
 
@@ -87,8 +88,13 @@ export function buildSpecEditUpdateInput(state: SpecEditUpdateFormState): SpecEd
       if (purchasedQuantities !== undefined && !validPurchasedQuantities({ purchasedElements, purchasedQuantities })) {
         throw new Error("Zukaufmengen benötigen je Bestandteil eine positive endliche Menge pro Person und eine Einheit.");
       }
+      const station = componentState.productionStation;
+      if (station !== undefined && !["", "hot-kitchen", "cold-kitchen", "beverage-station", "pastry"].includes(station)) {
+        throw new Error("Arbeitsbereich bitte aus der Liste wählen oder offen lassen.");
+      }
       return {
         componentId,
+        ...(station !== undefined ? { productionStation: station as SpecEditComponentUpdate["productionStation"] } : {}),
         menuCategory: parseMenuCategory(componentState.menuCategory),
         productionMode: parseProductionMode(componentState.productionMode),
         purchasedElements,

@@ -28,6 +28,8 @@ export function ProductionComponentAnswerCard({
       <ProductionComponentClassificationFields
         menuCategory={state.menuCategory}
         productionMode={state.productionMode}
+        productionStation={state.productionStation}
+        onProductionStationChange={productionStation => updateEditingComponentState(componentId, { productionStation })}
         onMenuCategoryChange={(menuCategory) =>
           updateEditingComponentState(componentId, {
             menuCategory

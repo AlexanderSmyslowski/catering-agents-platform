@@ -29,6 +29,7 @@ export interface SpecUpdateBody {
     productionMode?: "scratch" | "hybrid" | "convenience_purchase" | "external_finished";
     purchasedElements?: string[];
     recipeOverrideId?: string;
+    productionStation?: "" | "hot-kitchen" | "cold-kitchen" | "beverage-station" | "pastry";
     notes?: string;
   }>;
 }

@@ -375,6 +375,10 @@ function applySpecUpdates(
     return componentUpdate.recipeOverrideId?.trim() || undefined;
   };
 
+  const nextStation = (componentId: string, current?: AcceptedEventSpec["menuPlan"][number]["productionStation"]) => {
+    const patch = componentUpdates.get(componentId);
+    return patch && Object.prototype.hasOwnProperty.call(patch, "productionStation") ? patch.productionStation || undefined : current;
+  };
   const nextSpec = {
     ...spec,
     event: {
@@ -406,6 +410,7 @@ function applySpecUpdates(
                 ? dietaryTagsForCategory(componentUpdates.get(item.componentId)?.menuCategory)
                 : item.dietaryTags,
             recipeOverrideId: nextRecipeOverrideId(item.componentId, item.recipeOverrideId),
+            productionStation: nextStation(item.componentId, item.productionStation),
             productionDecision: componentUpdates.get(item.componentId)
               ? {
                   mode: componentUpdates.get(item.componentId)?.productionMode,
@@ -432,6 +437,7 @@ function applySpecUpdates(
               spec.menuPlan[index]?.componentId ?? "",
               spec.menuPlan[index]?.recipeOverrideId
             ),
+            productionStation: nextStation(spec.menuPlan[index]?.componentId ?? "", spec.menuPlan[index]?.productionStation),
             productionDecision:
               componentUpdates.get(spec.menuPlan[index]?.componentId ?? "")
                 ? {

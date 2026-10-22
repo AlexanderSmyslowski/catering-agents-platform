@@ -318,7 +318,7 @@ function isAuthorizedProductionAmendment(previous: AcceptedEventSpec, next: Acce
   for (const [index, component] of expected.menuPlan.entries()) {
     const successor = next.menuPlan[index]!;
     if (component.componentId !== successor.componentId) return false;
-    for (const key of ["menuCategory", "recipeOverrideId"]) copyField(component, successor, key);
+    for (const key of ["menuCategory", "recipeOverrideId", "productionStation"]) copyField(component, successor, key);
     if (successor.productionDecision) {
       const decision = { ...component.productionDecision };
       for (const key of ["mode", "purchasedElements", "purchasedQuantities", "notes"]) {
