@@ -1,3 +1,22 @@
+## Ergänzung22.10.2026 – belegter Nürnberger Vorgänger681213b
+
+Der Imagehelfer erkennt zusätzlich genau den zuletzt tatsächlich installierten
+Nürnberger Produktstand681213b775851d32fe2c5823a229b7f5b3d739d8 mit Operationsstand
+3a1bb5588adc84d205265662c7a30e5196098303 und Manifest
+3eac18160cf862620ce6b4c7843368a5344dbc1f4837b810bb03a36c9a6720df.
+Die Bindung umfasst vor dem Helperimport dessen festen Digest, vollständige
+Bundle-/Quell-/Schema-/OCI-Prüfung, Stage/Baseline/Installed/Candidatebelege und
+anschließend dieselbe laufende Image-/Quellen-/Mount-/Kommando-/Servingprüfung.
+Kein generischer unbekannter Vorgänger und keine historische Apply-Ausführung.
+
+Das ist eine lokale Folgeupdatekorrektur, kein neuer Installations- oder
+Livegesundheitsnachweis. Ziel bleibt Nürnberg catering-prod-02. Helsinki wurde
+endgültig gelöscht; historische Ziel-/Befehlsabschnitte unten sind keine neue
+Ausführungsfreigabe. Vor jeder neuen Installation bleiben frische Zugangs- und
+Providerprüfung, eigener Schreibschutz, aktuelle vollständige Backup→Offhost→
+Restore/Vergleich→Cleanup-Evidenz, reguläre CI-/Releasefreigabe und echter
+Anmeldetest erforderlich. Die6hEvidenz aus5.511 ist abgelaufen.
+
 # CateringOS – eigenständiger Zielserver-Updateweg
 
 **Stand:** 2026-10-03 (P4.1-Korrekturstand)
