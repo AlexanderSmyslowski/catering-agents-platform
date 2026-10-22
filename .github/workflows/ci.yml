@@ -130,7 +130,9 @@ jobs:
       - name: Browser rehearsal
         env:
           npm_config_cache: ${{ runner.temp }}/catering-npm-cache
-        run: timeout 300 npm run browser:rehearsal:full-fresh
+        # Four fresh stacks and desktop/mobile paths need headroom on shared
+        # runners; keep a bounded rehearsal inside the ten-minute job limit.
+        run: timeout 450 npm run browser:rehearsal:full-fresh
 
   compose-render-parity:
     runs-on: ubuntu-latest
