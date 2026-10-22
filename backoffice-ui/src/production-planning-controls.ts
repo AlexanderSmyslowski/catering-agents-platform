@@ -1,3 +1,4 @@
+import { loadProductionDrafts, loadProductionWorkspaceState } from "./api.js";
 import { announceProductionDraftRefresh } from "./production-draft-review-panel.js";
 import {
   buildProductionPlanSubmissionAction,
@@ -73,6 +74,19 @@ export function buildProductionPlanningControls(
       savedPredecessor = input.productionDraftContext;
       contextForPreparation = { caseId: input.productionDraftContext!.caseId, draft };
       input.onDraftRevised?.(draft);
+      input.showProductionDraftReview(draft.draftId);
+      announceProductionDraftRefresh();
+    },
+    loadImportedSpecDrafts: async caseId => (await loadProductionDrafts(caseId)).items,
+    publishAcceptedSpecDraft: async (caseId, spec) => {
+      const imported = (await input.createProductionDraftFromAcceptedEventSpec(caseId, spec)).draft;
+      const workspace = await loadProductionWorkspaceState(caseId);
+      if (workspace.activeCase?.caseId !== caseId || workspace.currentDraft?.draftId !== imported.draftId) {
+        throw new Error("Die Angaben wurden gespeichert, aber der Auftrag zeigt eine andere Prüffassung. Bitte erneut laden und prüfen. Deine Eingaben bleiben erhalten.");
+      }
+      return workspace.currentDraft;
+    },
+    onImportedDraft: draft => {
       input.showProductionDraftReview(draft.draftId);
       announceProductionDraftRefresh();
     },

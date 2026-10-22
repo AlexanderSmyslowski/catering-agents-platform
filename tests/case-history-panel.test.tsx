@@ -44,7 +44,8 @@ describe("case history panel", () => {
     expect(details?.open).toBe(true);
     expect(container.textContent).toContain("Bestehenden Auftrag öffnen");
     expect(container.textContent).toContain("Fall A - Sommerfest");
-    expect(container.textContent).toContain("Als Vorlage für neuen Auftrag");
+    expect(container.textContent).toContain("Neuen Auftrag anlegen");
+    expect(container.textContent).toContain("Anfrage, Leistungen und Freigaben werden nicht kopiert.");
 
     await act(async () => {
       const input = container.querySelector("input") as HTMLInputElement;

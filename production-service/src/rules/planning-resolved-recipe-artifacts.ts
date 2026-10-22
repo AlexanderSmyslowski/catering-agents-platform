@@ -10,7 +10,7 @@ import {
   gnPlanFor,
   prepWindowFor,
   purchasedElementsSummary,
-  stationFor
+  productionStationFor
 } from "./production-sheet-builders.js";
 
 export type ResolvedRecipePlanningArtifacts = {
@@ -42,7 +42,7 @@ export function buildResolvedRecipePlanningArtifacts({
   const batch = {
     batchId,
     ...draftBatch,
-    station: stationFor(component.label),
+    station: productionStationFor(component),
     prepWindow: prepWindowFor(eventSpec),
     gnPlan: gnPlanFor(draftBatch.scaledYield.amount)
   };

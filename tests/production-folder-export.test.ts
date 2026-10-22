@@ -382,7 +382,7 @@ describe("production folder export", () => {
     expect(html).toContain('<html lang="de">');
     expect(html).toContain("<title>CateringOS · Produktionsblatt</title>");
     expect(html).toContain("size: A4; margin: 18mm");
-    expect(html).toContain("Datum: 2026-06-14 · Gäste: 45");
+    expect(html).toContain("Datum: 14.06.2026 · Gäste: 45");
     expect(html).toContain("Kunde: Köpff Testkunde");
     expect(html).toContain("keine Zusicherung von Allergenfreiheit");
     const instruction = input.plan.kitchenSheets[0]!.steps[0]!.instruction;

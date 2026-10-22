@@ -329,7 +329,7 @@ describe("Linux browser rehearsal governance", () => {
     expect(workflow).toContain("npm_config_cache: ${{ runner.temp }}/catering-npm-cache");
     expect(workflow).toContain("npm ci");
     expect(workflow).toContain("chmod +x scripts/ci-browser-cli.sh");
-    expect(workflow).toContain("timeout 300 npm run browser:rehearsal:full-fresh");
+    expect(workflow).toContain("timeout 450 npm run browser:rehearsal:full-fresh");
     expect(workflow).toContain("sudo apt-get install --no-install-recommends -y screen");
     expect(workflow).toContain("screen --version");
     expect(workflow).toContain("browser:rehearsal:full-fresh");

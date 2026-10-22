@@ -1,4 +1,5 @@
 import { renderOfferPricingHtml } from "./offer-pricing-html.js";
+import { formatDocumentDate, formatPreparationWindow } from "./document-labels.js";
 import {
   buildProductionClarificationQuestions,
   productionContextNotes,
@@ -180,7 +181,7 @@ function renderSection1(spec: AcceptedEventSpec): string {
   return `<section><h2>1. Eckpunkte</h2><table class="facts"><tbody>${[
     row("Eventtyp", eventType),
     row("Serviceform", serviceForm),
-    row("Datum", spec.event.date),
+    row("Datum", formatDocumentDate(spec.event.date)),
     row("Personenzahl", spec.attendees.expected ? String(spec.attendees.expected) : undefined),
     row("Kunde", customer),
     row("Ort", venue || undefined),
@@ -422,7 +423,7 @@ function renderTimeline(plan: ProductionPlan, eventDate?: string): string {
   return ["Vortag", "Veranstaltungstag"].map((group) => {
     const entries = grouped.filter((item) => item.group === group).map((item) => item.entry);
     return entries.length > 0
-      ? `<h3>${group}</h3><ul>${entries.map((entry) => `<li>${escapeHtml(entry.at)} · ${escapeHtml(entry.label)}</li>`).join("")}</ul>`
+      ? `<h3>${group}</h3><ul>${entries.map((entry) => `<li>${escapeHtml(formatPreparationWindow(entry.at, eventDate))} · ${escapeHtml(entry.label)}</li>`).join("")}</ul>`
       : "";
   }).join("");
 }
@@ -477,7 +478,7 @@ function headerMeta(spec: AcceptedEventSpec): string {
   return [
     spec.customer?.name,
     spec.venue?.name ?? spec.venue?.address,
-    spec.event.date,
+    formatDocumentDate(spec.event.date),
     spec.attendees.expected ? `${spec.attendees.expected} Personen` : undefined
   ]
     .filter(Boolean)
@@ -492,6 +493,7 @@ export function renderProductionFolderHtml(input: RenderProductionFolderInput): 
   return `<!doctype html><html lang="de"><head><meta charset="utf-8"><title>Produktionsmappe – Rezeptkarten und aufsummierte Einkaufsliste</title><style>
 @page { size: A4; margin: 18mm; }
 body { color: #1f2933; font-family: Inter, Arial, sans-serif; font-size: 12px; line-height: 1.45; margin: 0; }
+.offer-pricing .money, .offer-pricing .quantity { white-space: nowrap; font-variant-numeric: tabular-nums; }
 header.document-header { border-bottom: 1px solid #cbd5df; margin-bottom: 18px; padding-bottom: 10px; }
 h1 { font-size: 22px; font-weight: 700; margin: 0 0 6px; }
 h2 { border-bottom: 1px solid #d9e2ec; font-size: 15px; margin: 22px 0 8px; padding-bottom: 4px; }

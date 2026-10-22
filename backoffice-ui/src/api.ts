@@ -925,6 +925,7 @@ export async function updateAcceptedSpec(
       productionMode?: "scratch" | "hybrid" | "convenience_purchase" | "external_finished";
       purchasedElements?: string[];
       recipeOverrideId?: string;
+      productionStation?: "" | "hot-kitchen" | "cold-kitchen" | "beverage-station" | "pastry";
       notes?: string;
     }>;
   }
@@ -1099,6 +1100,7 @@ export type ProductionDraftClassificationUpdate = {
     purchasedElements?: string[];
     purchasedQuantities?: PurchasedQuantity[];
     recipeOverrideId?: string;
+    productionStation?: "" | "hot-kitchen" | "cold-kitchen" | "beverage-station" | "pastry";
     notes?: string;
   }>;
   eventSchedule?: Array<{ label: string; start?: string; end?: string }>;

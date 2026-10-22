@@ -223,6 +223,7 @@ describe("backoffice internal usage smoke", () => {
     let currentPurchaseList = undefined as typeof artifacts.purchaseList | undefined;
     let activeProductionCaseId: string | undefined;
     let productionDrafts: ProductionDraft[] = [];
+    const importedSpecSnapshots: Array<typeof fixture.spec> = [];
     let createdPlanViaPost = false;
     const fetchCalls: Array<{ method: string; url: string; body?: unknown }> = [];
 
@@ -525,6 +526,8 @@ describe("backoffice internal usage smoke", () => {
         }
 
         if (method === "POST" && url.endsWith("/api/production/v1/production/drafts")) {
+          const importedSpec = structuredClone(currentSpec ?? fixture.plannedSpec);
+          importedSpecSnapshots.push(importedSpec);
           const importedDraft: ProductionDraft = {
             schemaVersion: SCHEMA_VERSION,
             businessId: "local",
@@ -535,7 +538,7 @@ describe("backoffice internal usage smoke", () => {
             source: {
               kind: "manual_import",
               receivedAt: "2026-04-10T09:34:00.000Z",
-              sourceRef: `spec:${currentSpec?.specId ?? fixture.spec.specId}`
+              sourceRef: `accepted-event-spec:${currentSpec?.specId ?? fixture.spec.specId}`
             },
             guardrails: {
               draftOnly: true,
@@ -546,7 +549,7 @@ describe("backoffice internal usage smoke", () => {
             },
             reviewCards: [],
             draftArtifacts: {
-              eventSpec: currentSpec ?? fixture.plannedSpec
+              eventSpec: importedSpec
             }
           };
           productionDrafts = [importedDraft];
@@ -739,7 +742,9 @@ describe("backoffice internal usage smoke", () => {
     expect(createdPlanViaPost).toBe(false);
     expect(saveAnswersCallIndex).toBeGreaterThanOrEqual(0);
     expect(createCaseCallIndices).toHaveLength(1);
-    expect(importDraftCallIndices).toHaveLength(2);
+    // Saving publishes the changed snapshot; planning requests the same
+    // fingerprinted import again before preparing the reviewed draft.
+    expect(importDraftCallIndices).toHaveLength(3);
     expect(createCaseCallIndices[0]).toBeLessThan(importDraftCallIndices[0]!);
     expect(importDraftCallIndices[0]).toBeLessThan(saveAnswersCallIndex);
     expect(importDraftCallIndices[1]).toBeGreaterThan(saveAnswersCallIndex);
@@ -751,7 +756,12 @@ describe("backoffice internal usage smoke", () => {
       caseId: "production-case-usage",
       specId: fixture.spec.specId
     });
-    expect(prepareDraftCallIndex).toBeGreaterThan(importDraftCallIndices[1]!);
+    expect(fetchCalls[importDraftCallIndices[2]!]?.body).toEqual(fetchCalls[importDraftCallIndices[1]!]?.body);
+    expect(importedSpecSnapshots[0]).toEqual(fixture.spec);
+    expect(importedSpecSnapshots[1]).toEqual(currentSpec);
+    expect(importedSpecSnapshots[2]).toEqual(importedSpecSnapshots[1]);
+    expect(importedSpecSnapshots[1]?.menuPlan[0]?.productionDecision?.mode).toBe("scratch");
+    expect(prepareDraftCallIndex).toBeGreaterThan(importDraftCallIndices[2]!);
     expect(createPlanCallIndex).toBe(-1);
     expect(document.body.textContent ?? "").toContain("Produktionsentwurf wurde vorbereitet und wartet auf Prüfung.");
     expect(document.body.textContent ?? "").toContain("Produktionsplan prüfen");

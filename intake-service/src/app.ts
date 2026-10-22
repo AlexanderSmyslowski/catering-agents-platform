@@ -351,7 +351,12 @@ function applySpecUpdates(
   const nextEventType = body.eventType?.trim() || spec.event.type || spec.servicePlan.eventType;
   const nextServiceForm = body.serviceForm?.trim() || spec.event.serviceForm || spec.servicePlan.serviceForm;
   const nextAttendeeCount = body.attendeeCount ?? spec.attendees.expected;
-  const nextMenuItems = normalizeMenuItems(body.menuItems);
+  const requestedMenuItems = normalizeMenuItems(body.menuItems);
+  // The answer form resends unchanged labels. That is not a replacement menu:
+  // retain component identities, explicit portion splits and recipe metadata.
+  const nextMenuItems = requestedMenuItems?.length === spec.menuPlan.length &&
+    requestedMenuItems.every((label, index) => label === spec.menuPlan[index]?.label)
+    ? undefined : requestedMenuItems;
   const nextEventSchedule = body.eventSchedule !== undefined
     ? normalizeEventSchedule(body.eventSchedule)
     : spec.event.schedule;
@@ -375,6 +380,19 @@ function applySpecUpdates(
     return componentUpdate.recipeOverrideId?.trim() || undefined;
   };
 
+  const nextDecision = (componentId: string, current?: AcceptedEventSpec["menuPlan"][number]["productionDecision"]) => {
+    const patch = componentUpdates.get(componentId);
+    if (!patch || (patch.productionMode === undefined && patch.purchasedElements === undefined && patch.notes === undefined)) return current;
+    return { ...current,
+      ...(patch.productionMode !== undefined ? { mode: patch.productionMode } : {}),
+      ...(patch.purchasedElements !== undefined ? { purchasedElements: patch.purchasedElements } : {}),
+      ...(patch.notes !== undefined ? { notes: patch.notes } : {})
+    };
+  };
+  const nextStation = (componentId: string, current?: AcceptedEventSpec["menuPlan"][number]["productionStation"]) => {
+    const patch = componentUpdates.get(componentId);
+    return patch && Object.prototype.hasOwnProperty.call(patch, "productionStation") ? patch.productionStation || undefined : current;
+  };
   const nextSpec = {
     ...spec,
     event: {
@@ -399,51 +417,49 @@ function applySpecUpdates(
         ? spec.menuPlan.map((item) => ({
             ...item,
             serviceStyle: nextServiceForm,
-            servings: nextAttendeeCount,
+            servings: item.servings === undefined || item.servings === spec.attendees.expected
+              ? nextAttendeeCount : item.servings,
             menuCategory: componentUpdates.get(item.componentId)?.menuCategory ?? item.menuCategory,
             dietaryTags:
               componentUpdates.get(item.componentId)?.menuCategory
                 ? dietaryTagsForCategory(componentUpdates.get(item.componentId)?.menuCategory)
                 : item.dietaryTags,
             recipeOverrideId: nextRecipeOverrideId(item.componentId, item.recipeOverrideId),
-            productionDecision: componentUpdates.get(item.componentId)
-              ? {
-                  mode: componentUpdates.get(item.componentId)?.productionMode,
-                  purchasedElements: componentUpdates.get(item.componentId)?.purchasedElements,
-                  notes: componentUpdates.get(item.componentId)?.notes
-                }
-              : item.productionDecision
+            productionStation: nextStation(item.componentId, item.productionStation),
+            productionDecision: nextDecision(item.componentId, item.productionDecision)
           }))
-        : nextMenuItems.map((label, index) => ({
-            componentId: `${label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "menu"}-${index + 1}`,
+        : nextMenuItems.map((label, index) => {
+            const matches = spec.menuPlan.filter(item => item.label === label);
+            const previous = spec.menuPlan[index]?.label === label ? spec.menuPlan[index]
+              : matches.length === 1 ? matches[0] : undefined;
+            return ({
+            componentId: previous?.componentId ?? `${label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "menu"}-${index + 1}`,
             label,
-            course: spec.menuPlan[index]?.course ?? "main",
+            course: previous?.course ?? "main",
             menuCategory:
-              componentUpdates.get(spec.menuPlan[index]?.componentId ?? "")?.menuCategory ??
-              spec.menuPlan[index]?.menuCategory,
+              componentUpdates.get(previous?.componentId ?? "")?.menuCategory ??
+              previous?.menuCategory,
             serviceStyle: nextServiceForm,
-            desiredRecipeTags: spec.menuPlan[index]?.desiredRecipeTags ?? (nextEventType ? [nextEventType] : []),
-            servings: nextAttendeeCount,
+            desiredRecipeTags: previous?.desiredRecipeTags ?? (nextEventType ? [nextEventType] : []),
+            servings: previous?.servings === undefined || previous.servings === spec.attendees.expected
+              ? nextAttendeeCount : previous.servings,
             dietaryTags:
-              componentUpdates.get(spec.menuPlan[index]?.componentId ?? "")?.menuCategory
-                ? dietaryTagsForCategory(componentUpdates.get(spec.menuPlan[index]?.componentId ?? "")?.menuCategory)
-                : spec.menuPlan[index]?.dietaryTags ?? [],
+              componentUpdates.get(previous?.componentId ?? "")?.menuCategory
+                ? dietaryTagsForCategory(componentUpdates.get(previous?.componentId ?? "")?.menuCategory)
+                : previous?.dietaryTags ?? [],
             recipeOverrideId: nextRecipeOverrideId(
-              spec.menuPlan[index]?.componentId ?? "",
-              spec.menuPlan[index]?.recipeOverrideId
+              previous?.componentId ?? "",
+              previous?.recipeOverrideId
             ),
-            productionDecision:
-              componentUpdates.get(spec.menuPlan[index]?.componentId ?? "")
-                ? {
-                    mode: componentUpdates.get(spec.menuPlan[index]?.componentId ?? "")?.productionMode,
-                    purchasedElements:
-                      componentUpdates.get(spec.menuPlan[index]?.componentId ?? "")?.purchasedElements,
-                    notes: componentUpdates.get(spec.menuPlan[index]?.componentId ?? "")?.notes
-                  }
-                : spec.menuPlan[index]?.productionDecision
-          }))
+            productionStation: nextStation(previous?.componentId ?? "", previous?.productionStation),
+            productionDecision: nextDecision(previous?.componentId ?? "", previous?.productionDecision)
+          });
+          })
   };
 
+  if (new Set(nextSpec.menuPlan.map(item => item.componentId)).size !== nextSpec.menuPlan.length) {
+    throw new Error("Gerichte müssen eindeutig zugeordnet bleiben.");
+  }
   return withEvaluatedReadiness(nextSpec);
 }
 

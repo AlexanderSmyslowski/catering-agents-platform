@@ -17,6 +17,13 @@ export function stationFor(label: string): string {
   return "hot-kitchen";
 }
 
+export function productionStationFor(component: MenuPlanComponent): string {
+  if (component.productionStation) return component.productionStation;
+  // A name-based routing guess is not an operator assignment for this event.
+  const suggestions: Record<string, string> = { "hot-kitchen": "Warme Küche", "cold-kitchen": "Kalte Küche", "beverage-station": "Getränke" };
+  return `Vorschlag: ${suggestions[stationFor(component.label)]} (ungeprüft)`;
+}
+
 export function prepWindowFor(spec: AcceptedEventSpec): string {
   return spec.event.date
     ? `${spec.event.date} T-1`
@@ -74,7 +81,7 @@ export function procurementKitchenSheet(
     title: `${component.label} - ${modeLabel}`,
     componentId: component.componentId,
     productionQty: productionQtyFor(servings),
-    station: stationFor(component.label),
+    station: productionStationFor(component),
     prepWindow: prepWindowFor(spec),
     ingredients: [],
     steps: [],
@@ -97,7 +104,7 @@ export function unresolvedKitchenSheet(
     title: `${component.label} - Rezeptklärung nötig`,
     componentId: component.componentId,
     productionQty: productionQtyFor(servings),
-    station: stationFor(component.label),
+    station: productionStationFor(component),
     prepWindow: prepWindowFor(spec),
     ingredients: [],
     steps: [],

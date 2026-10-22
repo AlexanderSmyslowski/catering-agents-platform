@@ -262,6 +262,7 @@ export interface MenuComponent {
   servings?: number;
   dietaryTags?: string[];
   recipeOverrideId?: string;
+  productionStation?: "hot-kitchen" | "cold-kitchen" | "beverage-station" | "pastry";
   productionDecision?: {
     mode?: "scratch" | "hybrid" | "convenience_purchase" | "external_finished";
     purchasedElements?: string[];

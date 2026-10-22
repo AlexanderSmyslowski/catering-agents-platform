@@ -4164,7 +4164,7 @@ describe("catering agents platform", () => {
     expect(offerExportResponse.body).toContain("<h2>Kalkulation offen</h2>");
     expect(offerExportResponse.body).not.toContain(String(draft.draftId));
     expect(offerExportResponse.body).toContain("Interne Prüfung");
-    expect(offerExportResponse.body).toContain("Kundentext erst nach Publish-Freigabe exportieren.");
+    expect(offerExportResponse.body).toContain("Kundentext erst nach Freigabe zum Versand exportieren.");
     expect(offerExportResponse.body).not.toContain("Vielen Dank");
 
     const partialOfferExportResponse = await exportApp.inject({

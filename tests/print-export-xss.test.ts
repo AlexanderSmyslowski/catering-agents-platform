@@ -111,7 +111,7 @@ describe("print export HTML escaping", () => {
     expect(html).not.toContain("Customer ");
     expect(html).not.toContain("Module ");
     expect(html).not.toContain("Gesamt:");
-    expect(html).toContain("Kundentext erst nach Publish-Freigabe exportieren.");
+    expect(html).toContain("Kundentext erst nach Freigabe zum Versand exportieren.");
   });
 
   it("prints explicit dish portions while retaining the publish gate", () => {
@@ -151,7 +151,7 @@ describe("print export HTML escaping", () => {
     );
 
     expect(html).toContain("Interne Prüfung");
-    expect(html).toContain("Kundentext erst nach Publish-Freigabe exportieren.");
+    expect(html).toContain("Kundentext erst nach Freigabe zum Versand exportieren.");
     expect(html).toContain("Preis: Prüfung nötig");
     expect(html).toContain("MwSt.: Prüfung nötig");
     expect(html).toContain("Allergene: Prüfung nötig");

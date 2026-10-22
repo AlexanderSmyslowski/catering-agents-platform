@@ -1391,10 +1391,6 @@ function ProductWorkspaceView({
       {(route === "offer" ? activeOfferCaseId : activeProductionCaseId) ? <section className="panel current-order-header" aria-label="Geöffneter Auftrag">
         <h2>{activeCase?.displayName ?? "Auftrag geöffnet"}</h2>
         <p role="status">{activeCase ? {open:"Offen",completed:"Abgeschlossen",archived:"Archiviert"}[activeCase.status] : loaderError ? "Auftragsname nicht verfügbar. Der Auftrag bleibt geöffnet." : "Auftragsdaten werden geladen …"}</p>
-        <a className="ghost-link" href="#history" onClick={() => {
-          const history = document.querySelector<HTMLDetailsElement>("#history");
-          if (history) { history.open = true; history.querySelector("summary")?.focus(); }
-        }}>Anderen Auftrag öffnen</a>
       </section> : null}
       {workspaceSearchText ? <p className="workspace-filter-notice" role="status">Ansicht ist gefiltert: „{workspaceSearchText}“ <button type="button" className="secondary-button" onClick={() => setWorkspaceSearchText("")}>Filter aufheben</button></p> : null}
 

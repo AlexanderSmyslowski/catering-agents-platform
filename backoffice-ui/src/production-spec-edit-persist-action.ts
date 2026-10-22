@@ -74,6 +74,7 @@ function buildClassificationUpdate(context: ProductionDraftEditContext, update: 
     if (changed("purchasedElements")) patch.purchasedElements = component.purchasedElements ?? [];
     if (changed("purchasedQuantities")) patch.purchasedQuantities = component.purchasedQuantities;
     if (changed("recipeOverrideId")) patch.recipeOverrideId = component.recipeOverrideId ?? "";
+    if (changed("productionStation")) patch.productionStation = component.productionStation ?? "";
     if (changed("notes")) patch.notes = component.notes ?? "";
     if (Object.keys(patch).length > 1) componentUpdates.push(patch);
   }
@@ -93,6 +94,9 @@ export type ProductionSpecEditPersistActionInput = ProductionQuestionEditSuccess
   getCurrentProductionDraftContext?: () => ProductionDraftEditContext | undefined;
   reviseProductionDraft?: (draftId: string, input: ProductionDraftClassificationUpdate) => Promise<{ draft: ProductionDraft }>;
   onDraftRevised?: (draft: ProductionDraft) => void;
+  loadImportedSpecDrafts?: (caseId: string) => Promise<ProductionDraft[]>;
+  publishAcceptedSpecDraft?: (caseId: string, spec: Record<string, unknown>) => Promise<ProductionDraft>;
+  onImportedDraft?: (draft: ProductionDraft) => void;
   updateAcceptedSpec: (
     specId: string,
     input: SpecEditUpdateInput
@@ -106,6 +110,9 @@ export function buildProductionSpecEditPersistAction({
   getCurrentProductionDraftContext,
   reviseProductionDraft,
   onDraftRevised,
+  publishAcceptedSpecDraft,
+  loadImportedSpecDrafts,
+  onImportedDraft,
   updateAcceptedSpec,
   buildCurrentSpecUpdateInput,
   setProductionWorkspaceCleared,
@@ -146,8 +153,44 @@ export function buildProductionSpecEditPersistAction({
       if (update.componentUpdates?.some(component => component.purchasedQuantities !== undefined)) {
         throw new Error("Strukturierte Zukaufmengen benötigen einen kanonischen Produktionsentwurf. Bitte den Produktionsfall öffnen.");
       }
+      if (productionDraftContext) {
+        if (productionDraftContext.draft.source?.sourceRef !== `accepted-event-spec:${editingSpecId}` ||
+            productionDraftContext.draft.draftArtifacts?.eventSpec?.specId !== editingSpecId || !publishAcceptedSpecDraft || !loadImportedSpecDrafts) {
+          throw new Error("Diese Quelle kann hier nicht geändert werden. Bitte den Produktionsauftrag aus einem freigegebenen Angebot öffnen.");
+        }
+        assertCurrentProductionDraftContext(productionDraftContext, getCurrentProductionDraftContext);
+        const comparable = (value: SpecEditUpdateInput) => JSON.stringify(stableValue({ ...value,
+          componentUpdates: value.componentUpdates?.map(item => ({ ...item, productionStation: item.productionStation ?? "", notes: item.notes ?? "" }))
+        }));
+        const priorDrafts = await loadImportedSpecDrafts!(productionDraftContext.caseId);
+        const currentSnapshot = specEditSnapshotFromSpec(productionDraftContext.draft.draftArtifacts!.eventSpec!);
+        const currentInput = buildSpecEditUpdateInput({ ...currentSnapshot, componentStates: Object.fromEntries(currentSnapshot.components) });
+        for (const prior of comparable(update) === comparable(currentInput) ? [] : priorDrafts) {
+          if (prior.draftId === productionDraftContext.draft.draftId ||
+              prior.source?.sourceRef !== `accepted-event-spec:${editingSpecId}` || !prior.draftArtifacts?.eventSpec) continue;
+          const snapshot = specEditSnapshotFromSpec(prior.draftArtifacts.eventSpec);
+          const priorInput = buildSpecEditUpdateInput({ ...snapshot, componentStates: Object.fromEntries(snapshot.components) });
+          if (comparable(priorInput) === comparable(update)) {
+            throw new Error("Diese Rücknahme zu einer früheren Prüffassung kann hier noch nicht sicher gespeichert werden. Der aktuelle Stand und deine Eingaben bleiben erhalten.");
+          }
+        }
+        assertCurrentProductionDraftContext(productionDraftContext, getCurrentProductionDraftContext);
+      }
       const response = await updateAcceptedSpec(editingSpecId, update);
       updatedSpec = response.acceptedEventSpec;
+      if (productionDraftContext) {
+        assertCurrentProductionDraftContext(productionDraftContext, getCurrentProductionDraftContext);
+        // Reuse the existing fingerprinted import; changing Intake alone would
+        // leave the operator reviewing an older immutable snapshot.
+        const imported = await publishAcceptedSpecDraft!(productionDraftContext.caseId, updatedSpec);
+        assertCurrentProductionDraftContext(productionDraftContext, getCurrentProductionDraftContext);
+        if (updatedSpec.specId !== editingSpecId || imported.status !== "pending_review" ||
+            imported.source?.sourceRef !== `accepted-event-spec:${editingSpecId}` ||
+            JSON.stringify(stableValue(imported.draftArtifacts?.eventSpec)) !== JSON.stringify(stableValue(updatedSpec))) {
+          throw new Error("Die Angaben wurden gespeichert, aber die neue Prüffassung stimmt nicht überein. Bitte den Auftrag erneut laden und prüfen.");
+        }
+        onImportedDraft?.(imported);
+      }
     }
     await completeProductionQuestionEditSuccess(
       updatedSpec,

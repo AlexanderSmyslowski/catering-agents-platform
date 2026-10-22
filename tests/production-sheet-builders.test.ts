@@ -60,7 +60,7 @@ describe("production sheet builders", () => {
       title: "Focaccia - Convenience-Zukauf",
       componentId: "component-1",
       productionQty: { amount: 24, unit: "Portionen" },
-      station: "hot-kitchen",
+      station: "Vorschlag: Warme Küche (ungeprüft)",
       prepWindow: "2026-07-12 T-1",
       ingredients: [],
       steps: [],

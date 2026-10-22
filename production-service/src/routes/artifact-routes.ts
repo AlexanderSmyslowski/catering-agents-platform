@@ -2832,15 +2832,16 @@ export function registerProductionArtifactRoutes(
             Object.keys(item).some((key) => !["componentId", "menuCategory"].includes(key)) ||
             typeof item.componentId !== "string" || (typeof item.menuCategory !== "string" || !["classic", "vegetarian", "vegan"].includes(item.menuCategory))) ||
           componentUpdates.some((item) => !isRecord(item) ||
-            Object.keys(item).some((key) => !["componentId", "productionMode", "purchasedElements", "purchasedQuantities", "recipeOverrideId", "notes"].includes(key)) ||
+            Object.keys(item).some((key) => !["componentId", "productionMode", "purchasedElements", "purchasedQuantities", "recipeOverrideId", "productionStation", "notes"].includes(key)) ||
             Object.keys(item).length < 2 || typeof item.componentId !== "string" || !item.componentId.trim() ||
             (has(item, "productionMode") && (typeof item.productionMode !== "string" || !modes.includes(item.productionMode))) ||
             (has(item, "purchasedElements") && (!Array.isArray(item.purchasedElements) || item.purchasedElements.length > 100 ||
               item.purchasedElements.some(value => typeof value !== "string" || !value.trim() || value.length > 500))) ||
             (has(item, "recipeOverrideId") && (typeof item.recipeOverrideId !== "string" || item.recipeOverrideId.length > 200 || item.recipeOverrideId !== item.recipeOverrideId.trim())) ||
+            (has(item, "productionStation") && (typeof item.productionStation !== "string" || !["", "hot-kitchen", "cold-kitchen", "beverage-station", "pastry"].includes(item.productionStation))) ||
             (has(item, "notes") && (typeof item.notes !== "string" || item.notes.length > 2000)))
         ) {
-          return reply.code(422).send({ message: "Nur eindeutige Änderungen an Klassifikation, Herstellung, Rezeptauswahl und Zeitfenster mit Fall und Revision sind zulässig." });
+          return reply.code(422).send({ message: "Nur eindeutige Änderungen an Klassifikation, Herstellung, Arbeitsbereich, Rezeptauswahl und Zeitfenster mit Fall und Revision sind zulässig." });
         }
         if (has(input, "eventSchedule") && (!Array.isArray(schedule) || schedule.length !== 1 || schedule.some(item =>
           !isRecord(item) || Object.keys(item).some(key => !["label", "start", "end"].includes(key)) ||
@@ -2853,7 +2854,7 @@ export function registerProductionArtifactRoutes(
         const categories = new Map<string, "classic" | "vegetarian" | "vegan">(
           classifications.map((item) => [item.componentId, item.menuCategory])
         );
-        type ComponentPatch = { componentId: string; productionMode?: NonNullable<AcceptedEventSpec["menuPlan"][number]["productionDecision"]>["mode"]; purchasedElements?: string[]; purchasedQuantities?: PurchasedQuantity[]; recipeOverrideId?: string; notes?: string };
+        type ComponentPatch = { componentId: string; productionMode?: NonNullable<AcceptedEventSpec["menuPlan"][number]["productionDecision"]>["mode"]; purchasedElements?: string[]; purchasedQuantities?: PurchasedQuantity[]; recipeOverrideId?: string; productionStation?: "" | NonNullable<AcceptedEventSpec["menuPlan"][number]["productionStation"]>; notes?: string };
         const patches = new Map<string, ComponentPatch>(componentUpdates.map(item => [item.componentId, item as ComponentPatch]));
         if (!eventSpec || categories.size !== classifications.length || patches.size !== componentUpdates.length ||
           [...categories.keys(), ...patches.keys()].some((id) => !eventSpec.menuPlan.some((component) => component.componentId === id))) {
@@ -2939,6 +2940,7 @@ export function registerProductionArtifactRoutes(
               ...component,
               ...(categories.has(component.componentId) ? { menuCategory: categories.get(component.componentId) } : {}),
               ...(patch && has(patch, "recipeOverrideId") ? { recipeOverrideId: patch.recipeOverrideId || undefined } : {}),
+              ...(patch && has(patch, "productionStation") ? { productionStation: patch.productionStation || undefined } : {}),
               ...(decisionChanged ? { productionDecision: {
                 ...component.productionDecision,
                 ...(has(patch, "productionMode") ? { mode: patch.productionMode } : {}),

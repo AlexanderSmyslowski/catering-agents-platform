@@ -3,6 +3,7 @@ export type PurchasedQuantityEdit = { element: string; amountPerPerson: string; 
 export type ComponentEditState = {
   menuCategory: string;
   productionMode: string;
+  productionStation?: string;
   purchasedElements: string;
   originalPurchasedElements?: string[];
   purchasedQuantities?: PurchasedQuantityEdit[];

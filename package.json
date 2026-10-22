@@ -56,13 +56,13 @@
     "@vitejs/plugin-react": "^5.1.4",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
-    "fastify": "^5.12.5",
+    "fastify": "^5.12.6",
     "jsdom": "^26.1.0",
     "pdf-parse": "^1.1.1",
     "pg": "^8.20.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "vite": "^7.3.5"
+    "vite": "^7.3.7"
   },
   "devDependencies": {
     "@resvg/resvg-js": "2.6.2",
@@ -75,7 +75,7 @@
     "pg-mem": "^3.0.14",
     "tsx": "^4.22.4",
     "typescript": "^5.9.2",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.12"
   },
   "overrides": {
     "@babel/core": "7.29.7",

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import * as api from "../backoffice-ui/src/api.js";
 import * as draftReview from "../backoffice-ui/src/production-draft-review-panel.js";
 import {
   buildProductionPlanningControls,
@@ -220,5 +221,28 @@ describe("canonical draft context across save and prepare", () => {
     expect(actionInput.prepareProductionDraft).toHaveBeenCalledWith("saved-draft");
     expect(actionInput.updateAcceptedSpec).not.toHaveBeenCalled();
     expect(actionInput.createProductionDraftFromAcceptedEventSpec).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("accepted-spec save refresh", () => {
+  it.each([true, false])("reports success only when the case workspace shows the imported fingerprint: %s", async current => {
+    const source = { ...spec, menuPlan: [] };
+    const previous = { draftId: "before", reviewCards: [], revision: 1, status: "pending_review" as const, createdAt: "2026-10-22", source: { sourceRef: "accepted-event-spec:spec-plan-submit-1" }, draftArtifacts: { eventSpec: source } };
+    const stored = { ...previous, draftId: "after" };
+    const actionInput = input({ productionDraftContext: { caseId: "case-import", draft: previous },
+      updateAcceptedSpec: vi.fn(async () => ({ acceptedEventSpec: source })),
+      createProductionDraftFromAcceptedEventSpec: vi.fn(async () => ({ draft: stored })) });
+    actionInput.getCurrentProductionDraftContext = () => actionInput.productionDraftContext;
+    const priorReader = vi.spyOn(api, "loadProductionDrafts").mockResolvedValue({ items: [] });
+    const reader = vi.spyOn(api, "loadProductionWorkspaceState").mockResolvedValue({ activeCase: { caseId: "case-import" }, currentDraft: current ? stored : previous } as any);
+    try {
+      await buildProductionPlanningControls(actionInput).handleSaveSpecEdit();
+      expect(reader).toHaveBeenCalledExactlyOnceWith("case-import");
+      expect(actionInput.resetSpecEdit).toHaveBeenCalledTimes(current ? 1 : 0);
+      expect(actionInput.showProductionDraftReview).toHaveBeenCalledTimes(current ? 1 : 0);
+      expect(actionInput.setError).toHaveBeenCalledTimes(current ? 0 : 1);
+      expect(actionInput.prepareProductionDraft).not.toHaveBeenCalled();
+    } finally { reader.mockRestore(); priorReader.mockRestore(); }
   });
 });

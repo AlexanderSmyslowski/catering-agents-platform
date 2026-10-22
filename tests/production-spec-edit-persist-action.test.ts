@@ -234,3 +234,84 @@ it("persists a special-diet-only answer as a new canonical revision instead of t
   expect(actionInput.reviseProductionDraft).toHaveBeenCalledWith("answer-r1",{caseId:"case-1",expectedRevision:1,componentClassifications:[],specialDietResponse:"SYNTHETISCH: Freigaben offen"});
   expect(actionInput.updateAcceptedSpec).not.toHaveBeenCalled();
 });
+
+
+describe("saving an imported accepted-spec snapshot", () => {
+  function importedInput() {
+    const source = { specId: "spec-lunch", menuPlan: [{ componentId: "dish", label: "Gericht", servings: 55 }] };
+    const updated = { ...source, menuPlan: [{ ...source.menuPlan[0]!, productionStation: "cold-kitchen" }] };
+    const draft = { draftId: "import-before", revision: 1, status: "pending_review" as const, createdAt: "2026-10-22", source: { sourceRef: "accepted-event-spec:spec-lunch" }, reviewCards: [], draftArtifacts: { eventSpec: source } };
+    const published = { ...draft, draftId: "import-after", draftArtifacts: { eventSpec: updated } };
+    const actionInput = input({ productionDraftContext: { caseId: "case-import", draft },
+      updateAcceptedSpec: vi.fn(async () => ({ acceptedEventSpec: updated })),
+      publishAcceptedSpecDraft: vi.fn(async () => published), loadImportedSpecDrafts: vi.fn(async () => []), onImportedDraft: vi.fn(),
+      buildCurrentSpecUpdateInput: () => ({ componentUpdates: [{ componentId: "dish", productionStation: "cold-kitchen" }] }) });
+    actionInput.getCurrentProductionDraftContext = () => actionInput.productionDraftContext;
+    return { actionInput, published, updated };
+  }
+  it("rejects a historical A-to-B-to-A reversal before changing Intake", async () => {
+    const { actionInput, published } = importedInput();
+    const spec = published.draftArtifacts.eventSpec;
+    const snapshot = specEditSnapshotFromSpec(spec);
+    actionInput.buildCurrentSpecUpdateInput = () => buildSpecEditUpdateInput({ ...snapshot, componentStates: Object.fromEntries(snapshot.components) });
+    vi.mocked(actionInput.loadImportedSpecDrafts!).mockResolvedValue([published]);
+    await expect(buildProductionSpecEditPersistAction(actionInput)()).rejects.toThrow("Rücknahme");
+    expect(actionInput.updateAcceptedSpec).not.toHaveBeenCalled();
+    expect(actionInput.publishAcceptedSpecDraft).not.toHaveBeenCalled();
+    expect(actionInput.resetSpecEdit).not.toHaveBeenCalled();
+  });
+  it("allows a current-state retry despite a different or identically represented historical draft", async () => {
+    const { actionInput, published } = importedInput();
+    const current = actionInput.productionDraftContext!.draft.draftArtifacts!.eventSpec!;
+    const snapshot = specEditSnapshotFromSpec(current);
+    actionInput.buildCurrentSpecUpdateInput = () => buildSpecEditUpdateInput({ ...snapshot, componentStates: Object.fromEntries(snapshot.components) });
+    vi.mocked(actionInput.loadImportedSpecDrafts!).mockResolvedValue([published, { ...published, draftId: "older-same-form", draftArtifacts: { eventSpec: current } }]);
+    vi.mocked(actionInput.updateAcceptedSpec).mockResolvedValue({ acceptedEventSpec: current });
+    vi.mocked(actionInput.publishAcceptedSpecDraft!).mockResolvedValue({ ...published, draftArtifacts: { eventSpec: current } });
+    await expect(buildProductionSpecEditPersistAction(actionInput)()).resolves.toEqual(current);
+    expect(actionInput.updateAcceptedSpec).toHaveBeenCalledOnce();
+    expect(actionInput.resetSpecEdit).toHaveBeenCalled();
+  });
+  it("opens the exact newly fingerprinted snapshot before reporting success", async () => {
+    const { actionInput, published, updated } = importedInput();
+    expect(await buildProductionSpecEditPersistAction(actionInput)()).toEqual(updated);
+    expect(actionInput.publishAcceptedSpecDraft).toHaveBeenCalledExactlyOnceWith("case-import", updated);
+    expect(actionInput.onImportedDraft).toHaveBeenCalledExactlyOnceWith(published);
+    expect(actionInput.resetSpecEdit).toHaveBeenCalled();
+  });
+  it("retains the editor and reports no success if publishing fails after the source save", async () => {
+    const { actionInput } = importedInput();
+    vi.mocked(actionInput.publishAcceptedSpecDraft!).mockRejectedValue(new Error("Prüffassung konnte nicht geladen werden"));
+    await expect(buildProductionSpecEditPersistAction(actionInput)()).rejects.toThrow("Prüffassung");
+    expect(actionInput.resetSpecEdit).not.toHaveBeenCalled();
+    expect(actionInput.setNotice).not.toHaveBeenCalled();
+  });
+  it("refuses unsupported uploaded sources before changing Intake", async () => {
+    const { actionInput } = importedInput();
+    actionInput.productionDraftContext!.draft.source!.sourceRef = "upload:angebot.pdf";
+    await expect(buildProductionSpecEditPersistAction(actionInput)()).rejects.toThrow("Quelle");
+    expect(actionInput.updateAcceptedSpec).not.toHaveBeenCalled();
+  });
+  it("refuses a stale case before saving or after a delayed source response", async () => {
+    const { actionInput } = importedInput();
+    actionInput.getCurrentProductionDraftContext = () => ({ ...actionInput.productionDraftContext!, caseId: "other-case" });
+    await expect(buildProductionSpecEditPersistAction(actionInput)()).rejects.toThrow("Produktionsfall");
+    expect(actionInput.updateAcceptedSpec).not.toHaveBeenCalled();
+    actionInput.getCurrentProductionDraftContext = () => actionInput.productionDraftContext;
+    vi.mocked(actionInput.updateAcceptedSpec).mockImplementation(async () => {
+      actionInput.productionDraftContext = { ...actionInput.productionDraftContext!, caseId: "other-case" };
+      return { acceptedEventSpec: { specId: "spec-lunch" } };
+    });
+    const action = buildProductionSpecEditPersistAction(actionInput);
+    await expect(action()).rejects.toThrow("Produktionsfall");
+    expect(actionInput.publishAcceptedSpecDraft).not.toHaveBeenCalled();
+    expect(actionInput.resetSpecEdit).not.toHaveBeenCalled();
+  });
+  it("rejects a newly imported snapshot changed by a concurrent source writer", async () => {
+    const { actionInput, published } = importedInput();
+    vi.mocked(actionInput.publishAcceptedSpecDraft!).mockResolvedValue({ ...published, draftArtifacts: { eventSpec: { specId: "spec-lunch" } } });
+    await expect(buildProductionSpecEditPersistAction(actionInput)()).rejects.toThrow("stimmt nicht überein");
+    expect(actionInput.onImportedDraft).not.toHaveBeenCalled();
+    expect(actionInput.resetSpecEdit).not.toHaveBeenCalled();
+  });
+});

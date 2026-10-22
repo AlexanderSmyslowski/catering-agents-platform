@@ -1,6 +1,8 @@
 type ProductionComponentClassificationFieldsProps = {
   menuCategory: string;
   productionMode: string;
+  productionStation?: string;
+  onProductionStationChange?: (productionStation: string) => void;
   onMenuCategoryChange: (menuCategory: string) => void;
   onProductionModeChange: (productionMode: string) => void;
 };
@@ -8,6 +10,8 @@ type ProductionComponentClassificationFieldsProps = {
 export function ProductionComponentClassificationFields({
   menuCategory,
   productionMode,
+  productionStation,
+  onProductionStationChange,
   onMenuCategoryChange,
   onProductionModeChange
 }: ProductionComponentClassificationFieldsProps) {
@@ -40,6 +44,16 @@ export function ProductionComponentClassificationFields({
           <option value="external_finished">Fertigprodukt / extern</option>
         </select>
       </label>
+      {onProductionStationChange && <label className="field-block">
+        <span>Arbeitsbereich</span>
+        <select aria-label="Arbeitsbereich" value={productionStation ?? ""} onChange={event => onProductionStationChange(event.target.value)}>
+          <option value="">Offen – noch nicht zugeordnet</option>
+          <option value="hot-kitchen">Warme Küche</option>
+          <option value="cold-kitchen">Kalte Küche</option>
+          <option value="beverage-station">Getränke</option>
+          <option value="pastry">Patisserie</option>
+        </select>
+      </label>}
     </div>
   );
 }
