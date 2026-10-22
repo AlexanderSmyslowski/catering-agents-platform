@@ -94,6 +94,7 @@ export function CaseHistoryPanel({
         {loading ? <p className="helper-text">Aufträge werden geladen ...</p> : null}
         {error ? <p className="form-error" role="alert">Aufträge konnten nicht geladen werden. Bitte die Seite neu laden. {error}</p> : null}
         {copyError ? <p className="form-error" role="alert">{copyError}</p> : null}
+        {items.length > 0 ? <p className="helper-text">Beim Neuanlegen wird nur der Auftragsname übernommen. Anfrage, Leistungen und Freigaben werden nicht kopiert.</p> : null}
         {items.length === 0 && !loading && !error ? (
           <p className="helper-text">{search.trim() ? "Kein Auftrag passt zur Suche." : "Noch keine Aufträge. Beginne mit einer neuen Anfrage."}{search.trim() ? <button type="button" className="secondary-button" onClick={() => onSearchChange("")}>Suche löschen</button> : null}</p>
         ) : (
@@ -121,7 +122,7 @@ export function CaseHistoryPanel({
                       disabled={copyingCaseId === item.caseId}
                       onClick={() => void copyCase(item.caseId)}
                     >
-                      {copyingCaseId === item.caseId ? "Wird kopiert ..." : "Als Vorlage für neuen Auftrag"}
+                      {copyingCaseId === item.caseId ? "Wird angelegt ..." : "Neuen Auftrag anlegen"}
                     </button>
                   </div>
                 </li>

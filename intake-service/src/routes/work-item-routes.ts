@@ -394,7 +394,18 @@ export function registerIntakeWorkItemRoutes(
         return reply.code(404).send({ message: "AcceptedEventSpec nicht gefunden." });
       }
 
-      const updatedSpec = validateAcceptedEventSpec(applySpecUpdates(spec, request.body));
+      let updatedSpec: AcceptedEventSpec;
+      try {
+        for (const patch of request.body.componentUpdates ?? []) {
+          if (Object.prototype.hasOwnProperty.call(patch, "productionStation") &&
+              (typeof patch.productionStation !== "string" || !["", "hot-kitchen", "cold-kitchen", "beverage-station", "pastry"].includes(patch.productionStation))) {
+            return reply.code(422).send({ message: "Arbeitsbereich bitte aus der Liste wählen oder ausdrücklich offen lassen." });
+          }
+        }
+        updatedSpec = validateAcceptedEventSpec(applySpecUpdates(spec, request.body));
+      } catch {
+        return reply.code(422).send({ message: "Die Veranstaltungsdaten sind ungültig. Bitte Mengen, Arbeitsbereiche und Zukaufangaben prüfen." });
+      }
       await store.saveSpec(actor, updatedSpec);
       await auditLog.logFor(actorForRequest(request, trustedActorSecret, allowDevActorHeader), {
         action: "intake.spec_updated",

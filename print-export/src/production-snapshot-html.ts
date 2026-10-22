@@ -1,5 +1,6 @@
 import { formatRecipeApprovalStateLabel, productionContextNotes, recipeSourceOriginLabel, recipeSourceReferenceLabel, type AcceptedEventSpec, type KitchenSheet, type ProductionPlan, type PurchaseList } from "@catering/shared-core";
 import type { AppliedProductionSnapshot } from "./applied-production-snapshot.js";
+import { formatPreparationWindow, formatProductionStation } from "./document-labels.js";
 
 function escapeHtml(value: string | number): string {
   return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
@@ -41,11 +42,13 @@ export function renderProductionKitchenSheets(plan: ProductionPlan, spec?: Accep
   return `<section><h2>Küchenblätter</h2>${plan.kitchenSheets.map(sheet => {
     const batch = plan.productionBatches.find(item => item.componentId === sheet.componentId && item.recipeId === sheet.recipeId);
     const source = sheet.recipeSource ?? batch?.recipeSource;
+    const station = batch?.station ?? sheet.station;
+    const explicitStation = spec?.menuPlan?.find(item => item.componentId === sheet.componentId)?.productionStation;
     const ingredients = sheet.ingredients.length ? sheet.ingredients : batch?.ingredients ?? [];
     const steps = [...sheet.steps, ...(batch?.steps ?? []).filter(step =>
       !sheet.steps.some(sheetStep => sheetStep.instruction === step.instruction)
     )];
-    return `<article class="kitchen-sheet"><h3>${escapeHtml(sheet.title)}</h3>${renderProductionOrderContext(spec)}${renderFrozenKitchenAllergens(sheet)}<p>Gesamtmenge: ${escapeHtml(quantity(batch?.scaledYield ?? sheet.productionQty))}${batch ? ` · Chargen: ${escapeHtml(batch.batchCount)}` : ""}</p><p>Station: ${escapeHtml(batch?.station ?? sheet.station)} · Vorbereitung (Planangabe, prüfen): ${escapeHtml(batch?.prepWindow ?? sheet.prepWindow)}</p><p>Quelle: ${escapeHtml(recipeSourceOriginLabel(source))} · ${escapeHtml(recipeSourceReferenceLabel(source))} · Status: ${escapeHtml(formatRecipeApprovalStateLabel(source?.approvalState) ?? "Status offen")}</p><ul>${ingredients.map(ingredient => `<li>${escapeHtml(ingredient.name)}: ${escapeHtml(quantity(ingredient.quantity))}</li>`).join("")}</ul><ol>${steps.map(step => `<li>${escapeHtml(step.instruction)}</li>`).join("")}</ol></article>`;
+    return `<article class="kitchen-sheet"><h3>${escapeHtml(sheet.title)}</h3>${renderProductionOrderContext(spec)}${renderFrozenKitchenAllergens(sheet)}<p>Gesamtmenge: ${escapeHtml(quantity(batch?.scaledYield ?? sheet.productionQty))}${batch ? ` · Geplante Rezeptansätze: ${escapeHtml(batch.batchCount)}` : ""}</p><p>Station: ${escapeHtml(formatProductionStation(station, explicitStation === station))} · Vorbereitung (Planangabe, prüfen): ${escapeHtml(formatPreparationWindow(batch?.prepWindow ?? sheet.prepWindow, spec?.event?.date))}</p><p>Quelle: ${escapeHtml(recipeSourceOriginLabel(source))} · ${escapeHtml(recipeSourceReferenceLabel(source))} · Status: ${escapeHtml(formatRecipeApprovalStateLabel(source?.approvalState) ?? "Status offen")}</p><ul>${ingredients.map(ingredient => `<li>${escapeHtml(ingredient.name)}: ${escapeHtml(quantity(ingredient.quantity))}</li>`).join("")}</ul><ol>${steps.map(step => `<li>${escapeHtml(step.instruction)}</li>`).join("")}</ol></article>`;
   }).join("")}</section>`;
 }
 

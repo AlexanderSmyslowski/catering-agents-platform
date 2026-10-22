@@ -75,7 +75,7 @@ describe("production spec edit update input", () => {
           productionMode: undefined,
           purchasedElements: [],
           recipeOverrideId: "",
-          notes: undefined
+          notes: ""
         }
       ]
     });

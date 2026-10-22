@@ -1,4 +1,5 @@
 import { renderOfferPricingHtml } from "./offer-pricing-html.js";
+import { formatDocumentDate, formatProductionStation } from "./document-labels.js";
 import Fastify from "fastify";
 import { IntakeStore } from "@catering/intake-service";
 import { OfferStore } from "@catering/offer-service";
@@ -24,6 +25,7 @@ import {
   deriveCateringAuthKeys,
   hasMinimalMvpCapability,
   formatMetroGroupLabel,
+  formatServiceFormLabel,
   isCateringSessionMode,
   isDevAuthEnabled,
   hostedMultiBusinessReady,
@@ -188,14 +190,14 @@ function renderSourceAnchorsSection(record: Record<string, unknown>): string[] {
 
 export function renderOfferHtml(draft: OfferDraft): string {
   const spec = draft.proposedEventSpec;
-  const documentStart = '<!doctype html><html lang="de"><head><meta charset="utf-8"><title>CateringOS · Angebot</title><style>@page{size:A4;margin:18mm}body{font-family:Arial,sans-serif;color:#1f2933;font-size:12px;line-height:1.45}h1{font-size:22px;margin:0 0 8px}h2{font-size:16px;margin:22px 0 8px}header{border-bottom:1px solid #cbd5df;padding-bottom:12px}p{margin:6px 0}pre{font:inherit;white-space:pre-wrap}td,th{padding:6px;text-align:left}li,td{overflow-wrap:anywhere}@media print{h2{break-after:avoid-page}tr,header{break-inside:avoid-page}}</style></head><body>';
+  const documentStart = '<!doctype html><html lang="de"><head><meta charset="utf-8"><title>CateringOS · Angebot</title><style>@page{size:A4;margin:18mm}body{font-family:Arial,sans-serif;color:#1f2933;font-size:12px;line-height:1.45}h1{font-size:22px;margin:0 0 8px}h2{font-size:16px;margin:22px 0 8px}header{border-bottom:1px solid #cbd5df;padding-bottom:12px}p{margin:6px 0}pre{font:inherit;white-space:pre-wrap}td,th{padding:6px;text-align:left}li,td{overflow-wrap:anywhere}.offer-pricing table{width:100%;border-collapse:collapse}.offer-pricing .money,.offer-pricing .quantity{white-space:nowrap;font-variant-numeric:tabular-nums}@media print{h2{break-after:avoid-page}tr,header{break-inside:avoid-page}}</style></head><body>';
   const eventHeader = [
     "<header>",
     "<h1>" + (draft.reviewStatus?.publishApproved ? "Angebot" : "Angebotsentwurf · interne Prüfung") + "</h1>",
     "<p>Kunde: " + escapeHtml(spec.customer?.name ?? "offen") + "</p>",
     "<p>Veranstaltung: " + escapeHtml(spec.event?.title ?? spec.event?.type ?? "offen") + "</p>",
-    "<p>Datum: " + escapeHtml(spec.event?.date ?? "offen") + " · Gäste: " + escapeHtml(spec.attendees?.expected ?? "offen") + "</p>",
-    "<p>Serviceform: " + escapeHtml(spec.event?.serviceForm ?? spec.servicePlan?.serviceForm ?? "offen") + "</p>",
+    "<p>Datum: " + escapeHtml(formatDocumentDate(spec.event?.date)) + " · Gäste: " + escapeHtml(spec.attendees?.expected ?? "offen") + "</p>",
+    "<p>Serviceform: " + escapeHtml(formatServiceFormLabel(spec.event?.serviceForm ?? spec.servicePlan?.serviceForm) ?? "offen") + "</p>",
     ...(spec.event?.schedule?.map(slot => "<p>" + escapeHtml(slot.label) + ": " + escapeHtml(slot.start ?? "offen") + "–" + escapeHtml(slot.end ?? "offen") + "</p>") ?? []),
     ...(spec.venue ? ["<p>Veranstaltungsort: " + escapeHtml([spec.venue.name, spec.venue.address].filter(Boolean).join(" · ") || "offen") + "</p>"] : []),
     "</header>"
@@ -213,7 +215,7 @@ export function renderOfferHtml(draft: OfferDraft): string {
     ? []
     : [
         "<section><h2>Interne Prüfung</h2>",
-        "<p>Kundentext erst nach Publish-Freigabe exportieren.</p>",
+        "<p>Kundentext erst nach Freigabe zum Versand exportieren.</p>",
         "<ul>",
         `<li>Preis: ${escapeHtml(formatOfferReviewStatusLabel(draft.reviewStatus?.priceReviewStatus))}</li>`,
         `<li>MwSt.: ${escapeHtml(formatOfferReviewStatusLabel(draft.reviewStatus?.taxReviewStatus))}</li>`,
@@ -287,8 +289,8 @@ export function renderProductionPlanHtml(plan: ProductionPlan, spec?: AcceptedEv
     '<!doctype html><html lang="de"><head><meta charset="utf-8"><title>CateringOS · Produktionsblatt</title><style>',
     "@page { size: A4; margin: 18mm; } body { color: #1f2933; font-family: Arial, sans-serif; font-size: 12px; line-height: 1.45; margin: 0; } h1 { font-size: 22px; margin: 0 0 8px; } h2 { font-size: 16px; margin: 22px 0 8px; } h3 { font-size: 14px; margin: 16px 0 6px; } p { margin: 6px 0; } header { border-bottom: 1px solid #cbd5df; padding-bottom: 12px; } section { margin: 16px 0; } li { overflow-wrap: anywhere; } .kitchen-sheet { margin-bottom: 20px; } .production-order-context { overflow-wrap: anywhere; } .production-order-context > p { break-after: avoid-page; } .allergen-caution { font-size: 11px; } footer { border-top: 1px solid #cbd5df; padding-top: 8px; margin-top: 20px; } @media print { h2,h3 { break-after: avoid-page; } .kitchen-sheet { break-inside: avoid-page; } }",
     "</style></head><body><header><p>CateringOS · Internes Arbeitsdokument</p><h1>Produktionsplan</h1>",
-    `<p>Datum: ${escapeHtml(spec?.event?.date ?? "offen")} · Gäste: ${escapeHtml(spec?.attendees?.expected ?? "offen")}</p>`,
-    ...(spec?.customer?.name ? [`<p>Kunde: ${escapeHtml(spec.customer.name)}</p>`] : []),
+    `<p>Datum: ${escapeHtml(formatDocumentDate(contextSpec?.event?.date))} · Gäste: ${escapeHtml(contextSpec?.attendees?.expected ?? "offen")}</p>`,
+    ...(contextSpec?.customer?.name ? [`<p>Kunde: ${escapeHtml(contextSpec.customer.name)}</p>`] : []),
     "</header>",
     renderAppliedProductionContext(appliedSnapshot),
     ...((notes) => notes.length ? ["<section><h2>Auftrags- und Küchenhinweise</h2><p>Keine Sonderkost-, Allergen- oder Hygienefreigabe. Vorgaben separat prüfen.</p><ul>" + notes.map(note => "<li>" + escapeHtml(note) + "</li>").join("") + "</ul></section>"] : [])(productionContextNotes(contextSpec)),
@@ -305,7 +307,7 @@ export function renderProductionPlanHtml(plan: ProductionPlan, spec?: AcceptedEv
         );
         const sourceLabel = formatProductionPlanRecipeSourceLabel(batch.recipeSource ?? kitchenSheet?.recipeSource);
 
-        return `<section><h2>${escapeHtml(productionComponentLabel(batch.componentId, plan, spec))}</h2>${renderProductionOrderContext(contextSpec)}<p>Station: ${escapeHtml(batch.station)}</p><p>Rezeptquelle: ${escapeHtml(sourceLabel)}</p><ol>${batch.steps
+        return `<section><h2>${escapeHtml(productionComponentLabel(batch.componentId, plan, spec))}</h2>${renderProductionOrderContext(contextSpec)}<p>Station: ${escapeHtml(formatProductionStation(batch.station, contextSpec?.menuPlan?.find(item => item.componentId === batch.componentId)?.productionStation === batch.station))}</p><p>Rezeptquelle: ${escapeHtml(sourceLabel)}</p><ol>${batch.steps
           .map((step) => `<li>${escapeHtml(step.instruction)}</li>`)
           .join("")}</ol></section>`;
       }

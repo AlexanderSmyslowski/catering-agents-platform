@@ -195,6 +195,33 @@ describe("ProductionDraftReviewPanel", () => {
     window.history.replaceState({}, "", "/produktion");
   });
 
+  it("offers an explicit way from a replaced deep link to an available draft in this case", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const original = { ...draftFixture(), draftId: "old-linked-draft", status: "superseded" as const };
+    const current = { ...draftFixture(), draftId: "current-case-draft", supersedesDraftId: original.draftId,
+      draftArtifacts: { eventSpec: { event: { title: "Aktuelle prüfbare Fassung" } } } };
+    window.history.replaceState({}, "", "/produktion?productionDraftId=old-linked-draft&keep=value#production-draft-old-linked-draft");
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL) => jsonResponse({ items: [original, current] }));
+    globalThis.fetch = fetchMock as typeof fetch;
+    try {
+      await act(async () => {
+        root.render(createElement(ProductionDraftReviewPanel, { submitting: false, caseId: activeCaseId, latestOnly: true }));
+        await flushPromises();
+      });
+      expect(container.textContent).not.toContain("Aktuelle prüfbare Fassung");
+      const open = Array.from(container.querySelectorAll("button")).find(button => button.textContent === "Verfügbare Prüfung öffnen");
+      expect(open).toBeDefined();
+      await act(async () => { open!.click(); await flushPromises(); });
+      expect(container.textContent).toContain("Aktuelle prüfbare Fassung");
+      expect(container.textContent).not.toContain("angeforderte Produktionsentwurf ist nicht verfügbar");
+      expect(new URL(window.location.href).searchParams.get("productionDraftId")).toBe(current.draftId);
+      expect(new URL(window.location.href).searchParams.get("keep")).toBe("value");
+      expect(fetchMock.mock.calls.every(([input]) => String(input) === productionDraftsUrl)).toBe(true);
+    } finally { await act(async () => root.unmount()); }
+  });
+
   it.each([
     ["decision", "success"], ["decision", "error"], ["apply", "success"], ["apply", "error"]
   ] as const)("ignores a late %s %s after switching A → B → A", async (operation, outcome) => {

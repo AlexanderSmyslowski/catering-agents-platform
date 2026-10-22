@@ -100,7 +100,7 @@ export function buildSpecEditUpdateInput(state: SpecEditUpdateFormState): SpecEd
         purchasedElements,
         ...(purchasedQuantities !== undefined ? { purchasedQuantities } : {}),
         recipeOverrideId: componentState.recipeOverrideId.trim() || "",
-        notes: componentState.notes.trim() || undefined
+        notes: componentState.notes.trim()
       };
     }
   );

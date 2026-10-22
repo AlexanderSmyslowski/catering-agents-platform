@@ -351,7 +351,12 @@ function applySpecUpdates(
   const nextEventType = body.eventType?.trim() || spec.event.type || spec.servicePlan.eventType;
   const nextServiceForm = body.serviceForm?.trim() || spec.event.serviceForm || spec.servicePlan.serviceForm;
   const nextAttendeeCount = body.attendeeCount ?? spec.attendees.expected;
-  const nextMenuItems = normalizeMenuItems(body.menuItems);
+  const requestedMenuItems = normalizeMenuItems(body.menuItems);
+  // The answer form resends unchanged labels. That is not a replacement menu:
+  // retain component identities, explicit portion splits and recipe metadata.
+  const nextMenuItems = requestedMenuItems?.length === spec.menuPlan.length &&
+    requestedMenuItems.every((label, index) => label === spec.menuPlan[index]?.label)
+    ? undefined : requestedMenuItems;
   const nextEventSchedule = body.eventSchedule !== undefined
     ? normalizeEventSchedule(body.eventSchedule)
     : spec.event.schedule;
@@ -403,7 +408,8 @@ function applySpecUpdates(
         ? spec.menuPlan.map((item) => ({
             ...item,
             serviceStyle: nextServiceForm,
-            servings: nextAttendeeCount,
+            servings: item.servings === undefined || item.servings === spec.attendees.expected
+              ? nextAttendeeCount : item.servings,
             menuCategory: componentUpdates.get(item.componentId)?.menuCategory ?? item.menuCategory,
             dietaryTags:
               componentUpdates.get(item.componentId)?.menuCategory
@@ -413,9 +419,10 @@ function applySpecUpdates(
             productionStation: nextStation(item.componentId, item.productionStation),
             productionDecision: componentUpdates.get(item.componentId)
               ? {
-                  mode: componentUpdates.get(item.componentId)?.productionMode,
-                  purchasedElements: componentUpdates.get(item.componentId)?.purchasedElements,
-                  notes: componentUpdates.get(item.componentId)?.notes
+                  ...item.productionDecision,
+                  ...(componentUpdates.get(item.componentId)?.productionMode !== undefined ? { mode: componentUpdates.get(item.componentId)!.productionMode } : {}),
+                  ...(componentUpdates.get(item.componentId)?.purchasedElements !== undefined ? { purchasedElements: componentUpdates.get(item.componentId)!.purchasedElements } : {}),
+                  ...(componentUpdates.get(item.componentId)?.notes !== undefined ? { notes: componentUpdates.get(item.componentId)!.notes } : {})
                 }
               : item.productionDecision
           }))

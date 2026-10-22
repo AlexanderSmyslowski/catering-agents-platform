@@ -19,17 +19,29 @@ async function change(element: HTMLInputElement, value: string) {
     element.dispatchEvent(new Event("input", { bubbles: true }));
   });
 }
-async function mount() {
+async function mount(pricingSummary = summary) {
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   const saved = vi.fn(async (_id: string) => undefined), editing = vi.fn();
   await act(async () => root.render(createElement(OfferPricingEditor, {
     draftId: "draft-a", revision: 1, variants: [{ variantId: "calculated", label: "Geprüfte Testfassung", guests: 100 }],
     menuPlan: [{ label: "Hähnchenragout", servings: 55 }, { label: "Gemüsebratlinge", servings: 25 }, { label: "Linsenragout", servings: 20 }],
-    pricingSummary: summary, disabled: false, onSaved: saved, onEditingChange: editing
+    pricingSummary, disabled: false, onSaved: saved, onEditingChange: editing
   })));
   return { root, saved, editing };
 }
 describe("offer pricing editor", () => {
+  it("uses singular labels for one flat-rate item and keeps plural quantities", async () => {
+    const priced = calculateOfferPricing({ lines: [
+      ...input,
+      { ...input[0]!, id: "delivery", label: "Anlieferung", quantity: "1", unit: "flat" },
+      { ...input[0]!, id: "staff", label: "Service", quantity: "24", unit: "hour" }
+    ] }, 100);
+    const { root } = await mount(priced);
+    expect(document.body.textContent).toContain("1 Pauschale");
+    expect(document.body.textContent).not.toContain("1 Pauschalen");
+    expect(document.body.textContent).toContain("24 Personenstunden");
+    await act(async () => root.unmount());
+  });
   it("retains synthetic provenance, missing tax, user edits on conflict and retries without duplicate submit", async () => {
     const { root, saved } = await mount();
     expect(document.body.textContent).toContain("Enthält synthetische Testannahmen");

@@ -13,6 +13,7 @@ const templates = [
   { id: "equipment", label: "Equipment / Table Top", category: "equipment", unit: "guest", cents: 850 },
   { id: "drinks", label: "Getränke", category: "drinks", unit: "guest", cents: 800 }
 ] as const;
+const singularUnitLabels = { guest: "Gast", hour: "Personenstunde", flat: "Pauschale", piece: "Stück" };
 const unitLabels = { guest: "Gäste", hour: "Personenstunden", flat: "Pauschalen", piece: "Stück" };
 const money = (cents: number | undefined) => cents === undefined ? "Noch offen" :
   (cents / 100).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
@@ -141,7 +142,7 @@ export function OfferPricingEditor({ draftId, revision, variants, menuPlan, pric
       {calculation.containsSynthetic ? <p role="status">Enthält synthetische Testannahmen – keine Unternehmenspreise.</p> : null}
       {totals(pricingSummary)}
       <ul className="item-list compact">{calculation.lines.map(line => <li key={line.id}>
-        {line.label}: {line.quantity} {unitLabels[line.unit]} × {money(line.unitNetCents)} = {money(line.netCents)} netto · Steuer {line.taxRateBps === undefined ? "offen" : line.taxRateBps / 100 + " %"} · Quelle: {line.sourceReference}{line.sourceKind === "synthetic" ? " · synthetisch" : " · prüfpflichtig"}
+        {line.label}: {line.quantity} {Number(line.quantity) === 1 ? singularUnitLabels[line.unit] : unitLabels[line.unit]} × {money(line.unitNetCents)} = {money(line.netCents)} netto · Steuer {line.taxRateBps === undefined ? "offen" : line.taxRateBps / 100 + " %"} · Quelle: {line.sourceReference}{line.sourceKind === "synthetic" ? " · synthetisch" : " · prüfpflichtig"}
       </li>)}</ul>
       <button type="button" className="secondary-button" disabled={disabled} onClick={begin}>Preisaufstellung bearbeiten</button>
     </> : <>

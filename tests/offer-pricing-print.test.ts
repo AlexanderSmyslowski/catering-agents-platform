@@ -2,6 +2,18 @@ import { describe, expect, it } from "vitest";
 import { calculateOfferPricing } from "../shared-core/src/offer-calculation.js";
 import { renderOfferPricingHtml } from "../print-export/src/offer-pricing-html.js";
 describe("price calculation in print", () => {
+  it("prints singular quantities and keeps money and units together", () => {
+    const summary = calculateOfferPricing({ lines: [
+      { id: "flat", label: "Logistik", category: "logistics", quantity: "1", unit: "flat", unitNetCents: 15000, taxRateBps: 1900, sourceKind: "synthetic", sourceReference: "Synthetischer Rechentest" },
+      { id: "hours", label: "Personal", category: "staff", quantity: "24", unit: "hour", unitNetCents: 4555, taxRateBps: 1900, sourceKind: "synthetic", sourceReference: "Synthetischer Rechentest" }
+    ] }, 100);
+    const html = renderOfferPricingHtml(summary);
+    expect(html).toContain('class="offer-pricing"');
+    expect(html).toContain('<span class="quantity">1 Pauschale</span>');
+    expect(html).toContain('<span class="quantity">24 Personenstunden</span>');
+    expect(html).toMatch(/<span class="money">1\.093,20\s€<\/span>/);
+    expect(html).not.toContain("1 Pauschalen");
+  });
   it("prints exact net/tax/gross and synthetic labels, while keeping internal sources out of customer output", () => {
     const summary = calculateOfferPricing({ lines: [{
       id: "food", label: "<script>Speisen</script>", category: "food", quantity: "100",

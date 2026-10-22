@@ -597,6 +597,17 @@ export function ProductionDraftReviewPanel({
         <div className="production-draft-state production-draft-unavailable" role="status">
           <strong>Der angeforderte Produktionsentwurf ist nicht verfügbar.</strong>
           <p>Er wurde möglicherweise bereits übernommen, verworfen oder ersetzt.</p>
+          {visibleDrafts.length > 0 ? <>
+            <p>Für diesen Auftrag liegt eine prüfbare Fassung vor. Es wird nichts automatisch übernommen.</p>
+            <button type="button" className="secondary-button" disabled={submitting || loading} onClick={() => {
+              const draftId = visibleDrafts[0]!.draftId;
+              const url = new URL(window.location.href);
+              url.searchParams.set("productionDraftId", draftId);
+              url.hash = productionDraftEntryId(draftId);
+              window.history.replaceState(window.history.state, "", url);
+              announceProductionDraftReview(draftId);
+            }}>Verfügbare Prüfung öffnen</button>
+          </> : null}
         </div>
       ) : displayedDrafts.length > 0 ? (
         <ul className="item-list compact">
