@@ -352,6 +352,10 @@ RELEASE_3D287D8_MANIFEST_SHA256 = "1361de764a3bb012ede94b2c6d29a8dd0d7bdd0ad2a99
 RELEASE_3D287D8_HELPER_SHA256 = "a46091052e2c720981c15aa2c56462754af86e3174a6b4326e603e3b6a3ff101"
 RELEASE_3D287D8_IMAGES = {"runtime": "sha256:7b169161fdce4df85a04af78aa01f66f2f7a5f2cc090327714ba6edb4d238fe6",
                           "web": "sha256:47b2e374d2591d63e6237ab1b3904d5a160e375770c340d40769d5366cb14f04"}
+RELEASE_681213B_MANIFEST_SHA256 = "3eac18160cf862620ce6b4c7843368a5344dbc1f4837b810bb03a36c9a6720df"
+RELEASE_681213B_HELPER_SHA256 = "21e42c3890f63a11b4b860a35f9c0efe7371fd620f870cd70abb903cd80b9cf9"
+RELEASE_681213B_IMAGES = {"runtime": "sha256:2c11dc76480fba75e21f3184779d9aa8e786d2271a5bbe6676daa9ae29b8ed01",
+                         "web": "sha256:fe2169fa79724d105c1199b28921f24f59bc477bc6ad278201875660018d6160"}
 PR727_CADDY_ROOT_NAME = "Caddy_Local_Authority_-_2026_ECC_Root_230535653603960188253814079773346015816"
 PR727_CADDY_ROOT_SHA256 = "e70877424f5913ab6146fb751750fd1deb4a862c2820811287459d3b213e2b88"
 PR727_CADDY_CA_BUNDLE_SHA256 = "f0cbbbeb86b1ca821634896f134c3c3b73db0bb525664b643ac80159242f9778"
@@ -483,6 +487,35 @@ def accepted_3d287d8_bundle(oci):
     return root, manifest
 
 
+def accepted_681213b_bundle(oci):
+    root = protected(RELEASES / RELEASE_681213B_MANIFEST_SHA256, directory=True)
+    manifest = read_bound(protected(root / "manifest.json"), RELEASE_681213B_MANIFEST_SHA256)
+    require(manifest["productCommit"] == "681213b775851d32fe2c5823a229b7f5b3d739d8" and
+            manifest["operationsCommit"] == "3a1bb5588adc84d205265662c7a30e5196098303" and
+            manifest["bases"] == CURRENT_BASE_LAYOUT, "NUE_RELEASE_681213B_PREDECESSOR_BINDING")
+    helper = protected(root / "tools/catering_target_nue_image_update.py")
+    require(digest(helper) == RELEASE_681213B_HELPER_SHA256 == manifest["helpers"][helper.name], "NUE_RELEASE_681213B_HELPER_BINDING")
+    predecessor = load_module("nue_accepted_681213b", helper)
+    require(predecessor.verify_bundle(root, RELEASE_681213B_MANIFEST_SHA256) == manifest, "NUE_RELEASE_681213B_BUNDLE_BINDING")
+    require(all(manifest["images"][role]["platformManifestDigest"] == identity for role, identity in RELEASE_681213B_IMAGES.items()),
+            "NUE_RELEASE_681213B_IMAGE_BINDING")
+    stage_receipt = json.loads(protected(root / "stage.json").read_bytes())
+    require(stage_receipt["manifestSha256"] == RELEASE_681213B_MANIFEST_SHA256 and stage_receipt["mode"] == "nue-image-only",
+            "NUE_RELEASE_681213B_STAGE_BINDING")
+    baseline = read_bound(protected(root / "baseline.json"), stage_receipt["baselineSha256"])
+    installed = json.loads(protected(root / "installed.json").read_bytes())
+    candidate = protected(root / "compose.candidate.json").read_bytes()
+    images = {s: RELEASE_681213B_IMAGES["web" if s == "web" else "runtime"] for s in SERVICES}
+    require(installed["manifestSha256"] == RELEASE_681213B_MANIFEST_SHA256 and installed["status"] == "NUE_IMAGE_ONLY_INSTALLED" and
+            installed["images"] == images and hashlib.sha256(candidate).hexdigest() == installed["composeSha256"],
+            "NUE_RELEASE_681213B_INSTALL_BINDING")
+    # Build already owns the update lock. Reuse the accepted read-only verifier
+    # checks here; the public Verify entry point correctly refuses any live lock.
+    predecessor.verify_runtime(baseline, images, candidate, candidate_oci=oci,
+                               candidate_layout=manifest["bases"], candidate_schema=manifest["schemaBinding"])
+    return root, manifest
+
+
 def pr727_running_gate(oci, rows):
     root, manifest = accepted_pr727_bundle()
     return verified_product_running_gate(oci, rows, root, manifest, PR727_IMAGES,
@@ -499,6 +532,12 @@ def release_3d287d8_running_gate(oci, rows):
     root, manifest = accepted_3d287d8_bundle(oci)
     return verified_product_running_gate(oci, rows, root, manifest, RELEASE_3D287D8_IMAGES,
         {"predecessorManifestSha256": RELEASE_3D287D8_MANIFEST_SHA256})
+
+
+def release_681213b_running_gate(oci, rows):
+    root, manifest = accepted_681213b_bundle(oci)
+    return verified_product_running_gate(oci, rows, root, manifest, RELEASE_681213B_IMAGES,
+        {"predecessorManifestSha256": RELEASE_681213B_MANIFEST_SHA256})
 
 
 def verified_product_running_gate(oci, rows, root, manifest, identities, observations):
@@ -569,6 +608,8 @@ def current_base_gate(oci, runtime_m, web_m):
         return pr735_running_gate(oci, rows)
     if all(row.get("ImageManifestDescriptor", {}).get("digest") == RELEASE_3D287D8_IMAGES["web" if row["Name"] == "/platform-infra-web-1" else "runtime"] for row in rows):
         return release_3d287d8_running_gate(oci, rows)
+    if all(row.get("ImageManifestDescriptor", {}).get("digest") == RELEASE_681213B_IMAGES["web" if row["Name"] == "/platform-infra-web-1" else "runtime"] for row in rows):
+        return release_681213b_running_gate(oci, rows)
     for row in rows:
         service = row["Name"].removeprefix("/platform-infra-").removesuffix("-1")
         oci.check_running_container(row, web_m if service == "web" else runtime_m)
