@@ -1,3 +1,17 @@
+## CI für eng begrenzte Operationsänderungen — 22.10.2026
+
+Auf Basis von main `3a1bb5588adc84d205265662c7a30e5196098303` wird nur der
+Vitest-Umfang für ausdrücklich benannte Python-Operatoränderungen verkürzt.
+Die vorhandenen Linux-/macOS-Operatorprüfungen, Deploymentverträge, Build,
+Browserprobe und Compose-Parität bleiben erhalten. Produkt-, CI-, Dependency-
+und unbekannte Änderungen laufen vollständig; unklare Git-/Eventbindungen
+fallen auf den Volltest zurück. Keine neue periodische Automation.
+
+Der genaue Vertrag steht in TESTING.md, die Pfadliste in
+`scripts/ci-test-scope.py`. Der Entwurf ändert keine Freigabe zur Integration
+oder Installation und ist kein neuer Betriebsnachweis. Aktuelle lokale
+Betriebsbelege bleiben im bestehenden Migrations-Runbook erhalten.
+
 ## Nürnberger Folgeupdate nach PR737/738 — 21.10.2026
 
 Entwicklungsbasis ist main `681213b775851d32fe2c5823a229b7f5b3d739d8` (PR739).

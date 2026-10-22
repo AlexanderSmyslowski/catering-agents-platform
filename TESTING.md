@@ -21,6 +21,34 @@ npm run build
 `npm test` ist der primaere Regressionslauf fuer den aktuellen MVP-Kern.  
 `npm run build` ist der Build-/TypeScript-/Frontend-Build-Gate, besonders nach Aenderungen an TypeScript, UI oder Package-Konfiguration.
 
+### GitHub-CI: gezielte Operationsregression
+
+Die vier bestehenden CI-Jobs bleiben Pflicht: Build/Test, Linux- und macOS-
+Operatorpruefungen, Browser-Rehearsal und Compose-Paritaet (Linux-Operator im
+Build/Test-Job). Nur der Umfang des Vitest-Schritts wird ausgewaehlt:
+
+- Bei ausschliesslichen Aenderungen an den explizit in
+  `scripts/ci-test-scope.py` aufgefuehrten Python-Operatoren und ihren Python-Tests
+  laufen die fuenf bestehenden Python-Acceptance-Sets sowie alle acht
+  `tests/catering-target-*.test.ts`-Vertraege. Die dort benannten vier
+  Begleitdokumente duerfen gemeinsam mit einem solchen Operatorpatch wechseln.
+- Produktcode, Auth, Schema, Pakete, Shell-/JS-Runner, CI selbst und alle anderen
+  Pfade behalten `npm test` mit der vollstaendigen Suite. Reine Doku-Aenderungen,
+  neue/entfernte/verschobene Dateien und Typwechsel ebenfalls.
+- PRs werden gegen die tatsaechlich ausgecheckte GitHub-Mergefassung und deren
+  im Event gebundene Eltern geprueft. Normale Main-Pushes vergleichen den
+  vollstaendigen `before`/`after`-Diff. Tags, fehlende Gitobjekte oder unklare
+  Bindungen waehlen die vollstaendige Suite; eine fehlende Scope-Ausgabe kann
+  den Volltest nicht ueberspringen.
+
+Der Lauf zeigt die Auswahl und ihren Grund im GitHub-Step-Summary. Ein gruenes
+Operations-CI ist kein behaupteter Volltest der Fachlogik. Build, Browserprobe,
+Compose und beide Plattformpruefungen werden dadurch nicht uebersprungen.
+Der bisher eng begrenzte synthetische Backup-Integrationsjob behaelt seinen
+eigenen Branch-/Draft-Vertrag; `skipped` bleibt kein Ausfuehrungsnachweis.
+Lokale Wiederholungen unveraenderter Volltests und manuelle CI-Retries sind
+dafuer nicht erforderlich. Es wird kein zusaetzlicher periodischer Lauf eingerichtet.
+
 ## 3. Bestehende Testebenen
 
 ### 3.1 Fachkern und Produktionslogik

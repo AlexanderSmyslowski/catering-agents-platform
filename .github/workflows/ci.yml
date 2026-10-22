@@ -17,6 +17,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Verify CI scope selection
+        run: python3 -B tests/ci_test_scope_test.py
+
+      - name: Select regression scope
+        id: test_scope
+        run: python3 -B scripts/ci-test-scope.py
 
       - name: Setup Node
         uses: actions/setup-node@v5
@@ -31,6 +40,7 @@ jobs:
         run: npm run build
 
       - name: Read-only process-tree tracer
+        if: steps.test_scope.outputs.scope != 'operator'
         run: |
           if ! command -v strace >/dev/null; then
             sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update
@@ -39,7 +49,12 @@ jobs:
           strace --version
 
       - name: Test
+        if: steps.test_scope.outputs.scope != 'operator'
         run: npm test
+
+      - name: Operator regression contracts
+        if: steps.test_scope.outputs.scope == 'operator'
+        run: npx --no-install vitest run tests/catering-target-*.test.ts
 
       - name: Catering target operator acceptance gates
         run: |
