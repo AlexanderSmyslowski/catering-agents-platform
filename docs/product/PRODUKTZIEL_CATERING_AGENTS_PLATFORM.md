@@ -1,3 +1,26 @@
+## Aktueller Einstieg — Version 5.516 / 22.10.2026
+
+Führend ist der neue5.516-Abschnitt in memory.md; historische Migrationsbefehle
+nicht ausführen. Produktpatch im eigenen Checkout catering-product-ready,
+Branch codex/product-readiness-fixes, Basis main1eebb7fc. Arbeitsbereiche bis
+gefrorenen Plan, explizite Entwurfslink-Rückkehr, Drucklesbarkeit sowie tatsächliche
+Textimport-Speicher-/55/25/20-Regressionskorrekturen lokal umgesetzt und unabhängig
+angenommen. Tatsächliches Opus5.5-ACCEPT nur für den Patch; keine Gesamtpilotfreigabe.
+138gezielteTests, nach letztem Delta89betroffeneTests/4Dateien und enger2Testcheck,
+TypeScript/Build/diffcheck bestanden; nicht summieren. npmci/Audit0. Private Belege:
+Checkout tmp/product-readiness-20261022. Reguläre CI/Integration/Zielinstallation
+für diesen neuen Patch bei dieser Fortschreibung noch offen.
+
+NUE bleibt belegter681213b/3a1bb55, keine aktuelle Liveprüfung. Frischen vollständigen
+Backup→Offhost→Restore/Vergleich→Cleanupnachweis vor Folgeinstallation herstellen;
+alte6hFreigabe abgelaufen. Automatische Vollsicherung und Observer bleiben echte
+separate Betriebslücken, alte beschränkte Timer nicht aktivieren. Reversion auf
+frühere direkte Importfassung fail-closed, noch kein vollständiger Bearbeitungsweg
+für diesen Sonderfall. Keine neue persönliche Anmeldung oder Dauerautomation
+wartet. Helsinki gelöscht, alteIPv4 reserviert. Keine Host-/DNS-/Firewalländerung.
+
+Gesamtziel unverändert: nachvollziehbar nutzbarer Büro-/Küchenprozess; synthetische Rechenannahmen ersetzen keine realen Preis-, Allergen- oder Küchenfreigaben. Keine neue Roadmap.
+
 ## Aufträge finden und sicher weiterbearbeiten — Version 5.479 / 20.10.2026
 
 Zusätzlichen konkreten Copy-Race vor Integration reproduziert: verzögerter Copy-POST wechselte trotz inzwischen neu getippter Anfrage auf die Kopie. Regression vorher FAIL, danach33 betroffene App-/Editor-/Produktionsprüfungen PASS; TypeScript/Build PASS. Unmittelbar vor dem Wechsel wird jetzt über Ref der zuletzt gerenderte Eingabe-/Editor-/Aktionsschutz geprüft; funktionaler Listenupdater erhält die gespeicherte Kopie. Unmount macht die Prüfung ungültig. Enger tatsächlicher Opus-5.5-Deltaabgleich in derselben unabhängigen Reviewsession: ACCEPT. Kein verbleibender wesentlicher Befund für den Patch. Kleinere UX-Grenze: Ein reiner anderer Leseauftrag während laufender Kopie verhindert den späteren Wechsel ohne neue Eingaben nicht; Kopf/Fassungsbindungen bleiben korrekt, keine Daten gehen verloren. Keine vollständige Laienabnahme daraus.

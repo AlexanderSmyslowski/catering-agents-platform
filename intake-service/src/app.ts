@@ -380,6 +380,15 @@ function applySpecUpdates(
     return componentUpdate.recipeOverrideId?.trim() || undefined;
   };
 
+  const nextDecision = (componentId: string, current?: AcceptedEventSpec["menuPlan"][number]["productionDecision"]) => {
+    const patch = componentUpdates.get(componentId);
+    if (!patch || (patch.productionMode === undefined && patch.purchasedElements === undefined && patch.notes === undefined)) return current;
+    return { ...current,
+      ...(patch.productionMode !== undefined ? { mode: patch.productionMode } : {}),
+      ...(patch.purchasedElements !== undefined ? { purchasedElements: patch.purchasedElements } : {}),
+      ...(patch.notes !== undefined ? { notes: patch.notes } : {})
+    };
+  };
   const nextStation = (componentId: string, current?: AcceptedEventSpec["menuPlan"][number]["productionStation"]) => {
     const patch = componentUpdates.get(componentId);
     return patch && Object.prototype.hasOwnProperty.call(patch, "productionStation") ? patch.productionStation || undefined : current;
@@ -417,46 +426,40 @@ function applySpecUpdates(
                 : item.dietaryTags,
             recipeOverrideId: nextRecipeOverrideId(item.componentId, item.recipeOverrideId),
             productionStation: nextStation(item.componentId, item.productionStation),
-            productionDecision: componentUpdates.get(item.componentId)
-              ? {
-                  ...item.productionDecision,
-                  ...(componentUpdates.get(item.componentId)?.productionMode !== undefined ? { mode: componentUpdates.get(item.componentId)!.productionMode } : {}),
-                  ...(componentUpdates.get(item.componentId)?.purchasedElements !== undefined ? { purchasedElements: componentUpdates.get(item.componentId)!.purchasedElements } : {}),
-                  ...(componentUpdates.get(item.componentId)?.notes !== undefined ? { notes: componentUpdates.get(item.componentId)!.notes } : {})
-                }
-              : item.productionDecision
+            productionDecision: nextDecision(item.componentId, item.productionDecision)
           }))
-        : nextMenuItems.map((label, index) => ({
-            componentId: `${label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "menu"}-${index + 1}`,
+        : nextMenuItems.map((label, index) => {
+            const matches = spec.menuPlan.filter(item => item.label === label);
+            const previous = spec.menuPlan[index]?.label === label ? spec.menuPlan[index]
+              : matches.length === 1 ? matches[0] : undefined;
+            return ({
+            componentId: previous?.componentId ?? `${label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "menu"}-${index + 1}`,
             label,
-            course: spec.menuPlan[index]?.course ?? "main",
+            course: previous?.course ?? "main",
             menuCategory:
-              componentUpdates.get(spec.menuPlan[index]?.componentId ?? "")?.menuCategory ??
-              spec.menuPlan[index]?.menuCategory,
+              componentUpdates.get(previous?.componentId ?? "")?.menuCategory ??
+              previous?.menuCategory,
             serviceStyle: nextServiceForm,
-            desiredRecipeTags: spec.menuPlan[index]?.desiredRecipeTags ?? (nextEventType ? [nextEventType] : []),
-            servings: nextAttendeeCount,
+            desiredRecipeTags: previous?.desiredRecipeTags ?? (nextEventType ? [nextEventType] : []),
+            servings: previous?.servings === undefined || previous.servings === spec.attendees.expected
+              ? nextAttendeeCount : previous.servings,
             dietaryTags:
-              componentUpdates.get(spec.menuPlan[index]?.componentId ?? "")?.menuCategory
-                ? dietaryTagsForCategory(componentUpdates.get(spec.menuPlan[index]?.componentId ?? "")?.menuCategory)
-                : spec.menuPlan[index]?.dietaryTags ?? [],
+              componentUpdates.get(previous?.componentId ?? "")?.menuCategory
+                ? dietaryTagsForCategory(componentUpdates.get(previous?.componentId ?? "")?.menuCategory)
+                : previous?.dietaryTags ?? [],
             recipeOverrideId: nextRecipeOverrideId(
-              spec.menuPlan[index]?.componentId ?? "",
-              spec.menuPlan[index]?.recipeOverrideId
+              previous?.componentId ?? "",
+              previous?.recipeOverrideId
             ),
-            productionStation: nextStation(spec.menuPlan[index]?.componentId ?? "", spec.menuPlan[index]?.productionStation),
-            productionDecision:
-              componentUpdates.get(spec.menuPlan[index]?.componentId ?? "")
-                ? {
-                    mode: componentUpdates.get(spec.menuPlan[index]?.componentId ?? "")?.productionMode,
-                    purchasedElements:
-                      componentUpdates.get(spec.menuPlan[index]?.componentId ?? "")?.purchasedElements,
-                    notes: componentUpdates.get(spec.menuPlan[index]?.componentId ?? "")?.notes
-                  }
-                : spec.menuPlan[index]?.productionDecision
-          }))
+            productionStation: nextStation(previous?.componentId ?? "", previous?.productionStation),
+            productionDecision: nextDecision(previous?.componentId ?? "", previous?.productionDecision)
+          });
+          })
   };
 
+  if (new Set(nextSpec.menuPlan.map(item => item.componentId)).size !== nextSpec.menuPlan.length) {
+    throw new Error("Gerichte müssen eindeutig zugeordnet bleiben.");
+  }
   return withEvaluatedReadiness(nextSpec);
 }
 

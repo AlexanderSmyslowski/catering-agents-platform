@@ -307,7 +307,7 @@ export function renderProductionPlanHtml(plan: ProductionPlan, spec?: AcceptedEv
         );
         const sourceLabel = formatProductionPlanRecipeSourceLabel(batch.recipeSource ?? kitchenSheet?.recipeSource);
 
-        return `<section><h2>${escapeHtml(productionComponentLabel(batch.componentId, plan, spec))}</h2>${renderProductionOrderContext(contextSpec)}<p>Station: ${escapeHtml(formatProductionStation(batch.station, contextSpec?.menuPlan?.find(item => item.componentId === batch.componentId)?.productionStation === batch.station))}</p><p>Rezeptquelle: ${escapeHtml(sourceLabel)}</p><ol>${batch.steps
+        return `<section><h2>${escapeHtml(productionComponentLabel(batch.componentId, plan, contextSpec))}</h2>${renderProductionOrderContext(contextSpec)}<p>Station: ${escapeHtml(formatProductionStation(batch.station, contextSpec?.menuPlan?.find(item => item.componentId === batch.componentId)?.productionStation === batch.station))}</p><p>Rezeptquelle: ${escapeHtml(sourceLabel)}</p><ol>${batch.steps
           .map((step) => `<li>${escapeHtml(step.instruction)}</li>`)
           .join("")}</ol></section>`;
       }

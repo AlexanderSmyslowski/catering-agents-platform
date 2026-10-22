@@ -1,3 +1,79 @@
+## Produktkorrekturen lokal angenommen; Integration und Zielnachprüfung offen — Version 5.516 / 22.10.2026
+
+Alexanders „Dann weiter. Alle Probleme aus dem Weg räumen“ im isolierten Checkout
+catering-product-ready, Branch codex/product-readiness-fixes, fortgesetzt. Basis
+main1eebb7fc (PR741/Main-CI39735996659 bereits vollständig angenommen). Kein Neustart
+der Migration, kein neuer Prüfrahmen, keine konkurrierenden Schreiber.
+
+Umgesetzt: Arbeitsbereich ausdrücklich je Komponente (Warme/Kalte Küche, Getränke,
+Patisserie), unverändert durch vorhandene Revision/Approval/Apply bis zum gefrorenen
+Plan. Namenserkennung erscheint nur als ungeprüfter Vorschlag; alte angewendete
+Artefakte bleiben unverändert. Veraltete Entwurfslinks bieten einen ausdrücklichen,
+fallgebundenen Weg zu einer verfügbaren Prüfung, ohne automatisches Freigeben.
+Doppelte Auftragsnavigation entfernt; Neuanlegen benennt ehrlich, dass nur der
+Auftragsname kopiert wird. Preis-/Mengeneinheiten im Druck werden zusammengehalten,
+Singular korrekt, Dokumentdaten deutsch, exakte T-1-Marker als Vortag mit Prüfhinweis.
+Produktionskopf und Komponentenbezeichnung verwenden denselben gefrorenen Kontext.
+
+Echte lokale Bedienprüfung deckte zwei zusätzliche Fehler im direkten Textimport
+auf und schloss sie: Speichern aktualisierte nur Intake, während die Prüfung die
+alte Kopie zeigte; jetzt wird über den vorhandenen fingerprintgebundenen Import
+nur die exakt gespeicherte, offene, aktuelle Fassung bestätigt. Fallwechsel,
+Quellabweichung und Importfehler erhalten Eingaben und melden keinen Erfolg.
+Unverändert erneut gesendete Menülabels setzen 55/25/20 nicht mehr auf100/100/100;
+Komponentenidentitäten und explizite Teilmengen bleiben erhalten. Neues Gericht
+erbt keine alte Arbeitsbereichs-/Rezept-/Herstellungszuordnung; doppelte IDs werden
+vor Persistenz mit422 abgewiesen. Entscheidungsfelder unterscheiden Weglassen
+von ausdrücklichem Leeren. Ungültige Arbeitsbereiche und Zukaufdaten werden vor
+Speicherung abgewiesen, bestehende Bestände bleiben erhalten.
+
+Gezielte Nachweise: 138Tests/14Dateien im zusammenhängenden Lauf bestanden;
+nach den eng begrenzten letzten Mengen-/Retry-/Menükorrekturen89Tests/4Dateien
+inklusive bestehender Plattformtests bestanden. Letzter enger APIcheck2Tests,
+TypeScript/Vitebuild und diffcheck erfolgreich. Überlappende Läufe nicht summieren.
+Bestehender Chunkgrößenhinweis unverändert. Sauberes npm ci --ignore-scripts und
+Audit0Befunde. Nur Fastify5.12.6, Vite7.3.7, Vitest samt mocker4.1.12 aktualisiert;
+chai6.2.2/tinyrainbow3.1.1 erhalten, vorhandenes esbuildOverride0.28.1 unverändert.
+
+Tatsächliches Opus5.5-Quellenreview: erster übergroßer Aufruf nach12Minuten ohne
+Ergebnis beendet. Begrenzter vollständiger Diffreview zunächstHOLD, danach
+fokussierte Korrekturprüfung ACCEPT für den Patch, keine Pilotfreigabe.
+canonicalModel=claude-opus-5-5, provider=firstParty, is_error=false/Exit0;
+Session64957ff4-e50c-45f3-9748-b7dc317c430a. Falsche erste Annahme über fehlende
+serverseitige Schemavalidierung an tatsächlicher Route widerlegt und vom Reviewer
+korrigiert. Behauptete fallübergreifende Import-ID ebenfalls durch bestehenden
+Business-/Case-/Spec-/Fingerprinthash widerlegt. Letzte kleine Folgekorrekturen
+unabhängig, begrenzt und ohne weitere Gesamtrunde angenommen.
+
+Normaler Chrome, ausschließlich127.0.0.1 und eigene Kopie synthetischer Bestände:
+55/25/20 nach Speichern sichtbar; erneutes Öffnen zeigt gespeicherte Bereiche
+warm/kalt/warm. Keine Fachfreigabe realer Küche. Angebotsexport zeigt weiterhin
+55/25/20,1Pauschale und8043,20netto/1528,21Steuer/9571,41brutto; synthetische
+Preis-/Steuerwarnungen und vier offene Punkte bleiben korrekt sichtbar. Desktop
+und390x844 kontrolliert, Viewport zurückgesetzt. Kein neuer vollständiger
+Nürnberger100-Gäste- oder PDFabnahmenachweis. Geschützte Belege im Checkout unter
+tmp/product-readiness-20261022 (Reviewresultate, isolierte Daten, Screenshots).
+
+Explizite Restgrenze: Rücknahme eines direkten accepted-event-spec-Imports auf
+eine frühere dargestellte Fassung wird vor dem Quellenwrite abgewiesen; kein
+abgeschlossener Rücknahmeweg behauptet. Unveränderte aktuelle Eingaben bleiben
+speicher-/berechenbar. Upload-/Dokumentquellen erhalten keine stillschweigende
+Bearbeitungsfreigabe. Diese Einschränkungen und reale Betriebsabnahme bleiben
+vor Laien-/Pilot-GO offen.
+
+Nürnberg unverändert letzter belegter Produkt681213b/Operations3a1bb55,
+Manifest3eac18160cf862620ce6b4c7843368a5344dbc1f4837b810bb03a36c9a6720df.
+Keine neue Live-Gesundheitsbehauptung. Automatische vollständige Backup-/Restorekette
+und Observer fehlen weiterhin; die alten Ein-Datenbank-Timer nicht aktiviert.
+Manueller echter NUE-Backup→Offhost→Restore/3DB-/Globals-/Dateivergleich→Cleanup-
+Nachweis aus5.511 bleibt historische Evidenz; seine6hInstallationsfrische ist
+abgelaufen. Vor neuem Rollout frische Zugangs-/Provider-/Ownlock-/Backupgates.
+Helsinki endgültig gelöscht; alteIPv4 reserviert, nicht geändert. Keine derzeit
+wartende persönliche Anmeldung, keine neue Dauerautomation, keine Host-/DNS-/
+Firewall-/Credential-/ADHaktion. Nächster Schritt: Änderungspaket veröffentlichen,
+reguläre vollständige CI auswerten; danach konkrete Integration und frische
+Nürnberger Nachprüfung im selben100-Gäste-Fall. Kein Gesamtprodukt-/Pilot-GO.
+
 ## CI für eng begrenzte Operationsänderungen — 22.10.2026
 
 Auf Basis von main `3a1bb5588adc84d205265662c7a30e5196098303` wird nur der
@@ -2962,3 +3038,6 @@ Doppelte technische Anmeldung im echten Chrome reproduziert, gezielte bestehende
 
 ### Version 5.494 — 21.10.2026
 Realen Folgeupdateblocker am PR735-Vorgänger reproduziert und lokal eng korrigiert;50Tests/Opus5.5ACCEPT, neueCI und tatsächlicheInstallation offen.
+
+### Version5.516 — 22.10.2026
+Produktkorrekturen und Grenzen lokal unabhängig angenommen; nächster Integrations-/Zielnachweis offen. Führender Abschnitt oben.

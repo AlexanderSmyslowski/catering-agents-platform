@@ -260,6 +260,18 @@ describe("saving an imported accepted-spec snapshot", () => {
     expect(actionInput.publishAcceptedSpecDraft).not.toHaveBeenCalled();
     expect(actionInput.resetSpecEdit).not.toHaveBeenCalled();
   });
+  it("allows a current-state retry despite a different or identically represented historical draft", async () => {
+    const { actionInput, published } = importedInput();
+    const current = actionInput.productionDraftContext!.draft.draftArtifacts!.eventSpec!;
+    const snapshot = specEditSnapshotFromSpec(current);
+    actionInput.buildCurrentSpecUpdateInput = () => buildSpecEditUpdateInput({ ...snapshot, componentStates: Object.fromEntries(snapshot.components) });
+    vi.mocked(actionInput.loadImportedSpecDrafts!).mockResolvedValue([published, { ...published, draftId: "older-same-form", draftArtifacts: { eventSpec: current } }]);
+    vi.mocked(actionInput.updateAcceptedSpec).mockResolvedValue({ acceptedEventSpec: current });
+    vi.mocked(actionInput.publishAcceptedSpecDraft!).mockResolvedValue({ ...published, draftArtifacts: { eventSpec: current } });
+    await expect(buildProductionSpecEditPersistAction(actionInput)()).resolves.toEqual(current);
+    expect(actionInput.updateAcceptedSpec).toHaveBeenCalledOnce();
+    expect(actionInput.resetSpecEdit).toHaveBeenCalled();
+  });
   it("opens the exact newly fingerprinted snapshot before reporting success", async () => {
     const { actionInput, published, updated } = importedInput();
     expect(await buildProductionSpecEditPersistAction(actionInput)()).toEqual(updated);

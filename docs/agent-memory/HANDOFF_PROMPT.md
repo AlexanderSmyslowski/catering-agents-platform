@@ -1,3 +1,24 @@
+## Aktueller Einstieg — Version 5.516 / 22.10.2026
+
+Führend ist der neue5.516-Abschnitt in memory.md; historische Migrationsbefehle
+nicht ausführen. Produktpatch im eigenen Checkout catering-product-ready,
+Branch codex/product-readiness-fixes, Basis main1eebb7fc. Arbeitsbereiche bis
+gefrorenen Plan, explizite Entwurfslink-Rückkehr, Drucklesbarkeit sowie tatsächliche
+Textimport-Speicher-/55/25/20-Regressionskorrekturen lokal umgesetzt und unabhängig
+angenommen. Tatsächliches Opus5.5-ACCEPT nur für den Patch; keine Gesamtpilotfreigabe.
+138gezielteTests, nach letztem Delta89betroffeneTests/4Dateien und enger2Testcheck,
+TypeScript/Build/diffcheck bestanden; nicht summieren. npmci/Audit0. Private Belege:
+Checkout tmp/product-readiness-20261022. Reguläre CI/Integration/Zielinstallation
+für diesen neuen Patch bei dieser Fortschreibung noch offen.
+
+NUE bleibt belegter681213b/3a1bb55, keine aktuelle Liveprüfung. Frischen vollständigen
+Backup→Offhost→Restore/Vergleich→Cleanupnachweis vor Folgeinstallation herstellen;
+alte6hFreigabe abgelaufen. Automatische Vollsicherung und Observer bleiben echte
+separate Betriebslücken, alte beschränkte Timer nicht aktivieren. Reversion auf
+frühere direkte Importfassung fail-closed, noch kein vollständiger Bearbeitungsweg
+für diesen Sonderfall. Keine neue persönliche Anmeldung oder Dauerautomation
+wartet. Helsinki gelöscht, alteIPv4 reserviert. Keine Host-/DNS-/Firewalländerung.
+
 ## CI für eng begrenzte Operationsänderungen — 22.10.2026
 
 Auf Basis von main `3a1bb5588adc84d205265662c7a30e5196098303` wird nur der

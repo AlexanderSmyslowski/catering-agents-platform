@@ -163,7 +163,9 @@ export function buildProductionSpecEditPersistAction({
           componentUpdates: value.componentUpdates?.map(item => ({ ...item, productionStation: item.productionStation ?? "", notes: item.notes ?? "" }))
         }));
         const priorDrafts = await loadImportedSpecDrafts!(productionDraftContext.caseId);
-        for (const prior of priorDrafts) {
+        const currentSnapshot = specEditSnapshotFromSpec(productionDraftContext.draft.draftArtifacts!.eventSpec!);
+        const currentInput = buildSpecEditUpdateInput({ ...currentSnapshot, componentStates: Object.fromEntries(currentSnapshot.components) });
+        for (const prior of comparable(update) === comparable(currentInput) ? [] : priorDrafts) {
           if (prior.draftId === productionDraftContext.draft.draftId ||
               prior.source?.sourceRef !== `accepted-event-spec:${editingSpecId}` || !prior.draftArtifacts?.eventSpec) continue;
           const snapshot = specEditSnapshotFromSpec(prior.draftArtifacts.eventSpec);

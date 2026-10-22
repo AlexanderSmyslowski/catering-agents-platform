@@ -35,6 +35,21 @@ describe("intake answers preserve existing menu allocations", () => {
         expect(invalid.statusCode, invalid.body).toBe(422);
         expect(await store.getSpec({ businessId: "local" }, source.specId)).toEqual(saved);
       }
+      const renamed = await app.inject({ method: "PATCH", url: `/v1/intake/specs/${source.specId}`, headers: { "x-catering-trusted-secret": secret, "x-catering-actor-name": "Intake-Mitarbeiter", "x-catering-business-id": "local" }, payload: { menuItems: ["Neues Dessert", "Gemüsebratlinge", "Linsenragout"], componentUpdates: [{ componentId: "original-1", productionStation: "cold-kitchen" }] } });
+      expect(renamed.statusCode, renamed.body).toBe(200);
+      const renamedMenu = renamed.json().acceptedEventSpec.menuPlan;
+      expect(renamedMenu[0]).not.toHaveProperty("productionStation");
+      expect(renamedMenu[0]).not.toHaveProperty("productionDecision");
+      expect(renamedMenu[1].componentId).toBe("original-1");
+      expect(renamedMenu[1].productionStation).toBe("cold-kitchen");
+      expect(renamedMenu[1].productionDecision).toEqual(saved.menuPlan[1]!.productionDecision);
+      const beforeDuplicate = await store.getSpec({ businessId: "local" }, source.specId);
+      const duplicate = await app.inject({ method: "PATCH", url: `/v1/intake/specs/${source.specId}`, headers: { "x-catering-trusted-secret": secret, "x-catering-actor-name": "Intake-Mitarbeiter", "x-catering-business-id": "local" }, payload: { menuItems: ["Gemüsebratlinge", "Gemüsebratlinge"] } });
+      expect(duplicate.statusCode, duplicate.body).toBe(422);
+      expect(await store.getSpec({ businessId: "local" }, source.specId)).toEqual(beforeDuplicate);
+
+      expect(renamedMenu.map((item: { servings: number }) => item.servings)).toEqual([100, 25, 20]);
+      await store.saveSpec({ businessId: "local" }, saved);
       const cleared = await app.inject({ method: "PATCH", url: `/v1/intake/specs/${source.specId}`, headers: { "x-catering-trusted-secret": secret, "x-catering-actor-name": "Intake-Mitarbeiter", "x-catering-business-id": "local" }, payload: { componentUpdates: [{ componentId: "original-0", notes: "" }] } });
       expect(cleared.statusCode, cleared.body).toBe(200);
       expect(cleared.json().acceptedEventSpec.menuPlan[0].productionDecision.notes).toBe("");
