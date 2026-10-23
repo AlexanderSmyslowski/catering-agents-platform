@@ -1,5 +1,12 @@
 # Catering Backup/Restore – Vertragsnotiz
 
+Für den vollständigen Nürnberger Drei-DB-Dienst gilt der konkrete
+[NUE-Installations- und Recoveryweg](../../platform-infra/backup/NUE-FULL-BACKUP.md).
+Dessen bestehender Cold-Capture-/Restorekern wird als eigener Dienstvariant
+zusammengeführt; lokale Tests sind keine Host- oder Timerabnahme. Die folgenden
+Verträge beschreiben den älteren Kandidaten-/Probe-Slice. Seine Ein-DB-Skripte
+und Sandboxunits werden für Nürnberg nicht als vollständige Sicherung installiert.
+
 Dieser Slice beschreibt ausschließlich einen später separat freizugebenden,
 repository-only Backup-Kandidaten und einen isolierten Restore-Probe. Es wurde
 in der Produktion **kein Backup ausgeführt; kein Restore ausgeführt**. Echte
