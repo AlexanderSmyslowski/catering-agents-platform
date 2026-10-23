@@ -466,8 +466,9 @@ class NueTests(unittest.TestCase):
     def test_new_bundle_binds_actual_full_source_lockfile_helpers_and_oci(self):
         from catering_target_operator_test import operator
         from catering_target_v4_test import archive_fixture
-        for mode in ("repository", "local-current"):
-            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as tmp:
+        binding = {"manifestSha256":"a" * 64, "helperSha256":"b" * 64}
+        for mode, predecessor in (("repository", None), ("local-current", None), ("local-current", binding)):
+            with self.subTest(mode=mode, predecessor=predecessor), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp); source = root / "source"; source.mkdir(mode=0o755)
                 for directory in nue.RUNTIME_ROOTS: (source / directory).mkdir(parents=True, mode=0o755)
                 (source / "shared-core/src/persistence.ts").write_text("const BUSINESS_RECORDS_SCHEMA_MIGRATION=`CREATE TABLE records(id TEXT)`;\nfunction getCachedPool() {}")
@@ -489,13 +490,14 @@ class NueTests(unittest.TestCase):
                 def save(identity, path):
                     role = next(role for role in fixtures if fixtures[role][2] == identity)
                     path.write_bytes(gzip.compress(fixtures[role][1]))
-                with patch.object(nue, "command", side_effect=command), patch.object(operator, "export_product_context", side_effect=lambda src, sha, dst: shutil.copytree(src, dst)), patch.object(operator, "_save_docker_image", side_effect=save), patch.object(nue, "current_base_gate", return_value={"current": True}) as current_gate:
+                with patch.object(nue, "accepted_current_bundle"), patch.object(nue, "own_lock", return_value="synthetic"), patch.object(nue, "owned"), patch.object(nue, "unlock"), patch.object(nue, "command", side_effect=command), patch.object(operator, "export_product_context", side_effect=lambda src, sha, dst: shutil.copytree(src, dst)), patch.object(operator, "_save_docker_image", side_effect=save), patch.object(nue, "current_base_gate", return_value={"current": True}) as current_gate:
                     out = root / "bundle"
                     sha = nue.create_bundle(operator, source, "1" * 40, "2" * 40, out,
                                             "node@sha256:" + "4" * 64 if mode == "repository" else None,
                                             "caddy@sha256:" + "5" * 64 if mode == "repository" else None,
                                             base_mode=mode, runtime_base=nue.CURRENT_RUNTIME_M if mode == "local-current" else None,
-                                            web_base=nue.CURRENT_WEB_M if mode == "local-current" else None)
+                                            web_base=nue.CURRENT_WEB_M if mode == "local-current" else None,
+                                            exported=predecessor is not None, accepted_current_release=predecessor)
                 manifest = nue.verify_bundle(out, sha)
                 self.assertEqual((manifest["targetId"], manifest["mode"]), ("catering-prod-02", "nue-image-only"))
                 self.assertTrue(all("--pull=false" in call for call in calls if call[1] == "build"))
@@ -504,14 +506,15 @@ class NueTests(unittest.TestCase):
                     current_gate.assert_not_called()
                 else:
                     self.assertEqual(current_gate.call_count, 2)
+                    self.assertTrue(all(call.kwargs == {"accepted_current_release":predecessor} for call in current_gate.call_args_list))
                     self.assertEqual(manifest["bases"], nue.CURRENT_BASE_LAYOUT)
                     self.assertIn("WORKDIR /catering-product", (out / "Dockerfile.runtime.bound").read_text())
                     self.assertIn("ln -s /catering-public /srv", (out / "Dockerfile.web.bound").read_text())
                     self.assertFalse(any(call[1] == "pull" for call in calls))
-                    with patch.object(nue, "command", side_effect=command), patch.object(operator, "export_product_context", side_effect=lambda src, sha, dst: shutil.copytree(src, dst)), patch.object(operator, "_save_docker_image", side_effect=save), patch.object(nue, "current_base_gate", side_effect=[{"current": True}, {"current": False}]):
+                    with patch.object(nue, "accepted_current_bundle"), patch.object(nue, "own_lock", return_value="synthetic"), patch.object(nue, "owned"), patch.object(nue, "unlock"), patch.object(nue, "command", side_effect=command), patch.object(operator, "export_product_context", side_effect=lambda src, sha, dst: shutil.copytree(src, dst)), patch.object(operator, "_save_docker_image", side_effect=save), patch.object(nue, "current_base_gate", side_effect=[{"current": True}, {"current": False}]):
                         rejected = root / "drift-bundle"
                         with self.assertRaisesRegex(RuntimeError, "NUE_CURRENT_BASE_CHANGED_DURING_BUILD"):
-                            nue.create_bundle(operator, source, "1" * 40, "2" * 40, rejected, None, None, base_mode="local-current", runtime_base=nue.CURRENT_RUNTIME_M, web_base=nue.CURRENT_WEB_M)
+                            nue.create_bundle(operator, source, "1" * 40, "2" * 40, rejected, None, None, base_mode="local-current", runtime_base=nue.CURRENT_RUNTIME_M, web_base=nue.CURRENT_WEB_M, exported=predecessor is not None, accepted_current_release=predecessor)
                         self.assertFalse((rejected / "manifest.json").exists())
                 (out / "source/package-lock.json").write_text("tampered")
                 with self.assertRaisesRegex(RuntimeError, "NUE_FULL_SOURCE_BINDING"): nue.verify_bundle(out, sha)
@@ -859,6 +862,142 @@ class NueTests(unittest.TestCase):
                         with self.assertRaises(RuntimeError): nue.accepted_681213b_bundle(object())
                         if mutation in ("helper", "helper-pin", "manifest", "product", "operations", "bases"):
                             loader.assert_not_called()
+
+    def test_explicit_current_record_checks_all_helpers_receipts_and_runtime_before_execution(self):
+        from unittest.mock import Mock
+        mutations = (None, "target", "bases", "helper-pin", "helper", "operator", "oci", "manifest",
+                     "bundle", "stage", "baseline", "installed", "receipt-manifest", "receipt-image", "compose", "runtime")
+        for mutation in mutations:
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
+                releases = Path(temporary); root = releases / "fixture"; tools = root / "tools"; tools.mkdir(parents=True)
+                for name in ("catering_target_nue_image_update.py", "catering-target-operator.py", "catering_target_oci.py"):
+                    (tools / name).write_text(name)
+                helper = tools / "catering_target_nue_image_update.py"
+                helper_sha = nue.digest(helper)
+                identities = {"runtime":"sha256:" + "a" * 64, "web":"sha256:" + "b" * 64}
+                manifest = {"mode":"nue-image-only", "repository":"AlexanderSmyslowski/catering-agents-platform",
+                    "targetId":"catering-prod-02", "platform":"linux/amd64", "bases":dict(nue.CURRENT_BASE_LAYOUT),
+                    "helpers":{p.name:nue.digest(p) for p in tools.iterdir()}, "schemaBinding":{"same":True},
+                    "images":{role:{"platformManifestDigest":identity} for role,identity in identities.items()}}
+                if mutation == "target": manifest["targetId"] = "catering-prod-1"
+                if mutation == "bases": manifest["bases"]["runtimeRoot"] = "/other"
+                raw = nue.canonical(manifest); sha = hashlib.sha256(raw).hexdigest()
+                root.rename(releases / sha); root = releases / sha; tools = root / "tools"
+                (root / "manifest.json").write_bytes(raw)
+                baseline = {"same":True}; baseline_raw = nue.canonical(baseline)
+                (root / "baseline.json").write_bytes(baseline_raw)
+                stage = {"manifestSha256":sha, "mode":"nue-image-only", "baselineSha256":hashlib.sha256(baseline_raw).hexdigest()}
+                if mutation == "stage": stage["manifestSha256"] = "d" * 64
+                (root / "stage.json").write_bytes(nue.canonical(stage))
+                images = {s:identities["web" if s == "web" else "runtime"] for s in nue.SERVICES}
+                candidate = nue.canonical({"services":images}); (root / "compose.candidate.json").write_bytes(candidate)
+                receipt = {"manifestSha256":sha, "status":"NUE_IMAGE_ONLY_INSTALLED", "images":dict(images),
+                           "composeSha256":hashlib.sha256(candidate).hexdigest()}
+                if mutation == "installed": receipt["status"] = "HOLD"
+                if mutation == "receipt-manifest": receipt["manifestSha256"] = "e" * 64
+                if mutation == "receipt-image": receipt["images"]["intake"] = "sha256:" + "f" * 64
+                (root / "installed.json").write_bytes(nue.canonical(receipt))
+                if mutation == "manifest": (root / "manifest.json").write_bytes(raw + b" ")
+                for label, name in (("helper", "catering_target_nue_image_update.py"), ("operator", "catering-target-operator.py"), ("oci", "catering_target_oci.py")):
+                    if mutation == label: (tools / name).write_bytes(b"tampered")
+                if mutation == "baseline": (root / "baseline.json").write_bytes(b"{}")
+                if mutation == "compose": (root / "compose.candidate.json").write_bytes(candidate + b" ")
+                verifier = SimpleNamespace(verify_bundle=Mock(return_value=manifest), verify_runtime=Mock(),
+                    verify=Mock(return_value={"status":"NUE_IMAGE_ONLY_VERIFIED"}))
+                if mutation == "bundle": verifier.verify_bundle.side_effect = RuntimeError("bundle drift")
+                if mutation == "runtime": verifier.verify_runtime.side_effect = RuntimeError("runtime drift")
+                binding = {"manifestSha256":sha, "helperSha256":"0" * 64 if mutation == "helper-pin" else helper_sha}
+                with patch.object(nue, "RELEASES", releases), patch.object(nue, "protected", side_effect=lambda p,**kw:Path(p)), \
+                     patch.object(nue, "load_module", return_value=verifier) as loader:
+                    if mutation is None:
+                        oci = object()
+                        self.assertEqual(nue.accepted_current_bundle(oci, binding, before_lock=True), (root, manifest))
+                        verifier.verify.assert_called_once_with(root, sha)
+                        verifier.verify_runtime.assert_not_called()
+                        self.assertEqual(nue.accepted_current_bundle(oci, binding), (root, manifest))
+                        verifier.verify_runtime.assert_called_once_with(baseline, images, candidate, candidate_oci=oci,
+                            candidate_layout=manifest["bases"], candidate_schema=manifest["schemaBinding"])
+                    else:
+                        with self.assertRaises(RuntimeError): nue.accepted_current_bundle(object(), binding)
+                        if mutation in ("helper-pin", "helper", "operator", "oci", "manifest", "target", "bases"):
+                            loader.assert_not_called()
+
+    def test_explicit_binding_is_request_bound_and_preflight_precedes_own_lock(self):
+        from unittest.mock import Mock
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary); source = root / "product"; source.mkdir(); (source / "package-lock.json").write_text("{}")
+            operator = Mock(REPOSITORY="AlexanderSmyslowski/catering-agents-platform")
+            operator.export_product_context.side_effect = lambda src, sha, dst: shutil.copytree(src, dst)
+            operator._source_tree_digest.return_value = "c" * 64
+            binding = {"manifestSha256":"a" * 64, "helperSha256":"b" * 64}
+            for invalid in ({}, {"manifestSha256":"a" * 64}, {**binding, "helperSha256":None}, {**binding, "manifestSha256":"../other"}):
+                output = root / "invalid"
+                with self.assertRaisesRegex(RuntimeError, "NUE_ACCEPTED_CURRENT_BINDING"):
+                    nue.prepare(operator, source, "1" * 40, "2" * 40, output, accepted_current_release=invalid)
+                self.assertFalse(output.exists())
+            inputs = root / "input"
+            sha = nue.prepare(operator, source, "1" * 40, "2" * 40, inputs, accepted_current_release=binding)
+            self.assertEqual(json.loads((inputs / "build-input.json").read_bytes())["acceptedCurrentRelease"], binding)
+            events = []
+            with patch.object(nue, "host_identity"), patch.object(nue, "protected", side_effect=lambda p,**kw:Path(p)), \
+                 patch.object(nue, "load_module", return_value=operator), \
+                 patch.object(nue, "accepted_current_bundle", side_effect=lambda *a,**kw:events.append(("preflight",kw))) as accepted, \
+                 patch.object(nue, "own_lock", side_effect=lambda:events.append("lock") or "own"), \
+                 patch.object(nue, "owned"), patch.object(nue, "unlock") as unlock, \
+                 patch.object(nue, "_create_bundle", return_value="candidate") as create:
+                kwargs = dict(base_mode="local-current", runtime_base=nue.CURRENT_RUNTIME_M, web_base=nue.CURRENT_WEB_M)
+                self.assertEqual(nue.build_prepared(inputs, sha, root / "output", None, None, **kwargs), "candidate")
+                self.assertEqual(events, [("preflight", {"before_lock":True}), "lock"])
+                self.assertEqual(create.call_args.kwargs["accepted_current_release"], binding)
+                unlock.assert_called_once_with("own")
+                create.reset_mock(); events.clear()
+                accepted.side_effect = RuntimeError("NUE_UPDATE_OR_RECOVERY_IN_PROGRESS")
+                with self.assertRaisesRegex(RuntimeError, "NUE_UPDATE_OR_RECOVERY_IN_PROGRESS"):
+                    nue.build_prepared(inputs, sha, root / "output", None, None, **kwargs)
+                self.assertEqual(events, []); create.assert_not_called(); self.assertFalse((root / "output").exists())
+                accepted.side_effect = None
+                with self.assertRaisesRegex(RuntimeError, "NUE_ACCEPTED_CURRENT_BASE_MODE"):
+                    nue.build_prepared(inputs, sha, root / "output", None, None)
+                create.assert_not_called()
+                (inputs / "build-input.json").write_bytes((inputs / "build-input.json").read_bytes() + b" ")
+                with self.assertRaisesRegex(RuntimeError, "EXPLICIT_FILE_BINDING"):
+                    nue.build_prepared(inputs, sha, root / "output", None, None, **kwargs)
+                create.assert_not_called()
+
+    def test_direct_explicit_build_refuses_foreign_lock_before_docker_or_output(self):
+        from unittest.mock import Mock
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary); lock = root / "lock"; lock.mkdir(); (lock / "owner.json").write_text("foreign")
+            binding = {"manifestSha256":"a" * 64, "helperSha256":"b" * 64}
+            with patch.object(nue, "LOCK", lock), patch.object(nue, "accepted_current_bundle") as accepted, \
+                 patch.object(nue, "command") as command, patch.object(nue, "_create_bundle") as build:
+                with self.assertRaisesRegex(RuntimeError, "NUE_FOREIGN_UPDATE_LOCK"):
+                    nue.create_bundle(Mock(), root / "source", "1" * 40, "2" * 40, root / "output", None, None,
+                        exported=True, base_mode="local-current", accepted_current_release=binding)
+                self.assertTrue(accepted.call_args.kwargs["before_lock"])
+                command.assert_not_called(); build.assert_not_called()
+                self.assertFalse((root / "output").exists())
+                self.assertEqual((lock / "owner.json").read_text(), "foreign")
+
+    def test_explicit_current_gate_uses_bound_images_and_never_falls_back(self):
+        from unittest.mock import Mock
+        binding = {"manifestSha256":"a" * 64, "helperSha256":"b" * 64}
+        identities = {"runtime":"sha256:" + "c" * 64, "web":"sha256:" + "d" * 64}
+        manifest = {"images":{role:{"platformManifestDigest":value} for role,value in identities.items()}}
+        with self.synthetic_current_host() as state, patch.object(nue, "accepted_current_bundle", return_value=(Path("/fixed"), manifest)) as accepted, \
+             patch.object(nue, "verified_product_running_gate", return_value={"verified":True}) as gate:
+            self.assertEqual(nue.current_base_gate(Mock(), nue.CURRENT_RUNTIME_M, nue.CURRENT_WEB_M,
+                accepted_current_release=binding), {"verified":True})
+            self.assertEqual(gate.call_args.args[4], identities)
+            self.assertEqual(gate.call_args.args[5], {"acceptedCurrentRelease":binding})
+            gate.reset_mock(); accepted.side_effect = RuntimeError("receipt drift")
+            with self.assertRaisesRegex(RuntimeError, "receipt drift"):
+                nue.current_base_gate(Mock(), nue.CURRENT_RUNTIME_M, nue.CURRENT_WEB_M, accepted_current_release=binding)
+            gate.assert_not_called()
+            accepted.reset_mock()
+            with self.assertRaisesRegex(RuntimeError, "NUE_CURRENT_BASE_EXACT_M_REQUIRED"):
+                nue.current_base_gate(Mock(), identities["runtime"], identities["web"], accepted_current_release=binding)
+            accepted.assert_not_called()
 
     @contextmanager
     def synthetic_pr727_caddy_trust(self):
