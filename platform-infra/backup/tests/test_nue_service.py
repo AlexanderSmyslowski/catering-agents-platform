@@ -74,6 +74,34 @@ class Admission(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'LEGACY_RESTORE_UNIT_PRESENT'):
             self.admit()
 
+    def test_systemctl_reader_requests_and_retains_empty_properties(self):
+        # systemctl suppresses empty values unless explicitly asked for them.
+        # Admission must distinguish a proven empty DropInPaths from missing data.
+        def systemctl(arguments, **kwargs):
+            stdout = b'LoadState=loaded\n'
+            if '--all' in arguments:
+                stdout += b'DropInPaths=\n'
+            return types.SimpleNamespace(returncode=0, stdout=stdout)
+        with mock.patch.object(service.subprocess, 'run', side_effect=systemctl):
+            observed = service.properties('catering-backup.service')
+        self.assertIn('DropInPaths', observed)
+        self.assertEqual(observed['DropInPaths'], '')
+
+    def test_missing_or_nonempty_dropin_properties_remain_rejected(self):
+        for unit, reason in [('catering-backup.service', 'SERVICE_UNIT_DRIFT'),
+                             ('catering-backup.timer', 'TIMER_UNIT_DRIFT')]:
+            for value in (None, '/etc/systemd/system/foreign.conf'):
+                with self.subTest(unit=unit, value=value):
+                    if value is None:
+                        self.units[unit].pop('DropInPaths')
+                    else:
+                        self.units[unit]['DropInPaths'] = value
+                    try:
+                        with self.assertRaisesRegex(RuntimeError, reason):
+                            self.admit()
+                    finally:
+                        self.units[unit]['DropInPaths'] = ''
+
     def test_namespace_mismatch_before_job_reads_or_mutates(self):
         with mock.patch.object(service.os, 'geteuid', return_value=0), \
              mock.patch.object(service, 'same_mount_namespace', side_effect=RuntimeError('HOST_MOUNT_NAMESPACE_REQUIRED')), \
