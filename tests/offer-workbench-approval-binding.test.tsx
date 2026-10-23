@@ -350,3 +350,23 @@ describe("offer workbench approval binding", () => {
     expect(markup).not.toContain("production-a-revision-1");
   });
 });
+
+it("removes all repeated extraction questions when a revised offer answers them", async () => {
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  const repeatedTimeQuestion = "Wie lautet das verbindliche Zeitfenster?";
+  const unanswered = "Allergene, Hygiene, Temperaturführung und Standzeiten prüfen.";
+  const initial = { ...draft("before-edit", "Vor Bearbeitung"), openQuestions: [repeatedTimeQuestion, repeatedTimeQuestion, unanswered] };
+  const revised = { ...draft("after-edit", "Nach Bearbeitung"), openQuestions: [unanswered] };
+  const duplicateKeyWarning = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  try {
+    await act(async () => root.render(createElement(OfferConversationalWorkbench, props({ activeDraft: initial, selectedDraft: initial }))));
+    await act(async () => root.render(createElement(OfferConversationalWorkbench, props({ activeDraft: revised, selectedDraft: revised }))));
+    const region = document.querySelector('[aria-label="Offene Punkte"]')!;
+    expect(region.querySelector("h3")?.textContent).toBe("Offene Punkte (1)");
+    expect(Array.from(region.querySelectorAll("li")).map(item => item.textContent)).toEqual([unanswered]);
+    expect(duplicateKeyWarning).not.toHaveBeenCalled();
+  } finally {
+    await act(async () => root.unmount());
+    duplicateKeyWarning.mockRestore();
+  }
+});
