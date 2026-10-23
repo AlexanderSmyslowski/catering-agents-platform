@@ -1,3 +1,33 @@
+## Vollständiger NUE-Backupdienst implementiert, noch nicht installiert — Version 5.541 / 23.10.2026
+
+PR750 enthält den serverlokalen Drei-DB-Backup-/Offhost-/Readback-/isolierten
+Restore-/Vergleich-/Cleanupdienst aus den bestehenden angenommenen Komponenten.
+Pflicht-CI des bisherigen PR-Stands ist vollständig SUCCESS. Der Dienst und
+Restic sind damit nicht auf Nürnberg installiert; kein echter Service-PASS,
+keine Timeraktivierung und keine Observerabnahme werden daraus abgeleitet.
+
+Die aktuelle Koordinatorübergabe bestätigt den bestehenden manuellen vollständigen
+D7-Backup-/Restore-/Vergleich-/Cleanup-Lauf 0f34717c1c2405543135c50b502924a8
+als tatsächlich erfolgreich und unabhängig angenommen, 23.10.2026 08:21:51 UTC.
+Er bezieht sich auf das installierte Manifest
+d7a6b39ae9631ef28e332c1e9841c55406b2d81c4730db4b06ad5e0100c64151;
+er ist kein Durchlauf des neuen systemd-Dienstes.
+
+Automatischer PR-Review fand danach einen echten Admissionblocker: Die unabhängig
+signaturgeprüfte offizielle Restic-0.19.0-Binary umfasst30.924.962Bytes und passt
+nicht in den bisherigen16MiB-Reader. Der enge Folgefix erlaubt ausschließlich dem
+festen /usr/local/bin/restic bis64MiB bei unverändertem exaktem Hash-, Eigentums-
+und Generationsschutz, sowohl initial als auch bei Laufzeitnachprüfungen.
+Andere Dateien behalten16MiB, die Passwortlesegrenze bleibt4096Bytes.
+Regression mit echter30.924.962Byte-Datei, falschem Hash/Pfad und Überschreitung
+von64MiB bestanden. Unabhängige Deltaabnahme und neue Pflicht-CI dieses Folgefixes
+sind noch offen; keine Integrations-/Installationsfreigabe behauptet.
+
+Details und nächste technische Grenze im
+[Checkpoint5.541](docs/agent-memory/memory_v5.541_2026-10-23.md).
+Bestehende Historie unten bleibt erhalten; ältere Aktiv-/Installationsstände sind
+kein aktueller Betriebsnachweis.
+
 Fortschreibung zur gebündelten Navigation: Der bestehende reine Lesebefehl
 inspect_result bleibt jetzt auch nach completed für fallgebundene Produktionsresultate
 erreichbar. Label „Plan und Einkauf anzeigen“, keine internen IDs in der Rückmeldung.
@@ -3115,3 +3145,10 @@ am23.10.04:22UTC unabhängig ACCEPT, alle3DB/Globals/Rollen/8Dateibäume identis
 
 ### Version 5.538 — 23.10.2026
 Irreführenden Altlinkstatus nur bei nachgewiesenem übernommenem Nachfolger lokal korrigiert;26Tests/Typecheck/Build/independentACCEPT. Folge-PR noch nicht installiert.
+
+
+### Version 5.541 — 23.10.2026: NUE-Backupdienst und enger Restic-Admissionfix
+
+Dienst in PR750 implementiert, nicht installiert; manueller D7-Lauf0f34717c…
+am08:21:51UTC unabhängig angenommen. Restic-only64MiB-Folgefix lokal gezielt
+verifiziert; dessen neue CI und unabhängige Deltaabnahme bleiben offen.

@@ -61,6 +61,14 @@ def protected(path, expected=None, private=False, maximum=16777216):
     return body, fingerprint(before)
 
 
+def protected_binding(path, expected, private=False):
+    # The official Restic executable exceeds the record/config reader's 16 MiB
+    # limit. Only this fixed binary path gets a larger, still hash-bound budget.
+    if Path(path) == RESTIC:
+        return protected(path, expected, private=private, maximum=64 * 1024 ** 2)
+    return protected(path, expected, private=private)
+
+
 def load_module(name, path):
     spec = importlib.util.spec_from_file_location(name, path)
     module = importlib.util.module_from_spec(spec)
@@ -204,7 +212,7 @@ class Job:
                 self.bindings[str(self.bundle / 'manifest.json')] == self.config['manifestSha256'], 'REVIEWED_SOURCE_PIN')
         for path, expected in self.bindings.items():
             require(re.fullmatch('[0-9a-f]{64}', expected), 'FILE_DIGEST')
-            _, self.identities[path] = protected(path, expected, private=path in (self.config['credentialsPath'], self.config['passwordPath']))
+            _, self.identities[path] = protected_binding(path, expected, private=path in (self.config['credentialsPath'], self.config['passwordPath']))
         self.installed = load_module('catering_nue_installed', self.helper)
         self.core = load_module('catering_nue_core', CORE)
         self.core.SCHEDULER_GATE = self.scheduler_gate
@@ -219,7 +227,7 @@ class Job:
         require(protected(GENERATION, private=True)[1] == self.generation_identity, 'GENERATION_CHANGED')
         require(protected(CONFIG, self.marker['configSha256'], private=True)[1] == self.config_identity, 'CONFIG_CHANGED')
         for path, expected in self.bindings.items():
-            require(protected(path, expected)[1] == self.identities[path], 'BOUND_GENERATION_CHANGED')
+            require(protected_binding(path, expected)[1] == self.identities[path], 'BOUND_GENERATION_CHANGED')
 
     def scheduler_gate(self):
         same_mount_namespace()

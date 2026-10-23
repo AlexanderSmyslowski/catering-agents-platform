@@ -6,6 +6,7 @@ import io
 import json
 import os
 import signal
+import stat
 from pathlib import Path
 import subprocess
 import sys
@@ -125,6 +126,56 @@ class Admission(unittest.TestCase):
         job.config['recoveryPath'] = '/another/generation/recovery'
         with self.assertRaisesRegex(RuntimeError, 'ATTESTATION_GENERATION_DIRECTORY'):
             job.validate_attestations()
+
+    def test_large_restic_binary_keeps_exact_hash_and_other_file_limits(self):
+        with tempfile.TemporaryDirectory() as directory:
+            binary = (Path(directory).resolve() / 'restic')
+            with binary.open('wb') as output:
+                output.write(b'synthetic-restic-fixture')
+                output.truncate(30924962)
+            binary.chmod(0o600)
+            expected = service.sha(binary.read_bytes())
+            original_lstat, original_fstat = Path.lstat, os.fstat
+            def root_metadata(info):
+                # Use synthetic protected ownership while the actual reader opens
+                # and hashes real fixture bytes and retains file generations.
+                values = {name: getattr(info, name) for name in (
+                    'st_dev', 'st_ino', 'st_mode', 'st_uid', 'st_gid', 'st_nlink',
+                    'st_size', 'st_mtime_ns', 'st_ctime_ns')}
+                values['st_uid'] = 0
+                if stat.S_ISDIR(info.st_mode):
+                    values['st_mode'] &= ~0o022
+                return types.SimpleNamespace(**values)
+            with mock.patch.object(service, 'RESTIC', binary), \
+                 mock.patch.object(Path, 'lstat', lambda path: root_metadata(original_lstat(path))), \
+                 mock.patch.object(service.os, 'fstat', lambda fd: root_metadata(original_fstat(fd))):
+                body, identity = service.protected_binding(binary, expected)
+                self.assertEqual(len(body), 30924962)
+                self.assertEqual(service.sha(body), expected)
+                with self.assertRaisesRegex(RuntimeError, 'PROTECTED_HASH'):
+                    service.protected_binding(binary, '0' * 64)
+                with self.assertRaisesRegex(RuntimeError, 'PROTECTED_FILE'):
+                    service.protected(binary, expected, private=True)
+                with mock.patch.object(service, 'RESTIC', binary.parent / 'different-restic'):
+                    with self.assertRaisesRegex(RuntimeError, 'PROTECTED_FILE'):
+                        service.protected_binding(binary, expected, private=True)
+                job = object.__new__(service.Job)
+                job.marker = {'configSha256': 'a' * 64}
+                job.generation_identity, job.config_identity = ('generation',), ('config',)
+                job.bindings, job.identities = {str(binary): expected}, {str(binary): identity}
+                actual_protected = service.protected
+                def read_current(path, *args, **kwargs):
+                    if Path(path) == service.GENERATION:
+                        return b'', job.generation_identity
+                    if Path(path) == service.CONFIG:
+                        return b'', job.config_identity
+                    return actual_protected(path, *args, **kwargs)
+                with mock.patch.object(service, 'protected', side_effect=read_current):
+                    job.immutable()
+                with binary.open('r+b') as output:
+                    output.truncate(64 * 1024 ** 2 + 1)
+                with self.assertRaisesRegex(RuntimeError, 'PROTECTED_FILE'):
+                    service.protected_binding(binary, expected)
 
     def test_restic_version_and_producer_exit_capability_are_required(self):
         job = object.__new__(service.Job)
