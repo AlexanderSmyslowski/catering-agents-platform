@@ -3152,3 +3152,8 @@ Irreführenden Altlinkstatus nur bei nachgewiesenem übernommenem Nachfolger lok
 Dienst in PR750 implementiert, nicht installiert; manueller D7-Lauf0f34717c…
 am08:21:51UTC unabhängig angenommen. Restic-only64MiB-Folgefix lokal gezielt
 verifiziert; dessen neue CI und unabhängige Deltaabnahme bleiben offen.
+
+
+### Version 5.543 — 23.10.2026
+Der bereits auf Nürnberg beobachtete Tastaturfokusfehler beim Ergebnis-Sprung ist lokal eng behoben: Der bestehende Produktionsplancontainer ist über tabIndex=-1 programmatisch fokussierbar und als Region „Produktionsplan und Unterlagen“ benannt. Keine neue Aktion, Schreiboperation, Gestaltung oder Fachlogik. Der gleiche Fokuspfad nach Übernahme profitiert ebenfalls.
+Regression vor Fix tatsächlich FAIL, danach29betroffeneTestsPASS; nach ergänzten Semantikasserts4betroffeneTests erneutPASS. TypeScript über831versionierteQuellenPASS (unveränderte unversionierte lokale Reviewkopien würden den pauschalen tsc-Aufruf zusätzlich einlesen). NormalerChrome auf echterLayoutkomponente mit synthetischer90GastFixture: Desktop/390px Enter→benannteRegion, nächsterTab→Einzelheiten; nativer sichtbarerFokus und ARIA-Rolle geprüft. Kein erneuter100Gast- oder NürnbergerNachweis. Impeccable-Detektor ohneBefund; bestehendeAgenturOS-Gestaltung erhalten. TatsächlicherOpus5.5/firstParty-Review9d48c3c0-9265-4149-b49b-b31b5f3841dd ACCEPT; konkreteFokusdarstellungsrückfragen imBrowser geschlossen. Belege lokal tmp/production-result-focus-20261023. Noch nicht aufNürnberg installiert.

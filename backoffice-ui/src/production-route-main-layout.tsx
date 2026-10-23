@@ -158,7 +158,8 @@ export function ProductionRouteMainLayout({
           </div>
         ),
         productionObjectsSlot: (
-          <div className="production-column production-column--objects">
+          <div className="production-column production-column--objects"
+            tabIndex={-1} role="region" aria-label="Produktionsplan und Unterlagen">
             <ProductionObjectsPanel
               progressState={objectPanelProgress}
               objectsState={objectPanelState}
