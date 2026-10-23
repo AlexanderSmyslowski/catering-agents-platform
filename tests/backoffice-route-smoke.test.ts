@@ -725,7 +725,7 @@ describe("backoffice route smoke", () => {
     expect(production.html).toContain("/api/exports/v1/exports/production-plans/corridor-plan-1/html");
     expect(production.text).toContain("Einkaufsliste exportieren für aktuellen Vorgang");
     expect(production.html).toContain("/api/exports/v1/exports/purchase-lists/corridor-purchase-1/csv");
-    expect(production.text).toContain("Audit-Spur");
+    expect(production.text).toContain("Bearbeitungsverlauf");
     expect(production.text).toContain("Produktionsauftrag angelegt.");
     expect(production.text).not.toContain("Korridor-Demo vorbereitet");
     expect(production.text).not.toContain("Produktionsfreigabe erteilt");

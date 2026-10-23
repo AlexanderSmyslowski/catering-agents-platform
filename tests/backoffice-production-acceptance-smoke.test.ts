@@ -1658,15 +1658,15 @@ describe("backoffice production acceptance smoke", () => {
     const content = await renderProductionRoute();
 
     expect(content).toContain("Herkunft und Übergabe");
-    expect(content).toContain("Intake-Ursprung");
+    expect(content).toContain("Herkunft der Anfrage");
     expect(content).toContain("manuelle Eingabe · 2026-05-21T08:02:00.000Z · Intake-Anfrage verknüpft");
-    expect(content).toContain("Audit-Spur");
+    expect(content).toContain("Bearbeitungsverlauf");
     expect(content).toContain("Produktionsplan erstellt · Küche · production.plan.created · 2026-05-21T09:15:00.000Z");
-    expect(content).toContain("Übergabe-/Exportartefakte");
+    expect(content).toContain("Unterlagen");
     expect(content).toContain("Produktionsblatt vorhanden · Einkaufsliste vorhanden");
-    expect(content).toContain("Beta-Endpunkt: Produktionsblatt, Einkaufsliste und Audit-Spur sind interne Arbeitsbelege.");
-    expect(content).toContain("Fehlende Artefakte bleiben offen markiert; keine externe Freigabe, Signatur- oder Compliance-Behauptung.");
-    expect(content).toContain("Keine rechtssichere Audit-Behauptung");
+    expect(content).toContain("Produktionsplan, Einkaufsliste und Verlauf sind interne Arbeitsunterlagen.");
+    expect(content).toContain("Fehlende Unterlagen bleiben als offen gekennzeichnet.");
+    expect(content).toContain("Die Übergabe ersetzt keine fachliche Freigabe für die tatsächliche Produktion.");
     expect(content).not.toContain("Konferenz am 2026-07-13 fuer 36 Teilnehmer");
     expect(content).not.toContain("sha256:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210");
   });
@@ -1835,7 +1835,7 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Export erst verfügbar, wenn Einkaufspositionen ermittelt sind.");
     expect(content).toContain("Produktionsblatt vorhanden · Einkaufsliste ohne Positionen");
     expect(content).toContain(
-      "Abschluss-Kontext: Produktionsplan im Fokus · Spezifikation im Fokus · Einkaufsliste ohne Positionen"
+      "Produktionsplan im Fokus · Spezifikation im Fokus · Einkaufsliste ohne Positionen"
     );
     expect(content).not.toContain("Einkaufsliste exportieren für aktuellen Vorgang");
     expect(content).not.toContain("Produktionsblatt vorhanden · Einkaufsliste vorhanden");
@@ -1888,14 +1888,14 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Aktueller Vorgang");
     expect(content).toContain("Produktionsblatt exportieren für aktuellen Produktionsplan");
     expect(content).toContain("Einkaufsliste exportieren für aktuellen Vorgang");
-    expect(content).toContain("Audit-Spur");
+    expect(content).toContain("Bearbeitungsverlauf");
     expect(content).toContain("Produktionsplan erstellt · Küche · production.plan.created · 2026-05-21T09:15:00.000Z");
     expect(content).toContain(
-      "Abschluss-Kontext: Produktionsplan im Fokus · Spezifikation im Fokus · Einkaufsliste vorhanden"
+      "Produktionsplan im Fokus · Spezifikation im Fokus · Einkaufsliste vorhanden"
     );
-    expect(content).toContain("Beta-Endpunkt: Produktionsblatt, Einkaufsliste und Audit-Spur sind interne Arbeitsbelege.");
-    expect(content).toContain("keine externe Freigabe, Signatur- oder Compliance-Behauptung");
-    expect(content).toContain("Keine rechtssichere Audit-Behauptung");
+    expect(content).toContain("Produktionsplan, Einkaufsliste und Verlauf sind interne Arbeitsunterlagen.");
+    expect(content).toContain("Sie ist keine externe Freigabe, Signatur oder rechtliche Zusicherung.");
+    expect(content).toContain("Die Übergabe ersetzt keine fachliche Freigabe für die tatsächliche Produktion.");
   });
 
   it("shows answered clarification questions as read-only status anchors", async () => {

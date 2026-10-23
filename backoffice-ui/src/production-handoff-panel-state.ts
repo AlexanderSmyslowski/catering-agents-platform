@@ -16,17 +16,17 @@ export function buildProductionHandoffPanelState(
   const facts: ProductionHandoffFactState[] = [
     {
       key: "intake-origin",
-      label: "Intake-Ursprung",
+      label: "Herkunft der Anfrage",
       value: handoffState.intakeOriginLabel
     },
     {
       key: "audit-trail",
-      label: "Audit-Spur",
+      label: "Bearbeitungsverlauf",
       value: handoffState.auditTrailLabel
     },
     {
       key: "export-artifacts",
-      label: "Übergabe-/Exportartefakte",
+      label: "Unterlagen",
       value: handoffState.exportLabel
     }
   ];
@@ -34,8 +34,8 @@ export function buildProductionHandoffPanelState(
   if (handoffState.contextLabel) {
     facts.push({
       key: "handoff-context",
-      label: "Abschluss-Kontext",
-      value: `Abschluss-Kontext: ${handoffState.contextLabel}`
+      label: "Übergabehinweis",
+      value: handoffState.contextLabel
     });
   }
 

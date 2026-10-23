@@ -3153,6 +3153,11 @@ Dienst in PR750 implementiert, nicht installiert; manueller D7-Lauf0f34717c…
 am08:21:51UTC unabhängig angenommen. Restic-only64MiB-Folgefix lokal gezielt
 verifiziert; dessen neue CI und unabhängige Deltaabnahme bleiben offen.
 
+
+### Version 5.543 — 23.10.2026
+Der bereits auf Nürnberg beobachtete Tastaturfokusfehler beim Ergebnis-Sprung ist lokal eng behoben: Der bestehende Produktionsplancontainer ist über tabIndex=-1 programmatisch fokussierbar und als Region „Produktionsplan und Unterlagen“ benannt. Keine neue Aktion, Schreiboperation, Gestaltung oder Fachlogik. Der gleiche Fokuspfad nach Übernahme profitiert ebenfalls.
+Regression vor Fix tatsächlich FAIL, danach29betroffeneTestsPASS; nach ergänzten Semantikasserts4betroffeneTests erneutPASS. TypeScript über831versionierteQuellenPASS (unveränderte unversionierte lokale Reviewkopien würden den pauschalen tsc-Aufruf zusätzlich einlesen). NormalerChrome auf echterLayoutkomponente mit synthetischer90GastFixture: Desktop/390px Enter→benannteRegion, nächsterTab→Einzelheiten; nativer sichtbarerFokus und ARIA-Rolle geprüft. Kein erneuter100Gast- oder NürnbergerNachweis. Impeccable-Detektor ohneBefund; bestehendeAgenturOS-Gestaltung erhalten. TatsächlicherOpus5.5/firstParty-Review9d48c3c0-9265-4149-b49b-b31b5f3841dd ACCEPT; konkreteFokusdarstellungsrückfragen imBrowser geschlossen. Belege lokal tmp/production-result-focus-20261023. Noch nicht aufNürnberg installiert.
+
 ### Version 5.544 — 23.10.2026: leere Systemd-Eigenschaften bei NUE-Admission
 
 Der bestehende NUE-Dienst fordert bei `systemctl show` jetzt ausdrücklich
@@ -3164,3 +3169,9 @@ Restic bleibt unverändert: dessen 0.19.0-Quellen und die bestehende feste
 Ein-Datei-Quelle/Env-Allowlist/30-Minuten-Grenze bestätigen keinen regulären
 8-MiB-Ausgabeüberlauf. Diese lokale Korrektur ist noch nicht unabhängig
 angenommen, integriert oder installiert; keine Dienst-/Timeraktivierung.
+
+Fortschreibung zu5.544,23.10.2026,10:57UTC: Die vorstehende offene Abnahme ist inzwischen abgeschlossen. Tatsächlicher unabhängiger Opus5.5/firstParty-Review cb8f3c31-4a6f-4f62-937f-8293ce6394cc ACCEPT für das enge Delta; der zusätzliche Restic-Ausgabeverdacht wurde anhand der verwendeten0.19.0-Quellen zurückgezogen. PR752/532186f ist nach vollständiger CI39938234889 SUCCESS regulär als9ad0217ee93fbb8c2cb987fca5550052137190de integriert. Die exakte Main-CI39942470581 läuft. Noch keine Installation, kein manueller Service-PASS und keine Timeraktivierung. PR751/Tastaturfix bleibt separat: ursprüngliche CI39936860322 SUCCESS, nach Einbeziehung des aktuellen Mainstands folgt die erforderliche neue CI. Alle bereits angenommenen unveränderten Code-/Browser-/Reviewnachweise bleiben erhalten. Der aktuelle D7-Produktstand auf Nürnberg bleibt unverändert.
+
+### Version 5.545 — 23.10.2026: verständliche Übergabehinweise
+
+Der bestehende Handoffbereich benennt Herkunft der Anfrage, Bearbeitungsverlauf, Unterlagen und Übergabehinweis verständlich. Redundante Gestaltungs-/Techniktexte sind durch kurze Benutzerhinweise ersetzt; interne Arbeitsunterlagen, offene Unterlagen und fehlende fachliche/externe Freigabe bleiben ausdrücklich sichtbar. Dynamische Werte bleiben vollständig erhalten; nur das doppelte Kontextpräfix entfällt. Keine Änderung an Daten, Rechten, APIs, Freigaben, Exporten oder Navigation. 46 direkt betroffene bestehende Tests und Diffprüfung PASS. Tatsächliche lokale Darstellung der bestehenden Komponente auf Desktop und390px ohne Textüberlauf geprüft. Opus5.5/firstParty Session744dc97c-ebde-407e-9f0d-0d07f038a1e2 ACCEPT. Optionaler Kontext im bestehenden Test geprüft, im Browserfixture nicht gesetzt; kein neuer100Gast-/Nürnberg-Nachweis. Belege tmp/production-handoff-copy-20261023. Mit dem bereits angenommenen Tastaturfix in PR751 gebündelt, Pflicht-CI und Zielrollout weiter offen.

@@ -205,6 +205,25 @@ function buildProps(
 }
 
 describe("production route main layout", () => {
+  it("lets the result shortcut transfer keyboard focus into the production plan", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    try {
+      await act(async () => root.render(createElement(ProductionRouteMainLayout, buildProps())));
+      const result = container.querySelector<HTMLElement>(".production-column--objects");
+      expect(result).not.toBeNull();
+      result?.focus({ preventScroll: true });
+      expect(document.activeElement).toBe(result);
+      expect(result?.tabIndex).toBe(-1);
+      expect(result?.getAttribute("role")).toBe("region");
+      expect(result?.getAttribute("aria-label")).toBe("Produktionsplan und Unterlagen");
+    } finally {
+      await act(async () => root.unmount());
+      container.remove();
+    }
+  });
+
   it("keeps event recipe checks visible when no clarification questions remain", async () => {
     const props = buildProps({ activeProductionCaseId: "synthetic-planning-case" });
     const sessionSpy = vi.spyOn(session, "useCateringSession").mockReturnValue({
