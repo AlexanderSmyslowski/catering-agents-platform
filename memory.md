@@ -1,3 +1,25 @@
+## Wiederöffnen übernommener Produktionsfassungen — Version 5.538 / 23.10.2026
+
+Auf Nürnbergcf2975e tatsächlich beobachteter enger Bedienfehler: Der ursprüngliche
+Handoff-Link zeigt nach Vorbereitung und Übernahme einer Nachfolgerfassung weiterhin
+„Produktionsentwurf nicht verfügbar“, obwohl Plan und Einkauf vorhanden sind.
+Die lokale Korrektur erklärt einen übernommenen Nachfolger nur bei vollständiger,
+streng aufsteigender supersedes-Kette und exakt serverbestätigtem Apply seiner Revision.
+Der ursprüngliche Entwurf wird nicht als übernommen ausgegeben. Ein expliziter Button
+öffnet die bestätigte Fassung; keine automatische Auswahl, kein API-Schreiben,
+keine Änderung von Daten, Freigaben oder Fallgrenzen. Fehlender/falscher/mehrdeutiger
+Nachweis bleibt beim bisherigen vorsichtigen Zustand.
+
+Regressionsfall vorher reproduziert; anschließend26 Paneltests einschließlich falscher
+Receiptrevision, unverwandtem Nachfolger und fehlendem Zwischenglied bestanden.
+TypeScript und Vitebuild bestanden. Ein unabhängiger Reviewer nahm das Zweidateien-
+Delta gegen cf2975e ohne wesentliche Befunde an. Dieser Folgefix ist noch nicht installiert;
+Nürnberg bleibt auf dem tatsächlich angenommenen cf2975e/Ops684-Stand.
+Aktueller100-Gäste-Durchlauf,390px-Layout und neue2g-Zimt-PDF sind tatsächlich geprüft;
+UI-Testkonto/HTTPS/Authinputs bereinigt, Schlussverify05:58:25UTC unabhängigACCEPT.
+Realer Pilot bleibt wegen fachlicher Freigaben und fehlender automatischer vollständiger
+Backup-/Observerkette offen. Keine neue Architektur oder Betriebsaktivierung.
+
 ## Produktkorrekturen lokal angenommen; Integration und Zielnachprüfung offen — Version 5.516 / 22.10.2026
 
 Alexanders „Dann weiter. Alle Probleme aus dem Weg räumen“ im isolierten Checkout
@@ -3075,3 +3097,6 @@ und tatsächliche mobile Zielnachprüfung sind hier ausdrücklich noch offen;
 Pflicht-CI, frische Backup-/Zugangsgates und normaler signierter Updateweg bleiben
 zwingend. Letzter tatsächlicher Backup→Restore→Vergleich→Cleanup c4d64c98835f4a6f8ebbaa508a431c2b
 am23.10.04:22UTC unabhängig ACCEPT, alle3DB/Globals/Rollen/8Dateibäume identisch.
+
+### Version 5.538 — 23.10.2026
+Irreführenden Altlinkstatus nur bei nachgewiesenem übernommenem Nachfolger lokal korrigiert;26Tests/Typecheck/Build/independentACCEPT. Folge-PR noch nicht installiert.

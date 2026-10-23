@@ -195,6 +195,50 @@ describe("ProductionDraftReviewPanel", () => {
     window.history.replaceState({}, "", "/produktion");
   });
 
+  it.each(["confirmed", "wrong-revision", "unrelated", "broken-chain"] as const)(
+    "reopens an applied successor only with a confirmed revision and complete ancestry (%s)", async (proof) => {
+      const original: ProductionDraft = { ...draftFixture(), draftId: "handoff-source", revision: 1, status: "superseded" };
+      const revised: ProductionDraft = { ...draftFixture(), draftId: "saved-source", revision: 2,
+        status: "superseded", supersedesDraftId: original.draftId };
+      const prepared: ProductionDraft = { ...draftFixture(), draftId: "prepared-result", revision: 3,
+        status: "approved", supersedesDraftId: proof === "unrelated" ? "another-source" : revised.draftId };
+      const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => jsonResponse({
+        items: proof === "broken-chain" ? [original, prepared] : [original, revised, prepared],
+        approvedProductionSpecs: [{ approvedProductionSpecId: "approved-result",
+          sourceDraft: { draftId: prepared.draftId, revision: proof === "wrong-revision" ? 99 : 3 }, applied: true }]
+      }));
+      globalThis.fetch = fetchMock as typeof fetch;
+      window.history.replaceState({}, "", "/produktion?productionDraftId=handoff-source&keep=value");
+      const container = document.createElement("div"); document.body.appendChild(container);
+      const root = createRoot(container);
+      try {
+        await act(async () => {
+          root.render(createElement(ProductionDraftReviewPanel, { submitting: false, caseId: activeCaseId, embedded: true }));
+          await flushPromises();
+        });
+        const openSaved = [...container.querySelectorAll("button")].find(button => button.textContent === "Übernommenen Stand anzeigen");
+        if (proof === "confirmed") {
+          expect(container.textContent).toContain("Eine neuere Fassung dieses Entwurfs wurde bereits übernommen.");
+          expect(container.textContent).not.toContain("angeforderte Produktionsentwurf ist nicht verfügbar");
+          expect(container.textContent).not.toContain("Dieser Produktionsentwurf wurde bereits übernommen.");
+          expect(new URL(window.location.href).searchParams.get("productionDraftId")).toBe(original.draftId);
+          expect(openSaved).toBeDefined();
+          await act(async () => { openSaved!.click(); await flushPromises(); });
+          expect(container.textContent).toContain("Dieser Produktionsentwurf wurde bereits übernommen.");
+          expect(new URL(window.location.href).searchParams.get("productionDraftId")).toBe(prepared.draftId);
+          expect(new URL(window.location.href).searchParams.get("keep")).toBe("value");
+        } else {
+          expect(openSaved).toBeUndefined();
+          expect(container.textContent).toContain("angeforderte Produktionsentwurf ist nicht verfügbar");
+        }
+        expect([...container.querySelectorAll("button")].some(button => button.textContent === "Entwurf übernehmen")).toBe(false);
+        expect(fetchMock.mock.calls.every(([, init]) => !init?.method || init.method === "GET")).toBe(true);
+      } finally {
+        await act(async () => root.unmount()); container.remove();
+      }
+    }
+  );
+
   it("offers an explicit way from a replaced deep link to an available draft in this case", async () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
