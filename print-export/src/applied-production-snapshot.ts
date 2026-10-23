@@ -68,9 +68,13 @@ async function readAppliedProductionSnapshot(
       manifests.some(item => item.eventSpecId === target.eventSpecId)) conflict();
     return undefined;
   }
-  if (linkedManifests.length !== 1 || linkedSpecs.length !== 1 || linkedCases.length !== 1) conflict();
+  if (linkedManifests.length !== 1 || linkedCases.length !== 1) conflict();
   const manifest = linkedManifests[0]!;
-  const approvedSpec = linkedSpecs[0]!;
+  // Legacy preparations reused spec-derived artifact IDs. A later approval
+  // without an Apply must not invalidate the uniquely published snapshot.
+  const appliedSpecs = linkedSpecs.filter(item => item.approvedProductionSpecId === manifest.approvedProductionSpecId);
+  if (appliedSpecs.length !== 1) conflict();
+  const approvedSpec = appliedSpecs[0]!;
   const productionCase = linkedCases[0]!;
   const { eventSpec, productionPlan, purchaseList, recipes } = approvedSpec.artifacts;
   let expectedManifest: ProductionApplyManifest;

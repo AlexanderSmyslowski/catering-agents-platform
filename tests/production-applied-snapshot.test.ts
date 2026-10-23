@@ -12,8 +12,8 @@ const context = { businessId: "local" };
 const secret = "synthetic-applied-snapshot-test";
 const headers = { "x-catering-actor-name": "Produktions-Mitarbeiter", "x-catering-trusted-secret": secret };
 
-async function approvedDescendant(pgPool?: CollectionStorageOptions["pgPool"]) {
-  const rootDir = mkdtempSync(path.join(tmpdir(), "catering-applied-snapshot-"));
+async function approvedDescendant(pgPool?: CollectionStorageOptions["pgPool"], existing?: { rootDir: string; suffix: string }) {
+  const rootDir = existing?.rootDir ?? mkdtempSync(path.join(tmpdir(), "catering-applied-snapshot-"));
   const store = new ProductionStore({ rootDir, pgPool });
   const repository = new InMemoryRecipeRepository({ rootDir, pgPool });
   const intakeRecords = new InMemoryIntakeRecordsPort();
@@ -27,7 +27,7 @@ async function approvedDescendant(pgPool?: CollectionStorageOptions["pgPool"]) {
     uncertainties: [{ field: "event.schedule", severity: "low", message: 'Zeitangabe in "Lunch" ist nicht als vollständiger Termin belastbar.', suggestedQuestion: "Wie lautet das verbindliche Zeitfenster?" }]
   };
   const handoff: ProductionHandoff = {
-    schemaVersion: "1.0", businessId: "local", handoffId: "handoff-applied-snapshot", approvedOfferId: "offer-applied-snapshot", approvalRequestId: "offer-approval-applied-snapshot",
+    schemaVersion: "1.0", businessId: "local", handoffId: `handoff-applied-snapshot${existing?.suffix ?? ""}`, approvedOfferId: `offer-applied-snapshot${existing?.suffix ?? ""}`, approvalRequestId: `offer-approval-applied-snapshot${existing?.suffix ?? ""}`,
     createdAt: "2026-09-19T10:00:00.000Z", eventSpecSnapshot: structuredClone(spec), pricingSnapshot: spec.budgetContext!.pricingSummary!,
     source: { draftId: "offer-draft-applied-snapshot", revision: 1, selectedVariantId: "variant-applied-snapshot" }
   };
@@ -82,6 +82,49 @@ async function approvedDescendant(pgPool?: CollectionStorageOptions["pgPool"]) {
 }
 
 describe("applied canonical snapshots", () => {
+  it("keeps the first frozen publication exportable while a second same-spec handoff is approved and applied", async () => {
+    const first = await approvedDescendant();
+    const exports = buildPrintExportApp({ rootDir: first.rootDir, trustedActorSecret: secret, env: { CATERING_DEV_AUTH: "1" } });
+    let second: Awaited<ReturnType<typeof approvedDescendant>> | undefined;
+    try {
+      expect((await first.apply()).statusCode).toBe(200);
+      const before = (await first.store.getApprovedProductionSpec(context, first.approvedId))!;
+      second = await approvedDescendant(undefined, { rootDir: first.rootDir, suffix: "-second" });
+      const next = (await second.store.getApprovedProductionSpec(context, second.approvedId))!;
+      expect(next.artifacts.eventSpec.specId).toBe(before.artifacts.eventSpec.specId);
+      expect(next.artifacts.productionPlan.planId).not.toBe(before.artifacts.productionPlan.planId);
+      expect(next.artifacts.purchaseList.purchaseListId).not.toBe(before.artifacts.purchaseList.purchaseListId);
+      expect(next.artifacts.productionPlan.productionBatches).toEqual(before.artifacts.productionPlan.productionBatches);
+      const exportFirst = () => exports.inject({ method: "GET", url: `/v1/exports/production-plans/${before.artifacts.productionPlan.planId}/html`, headers });
+      expect((await exportFirst()).statusCode).toBe(200);
+      const applySecond = await second.apply();
+      expect(applySecond.statusCode, applySecond.body).toBe(200);
+      expect((await exportFirst()).statusCode).toBe(200);
+      expect((await exports.inject({ method: "GET", url: `/v1/exports/production-plans/${next.artifacts.productionPlan.planId}/html`, headers })).statusCode).toBe(200);
+      expect(await first.store.getPlan(context, before.artifacts.productionPlan.planId)).toEqual(before.artifacts.productionPlan);
+      expect(await first.store.getPurchaseList(context, before.artifacts.purchaseList.purchaseListId)).toEqual(before.artifacts.purchaseList);
+    } finally { await second?.app.close(); await exports.close(); await first.app.close(); }
+  });
+
+  it("resolves a legacy shared artifact ID through its unique Apply manifest despite an unapplied approval", async () => {
+    const fixture = await approvedDescendant();
+    const exports = buildPrintExportApp({ rootDir: fixture.rootDir, trustedActorSecret: secret, env: { CATERING_DEV_AUTH: "1" } });
+    const original = ProductionStore.prototype.listApprovedProductionSpecs;
+    let spy: ReturnType<typeof vi.spyOn> | undefined;
+    try {
+      expect((await fixture.apply()).statusCode).toBe(200);
+      const approved = (await fixture.store.getApprovedProductionSpec(context, fixture.approvedId))!;
+      spy = vi.spyOn(ProductionStore.prototype, "listApprovedProductionSpecs").mockImplementation(async function (this: ProductionStore, actor) {
+        return [...await original.call(this, actor), { ...structuredClone(approved), approvedProductionSpecId: "synthetic-unapplied-approval" }];
+      });
+      for (const url of [`/v1/exports/production-plans/${approved.artifacts.productionPlan.planId}/html`, `/v1/exports/production-folders/${approved.artifacts.productionPlan.planId}/html`, `/v1/exports/purchase-lists/${approved.artifacts.purchaseList.purchaseListId}/csv`]) {
+        const response = await exports.inject({ method: "GET", url, headers });
+        expect(response.statusCode, response.body).toBe(200);
+        expect(response.body).toContain("soup ingredient");
+      }
+    } finally { spy?.mockRestore(); await exports.close(); await fixture.app.close(); }
+  });
+
   it("validates all applied exports on the checked-out PostgreSQL transaction client", async () => {
     const { Pool } = newDb().adapters.createPg();
     const base = new Pool();

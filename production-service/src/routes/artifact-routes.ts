@@ -2315,6 +2315,10 @@ export function registerProductionArtifactRoutes(
           }
         : {})
       });
+      // Distinct frozen preparations must coexist even when they refer to the
+      // same intake specification. Existing/recovered snapshots return above.
+      artifacts.productionPlan.planId = `plan-${preparedDraftId}`;
+      artifacts.purchaseList.purchaseListId = `purchase-${preparedDraftId}`;
       const materializedRecipeById = new Map(artifacts.recipes.map((recipe) => [recipe.recipeId, recipe]));
       for (const evidence of planningEvidence) {
         const materializedRecipe = materializedRecipeById.get(evidence.recipeId);
