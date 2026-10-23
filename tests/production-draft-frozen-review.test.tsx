@@ -26,9 +26,9 @@ function frozenDraft(): ProductionDraft {
         { componentId: "purchase", label: "Croissants und Wasser", menuCategory: "classic", servings: 35, productionDecision: { mode: "convenience_purchase", purchasedElements: ["Croissants", "Wasser"] } }
       ] },
       productionPlan: { planId: "plan-frozen", eventSpecId: "spec-frozen", readiness: { status: "complete", reasons: [] }, productionBatches: [
-        { batchId: "batch-frozen", componentId: "coffee", recipeId: "recipe-frozen", scaledYield: { amount: 35, unit: "servings" }, batchCount: 4, ingredients, station: "Getränke", prepWindow: "08:00–09:00", steps: [{ index: 1, instruction: "Synthetischer Testschritt" }] }
+        { batchId: "batch-frozen", componentId: "coffee", recipeId: "recipe-frozen", scaledYield: { amount: 35, unit: "servings" }, batchCount: 4, ingredients, station: "beverage-station", prepWindow: "08:00–09:00", steps: [{ index: 1, instruction: "Synthetischer Testschritt" }] }
       ], kitchenSheets: [
-        { title: "Küchenblatt Kaffeepause", componentId: "coffee", recipeId: "recipe-frozen", productionQty: { amount: 35, unit: "servings" }, ingredients, instructions: ["Kaffee bereitstellen"], station: "Getränke", prepWindow: "08:00–09:00" },
+        { title: "Küchenblatt Kaffeepause", componentId: "coffee", recipeId: "recipe-frozen", productionQty: { amount: 35, unit: "servings" }, ingredients, instructions: ["Kaffee bereitstellen"], station: "beverage-station", prepWindow: "08:00–09:00" },
         { title: "Küchenblatt Zukauf", componentId: "purchase", productionQty: { amount: 35, unit: "servings" }, ingredients: [], instructions: ["Zukauf bereitstellen"], procurementNotes: ["Gebinde und Lieferant noch fachlich klären"], station: "Ausgabe", prepWindow: "09:00" }
       ], recipeSelections: [{ componentId: "coffee", recipeId: "recipe-frozen" }], timeline: [{ label: "Ausgabe", at: "09:00" }], unresolvedItems: [] },
       purchaseList: { purchaseListId: "purchase-frozen", eventSpecId: "spec-frozen", items: [
@@ -66,7 +66,12 @@ describe("frozen production review content", () => {
   it("distinguishes one 35-serving batch from four charges and includes both frozen kitchen sheets", async () => {
     await mount(frozenDraft());
     const text = card("Plan prüfen").textContent;
-    for (const value of ["Vollständig berechnet", "1 Produktionsansatz", "35 Portionen", "4 Chargen", "350 g", "70 g", "3.5 l", "Küchenblatt Kaffeepause", "Küchenblatt Zukauf", "Zukauf bereitstellen", "Gebinde und Lieferant noch fachlich klären"]) expect(text).toContain(value);
+    for (const value of ["Vollständig berechnet", "1 Produktionsansatz", "35 Portionen", "4 Chargen", "350 g", "70 g", "3.5 l", "Küchenblatt Kaffeepause", "Getränke", "Küchenblatt Zukauf", "Zukauf bereitstellen", "Gebinde und Lieferant noch fachlich klären"]) expect(text).toContain(value);
+  });
+  it("translates the canonical beverage station in batch and kitchen sheet", async () => {
+    await mount(frozenDraft());
+    expect(card("Plan prüfen").textContent).toContain("Getränke");
+    expect(card("Plan prüfen").textContent).not.toContain("beverage-station");
   });
   it("shows all five purchase quantities and human-readable frozen recipe/procurement lineage", async () => {
     await mount(frozenDraft());

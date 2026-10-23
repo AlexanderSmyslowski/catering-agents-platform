@@ -27,7 +27,7 @@ function approvalLabel(input: unknown): string {
   return state && ["approved_internal", "auto_usable", "review_required"].includes(state)
     ? formatRecipeApprovalStateLabel(state) ?? "unvollständig: Rezeptstatus klären" : "unvollständig: Rezeptstatus klären";
 }
-const stationLabels = { hot: "Warme Küche", "hot-kitchen": "Warme Küche", cold: "Kalte Küche", "cold-kitchen": "Kalte Küche", pastry: "Patisserie" };
+const stationLabels = { "beverage-station": "Getränke", hot: "Warme Küche", "hot-kitchen": "Warme Küche", cold: "Kalte Küche", "cold-kitchen": "Kalte Küche", pastry: "Patisserie" };
 function station(input: unknown): string {
   const key = text(input);
   return key && Object.hasOwn(stationLabels, key) ? stationLabels[key as keyof typeof stationLabels] : value(input, "Arbeitsbereich fehlt");
