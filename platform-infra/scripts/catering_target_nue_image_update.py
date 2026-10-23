@@ -306,7 +306,15 @@ def verify_bundle(bundle, manifest_sha):
     return manifest
 
 
-def prepare(operator, source, product, operations, output):
+def accepted_current_binding(binding):
+    require(isinstance(binding, dict) and set(binding) == {"manifestSha256", "helperSha256"} and
+            all(isinstance(v, str) and re.fullmatch(r"[0-9a-f]{64}", v) for v in binding.values()),
+            "NUE_ACCEPTED_CURRENT_BINDING")
+    return dict(binding)
+
+
+def prepare(operator, source, product, operations, output, *, accepted_current_release=None):
+    binding = accepted_current_binding(accepted_current_release) if accepted_current_release is not None else None
     require(not os.path.lexists(output), "NUE_INPUT_ALREADY_EXISTS")
     output.mkdir(mode=0o755)
     operator.export_product_context(source, product, output / "source")
@@ -315,6 +323,7 @@ def prepare(operator, source, product, operations, output):
     for name in ("catering-target-operator.py", "catering_target_oci.py", "catering_target_nue_image_update.py"):
         shutil.copyfile(Path(__file__).with_name(name), tools / name); (tools / name).chmod(0o644)
     request = {"schemaVersion": 1, "mode": "nue-image-only-build-input", "repository": operator.REPOSITORY, "targetId": "catering-prod-02", "productCommit": product, "operationsCommit": operations, "sourceTreeSha256": operator._source_tree_digest(output / "source"), "helpers": {path.name: digest(path) for path in tools.iterdir()}}
+    if binding is not None: request["acceptedCurrentRelease"] = binding
     (output / "build-input.json").write_bytes(canonical(request)); (output / "build-input.json").chmod(0o644)
     return digest(output / "build-input.json")
 
@@ -322,7 +331,7 @@ def prepare(operator, source, product, operations, output):
 def build_prepared(directory, request_sha, output, node_base, caddy_base, *, base_mode="repository", runtime_base=None, web_base=None):
     host_identity(); directory = protected(directory, directory=True)
     request = read_bound(protected(directory / "build-input.json"), request_sha)
-    require(set(request) == {"schemaVersion", "mode", "repository", "targetId", "productCommit", "operationsCommit", "sourceTreeSha256", "helpers"}, "NUE_BUILD_REQUEST_SHAPE")
+    require(set(request) - {"acceptedCurrentRelease"} == {"schemaVersion", "mode", "repository", "targetId", "productCommit", "operationsCommit", "sourceTreeSha256", "helpers"}, "NUE_BUILD_REQUEST_SHAPE")
     require(request["schemaVersion"] == 1 and request["mode"] == "nue-image-only-build-input" and request["repository"] == "AlexanderSmyslowski/catering-agents-platform" and request["targetId"] == "catering-prod-02", "NUE_BUILD_REQUEST_TARGET")
     require(set(request["helpers"]) == {"catering-target-operator.py", "catering_target_oci.py", "catering_target_nue_image_update.py"}, "NUE_HELPER_SCOPE")
     for name, expected in request["helpers"].items(): require(digest(protected(directory / "tools" / name)) == expected, "NUE_BUILD_HELPER_BINDING")
@@ -330,11 +339,16 @@ def build_prepared(directory, request_sha, output, node_base, caddy_base, *, bas
     operator = load_module("nue_build_operator", directory / "tools/catering-target-operator.py")
     require(operator._source_tree_digest(directory / "source") == request["sourceTreeSha256"], "NUE_BUILD_FULL_SOURCE_BINDING")
     for field in ("productCommit", "operationsCommit"): require(re.fullmatch(r"[0-9a-f]{40}", request[field]), "NUE_BUILD_COMMIT")
+    binding = accepted_current_binding(request["acceptedCurrentRelease"]) if "acceptedCurrentRelease" in request else None
+    if binding is not None:
+        require(base_mode == "local-current", "NUE_ACCEPTED_CURRENT_BASE_MODE")
     protected(output.parent, directory=True)
+    if binding is not None:
+        return create_bundle(operator, directory / "source", request["productCommit"], request["operationsCommit"], output, node_base, caddy_base, exported=True, base_mode=base_mode, runtime_base=runtime_base, web_base=web_base, accepted_current_release=binding)
     token = own_lock()
     try:
         owned(token)
-        return create_bundle(operator, directory / "source", request["productCommit"], request["operationsCommit"], output, node_base, caddy_base, exported=True, base_mode=base_mode, runtime_base=runtime_base, web_base=web_base)
+        return create_bundle(operator, directory / "source", request["productCommit"], request["operationsCommit"], output, node_base, caddy_base, exported=True, base_mode=base_mode, runtime_base=runtime_base, web_base=web_base, accepted_current_release=binding)
     finally: unlock(token)
 
 
@@ -516,6 +530,42 @@ def accepted_681213b_bundle(oci):
     return root, manifest
 
 
+def accepted_current_bundle(oci, binding, *, before_lock=False):
+    binding = accepted_current_binding(binding)
+    sha = binding["manifestSha256"]
+    root = protected(RELEASES / sha, directory=True)
+    manifest = read_bound(protected(root / "manifest.json"), sha)
+    require(manifest["mode"] == "nue-image-only" and manifest["targetId"] == "catering-prod-02" and
+            manifest["repository"] == "AlexanderSmyslowski/catering-agents-platform" and
+            manifest["platform"] == "linux/amd64" and manifest["bases"] == CURRENT_BASE_LAYOUT,
+            "NUE_ACCEPTED_CURRENT_TARGET")
+    names = {"catering-target-operator.py", "catering_target_oci.py", "catering_target_nue_image_update.py"}
+    require(set(manifest["helpers"]) == names, "NUE_ACCEPTED_CURRENT_HELPER_SCOPE")
+    tools = protected(root / "tools", directory=True)
+    helper = protected(tools / "catering_target_nue_image_update.py")
+    require(digest(helper) == binding["helperSha256"] == manifest["helpers"][helper.name], "NUE_ACCEPTED_CURRENT_HELPER_PIN")
+    for name in sorted(names):
+        require(digest(protected(tools / name)) == manifest["helpers"][name], "NUE_ACCEPTED_CURRENT_HELPER_BINDING")
+    predecessor = load_module("nue_accepted_current", helper)
+    require(predecessor.verify_bundle(root, sha) == manifest, "NUE_ACCEPTED_CURRENT_BUNDLE_BINDING")
+    stage = json.loads(protected(root / "stage.json").read_bytes())
+    require(stage["manifestSha256"] == sha and stage["mode"] == "nue-image-only", "NUE_ACCEPTED_CURRENT_STAGE_BINDING")
+    baseline = read_bound(protected(root / "baseline.json"), stage["baselineSha256"])
+    installed = json.loads(protected(root / "installed.json").read_bytes())
+    candidate = protected(root / "compose.candidate.json").read_bytes()
+    images = {s: manifest["images"]["web" if s == "web" else "runtime"]["platformManifestDigest"] for s in SERVICES}
+    require(all(IMAGE.fullmatch(identity) for identity in images.values()) and
+            installed["manifestSha256"] == sha and installed["status"] == "NUE_IMAGE_ONLY_INSTALLED" and
+            installed["images"] == images and hashlib.sha256(candidate).hexdigest() == installed["composeSha256"],
+            "NUE_ACCEPTED_CURRENT_INSTALL_BINDING")
+    if before_lock:
+        require(predecessor.verify(root, sha)["status"] == "NUE_IMAGE_ONLY_VERIFIED", "NUE_ACCEPTED_CURRENT_VERIFY")
+    else:
+        predecessor.verify_runtime(baseline, images, candidate, candidate_oci=oci,
+                                   candidate_layout=manifest["bases"], candidate_schema=manifest["schemaBinding"])
+    return root, manifest
+
+
 def pr727_running_gate(oci, rows):
     root, manifest = accepted_pr727_bundle()
     return verified_product_running_gate(oci, rows, root, manifest, PR727_IMAGES,
@@ -589,7 +639,7 @@ def verified_product_running_gate(oci, rows, root, manifest, identities, observa
     return observations
 
 
-def current_base_gate(oci, runtime_m, web_m):
+def current_base_gate(oci, runtime_m, web_m, *, accepted_current_release=None):
     host_identity()
     require(runtime_m == CURRENT_RUNTIME_M and web_m == CURRENT_WEB_M, "NUE_CURRENT_BASE_EXACT_M_REQUIRED")
     compose = json.loads(protected(COMPOSE).read_bytes())
@@ -602,6 +652,12 @@ def current_base_gate(oci, runtime_m, web_m):
         require(image.get("Descriptor", {}).get("mediaType") == "application/vnd.oci.image.manifest.v1+json", "NUE_CURRENT_BASE_NOT_PLATFORM_MANIFEST")
     rows = inspect(["platform-infra-" + service + "-1" for service in SERVICES])
     require({row["Name"] for row in rows} == {"/platform-infra-" + s + "-1" for s in SERVICES} and len(rows) == 5, "NUE_CURRENT_BASE_CONTAINER_SCOPE")
+    if accepted_current_release is not None:
+        binding = accepted_current_binding(accepted_current_release)
+        root, manifest = accepted_current_bundle(oci, binding)
+        identities = {role: manifest["images"][role]["platformManifestDigest"] for role in ("runtime", "web")}
+        return verified_product_running_gate(oci, rows, root, manifest, identities,
+                                             {"acceptedCurrentRelease": binding})
     if all(row.get("ImageManifestDescriptor", {}).get("digest") == PR727_IMAGES["web" if row["Name"] == "/platform-infra-web-1" else "runtime"] for row in rows):
         return pr727_running_gate(oci, rows)
     if all(row.get("ImageManifestDescriptor", {}).get("digest") == PR735_IMAGES["web" if row["Name"] == "/platform-infra-web-1" else "runtime"] for row in rows):
@@ -661,14 +717,34 @@ def current_local_reference(role, identity):
     return "catering-nue-current-" + role + ":" + identity.removeprefix("sha256:")
 
 
-def create_bundle(operator, source, product, operations, output, node_base, caddy_base, *, exported=False, base_mode="repository", runtime_base=None, web_base=None):
+def create_bundle(operator, source, product, operations, output, node_base, caddy_base, *, exported=False, base_mode="repository", runtime_base=None, web_base=None, accepted_current_release=None):
+    binding = accepted_current_binding(accepted_current_release) if accepted_current_release is not None else None
+    kwargs = dict(exported=exported, base_mode=base_mode, runtime_base=runtime_base, web_base=web_base,
+                  accepted_current_release=binding)
+    if binding is None:
+        return _create_bundle(operator, source, product, operations, output, node_base, caddy_base, **kwargs)
+    require(exported and base_mode == "local-current", "NUE_ACCEPTED_CURRENT_BUILD_SCOPE")
+    # Both public build entries share this ordering. Public Verify refuses any
+    # update lock; under our own lock the pinned runtime verifier checks again.
+    accepted_current_bundle(operator._oci(), binding, before_lock=True)
+    token = own_lock()
+    try:
+        owned(token)
+        return _create_bundle(operator, source, product, operations, output, node_base, caddy_base, **kwargs)
+    finally:
+        unlock(token)
+
+
+def _create_bundle(operator, source, product, operations, output, node_base, caddy_base, *, exported=False, base_mode="repository", runtime_base=None, web_base=None, accepted_current_release=None):
     """Build only with exact, already present base manifests; no floating FROM tags."""
     require(not output.exists() and not output.is_symlink(), "NUE_OUTPUT_EXISTS")
+    binding = accepted_current_binding(accepted_current_release) if accepted_current_release is not None else None
+    require(binding is None or (exported and base_mode == "local-current"), "NUE_ACCEPTED_CURRENT_BUILD_SCOPE")
     bases = {}
     require(base_mode in ("repository", "local-current"), "NUE_BASE_MODE")
     if base_mode == "local-current":
         require(node_base is None and caddy_base is None, "NUE_CURRENT_BASE_INPUT_SCOPE")
-        current_before = current_base_gate(operator._oci(), runtime_base, web_base)
+        current_before = current_base_gate(operator._oci(), runtime_base, web_base, accepted_current_release=binding)
         # Reuse the accepted local tag→exact-M binding; these are local aliases,
         # never invented official repository digests or registry inputs.
         for role, identity in (("runtime", runtime_base), ("web", web_base)):
@@ -713,7 +789,7 @@ def create_bundle(operator, source, product, operations, output, node_base, cadd
         operator._save_docker_image(identity, archive)
         images[role] = {**operator._inspect_archive(archive, identity), "archiveSha256": digest(archive)}
     if base_mode == "local-current":
-        require(current_base_gate(operator._oci(), runtime_base, web_base) == current_before, "NUE_CURRENT_BASE_CHANGED_DURING_BUILD")
+        require(current_base_gate(operator._oci(), runtime_base, web_base, accepted_current_release=binding) == current_before, "NUE_CURRENT_BASE_CHANGED_DURING_BUILD")
         for kind, identity in (("runtime", runtime_base), ("web", web_base)):
             operator._oci().check_loaded_image(json.loads(command(["docker", "image", "inspect", current_local_reference(kind, identity)]))[0], identity)
     manifest = {"schemaVersion": 1, "mode": "nue-image-only", "repository": operator.REPOSITORY, "targetId": "catering-prod-02", "platform": "linux/amd64", "productCommit": product, "operationsCommit": operations, "sourceTreeSha256": operator._source_tree_digest(context), "schemaBinding": source_schema(context), "bases": bases, "images": images, "helpers": {path.name: digest(path) for path in tools.iterdir()}}
