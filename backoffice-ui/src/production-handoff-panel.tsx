@@ -19,10 +19,9 @@ export function ProductionHandoffPanel({
   return (
     <article className="production-handoff-zone" aria-label="Herkunft und Übergabe">
       <header>
-        <p className="eyebrow">Abschlusszone</p>
         <h3>Herkunft und Übergabe</h3>
         <p className="helper-text">
-          Ruhige Bündelung vorhandener Herkunfts-, Audit- und Exporthinweise. Keine rechtssichere Audit-Behauptung.
+          Hier siehst du, woher der Auftrag stammt und welche Unterlagen vorliegen.
         </p>
       </header>
       <div className="handoff-fact-grid">
@@ -34,11 +33,12 @@ export function ProductionHandoffPanel({
         ))}
       </div>
       <p className="helper-text">
-        Beta-Endpunkt: Produktionsblatt, Einkaufsliste und Audit-Spur sind interne Arbeitsbelege.
-        Fehlende Artefakte bleiben offen markiert; keine externe Freigabe, Signatur- oder Compliance-Behauptung.
+        Produktionsplan, Einkaufsliste und Verlauf sind interne Arbeitsunterlagen.
+        Fehlende Unterlagen bleiben als offen gekennzeichnet.
       </p>
       <p className="helper-text">
-        Es werden nur bestehende Metadaten und Artefaktzustände gezeigt; Rohtexte oder PDF-Extrakte werden hier nicht gespiegelt.
+        Die Übergabe ersetzt keine fachliche Freigabe für die tatsächliche Produktion.
+        Sie ist keine externe Freigabe, Signatur oder rechtliche Zusicherung.
       </p>
     </article>
   );

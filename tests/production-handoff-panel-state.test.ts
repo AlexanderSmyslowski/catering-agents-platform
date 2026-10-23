@@ -13,17 +13,17 @@ describe("production handoff panel state", () => {
       facts: [
         {
           key: "intake-origin",
-          label: "Intake-Ursprung",
+          label: "Herkunft der Anfrage",
           value: "manual_form · 2026-04-18T10:30:00.000Z · request-1"
         },
         {
           key: "audit-trail",
-          label: "Audit-Spur",
+          label: "Bearbeitungsverlauf",
           value: "Produktionsplan erstellt · Küche · production.plan.created · 2026-05-21T09:15:00.000Z"
         },
         {
           key: "export-artifacts",
-          label: "Übergabe-/Exportartefakte",
+          label: "Unterlagen",
           value: "Produktionsblatt vorhanden · Einkaufsliste vorhanden"
         }
       ]
@@ -41,23 +41,23 @@ describe("production handoff panel state", () => {
     ).toEqual([
       {
         key: "intake-origin",
-        label: "Intake-Ursprung",
+        label: "Herkunft der Anfrage",
         value: "PDF-Upload"
       },
       {
         key: "audit-trail",
-        label: "Audit-Spur",
+        label: "Bearbeitungsverlauf",
         value: "Audit geladen"
       },
       {
         key: "export-artifacts",
-        label: "Übergabe-/Exportartefakte",
+        label: "Unterlagen",
         value: "Plan und Einkaufsliste"
       },
       {
         key: "handoff-context",
-        label: "Abschluss-Kontext",
-        value: "Abschluss-Kontext: Produktionsplan im Fokus · Spezifikation im Fokus · Einkaufsliste vorhanden"
+        label: "Übergabehinweis",
+        value: "Produktionsplan im Fokus · Spezifikation im Fokus · Einkaufsliste vorhanden"
       }
     ]);
   });
