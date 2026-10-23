@@ -3041,3 +3041,37 @@ Realen Folgeupdateblocker am PR735-Vorgänger reproduziert und lokal eng korrigi
 
 ### Version5.516 — 22.10.2026
 Produktkorrekturen und Grenzen lokal unabhängig angenommen; nächster Integrations-/Zielnachweis offen. Führender Abschnitt oben.
+
+
+### Version 5.534 — 23.10.2026: Produktionsprüfung und Küchenmengen präzisiert
+
+Der synthetische Nürnberger100Gästeablauf auf Produkt2710c4d/Ops684e430,
+Manifestb60529ef wurde tatsächlich bis Apply/Produktionsunterlagen/29Positionen/
+CSV/PDF durchgespielt:55/25/20Portionen und0,002kgZimt erhalten. Tatsächlicher
+Opus5.5/firstParty-Istreview bestätigt die synthetische Funktionskette GO,
+behält aber NO-GO für echte Aufträge: reale Preis-/Steuer-/Küchen-/Allergen-/
+Hygienefreigaben, mobiler Zielnachweis und Laientest fehlen. Observer und
+vollständige automatische Backupkette bleiben offen. Aktueller Migrations-/
+Betriebsnachweis liegt im bestehenden externen Runbook, nicht in alten
+historischen Abschnitten dieser Datei.
+
+PR748 korrigiert ausschließlich bestehende Darstellung: spezifische Rezeptfragen
+bleiben erhalten statt generischer Menüfrage; unterschiedliche Fragen zum selben
+Feld werden nicht verschluckt. Completed benennt den gespeicherten Arbeitsschritt
+(Plan übernommen / An Produktion übergeben), keine tatsächliche Küchenfreigabe.
+Klassisch wird sichtbar. Kleine Gewichte erscheinen im Druck als2g(0,002kg),
+CSVverträge und gespeicherte Mengen bleiben identisch. Arbeitschargen ersetzen die
+missverständlichen vollen Rezeptansätze, mit explizitem Gesamtmengenhinweis.
+Wiederholte Zeitfragen führten wegen gleicher Reactkeys nach einer Revision zu
+zurückgebliebenen DOMzeilen; draft-lokale Textzeilenkeys beseitigen genau das.
+Keine Änderung an Persistenz, Auth, Approvals oder der Pflicht zur Fachprüfung.
+
+Beide Darstellungsregressionen vor der Korrektur reproduziert;49betroffeneTests,
+30betroffene/Export-XSS-Tests nach Formatterkorrektur und12Workbenchtests nach
+Reactkeykorrektur bestanden. TypeScript/UIbuild PASS; gezielter Browserdruck
+aufA4 visuell lesbar, einschließlich längerer Chargenzeile. Unabhängiger Scope-/
+Qualitätsreview und separates Zweidateien-Keysdelta ACCEPT. Neue Installation
+und tatsächliche mobile Zielnachprüfung sind hier ausdrücklich noch offen;
+Pflicht-CI, frische Backup-/Zugangsgates und normaler signierter Updateweg bleiben
+zwingend. Letzter tatsächlicher Backup→Restore→Vergleich→Cleanup c4d64c98835f4a6f8ebbaa508a431c2b
+am23.10.04:22UTC unabhängig ACCEPT, alle3DB/Globals/Rollen/8Dateibäume identisch.
