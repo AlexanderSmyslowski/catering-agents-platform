@@ -257,6 +257,21 @@ class CateringTargetOperatorTests(unittest.TestCase):
         (release / "manifest.json").chmod(0o644)
         return release, hashlib.sha256((release / "manifest.json").read_bytes()).hexdigest(), runtime_image, web_image, hashlib.sha256(STAGE_BINDING_PATH.read_bytes()).hexdigest()
 
+    def test_nue_prepare_passes_explicit_current_pins_only_to_bound_request(self):
+        from unittest.mock import Mock
+        base = ["nue-prepare", "--target", "catering-prod-02", "--product-commit", PRODUCT_SHA,
+                "--operations-commit", OPERATIONS_SHA, "--product-source", "/product", "--output-dir", "/output"]
+        pins = {"manifestSha256":"a" * 64, "helperSha256":"b" * 64}
+        for supplied, expected in (([], None), (["--accepted-current-manifest-sha256", pins["manifestSha256"],
+                                               "--accepted-current-helper-sha256", pins["helperSha256"]], pins)):
+            helper = Mock(); helper.prepare.return_value = "c" * 64
+            with patch.object(operator, "require_macos"), patch.object(operator, "repository_root", return_value=Path("/ops")), \
+                 patch.object(operator, "verify_commit_gates", return_value=(Path("/ops"), Path("/product"))), \
+                 patch.object(operator, "_nue", return_value=helper), patch.dict(sys.modules, {operator.__name__:operator}), patch("builtins.print"):
+                self.assertEqual(operator.main(base + supplied), 0)
+            self.assertEqual(helper.prepare.call_args.kwargs, {"accepted_current_release":expected})
+
+
     def test_stage_receipt_binds_commits_manifest_images_and_artifact_digests(self) -> None:
         with tempfile.TemporaryDirectory(prefix="catering-operator-stage-binding-") as temporary:
             release, manifest_sha, runtime_image, web_image, checker_sha = self._stage_fixture(Path(temporary))
