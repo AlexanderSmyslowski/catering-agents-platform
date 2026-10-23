@@ -81,7 +81,7 @@ def same_mount_namespace():
 
 
 def properties(unit):
-    raw = subprocess.run(['/usr/bin/systemctl', 'show', unit, '--no-pager'], env=BASE_ENV,
+    raw = subprocess.run(['/usr/bin/systemctl', 'show', unit, '--no-pager', '--all'], env=BASE_ENV,
                          stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=20)
     require(raw.returncode == 0 and len(raw.stdout) <= 262144, 'SYSTEMD_SHOW_FAILED')
     return dict(line.split('=', 1) for line in raw.stdout.decode().splitlines() if '=' in line)
