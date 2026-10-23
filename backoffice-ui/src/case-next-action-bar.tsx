@@ -56,7 +56,7 @@ export function CaseNextActionBar({
     approve_production: "Mengen, Rückfragen und Küchenhinweise prüfen, dann intern freigeben.",
     apply_approved: "Erstellt Produktionsplan und Einkaufsliste aus dem freigegebenen Stand.",
     inspect_result: "Vorhandene Unterlagen öffnen. Fehlende Ergebnisse und fachliche Hinweise bleiben dort sichtbar.",
-    complete: "Als abgeschlossen markiert. Unterlagen und fachliche Hinweise bleiben einsehbar."
+    complete: "Dieser Bearbeitungsschritt ist gespeichert. Offene fachliche Prüfungen bleiben vor der tatsächlichen Produktion erforderlich."
   };
 
   return (

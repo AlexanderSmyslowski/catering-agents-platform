@@ -67,7 +67,7 @@ export function OfferMenuEditor({ draftId, revision, menuPlan, onSaved, disabled
         <button type="button" className="secondary-button" disabled={saving} onClick={() => { setRows(undefined); onEditingChange(false); setError(""); }}>Abbrechen</button>
       </div>
     </> : <>
-      <ul className="item-list compact">{menuPlan.map((item, index) => <li key={String(item.componentId ?? index)}>{String(item.label ?? "")} · {item.servings === undefined ? "Portionen offen" : String(item.servings) + " Portionen"}{item.menuCategory === "vegan" ? " · vegan" : item.menuCategory === "vegetarian" ? " · vegetarisch" : ""}</li>)}</ul>
+      <ul className="item-list compact">{menuPlan.map((item, index) => <li key={String(item.componentId ?? index)}>{String(item.label ?? "")} · {item.servings === undefined ? "Portionen offen" : String(item.servings) + " Portionen"}{item.menuCategory === "vegan" ? " · vegan" : item.menuCategory === "vegetarian" ? " · vegetarisch" : item.menuCategory === "classic" ? " · klassisch" : ""}</li>)}</ul>
       <button type="button" className="secondary-button" disabled={disabled} onClick={begin}>Menü bearbeiten</button>
     </>}
     {error ? <p role="alert">{error}</p> : null}

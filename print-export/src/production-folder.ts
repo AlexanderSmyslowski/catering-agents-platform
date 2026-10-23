@@ -1,5 +1,5 @@
 import { renderOfferPricingHtml } from "./offer-pricing-html.js";
-import { formatDocumentDate, formatPreparationWindow } from "./document-labels.js";
+import { formatDocumentDate, formatPreparationWindow, formatKitchenQuantity } from "./document-labels.js";
 import {
   buildProductionClarificationQuestions,
   productionContextNotes,
@@ -59,7 +59,9 @@ function formatQuantity(quantity?: { amount: number; unit: string }): string {
     return "offen";
   }
 
-  return `${formatQuantityNumber(quantity.amount)} ${formatUnit(quantity.unit)}`;
+  const canonical = `${formatQuantityNumber(quantity.amount)} ${formatUnit(quantity.unit)}`;
+  return quantity.unit === "kg" && quantity.amount > 0 && quantity.amount < 1
+    ? `${formatKitchenQuantity(quantity.amount, quantity.unit)} (${canonical})` : canonical;
 }
 
 function formatMoney(value?: { amount: number; currency: string }): string | undefined {
@@ -385,7 +387,7 @@ function renderSection8(
 
   const content = groups.map(({ group, items }) =>
     `<article class="purchase-group"><h3>${escapeHtml(formatMetroGroupLabel(group))}</h3><table><thead><tr><th>Artikel</th><th>Menge</th><th>Einkaufshinweis</th><th>Verwendung</th></tr></thead><tbody>${items.map((item) =>
-      `<tr><td>${escapeHtml(item.displayName)}</td><td>${escapeHtml(`${formatQuantityNumber(item.purchaseQty)} ${item.purchaseUnit}`)}</td><td>${escapeHtml(item.supplierHint?.trim() ? item.supplierHint : "nicht hinterlegt")}</td><td>${escapeHtml(purchaseItemUsage(item, recipeById, spec))}</td></tr>`
+      `<tr><td>${escapeHtml(item.displayName)}</td><td>${escapeHtml(formatQuantity({ amount: item.purchaseQty, unit: item.purchaseUnit }))}</td><td>${escapeHtml(item.supplierHint?.trim() ? item.supplierHint : "nicht hinterlegt")}</td><td>${escapeHtml(purchaseItemUsage(item, recipeById, spec))}</td></tr>`
     ).join("")}</tbody></table></article>`
   ).join("");
 

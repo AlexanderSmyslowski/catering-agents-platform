@@ -96,7 +96,7 @@ import {
   canRequestProductionRevision
 } from "./production-draft-review-panel.js";
 import { CaseHistoryPanel } from "./case-history-panel.js";
-import { buildCaseHistoryState } from "./case-history-state.js";
+import { buildCaseHistoryState, formatCaseStatus } from "./case-history-state.js";
 import {
   buildCaseNextAction,
   type CaseNextAction,
@@ -1390,7 +1390,8 @@ function ProductWorkspaceView({
 
       {(route === "offer" ? activeOfferCaseId : activeProductionCaseId) ? <section className="panel current-order-header" aria-label="Geöffneter Auftrag">
         <h2>{activeCase?.displayName ?? "Auftrag geöffnet"}</h2>
-        <p role="status">{activeCase ? {open:"Offen",completed:"Abgeschlossen",archived:"Archiviert"}[activeCase.status] : loaderError ? "Auftragsname nicht verfügbar. Der Auftrag bleibt geöffnet." : "Auftragsdaten werden geladen …"}</p>
+        <p role="status">{activeCase ? formatCaseStatus(route === "offer" ? "offer" : "production", activeCase.status) : loaderError ? "Auftragsname nicht verfügbar. Der Auftrag bleibt geöffnet." : "Auftragsdaten werden geladen …"}</p>
+        {route === "production" && activeCase?.status === "completed" ? <p className="helper-text">Plan und Einkaufsliste sind gespeichert. Offene Rezept-, Allergen- und Hygieneprüfungen bleiben vor der tatsächlichen Produktion erforderlich.</p> : null}
       </section> : null}
       {workspaceSearchText ? <p className="workspace-filter-notice" role="status">Ansicht ist gefiltert: „{workspaceSearchText}“ <button type="button" className="secondary-button" onClick={() => setWorkspaceSearchText("")}>Filter aufheben</button></p> : null}
 
