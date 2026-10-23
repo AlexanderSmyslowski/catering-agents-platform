@@ -3152,3 +3152,15 @@ Irreführenden Altlinkstatus nur bei nachgewiesenem übernommenem Nachfolger lok
 Dienst in PR750 implementiert, nicht installiert; manueller D7-Lauf0f34717c…
 am08:21:51UTC unabhängig angenommen. Restic-only64MiB-Folgefix lokal gezielt
 verifiziert; dessen neue CI und unabhängige Deltaabnahme bleiben offen.
+
+### Version 5.544 — 23.10.2026: leere Systemd-Eigenschaften bei NUE-Admission
+
+Der bestehende NUE-Dienst fordert bei `systemctl show` jetzt ausdrücklich
+`--all` an: Systemd unterdrückt sonst leere Eigenschaften, wodurch ein regulär
+leeres `DropInPaths` fehlte und die strikte Admission auch ohne Drop-in hielt.
+Fehlende Eigenschaften und tatsächlich vorhandene Drop-ins bleiben abgewiesen.
+Regression vor Fix reproduziert; danach alle 11 gezielten Admissiontests PASS.
+Restic bleibt unverändert: dessen 0.19.0-Quellen und die bestehende feste
+Ein-Datei-Quelle/Env-Allowlist/30-Minuten-Grenze bestätigen keinen regulären
+8-MiB-Ausgabeüberlauf. Diese lokale Korrektur ist noch nicht unabhängig
+angenommen, integriert oder installiert; keine Dienst-/Timeraktivierung.
