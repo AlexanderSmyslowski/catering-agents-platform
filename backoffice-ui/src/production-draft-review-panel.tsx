@@ -200,6 +200,30 @@ function approvedSpecIdsFromProjection(
   );
 }
 
+function appliedSuccessorId(drafts: ProductionDraft[], focusedId: string | undefined, appliedIds: string[]): string | undefined {
+  if (!focusedId || drafts.find((draft) => draft.draftId === focusedId)?.status !== "superseded") return;
+  const matches: string[] = [];
+  for (const applied of drafts.filter((draft) => appliedIds.includes(draft.draftId))) {
+    let child = applied;
+    const visited = new Set([child.draftId]);
+    // An old link is not itself an applied revision. Only a complete replacement
+    // chain to a separately confirmed applied snapshot can explain its result.
+    while (child.supersedesDraftId) {
+      const parent = drafts.find((draft) => draft.draftId === child.supersedesDraftId);
+      if (!parent || parent.status !== "superseded" || visited.has(parent.draftId) ||
+        !Number.isInteger(parent.revision) || !Number.isInteger(child.revision) ||
+        parent.revision! < 1 || child.revision! <= parent.revision!) break;
+      if (parent.draftId === focusedId) {
+        matches.push(applied.draftId);
+        break;
+      }
+      visited.add(parent.draftId);
+      child = parent;
+    }
+  }
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
 export function canRequestProductionRevision(draft: ProductionDraft): boolean {
   const requestedChanges = draft.reviewCards.filter((card) => card.decision === "change_requested");
   return requestedChanges.length > 0 && requestedChanges.every((card) =>
@@ -534,6 +558,7 @@ export function ProductionDraftReviewPanel({
       : visibleDrafts;
   const hasApprovedDraft = displayedDrafts.some((draft) => Boolean(approvedSpecIds[draft.draftId]));
   const focusedDraftApplied = Boolean(focusedDraftId && appliedDraftIds.includes(focusedDraftId));
+  const appliedSuccessor = appliedSuccessorId(drafts, focusedDraftId, appliedDraftIds);
   const focusedDraftUnavailable = Boolean(focusedDraftId && hasLoaded && !loading && !loadError && !focusedDraft && !focusedDraftApplied);
 
   if (resumeMode && displayedDrafts.length === 0 && !message && !loadError && !focusedDraftId) {
@@ -592,6 +617,18 @@ export function ProductionDraftReviewPanel({
         <div className="production-draft-state" role="status">
           <strong>Dieser Produktionsentwurf wurde bereits übernommen.</strong>
           <p>Der gespeicherte Produktionsplan und die Einkaufsliste stehen im Ergebnisbereich. Fachliche Rückfragen und Freigabegrenzen bleiben separat sichtbar.</p>
+        </div>
+      ) : appliedSuccessor ? (
+        <div className="production-draft-state" role="status">
+          <strong>Eine neuere Fassung dieses Entwurfs wurde bereits übernommen.</strong>
+          <p>Produktionsplan und Einkaufsliste sind gespeichert. Fachliche Rückfragen und Freigabegrenzen bleiben separat sichtbar.</p>
+          <button type="button" className="secondary-button" disabled={submitting || loading} onClick={() => {
+            const url = new URL(window.location.href);
+            url.searchParams.set("productionDraftId", appliedSuccessor);
+            url.hash = productionDraftEntryId(appliedSuccessor);
+            window.history.replaceState(window.history.state, "", url);
+            announceProductionDraftReview(appliedSuccessor);
+          }}>Übernommenen Stand anzeigen</button>
         </div>
       ) : focusedDraftUnavailable ? (
         <div className="production-draft-state production-draft-unavailable" role="status">

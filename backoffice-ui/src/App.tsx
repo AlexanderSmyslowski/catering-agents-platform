@@ -355,7 +355,7 @@ export async function runProductWorkspaceNextAction(
       input.focus(".production-column--objects");
       return;
     case "inspect_result":
-      input.setNotice(`Produktionsresultat ${action.artifactId} ist bereits vorhanden.`);
+      input.setNotice("Unterlagen und offene fachliche Hinweise stehen im Ergebnisbereich.");
       input.focus(".production-column--objects");
       return;
     case "complete":

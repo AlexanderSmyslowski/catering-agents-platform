@@ -41,4 +41,17 @@ describe("case next action state machine", () => {
     expect(buildCaseNextAction(base({ caseStatus: "archived", hasSource: false })))
       .toMatchObject({ kind: "complete" });
   });
+
+  it("keeps saved production results readable after completion without offering another apply", () => {
+    expect(buildCaseNextAction(base({ product: "production", caseStatus: "completed",
+      approvedProductionSpecId: "approved-already-applied", resultArtifactId: "saved-plan" })))
+      .toMatchObject({ kind: "inspect_result", artifactId: "saved-plan" });
+    expect(buildCaseNextAction(base({ product: "production", caseStatus: "completed",
+      approvedProductionSpecId: "approved-already-applied" })))
+      .toEqual({ kind: "complete", label: "Plan übernommen" });
+    expect(buildCaseNextAction(base({ product: "production", caseStatus: "archived", resultArtifactId: "saved-plan" })))
+      .toEqual({ kind: "complete", label: "Archiviert" });
+    expect(buildCaseNextAction(base({ caseStatus: "completed", approvedOfferId: "approved-offer", resultArtifactId: "unrelated-plan" })))
+      .toEqual({ kind: "complete", label: "An Produktion übergeben" });
+  });
 });
