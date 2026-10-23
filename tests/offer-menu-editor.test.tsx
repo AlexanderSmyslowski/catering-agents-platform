@@ -32,10 +32,10 @@ describe("offer menu editing", () => {
     vi.mocked(reviseOfferMenu).mockResolvedValue({ draftId: "new-draft" } as any);
     await act(async () => root.render(createElement(OfferMenuEditor, {
       draftId: "original-draft", revision: 1, disabled: false,
-      menuPlan: [{ componentId: "chicken", label: "Hähnchenragout", servings: 55 }, { componentId: "veg", label: "Gemüsebratlinge", servings: 25 }, { componentId: "vegan", label: "Linsenragout", servings: 20 }],
+      menuPlan: [{ componentId: "chicken", label: "Hähnchenragout", servings: 55, menuCategory: "classic" }, { componentId: "veg", label: "Gemüsebratlinge", servings: 25 }, { componentId: "vegan", label: "Linsenragout", servings: 20 }],
       onSaved: saved, onEditingChange: editing
     })));
-    expect(document.body.textContent).toContain("55 Portionen");
+    expect(document.body.textContent).toContain("55 Portionen · klassisch");
     await act(async () => (Array.from(document.querySelectorAll("button")).find(x => x.textContent === "Menü bearbeiten")!).click());
     expect(Array.from(document.querySelectorAll('input[type="number"]')).map(x => (x as HTMLInputElement).value)).toEqual(["55", "25", "20"]);
     await act(async () => (Array.from(document.querySelectorAll("button")).find(x => x.textContent === "Menü als neue Fassung speichern")!).click());

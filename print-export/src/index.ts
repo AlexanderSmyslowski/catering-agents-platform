@@ -1,5 +1,5 @@
 import { renderOfferPricingHtml } from "./offer-pricing-html.js";
-import { formatDocumentDate, formatProductionStation } from "./document-labels.js";
+import { formatDocumentDate, formatProductionStation, formatKitchenQuantity } from "./document-labels.js";
 import Fastify from "fastify";
 import { IntakeStore } from "@catering/intake-service";
 import { OfferStore } from "@catering/offer-service";
@@ -322,8 +322,6 @@ export function renderProductionPlanHtml(plan: ProductionPlan, spec?: AcceptedEv
 export function renderPurchaseListCsv(list: PurchaseList, format: "standard" | "excel-de" = "standard"): string {
   if (format === "excel-de") {
     const decimal = (amount: number) => amount.toLocaleString("de-DE", { useGrouping: false, maximumSignificantDigits: 15 });
-    const kitchenQuantity = (amount: number, unit: string) => unit === "kg" && amount > 0 && amount < 1
-      ? `${decimal(Number((amount * 1000).toPrecision(15)))} g` : `${decimal(amount)} ${unit}`;
     // Quoting CSV syntax alone does not stop Excel from executing a cell formula.
     const cell = (value: string) => escapeCsv(/^[\s\uFEFF]*[=+@-]/u.test(value) ? `'${value}` : value);
     const rows = [
@@ -331,7 +329,7 @@ export function renderPurchaseListCsv(list: PurchaseList, format: "standard" | "
         "Küchenmenge (Umrechnung)", "Lieferantenhinweis", "Quellrezepte", "Rezeptherkunft", "Quellenreferenzen"],
       ...list.items.map(item => [
         formatMetroGroupLabel(item.group), item.displayName, decimal(item.normalizedQty), item.normalizedUnit,
-        decimal(item.purchaseQty), item.purchaseUnit, kitchenQuantity(item.purchaseQty, item.purchaseUnit), item.supplierHint?.trim() ? item.supplierHint : "nicht hinterlegt",
+        decimal(item.purchaseQty), item.purchaseUnit, formatKitchenQuantity(item.purchaseQty, item.purchaseUnit), item.supplierHint?.trim() ? item.supplierHint : "nicht hinterlegt",
         item.sourceRecipes.join("; "),
         (item.sourceRecipeMetadata?.length ? item.sourceRecipeMetadata.map(recipeSourceOriginLabel) : [recipeSourceOriginLabel()]).join("; "),
         (item.sourceRecipeMetadata?.length ? item.sourceRecipeMetadata.map(recipeSourceReferenceLabel) : [recipeSourceReferenceLabel()]).join("; ")

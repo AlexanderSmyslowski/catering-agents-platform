@@ -246,7 +246,7 @@ describe("applied canonical snapshots", () => {
         const response = await exports.inject({ method: "GET", url: `/v1/exports/${kind}/${plan.planId}/html`, headers });
         initialRead.mockRestore();
         expect(response.statusCode, response.body).toBe(200);
-        for (const text of [fixture.caseId, fixture.approvedId, approved.sourceDraft.draftId, `Revision ${approved.sourceDraft.revision}`, "Apply", plan.planId, purchaseList.purchaseListId, "35 Portionen", "Geplante Rezeptansätze: 4", "3,5 kg", "Approved soup", "Approved salad", "synthetic:approved-soup", "Prüfung nötig", "Croissants", "17,5 l"]) expect(response.body).toContain(text);
+        for (const text of [fixture.caseId, fixture.approvedId, approved.sourceDraft.draftId, `Revision ${approved.sourceDraft.revision}`, "Apply", plan.planId, purchaseList.purchaseListId, "35 Portionen", "Arbeitschargen: 4", "Zutatenmengen insgesamt für 35 Portionen, nicht je Charge", "3,5 kg", "Approved soup", "Approved salad", "synthetic:approved-soup", "Prüfung nötig", "Croissants", "17,5 l"]) expect(response.body).toContain(text);
         for (const text of ["WRONG PURCHASE", "WRONG LIVE", "WRONG STALE", "9876", "9.876"]) expect(response.body).not.toContain(text);
       }
       const csv = await exports.inject({ method: "GET", url: `/v1/exports/purchase-lists/${purchaseList.purchaseListId}/csv`, headers });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCaseHistoryState } from "../backoffice-ui/src/case-history-state.js";
+import { buildCaseHistoryState, completedCaseLabel, formatCaseStatus } from "../backoffice-ui/src/case-history-state.js";
 import type { CaseSummary } from "@catering/shared-core";
 
 const cases: CaseSummary[] = [
@@ -55,4 +55,11 @@ describe("case history state", () => {
     expect(state.items.map((item) => item.caseId)).toEqual(["old-case", "new-case"]);
     expect(state.query).toBe("sommerfest.pdf");
   });
+});
+
+it("names completed workflow steps without claiming that the catering work is finished", () => {
+  expect(completedCaseLabel("production")).toBe("Plan übernommen");
+  expect(formatCaseStatus("production", "completed")).toBe("Plan übernommen");
+  expect(formatCaseStatus("offer", "completed")).toBe("An Produktion übergeben");
+  expect(formatCaseStatus("production", "archived")).toBe("Archiviert");
 });

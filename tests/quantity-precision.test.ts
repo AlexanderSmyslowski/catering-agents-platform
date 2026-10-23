@@ -93,7 +93,8 @@ describe("quantity precision through production, purchasing and print", () => {
     expect(renderPurchaseListCsv(list)).toContain('"0.002","kg","0.002","kg"');
     const folder=renderProductionFolderHtml({spec,plan,recipes:[recipe],purchaseLists:[list]});
     expect(folder.match(/0,002 kg/g)!.length).toBeGreaterThanOrEqual(2);
-    expect(renderProductionPlanHtml(plan,spec)).toContain("0,002 kg");
+    expect(renderProductionPlanHtml(plan,spec)).toContain("2 g (0,002 kg)");
+    expect(folder).toContain("2 g (0,002 kg)");
     const tinyRecipe=model(0.000000001);const tiny=batch(tinyRecipe);
     const tinyFolder=renderProductionFolderHtml({spec,plan:{...plan,productionBatches:[tiny],kitchenSheets:[]},recipes:[tinyRecipe],purchaseLists:[aggregatePurchaseList(spec.specId,[tiny])]});
     expect(tinyFolder).toContain("0,000000002 kg");

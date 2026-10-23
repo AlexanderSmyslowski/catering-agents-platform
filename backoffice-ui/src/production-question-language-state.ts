@@ -100,6 +100,8 @@ function translateUncertaintyMessage(field?: string, message?: string): string |
 }
 
 function translateSuggestedQuestion(field?: string, question?: string): string | undefined {
+  // A menu uncertainty can concern one recipe even when the menu is complete.
+  if (field === "menuPlan" && question?.trim()) return question.trim();
   if (field) {
     const mapped = questionForMissingField(field);
     if (mapped) {
@@ -273,9 +275,6 @@ export function buildProductionQuestions(spec?: Record<string, unknown>): string
     );
     const nextQuestion = translatedQuestion ?? translatedMessage;
     if (nextQuestion) {
-      if (field) {
-        coveredFields.add(field);
-      }
       questions.push(nextQuestion);
     }
   }

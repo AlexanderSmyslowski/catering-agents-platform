@@ -1,4 +1,5 @@
 import type { CaseProduct, CaseStatus } from "@catering/shared-core";
+import { completedCaseLabel } from "./case-history-state.js";
 
 export type CaseNextDraftState = "pending_review" | "change_requested" | "ready_for_approval";
 
@@ -28,7 +29,7 @@ export type CaseNextAction =
   | { kind: "approve_production"; label: "Produktionsstand freigeben"; draftId: string }
   | { kind: "apply_approved"; label: "Plan und Einkauf erstellen"; approvedProductionSpecId: string }
   | { kind: "inspect_result"; label: "Ergebnis öffnen"; artifactId: string }
-  | { kind: "complete"; label: "Auftrag abgeschlossen" };
+  | { kind: "complete"; label: "Plan übernommen" | "An Produktion übergeben" | "Archiviert" };
 
 function nonEmpty(value: string | undefined): value is string {
   return typeof value === "string" && value.trim().length > 0;
@@ -41,7 +42,7 @@ function nonEmpty(value: string | undefined): value is string {
  */
 export function buildCaseNextAction(input: CaseNextActionInput): CaseNextAction {
   if (input.caseStatus === "archived" || input.caseStatus === "completed") {
-    return { kind: "complete", label: "Auftrag abgeschlossen" };
+    return { kind: "complete", label: input.caseStatus === "archived" ? "Archiviert" : completedCaseLabel(input.product) };
   }
 
   if (nonEmpty(input.resultArtifactId)) {

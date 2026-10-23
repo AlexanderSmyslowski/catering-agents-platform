@@ -35,12 +35,12 @@ describe("case next action bar", () => {
     document.body.append(container);
     const root = createRoot(container);
     await act(async () => root.render(createElement(CaseNextActionBar, {
-      action: { kind: "complete", label: "Auftrag abgeschlossen" },
+      action: { kind: "complete", label: "Plan übernommen" },
       onAction: vi.fn(),
       error: "Status konnte nicht geladen werden."
     })));
     expect(container.querySelector("button[data-action='case-next-action']")).toBeNull();
-    expect(container.querySelector("[data-state='complete']")?.textContent).toBe("Auftrag abgeschlossen");
+    expect(container.querySelector("[data-state='complete']")?.textContent).toBe("Plan übernommen");
     expect(container.querySelector("[role='alert']")?.textContent).toBe("Status konnte nicht geladen werden.");
     await act(async () => root.unmount());
   });

@@ -394,8 +394,8 @@ export function OfferConversationalWorkbench({
               ) : null}
               {focusedOpenQuestions.length > 0 ? (
                 <section aria-label="Offene Punkte"><h3>Offene Punkte ({focusedOpenQuestions.length})</h3><ul className="item-list compact">
-                  {focusedOpenQuestions.map((question) => (
-                    <li key={question}>{question}</li>
+                  {focusedOpenQuestions.map((question, index) => (
+                    <li key={`${focusedDraftId}:${index}`}>{question}</li>
                   ))}
                 </ul></section>
               ) : (

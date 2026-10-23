@@ -101,6 +101,28 @@ describe("production question language state", () => {
     ]);
   });
 
+  it("keeps distinct recipe-review questions instead of asking for an already present menu", () => {
+    const questions = buildProductionQuestions({
+      readiness: { status: "complete" },
+      event: { date: "2026-11-13", serviceForm: "buffet" },
+      attendees: { expected: 100 },
+      menuPlan: [
+        { label: "Hähnchenragout", menuCategory: "classic", productionDecision: { mode: "in_house" } },
+        { label: "Ofengemüse", menuCategory: "vegan", productionDecision: { mode: "in_house" } }
+      ],
+      uncertainties: [
+        { field: "menuPlan", suggestedQuestion: "Welche Ernährungskennzeichnung gilt nach Rezeptprüfung für Hähnchenragout?" },
+        { field: "menuPlan", suggestedQuestion: "Welche Ernährungskennzeichnung gilt nach Rezeptprüfung für Ofengemüse?" },
+        { field: "menuPlan", suggestedQuestion: "Welche Ernährungskennzeichnung gilt nach Rezeptprüfung für Ofengemüse?" }
+      ]
+    });
+    expect(questions).toEqual([
+      "Welche Ernährungskennzeichnung gilt nach Rezeptprüfung für Hähnchenragout?",
+      "Welche Ernährungskennzeichnung gilt nach Rezeptprüfung für Ofengemüse?"
+    ]);
+    expect(questions).not.toContain("Welche Gerichte oder Komponenten sollen konkret produziert werden?");
+  });
+
   it("translates inferred assumptions into German", () => {
     const assumptions = buildProductionAssumptions({
       event: {

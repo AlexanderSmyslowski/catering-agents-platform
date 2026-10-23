@@ -1,4 +1,4 @@
-import type { CaseSummary } from "@catering/shared-core";
+import type { CaseProduct, CaseStatus, CaseSummary } from "@catering/shared-core";
 
 export type CaseHistoryItem = CaseSummary & {
   /** Optional server-provided search text; it never contains technical IDs. */
@@ -58,4 +58,12 @@ export function buildCaseHistoryState(
     ...(activeCaseId ? { activeCaseId } : {}),
     query: normalizedQuery,
   };
+}
+
+export function completedCaseLabel(product: CaseProduct): "Plan übernommen" | "An Produktion übergeben" {
+  return product === "production" ? "Plan übernommen" : "An Produktion übergeben";
+}
+
+export function formatCaseStatus(product: CaseProduct, status: CaseStatus): string {
+  return status === "completed" ? completedCaseLabel(product) : status === "archived" ? "Archiviert" : "Offen";
 }

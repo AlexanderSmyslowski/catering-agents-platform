@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { CaseProduct } from "@catering/shared-core";
-import type { CaseHistoryItem } from "./case-history-state.js";
+import { formatCaseStatus, type CaseHistoryItem } from "./case-history-state.js";
 
 export interface CaseHistoryPanelProps {
   product: CaseProduct;
@@ -113,7 +113,7 @@ export function CaseHistoryPanel({
                     >
                       <strong>{item.displayName}</strong>
                       <span>{caseCreatedLabel(item.createdAt)}</span>
-                      <span>{{ open: "Offen", completed: "Abgeschlossen", archived: "Archiviert" }[item.status]}{active ? " · geöffnet" : ""}</span>
+                      <span>{formatCaseStatus(product, item.status)}{active ? " · geöffnet" : ""}</span>
                     </button>
                     <button
                       className="quiet-list__copy secondary-button"
