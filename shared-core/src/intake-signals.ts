@@ -181,6 +181,15 @@ const dietaryShareHeadingPattern =
 const dishContextPattern =
   /(?:quiche|hummus|gem(?:ü|ue)se|cups?|spie(?:ss|ß)e|brownie|bites?|tomaten|mozzarella|feta|kuchen|curry|reis|salat|suppe|bowl|tarte|pasta|nudel|kartoffel|kraut|zucchini|pilze|zuckerschoten|pak-choi|wildkr(?:ä|ae)uter|bulette|frikadelle|dessert|baguette|brot)/i;
 
+export function parseCountedDishLine(line: string): { label: string; servings: number; dietaryLabel?: string; isHeading: boolean } | undefined {
+  const match = line.match(/^[ \t]*(?:[-*•][ \t]*)?([^:\r\n]{1,160}):[ \t]*(\d{1,5})[ \t]+Portion(?:en)?(?:[ \t]*,[ \t]*(vegan|vegetarisch|klassisch))?[ \t]*\.?[ \t]*$/i);
+  if (!match || Number(match[2]) <= 0) return undefined;
+  const label = match[1]!.trim();
+  // Counts of groups, totals and courses do not identify an individual dish.
+  const isHeading = /^(?:vegan|vegetarisch|klassisch|(?:(?:vegan(?:e[nmrs]?)?|vegetarisch(?:e[nmrs]?)?|klassisch(?:e[nmrs]?)?)\s+)?(?:Gäste|Gaeste|Personen|Teilnehmer(?:innen)?|Personal|Vegetarier(?:innen)?|Veganer(?:innen)?|Kinder|Erwachsene|Sonderkost|Allergie|Glutenfrei|Laktosefrei|Milchfrei|Nussfrei|Gesamt(?:menge)?|Summe|Insgesamt|Portionen|Hauptgang|Hauptgänge|Hauptgaenge|Vorspeisen?|Desserts?|Beilagen?|Menü|Menu|Buffet|Empfang|Catering))$/i.test(label);
+  return { label, servings: Number(match[2]), isHeading, ...(match[3] ? { dietaryLabel: match[3] } : {}) };
+}
+
 function isComponentScopedDietarySegment(segment: string, canonical: string): boolean {
   if (canonical !== "vegan" && canonical !== "vegetarian") {
     return false;
@@ -220,6 +229,9 @@ function shouldPromoteDietarySignalToConstraint(segment: string, canonical: stri
       || /\b(?:alle Gäste|alle Gaeste|für alle|fuer alle)\b/i.test(segment)
       || new RegExp(diet+"\\s+(?:Buffet|Menü|Menu|Catering|Event|Veranstaltung|Essen)\\b", "i").test(segment)
       || new RegExp("(?:Buffet|Menü|Menu|Catering|Event|Veranstaltung|Essen)\\s+(?:muss|soll|sollte)\\s+(?:"+diet+")\\b", "i").test(segment);
+    const countedGuestGroup = /^(?:vegan|vegetarisch|Veganer(?:innen)?|Vegetarier(?:innen)?|(?:vegan(?:e[nmrs]?)?|vegetarisch(?:e[nmrs]?)?)\s+(?:Gäste|Gaeste|Personen))\s*:\s*\d{1,5}\s+Portion(?:en)?\.?$/i.test(segment);
+    const countedLine = parseCountedDishLine(segment);
+    if ((countedLine && !countedLine.isHeading || countedGuestGroup) && !explicitGlobal) return false;
     // Counts and guest choices describe part of a mixed menu. An explicit
     // whole-event mandate still takes precedence over that local wording.
     const portionOrGroup = new RegExp("\\b\\d+\\s+(?:Portion(?:en)?\\s+)?"+diet+"\\b", "i").test(segment)
@@ -279,7 +291,11 @@ export function analyzeIntakeText(text: string): IntakeSignals {
   ).join("\n");
   // Separate numbered guest instructions from the previous sentence, but
   // keep planning counts with their uncertainty and decimal quantities intact.
-  const segments = eventText.split(/(?<!\d),|,(?!\d)|[;\n]+|(?<!\b[cC][aA]\.)(?<=[.!?])\s+(?=[A-ZÄÖÜ]|\d+\s+(?:Gäste|Gaeste|Personen|Teilnehmer)\s+(?:(?:benötigen|benoetigen|brauchen|wünschen|wuenschen|müssen|muessen)\s+)?(?:(?:gluten|laktose|milch|nuss)frei|[Ss]chalenfrucht))/).map(normalizeSegment).filter(Boolean);
+  // Keep a counted dish's trailing dietary label attached to its quantity.
+  // Splitting "Linsenragout: 20 Portionen, vegan" at the comma would otherwise
+  // turn the isolated word "vegan" into a requirement for the entire event.
+  const segmentedText = eventText.replace(/^([^\r\n:]+:[ \t]*\d{1,5}[ \t]+Portion(?:en)?)[ \t]*,[ \t]*(vegan|vegetarisch|klassisch)([ \t]*\.?[ \t]*)$/gim, "$1 $2$3");
+  const segments = segmentedText.split(/(?<!\d),|,(?!\d)|[;\n]+|(?<!\b[cC][aA]\.)(?<=[.!?])\s+(?=[A-ZÄÖÜ]|\d+\s+(?:Gäste|Gaeste|Personen|Teilnehmer)\s+(?:(?:benötigen|benoetigen|brauchen|wünschen|wuenschen|müssen|muessen)\s+)?(?:(?:gluten|laktose|milch|nuss)frei|[Ss]chalenfrucht))/).map(normalizeSegment).filter(Boolean);
   // A day followed by a written month is one date, not two sentences.
   for (let index = 1; index < segments.length;) {
     const day = segments[index - 1].match(/\b(\d{1,2}\.)$/)?.[1];

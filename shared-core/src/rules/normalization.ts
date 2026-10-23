@@ -1,4 +1,4 @@
-import { analyzeIntakeText } from "../intake-signals.js";
+import { analyzeIntakeText, parseCountedDishLine } from "../intake-signals.js";
 import { eventTypeDefaults, eventTypeKeywords, infrastructureCatalog, serviceFormKeywords } from "../taxonomies/defaults.js";
 import { formatEventTypeLabel, formatServiceFormLabel } from "../taxonomies/labels.js";
 import type {
@@ -12,7 +12,7 @@ import type {
 import { SCHEMA_VERSION } from "../types.js";
 import { evaluateReadiness } from "./readiness.js";
 
-type InferredMenuItem = Pick<MenuComponent, "label" | "menuCategory" | "dietaryTags" | "servings">;
+type InferredMenuItem = Pick<MenuComponent, "label" | "menuCategory" | "dietaryTags" | "servings"> & { dietaryReviewNote?: string };
 
 function slugify(value: string): string {
   return value
@@ -238,12 +238,25 @@ function extractInlineMenuMarkerItems(text: string): InferredMenuItem[] {
 function extractQuantifiedMenuItems(text: string): InferredMenuItem[] {
   // Only explicit dish counts establish portions. Guest subgroups, gram weights
   // and staff counts must not become additional menu servings.
-  return [...text.matchAll(/\b(\d{1,5})\s+Portion(?:en)?\s+(.+?)(?=,\s*\d+\s+Portion|[;.\n]|$)/gi)]
+  const countedLines = [...text.matchAll(/^[^\r\n]+/gm)].flatMap(match => {
+    const parsed = parseCountedDishLine(match[0]);
+    return parsed ? [{ index: match.index!, length: match[0].length, ...parsed }] : [];
+  });
+  const namedLines = countedLines.filter(line => !line.isHeading && !isMenuNoise(line.label));
+  const prefixed = [...text.matchAll(/\b(\d{1,5})[ \t]+Portion(?:en)?[ \t]+(.+?)(?=,\s*\d+\s+Portion|[;.\r\n]|$)/gi)]
     .filter((match) => Number(match[1]) > 0)
-    .map((match) => ({
-      ...inferMenuItemFromLabel(sanitizeMenuLine(match[2]!)),
-      servings: Number(match[1])
-    }));
+    .filter(match => !countedLines.some(line => match.index! >= line.index && match.index! < line.index + line.length))
+    .map(match => ({ index: match.index!, item: { ...inferMenuItemFromLabel(sanitizeMenuLine(match[2]!)), servings: Number(match[1]) } }));
+  const suffixed = namedLines.map(line => {
+    const label = sanitizeMenuLine(line.label);
+    const inferred = inferMenuItemFromLabel(label);
+    const statedCategory = line.dietaryLabel ? inferMenuCategoryFromText(line.dietaryLabel) : undefined;
+    const needsReview = statedCategory !== undefined && statedCategory !== inferred.menuCategory;
+    const menuCategory = needsReview ? undefined : inferred.menuCategory;
+    return { index: line.index, item: { ...inferred, servings: line.servings, menuCategory, dietaryTags: dietaryTagsForCategory(menuCategory),
+      ...(needsReview ? { dietaryReviewNote: `Ernährungsangabe für ${label}: ${line.dietaryLabel}. Kennzeichnung vor Freigabe anhand des Rezepts prüfen.` } : {}) } };
+  });
+  return [...prefixed, ...suffixed].sort((left, right) => left.index - right.index).map(({ item }) => item);
 }
 
 function extractMenuItems(text: string, fallbackKeywords: string[]): InferredMenuItem[] {
@@ -383,6 +396,9 @@ export function normalizeEventRequestToSpec(
     ? [{ code: "explicit_menu_portions", message: "Gerichte und Portionszahlen aus ausdrücklichen Portionsangaben übernommen; übrige Leistungen vor Freigabe ergänzen und prüfen.", applied: true }]
     : [];
   const uncertainties: Uncertainty[] = uniqueUncertainties(request.uncertainties ?? [], signals.uncertainties);
+  for (const item of menuItems) {
+    if (item.dietaryReviewNote) uncertainties.push({ field: "menuPlan", message: item.dietaryReviewNote, severity: "medium", suggestedQuestion: `Welche Ernährungskennzeichnung gilt nach Rezeptprüfung für ${item.label}?` });
+  }
 
   if (!request.event?.type) {
     assumptions.push({
