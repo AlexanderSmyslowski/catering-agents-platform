@@ -1,4 +1,5 @@
 import type { ProductionDraft, ProductionDraftReviewCard } from "./api.js";
+import { formatRecipeApprovalStateLabel } from "../../shared-core/src/export-source-metadata.js";
 
 type RecordValue = Record<string, unknown>;
 function record(value: unknown): RecordValue | undefined {
@@ -14,7 +15,22 @@ function value(value: unknown, missing = "Angabe fehlt"): string {
   return text(value) ?? number(value)?.toString() ?? `unvollständig: ${missing}`;
 }
 function quantity(amount: unknown, unit: unknown): string {
-  return `${number(amount) ?? "unvollständig: Menge fehlt"} ${text(unit) ?? "unvollständig: Einheit fehlt"}`;
+  return `${number(amount) ?? "unvollständig: Menge fehlt"} ${unit === "servings" ? amount === 1 ? "Portion" : "Portionen" : text(unit) ?? "unvollständig: Einheit fehlt"}`;
+}
+function label(input: unknown, labels: Record<string, string>, missing: string): string {
+  const key = text(input);
+  return key && Object.hasOwn(labels, key) ? labels[key]! : `unvollständig: ${missing}`;
+}
+function approvalLabel(input: unknown): string {
+  const state = text(input);
+  if (state === "rejected") return "abgelehnt";
+  return state && ["approved_internal", "auto_usable", "review_required"].includes(state)
+    ? formatRecipeApprovalStateLabel(state) ?? "unvollständig: Rezeptstatus klären" : "unvollständig: Rezeptstatus klären";
+}
+const stationLabels = { "beverage-station": "Getränke", hot: "Warme Küche", "hot-kitchen": "Warme Küche", cold: "Kalte Küche", "cold-kitchen": "Kalte Küche", pastry: "Patisserie" };
+function station(input: unknown): string {
+  const key = text(input);
+  return key && Object.hasOwn(stationLabels, key) ? stationLabels[key as keyof typeof stationLabels] : value(input, "Arbeitsbereich fehlt");
 }
 function quantityObject(input: unknown): string {
   const item = record(input);
@@ -75,7 +91,8 @@ function EventContent({ spec }: { spec: RecordValue }) {
   const event = record(spec.event);
   const attendees = record(spec.attendees);
   return <>
-    <p>Event-Spec: {value(spec.specId)} | Datum: {value(event?.date)} | Personen: {value(attendees?.expected ?? attendees?.guaranteed)}</p>
+    <p><strong>{value(event?.title, "Veranstaltungsname fehlt")}</strong></p>
+    <p>Datum: {value(event?.date)} · Gäste: {value(attendees?.expected ?? attendees?.guaranteed)}</p>
     <p><strong>Zeitfenster</strong></p>
     {Array.isArray(event?.schedule) && event.schedule.length ? <ul>{event.schedule.map((item, index) => {
       const slot = record(item);
@@ -87,49 +104,69 @@ function EventContent({ spec }: { spec: RecordValue }) {
       const component = record(item);
       const decision = record(component?.productionDecision);
       const mode = text(decision?.mode);
-      return <li key={index}>{value(component?.label)} ({value(component?.componentId)}) · Kategorie: {value(component?.menuCategory)} · Herstellung: {mode && Object.hasOwn(modeLabels, mode) ? modeLabels[mode] : value(undefined, "Herstellungsweg unbekannt")} · Portionen: {value(component?.servings)}
+      return <li key={index}>{value(component?.label)} · Kategorie: {label(component?.menuCategory, { classic: "Klassisch", vegetarian: "Vegetarisch", vegan: "Vegan" }, "Ernährungskennzeichnung klären")} · Herstellung: {mode && Object.hasOwn(modeLabels, mode) ? modeLabels[mode] : value(undefined, "Herstellungsweg unbekannt")} · Portionen: {value(component?.servings)}
         <Strings items={decision?.purchasedElements} label="Zukauf" />
         {decision?.notes !== undefined && <p>{value(decision.notes)}</p>}
       </li>;
     })}</ul> : <Warning>Komponenten nicht verfügbar.</Warning>}
   </>;
 }
-function Batch({ batch }: { batch: RecordValue | undefined }) {
-  if (!batch) return <Warning>Produktionsbatch unvollständig.</Warning>;
+function frozenBatchName(draft: ProductionDraft, batch: RecordValue, kind: "component" | "recipe"): string {
+  const spec = record(draft.draftArtifacts?.eventSpec);
+  const plan = record(draft.draftArtifacts?.productionPlan);
+  if (!text(spec?.specId) || plan?.eventSpecId !== spec?.specId) return "unvollständig: Zuordnung zum Auftrag klären";
+  const items = kind === "component" ? spec?.menuPlan : draft.draftArtifacts?.recipes;
+  const key = kind === "component" ? "componentId" : "recipeId";
+  const matches = Array.isArray(items) ? items.map(record).filter(item => text(batch[key]) && item?.[key] === batch[key]) : [];
+  return matches.length === 1 ? value(matches[0]?.[kind === "component" ? "label" : "name"], "Bezeichnung fehlt") : "unvollständig: Bezeichnung nicht eindeutig zugeordnet";
+}
+function Batch({ batch, draft }: { batch: RecordValue | undefined; draft: ProductionDraft }) {
+  if (!batch) return <Warning>Produktionsansatz unvollständig.</Warning>;
   return <div>
-    <p>Batch: {value(batch.batchId)} · Komponente: {value(batch.componentId)} · Rezept: {value(batch.recipeId)}</p>
-    <p>Skalierte Zielmenge: {quantityObject(batch.scaledYield)} · {value(batch.batchCount)} Chargen (batchCount)</p>
-    <p>Station: {value(batch.station)} · Zeitfenster: {value(batch.prepWindow)}</p>
+    <p><strong>{frozenBatchName(draft, batch, "component")}</strong> · Rezept: {frozenBatchName(draft, batch, "recipe")}</p>
+    <p>Skalierte Zielmenge: {quantityObject(batch.scaledYield)} · {value(batch.batchCount)} Chargen</p>
+    <p>Arbeitsbereich: {station(batch.station)} · Zeitfenster: {value(batch.prepWindow)}</p>
     <Ingredients items={batch.ingredients} /><Steps items={batch.steps} />
   </div>;
 }
-function PlanContent({ plan }: { plan: RecordValue }) {
+function PlanContent({ plan, draft }: { plan: RecordValue; draft: ProductionDraft }) {
   const readiness = record(plan.readiness);
   return <>
-    <p>Plan: {value(plan.planId)} · Planungsstand: {value(readiness?.status)}</p>
+    <p>Berechnungsstand: {label(readiness?.status, { complete: "Vollständig berechnet", partial: "Teilweise berechnet", insufficient: "Berechnung unvollständig" }, "Berechnungsstand klären")}</p>
     <Strings items={readiness?.reasons} label="Begründungen" />
     {Array.isArray(plan.productionBatches) ? <>
-      <p>{plan.productionBatches.length} {plan.productionBatches.length === 1 ? "Produktionsbatch" : "Produktionsbatches"}</p>
-      {plan.productionBatches.map((batch, index) => <Batch key={index} batch={record(batch)} />)}
-    </> : <Warning>Produktionsbatches nicht verfügbar.</Warning>}
+      <p>{plan.productionBatches.length} {plan.productionBatches.length === 1 ? "Produktionsansatz" : "Produktionsansätze"}</p>
+      {plan.productionBatches.map((batch, index) => <Batch key={index} batch={record(batch)} draft={draft} />)}
+    </> : <Warning>Produktionsansätze nicht verfügbar.</Warning>}
     <p><strong>Küchenblätter</strong></p>
     {Array.isArray(plan.kitchenSheets) ? plan.kitchenSheets.map((item, index) => {
       const sheet = record(item);
       return <div key={index}>
-        <p><strong>{value(sheet?.title, "Küchenblatt fehlt")}</strong> · Komponente: {value(sheet?.componentId)}</p>
-        <p>Produktionsmenge: {quantityObject(sheet?.productionQty)} · Station: {value(sheet?.station)} · Zeitfenster: {value(sheet?.prepWindow)}</p>
+        <p><strong>{value(sheet?.title, "Küchenblatt fehlt")}</strong></p>
+        <p>Produktionsmenge: {quantityObject(sheet?.productionQty)} · Arbeitsbereich: {station(sheet?.station)} · Zeitfenster: {value(sheet?.prepWindow)}</p>
         <Ingredients items={sheet?.ingredients} /><Strings items={sheet?.instructions} label="Anweisungen" /><Steps items={sheet?.steps} />
         <Strings items={sheet?.procurementNotes} label="Beschaffungshinweise" /><Strings items={sheet?.blockingNotes} label="Offene Küchenprüfung" />
       </div>;
     }) : <Warning>Küchenblätter nicht verfügbar.</Warning>}
+    <p><strong>Ablauf</strong></p>
     {Array.isArray(plan.timeline) ? <ul>{plan.timeline.map((item, index) => <li key={index}>{value(record(item)?.label)}: {value(record(item)?.at)}</li>)}</ul> : <Warning>Ablauf unvollständig.</Warning>}
     <Strings items={plan.unresolvedItems} label="Offene Punkte" /><Strings items={plan.warnings} label="Warnungen" /><Strings items={plan.blockingIssues} label="Planungshindernisse" />
   </>;
 }
-function PurchaseContent({ list }: { list: RecordValue }) {
+function procurementName(source: unknown, list: RecordValue, draft: ProductionDraft): string | undefined {
+  const match = text(source)?.match(/^procurement:(.+)$/);
+  const spec = record(draft.draftArtifacts?.eventSpec);
+  if (!match || !text(spec?.specId) || list.eventSpecId !== spec?.specId || !Array.isArray(spec?.menuPlan)) return undefined;
+  const matches = spec.menuPlan.map(record).filter(component => component?.componentId === match[1]);
+  const component = matches.length === 1 ? matches[0] : undefined;
+  return component && ["hybrid", "convenience_purchase", "external_finished"].includes(text(record(component.productionDecision)?.mode) ?? "")
+    ? text(component.label) : undefined;
+}
+function PurchaseContent({ list, draft }: { list: RecordValue; draft: ProductionDraft }) {
   return <>
-    <p>Einkaufsliste: {value(list.purchaseListId)}</p>
-    {!Array.isArray(list.items) ? <Warning>Einkaufspositionen nicht verfügbar.</Warning> : <table>
+    {!Array.isArray(list.items) ? <Warning>Einkaufspositionen nicht verfügbar.</Warning> : <>
+    <p className="helper-text frozen-purchase-scroll-hint">Tabelle nach rechts verschieben, um Herkunft und Rezeptstatus zu lesen.</p>
+    <div className="frozen-purchase-table" role="region" aria-label="Einkaufspositionen mit Herkunft und Rezeptstatus · seitlich verschiebbar" tabIndex={0}><table>
       <thead><tr><th>Position</th><th>Einkaufsmenge</th><th>Normalisierte Menge</th><th>Herkunft</th></tr></thead>
       <tbody>{list.items.map((item, index) => {
         const row = record(item);
@@ -139,15 +176,19 @@ function PurchaseContent({ list }: { list: RecordValue }) {
           <td>{value(row?.displayName, "Position fehlt")}</td>
           <td>{quantity(row?.purchaseQty, row?.purchaseUnit)}</td>
           <td>{quantity(row?.normalizedQty, row?.normalizedUnit)}</td>
-          <td>{sources.length ? <ul>{sources.map((source, sourceIndex) => <li key={sourceIndex}>{value(source, "Herkunft fehlt")}</li>)}</ul> : <Warning>unvollständig: Herkunft fehlt</Warning>}
-            {metadata.map((input, metadataIndex) => {
-              const source = record(input);
-              return <p key={metadataIndex}>{value(source?.recipeName)} ({value(source?.recipeId)}) · Quelle: {value(source?.reference)} · Status: {value(source?.approvalState)}</p>;
-            })}
+          <td>{sources.length ? sources.map((source, sourceIndex) => {
+            const matches = metadata.map(record).filter(item => text(source) && item?.recipeId === source);
+            if (matches.length === 1) {
+              const item = matches[0];
+              return <p key={sourceIndex}>{value(item?.recipeName)} · Quelle: {value(item?.reference)} · Rezeptstatus: {approvalLabel(item?.approvalState)}</p>;
+            }
+            const purchased = matches.length === 0 ? procurementName(source, list, draft) : undefined;
+            return purchased ? <p key={sourceIndex}>Zukauf: {purchased}</p> : <Warning key={sourceIndex}>unvollständig: Herkunft klären</Warning>;
+          }) : <Warning>unvollständig: Herkunft fehlt</Warning>}
           </td>
         </tr>;
       })}</tbody>
-    </table>}
+    </table></div></>}
     <p className="helper-text">Mengen und Herkunft belegen keine reale Einkaufsdeckung. Zukaufsspezifikation, Gebinde und Lieferant fachlich prüfen.</p>
   </>;
 }
@@ -159,24 +200,63 @@ function RecipeContent({ recipe, draft }: { recipe: RecordValue; draft: Producti
   const batches = plan?.eventSpecId === spec?.specId && text(spec?.specId) && Array.isArray(plan?.productionBatches)
     ? plan.productionBatches.map(record).filter(batch => batch?.recipeId === recipe.recipeId) : [];
   return <>
-    <p>Rezept: {value(recipe.name)} ({value(recipe.recipeId)})</p>
+    <p>Rezept: <strong>{value(recipe.name)}</strong></p>
     <p>Basisertrag: {quantity(baseYield?.servings, baseYield?.unit)}</p>
-    <p>Quelle: {value(source?.reference)} · Herkunft: {value(source?.originType)} · Rezeptstatus: {value(source?.approvalState)}</p>
+    <p>Quelle: {value(source?.reference)} · Herkunft: {label(source?.originType, { internal_db: "Interne Rezeptsammlung", approved_import: "Importierte Rezeptsammlung", cookbook: "Kochbuch", web: "Internet" }, "Rezeptherkunft klären")} · Rezeptstatus: {approvalLabel(source?.approvalState)}</p>
     <p><strong>Basiszutaten</strong></p><Ingredients items={recipe.ingredients} />
     <p><strong>Skalierung im selben Entwurf</strong></p>
-    {batches.length ? batches.map((batch, index) => <Batch key={index} batch={batch} />) : <Warning>Verknüpfte Skalierung nicht verfügbar.</Warning>}
-    <p className="helper-text">Eine synthetische technische Prüfung ersetzt keine reale menschliche Küchenprüfung. Diese Entscheidung ist keine globale Rezept- oder Allergenfreigabe; ein Rezept mit review_required bleibt prüfpflichtig.</p>
+    {batches.length ? batches.map((batch, index) => <Batch key={index} batch={batch} draft={draft} />) : <Warning>Verknüpfte Skalierung nicht verfügbar.</Warning>}
+    <p className="helper-text">Eine synthetische technische Prüfung ersetzt keine reale menschliche Küchenprüfung. Diese Entscheidung ist keine globale Rezept- oder Allergenfreigabe; ausstehende Rezeptprüfungen bleiben offen.</p>
   </>;
+}
+
+function Technical({ draft, card, target }: { draft: ProductionDraft; card: ProductionDraftReviewCard; target?: RecordValue }) {
+  const entries = [`Unveränderlicher Entwurf: ${draft.draftId} · Revision ${value(draft.revision)}`];
+  if (target && card.kind === "event_data") {
+    entries.push(`Veranstaltung: ${value(target.specId)}`);
+    if (Array.isArray(target.menuPlan)) for (const item of target.menuPlan) {
+      const component = record(item);
+      entries.push(`Menüposition: ${value(component?.componentId)} · Kategorie: ${value(component?.menuCategory)}`);
+    }
+  } else if (target && card.kind === "timeline") {
+    entries.push(`Produktionsplan: ${value(target.planId)} · Berechnungsstand: ${value(record(target.readiness)?.status)}`);
+    if (Array.isArray(target.productionBatches)) for (const item of target.productionBatches) {
+      const batch = record(item);
+      entries.push(`Produktionscharge: ${value(batch?.batchId)} · Menüposition: ${value(batch?.componentId)} · Rezept: ${value(batch?.recipeId)}`);
+    }
+    if (Array.isArray(target.kitchenSheets)) for (const item of target.kitchenSheets) entries.push(`Küchenblatt-Menüposition: ${value(record(item)?.componentId)}`);
+  } else if (target && card.kind === "purchase_item") {
+    entries.push(`Einkaufsliste: ${value(target.purchaseListId)}`);
+    if (Array.isArray(target.items)) for (const item of target.items) {
+      const row = record(item);
+      if (Array.isArray(row?.sourceRecipes)) entries.push(`Position ${value(row?.displayName)} · Herkunft: ${row.sourceRecipes.map(source => value(source, "Herkunft fehlt")).join(", ")}`);
+      if (Array.isArray(row?.sourceRecipeMetadata)) for (const input of row.sourceRecipeMetadata) {
+        const source = record(input);
+        entries.push(`Rezept: ${value(source?.recipeId)} · Status: ${value(source?.approvalState)}`);
+      }
+    }
+  } else if (target && card.kind === "recipe") {
+    const source = record(target.source);
+    entries.push(`Rezept: ${value(target.recipeId)} · Herkunft: ${value(source?.originType)} · Status: ${value(source?.approvalState)}`);
+    const plan = record(draft.draftArtifacts?.productionPlan);
+    const spec = record(draft.draftArtifacts?.eventSpec);
+    if (text(spec?.specId) && plan?.eventSpecId === spec?.specId && Array.isArray(plan?.productionBatches)) for (const input of plan.productionBatches) {
+      const batch = record(input);
+      if (batch?.recipeId === target.recipeId) entries.push(`Produktionscharge: ${value(batch?.batchId)} · Menüposition: ${value(batch?.componentId)}`);
+    }
+  }
+  return <details><summary>Technische Details</summary><ul>{entries.map((entry, index) => <li key={index}>{entry}</li>)}</ul></details>;
 }
 
 export function ProductionDraftFrozenContent({ draft, card }: { draft: ProductionDraft; card: ProductionDraftReviewCard }) {
   if (!["event_data", "timeline", "purchase_item", "recipe"].includes(card.kind)) return null;
   const target = resolveTarget(draft, card);
   return <section aria-label={`Eingefrorener Inhalt: ${card.title}`}>
-    <p className="helper-text">Unveränderlicher Entwurf {draft.draftId} · Revision {value(draft.revision)}</p>
+    <p className="helper-text">Gespeicherter Prüfstand · Fassung {value(draft.revision)}. Die Entscheidung gilt nur für diese Fassung.</p>
     {!target ? <Warning /> : card.kind === "event_data" ? <EventContent spec={target} />
-      : card.kind === "timeline" ? <PlanContent plan={target} />
-        : card.kind === "purchase_item" ? <PurchaseContent list={target} />
+      : card.kind === "timeline" ? <PlanContent plan={target} draft={draft} />
+        : card.kind === "purchase_item" ? <PurchaseContent list={target} draft={draft} />
           : <RecipeContent recipe={target} draft={draft} />}
+    <Technical draft={draft} card={card} target={target} />
   </section>;
 }

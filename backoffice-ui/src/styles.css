@@ -630,6 +630,25 @@ button:disabled {
   overflow-x: auto;
 }
 
+.frozen-purchase-table {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.frozen-purchase-table table {
+  min-width: 40rem;
+}
+
+.frozen-purchase-scroll-hint {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .frozen-purchase-scroll-hint {
+    display: block;
+  }
+}
+
 .drag-drop-zone,
 .question-window {
   display: grid;

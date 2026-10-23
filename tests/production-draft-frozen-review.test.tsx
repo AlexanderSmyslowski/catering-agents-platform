@@ -26,9 +26,9 @@ function frozenDraft(): ProductionDraft {
         { componentId: "purchase", label: "Croissants und Wasser", menuCategory: "classic", servings: 35, productionDecision: { mode: "convenience_purchase", purchasedElements: ["Croissants", "Wasser"] } }
       ] },
       productionPlan: { planId: "plan-frozen", eventSpecId: "spec-frozen", readiness: { status: "complete", reasons: [] }, productionBatches: [
-        { batchId: "batch-frozen", componentId: "coffee", recipeId: "recipe-frozen", scaledYield: { amount: 35, unit: "servings" }, batchCount: 4, ingredients, station: "Getränke", prepWindow: "08:00–09:00", steps: [{ index: 1, instruction: "Synthetischer Testschritt" }] }
+        { batchId: "batch-frozen", componentId: "coffee", recipeId: "recipe-frozen", scaledYield: { amount: 35, unit: "servings" }, batchCount: 4, ingredients, station: "beverage-station", prepWindow: "08:00–09:00", steps: [{ index: 1, instruction: "Synthetischer Testschritt" }] }
       ], kitchenSheets: [
-        { title: "Küchenblatt Kaffeepause", componentId: "coffee", recipeId: "recipe-frozen", productionQty: { amount: 35, unit: "servings" }, ingredients, instructions: ["Kaffee bereitstellen"], station: "Getränke", prepWindow: "08:00–09:00" },
+        { title: "Küchenblatt Kaffeepause", componentId: "coffee", recipeId: "recipe-frozen", productionQty: { amount: 35, unit: "servings" }, ingredients, instructions: ["Kaffee bereitstellen"], station: "beverage-station", prepWindow: "08:00–09:00" },
         { title: "Küchenblatt Zukauf", componentId: "purchase", productionQty: { amount: 35, unit: "servings" }, ingredients: [], instructions: ["Zukauf bereitstellen"], procurementNotes: ["Gebinde und Lieferant noch fachlich klären"], station: "Ausgabe", prepWindow: "09:00" }
       ], recipeSelections: [{ componentId: "coffee", recipeId: "recipe-frozen" }], timeline: [{ label: "Ausgabe", at: "09:00" }], unresolvedItems: [] },
       purchaseList: { purchaseListId: "purchase-frozen", eventSpecId: "spec-frozen", items: [
@@ -66,7 +66,12 @@ describe("frozen production review content", () => {
   it("distinguishes one 35-serving batch from four charges and includes both frozen kitchen sheets", async () => {
     await mount(frozenDraft());
     const text = card("Plan prüfen").textContent;
-    for (const value of ["complete", "1 Produktionsbatch", "35 servings", "4 Chargen", "350 g", "70 g", "3.5 l", "Küchenblatt Kaffeepause", "Küchenblatt Zukauf", "Zukauf bereitstellen", "Gebinde und Lieferant noch fachlich klären"]) expect(text).toContain(value);
+    for (const value of ["Vollständig berechnet", "1 Produktionsansatz", "35 Portionen", "4 Chargen", "350 g", "70 g", "3.5 l", "Küchenblatt Kaffeepause", "Getränke", "Küchenblatt Zukauf", "Zukauf bereitstellen", "Gebinde und Lieferant noch fachlich klären"]) expect(text).toContain(value);
+  });
+  it("translates the canonical beverage station in batch and kitchen sheet", async () => {
+    await mount(frozenDraft());
+    expect(card("Plan prüfen").textContent).toContain("Getränke");
+    expect(card("Plan prüfen").textContent).not.toContain("beverage-station");
   });
   it("shows all five purchase quantities and human-readable frozen recipe/procurement lineage", async () => {
     await mount(frozenDraft());
@@ -78,7 +83,8 @@ describe("frozen production review content", () => {
       expect(rows[index]!.querySelectorAll("td")[2]!.textContent).toBe(amount);
     }
     expect(rows[0]!.textContent).toContain("synthetic:coffee-fixture");
-    expect(rows[3]!.textContent).toContain("procurement:purchase");
+    expect(rows[3]!.textContent).toContain("Zukauf: Croissants und Wasser");
+    expect(card("Einkauf prüfen").querySelector("details")!.textContent).toContain("procurement:purchase");
   });
   it("shows the frozen special diet answer beside the event approval and keeps it as escaped text", async () => {
     const draft = frozenDraft();
@@ -92,7 +98,7 @@ describe("frozen production review content", () => {
   it("shows recipe base and linked scaling without transferring predecessor decisions or requesting live data", async () => {
     const fetchMock = await mount(frozenDraft());
     const text = card("Rezept prüfen").textContent;
-    for (const value of ["recipe-frozen", "Synthetische Kaffeepause", "10 servings", "synthetic:coffee-fixture", "review_required", "35 servings", "4 Chargen", "350 g", "70 g", "3.5 l", "synthetische", "menschliche Küchenprüfung", "Allergenfreigabe"]) expect(text).toContain(value);
+    for (const value of ["recipe-frozen", "Synthetische Kaffeepause", "10 Portionen", "synthetic:coffee-fixture", "Prüfung nötig", "35 Portionen", "4 Chargen", "350 g", "70 g", "3.5 l", "synthetische", "menschliche Küchenprüfung", "Allergenfreigabe"]) expect(text).toContain(value);
     expect(container.textContent).not.toContain("LIVE RECIPE MUST NOT APPEAR");
     expect(fetchMock.mock.calls).toHaveLength(1);
     for (const title of ["Event prüfen", "Plan prüfen", "Einkauf prüfen", "Rezept prüfen"]) {
@@ -108,6 +114,57 @@ describe("frozen production review content", () => {
     menu[0]!.productionDecision = { mode: "__proto__" };
     await mount(draft);
     expect(card("Event prüfen").textContent).toContain("unvollständig");
+  });
+  it("keeps names, quantities and review limits visible while technical identifiers stay in closed disclosures", async () => {
+    await mount(frozenDraft());
+    const content = card("Rezept prüfen").querySelector('section[aria-label^="Eingefrorener Inhalt"]')!;
+    const primary = content.cloneNode(true) as HTMLElement;
+    primary.querySelectorAll("details").forEach(item => item.remove());
+    for (const expected of ["Gespeicherter Prüfstand", "Fassung 8", "Synthetische Kaffeepause", "Kaffeepause", "35 Portionen", "4 Chargen", "Importierte Rezeptsammlung", "Prüfung nötig", "keine globale Rezept- oder Allergenfreigabe"]) expect(primary.textContent).toContain(expected);
+    for (const hidden of ["draft-frozen", "recipe-frozen", "batch-frozen", "approved_import", "review_required", "batchCount"]) expect(primary.textContent).not.toContain(hidden);
+    expect(content.querySelectorAll("details").length).toBeGreaterThan(0);
+    expect(content.querySelectorAll("details[open]")).toHaveLength(0);
+    expect(content.textContent).toContain("recipe-frozen");
+  });
+  it.each(["ambiguous-menu", "other-event"])("does not substitute a dish name from %s", async failure => {
+    const draft = frozenDraft();
+    if (failure === "ambiguous-menu") (draft.draftArtifacts!.eventSpec!.menuPlan as Array<Record<string, unknown>>).push({ componentId: "coffee", label: "Falsche zweite Zuordnung" });
+    else draft.draftArtifacts!.productionPlan!.eventSpecId = "another-event";
+    await mount(draft);
+    expect(card("Plan prüfen").textContent).toContain(failure === "ambiguous-menu" ? "Bezeichnung nicht eindeutig zugeordnet" : "Zuordnung zum Auftrag klären");
+    expect(card("Plan prüfen").textContent).not.toContain("Falsche zweite Zuordnung");
+  });
+  it("keeps an unknown recipe status unresolved and preserves the exact 2 g amount", async () => {
+    const draft = frozenDraft();
+    const recipe = draft.draftArtifacts!.recipes![0]!;
+    (recipe.source as Record<string, unknown>).approvalState = "unknown-status";
+    (recipe.ingredients as Array<Record<string, unknown>>).push({ name: "Zimt", quantity: { amount: 0.002, unit: "kg" } });
+    await mount(draft);
+    expect(card("Rezept prüfen").textContent).toContain("unvollständig: Rezeptstatus klären");
+    expect(card("Rezept prüfen").textContent).toContain("Zimt: 0.002 kg");
+    expect(card("Rezept prüfen").textContent).not.toContain("intern freigegeben");
+  });
+  it("shows readable frozen purchase provenance and a keyboard-focusable scroll area instead of raw identifiers", async () => {
+    await mount(frozenDraft());
+    const content = card("Einkauf prüfen").querySelector('section[aria-label^="Eingefrorener Inhalt"]')!;
+    const primary = content.cloneNode(true) as HTMLElement;
+    primary.querySelectorAll("details").forEach(item => item.remove());
+    for (const text of ["Synthetische Kaffeepause", "Prüfung nötig", "Zukauf: Croissants und Wasser"]) expect(primary.textContent).toContain(text);
+    expect(primary.textContent).not.toContain("recipe-frozen");
+    expect(primary.textContent).not.toContain("procurement:");
+    expect(content.textContent).toContain("procurement:purchase");
+    expect(content.querySelector('[role="region"]')?.getAttribute("tabindex")).toBe("0");
+    expect(content.textContent).toContain("Tabelle nach rechts verschieben");
+  });
+  it.each(["unknown-source", "other-event", "duplicate-metadata"])("keeps purchase provenance unresolved for %s", async failure => {
+    const draft = frozenDraft();
+    const items = draft.draftArtifacts!.purchaseList!.items as Array<Record<string, unknown>>;
+    if (failure === "unknown-source") items[3]!.sourceRecipes = ["unknown-source"];
+    if (failure === "other-event") draft.draftArtifacts!.purchaseList!.eventSpecId = "another-event";
+    if (failure === "duplicate-metadata") (items[0]!.sourceRecipeMetadata as unknown[]).push({ recipeId: "recipe-frozen", recipeName: "Wrong duplicate" });
+    await mount(draft);
+    expect(card("Einkauf prüfen").textContent).toContain("unvollständig: Herkunft klären");
+    expect(card("Einkauf prüfen").textContent).not.toContain("Wrong duplicate");
   });
   it("sends only the clicked card decision and leaves actor attribution to the server", async () => {
     const transport = await mount(frozenDraft());
