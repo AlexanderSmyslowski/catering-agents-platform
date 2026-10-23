@@ -1,3 +1,18 @@
+Fortschreibung zur gebündelten Navigation: Der bestehende reine Lesebefehl
+inspect_result bleibt jetzt auch nach completed für fallgebundene Produktionsresultate
+erreichbar. Label „Plan und Einkauf anzeigen“, keine internen IDs in der Rückmeldung.
+Archiviert, abgeschlossene Angebote und completed ohne gespeichertes Resultat bleiben
+terminal; keine erneute Freigabe/Übernahme. Zwei Regressionen vorher FAIL, danach34Tests
+in vier betroffenen NextAction-/Bar-/Flow-/GlobalIntegrationdateien PASS.
+TypeScript/Vitebuild PASS, unabhängiger Fünfdateien-Delta-Reviewer ACCEPT.
+Lokale synthetische Browservorschau mit echten Komponenten und vorhandenem Lesebefehl:
+390px ohne horizontalen Überlauf, Button im ersten Bildschirm (y464–515), echter
+Fokus-/Scrollwechsel zum sichtbaren Ergebnisbereich; kein Nürnberger Nachweis dieses
+noch nicht installierten Folgedeltas. Viewport zurückgesetzt, eigener Vorschautab
+geschlossen und Server4387 beendet. Belege tmp/applied-draft-navigation-20261023/preview.
+Beide Navigationskorrekturen werden zusammen in PR749 veröffentlicht; normale
+Pflicht-CI und Integration/Installation stehen noch aus.
+
 ## Wiederöffnen übernommener Produktionsfassungen — Version 5.538 / 23.10.2026
 
 Auf Nürnbergcf2975e tatsächlich beobachteter enger Bedienfehler: Der ursprüngliche

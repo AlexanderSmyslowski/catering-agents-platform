@@ -45,6 +45,7 @@ export function CaseNextActionBar({
   const activePhase = phaseForAction(action);
   const labels = product ? ["Anfrage", "Entwurf", "Prüfung", "Unterlagen"] : phaseLabels;
   const taskLabel = product && action.kind === "add_source" ? (product === "offer" ? "Kundenanfrage eingeben" : "Angebot oder Auftrag eingeben")
+    : product === "production" && action.kind === "inspect_result" ? "Plan und Einkauf anzeigen"
     : product && action.kind === "review_draft" ? (product === "offer" ? "Angebot prüfen" : "Produktionsentwurf prüfen") : action.label;
   const hints: Record<CaseNextAction["kind"], string> = {
     add_source: product === "offer" ? "Kundenanfrage als Text oder Datei einfügen." : "Angebot oder Auftragsbeschreibung einfügen.",

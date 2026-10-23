@@ -45,6 +45,21 @@ describe("case next action bar", () => {
     await act(async () => root.unmount());
   });
 
+  it("names the saved production documents in its existing read action", async () => {
+    const container = document.body.appendChild(document.createElement("div"));
+    const root = createRoot(container);
+    const onAction = vi.fn();
+    const action: CaseNextAction = { kind: "inspect_result", label: "Ergebnis öffnen", artifactId: "saved-plan" };
+    try {
+      await act(async () => root.render(createElement(CaseNextActionBar, { product: "production", action, onAction })));
+      const buttons = container.querySelectorAll("button");
+      expect(buttons).toHaveLength(1);
+      expect(buttons[0]?.textContent).toBe("Plan und Einkauf anzeigen");
+      await act(async () => buttons[0]!.click());
+      expect(onAction).toHaveBeenCalledWith(action);
+    } finally { await act(async () => root.unmount()); }
+  });
+
   it("disables the command while a mutating action is in flight", async () => {
     const container = document.createElement("div");
     document.body.append(container);

@@ -41,6 +41,10 @@ function nonEmpty(value: string | undefined): value is string {
  * second handoff or apply after the result already exists.
  */
 export function buildCaseNextAction(input: CaseNextActionInput): CaseNextAction {
+  // Completing the editing step must not hide its saved, read-only results.
+  if (input.caseStatus === "completed" && input.product === "production" && nonEmpty(input.resultArtifactId)) {
+    return { kind: "inspect_result", label: "Ergebnis öffnen", artifactId: input.resultArtifactId };
+  }
   if (input.caseStatus === "archived" || input.caseStatus === "completed") {
     return { kind: "complete", label: input.caseStatus === "archived" ? "Archiviert" : completedCaseLabel(input.product) };
   }
