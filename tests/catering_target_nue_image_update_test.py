@@ -474,8 +474,8 @@ class NueTests(unittest.TestCase):
                 (source / "shared-core/src/persistence.ts").write_text("const BUSINESS_RECORDS_SCHEMA_MIGRATION=`CREATE TABLE records(id TEXT)`;\nfunction getCachedPool() {}")
                 (source / "package.json").write_text("{}"); (source / "package-lock.json").write_text('{"lockfileVersion":3}')
                 docker = source / "platform-infra/docker"; docker.mkdir(parents=True)
-                (docker / "Dockerfile.runtime").write_text("FROM node:22-alpine\nWORKDIR /app\nCOPY . .\nRUN npm ci\n")
-                (docker / "Dockerfile.web").write_text("FROM node:22-alpine AS build\nWORKDIR /app\nCOPY . .\nRUN npm ci\nFROM caddy:2.10-alpine\n")
+                for role in ("runtime", "web"):
+                    (docker / ("Dockerfile." + role)).write_text((ROOT / "platform-infra/docker" / ("Dockerfile." + role)).read_text())
                 fixtures = {role: archive_fixture(role, "manifest") for role in ("runtime", "web")}
                 calls = []
                 def command(argv, **kwargs):
@@ -501,6 +501,9 @@ class NueTests(unittest.TestCase):
                 manifest = nue.verify_bundle(out, sha)
                 self.assertEqual((manifest["targetId"], manifest["mode"]), ("catering-prod-02", "nue-image-only"))
                 self.assertTrue(all("--pull=false" in call for call in calls if call[1] == "build"))
+                for role, install in (("runtime", "RUN npm ci --omit=dev"), ("web", "RUN npm ci")):
+                    lines = (out / ("Dockerfile." + role + ".bound")).read_text().splitlines()
+                    self.assertEqual([line for line in lines if line.startswith("RUN npm ci")], [install])
                 if mode == "repository":
                     self.assertIn("FROM node@sha256:", (out / "Dockerfile.runtime.bound").read_text())
                     current_gate.assert_not_called()
@@ -1217,7 +1220,8 @@ class NueTests(unittest.TestCase):
         self.assertIn("COPY --from=build /catering-product/backoffice-ui/dist/ /catering-public/", dockerfile)
         self.assertIn("COPY platform-infra/Caddyfile /etc/caddy/Caddyfile", dockerfile)
         self.assertNotIn("/app/", dockerfile)
-        self.assertIn("RUN npm ci", dockerfile)
+        self.assertIn("RUN npm ci", dockerfile.splitlines())
+        self.assertNotIn("--omit=dev", dockerfile)
         self.assertIn("find /catering-product/backoffice-ui/dist -type l", dockerfile)
 
 

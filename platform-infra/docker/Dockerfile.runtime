@@ -4,6 +4,6 @@ WORKDIR /app
 
 COPY . .
 
-RUN npm ci
+RUN npm ci --omit=dev
 
 CMD ["npm", "run", "dev:intake"]

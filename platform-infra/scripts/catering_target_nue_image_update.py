@@ -705,10 +705,10 @@ def current_base_gate(oci, runtime_m, web_m, *, accepted_current_release=None):
 
 def local_current_dockerfile(role, runtime_m, web_m):
     require(runtime_m == CURRENT_RUNTIME_M and web_m == CURRENT_WEB_M, "NUE_CURRENT_BASE_EXACT_M_REQUIRED")
-    runtime = "FROM " + current_local_reference("runtime", runtime_m) + "\nWORKDIR /\nRUN test ! -e /catering-product && test ! -L /catering-product\nWORKDIR /catering-product\nCOPY . .\nRUN npm ci\n"
-    if role == "runtime": return runtime + 'CMD ["npm", "run", "dev:intake"]\n'
+    runtime = "FROM " + current_local_reference("runtime", runtime_m) + "\nWORKDIR /\nRUN test ! -e /catering-product && test ! -L /catering-product\nWORKDIR /catering-product\nCOPY . .\n"
+    if role == "runtime": return runtime + 'RUN npm ci --omit=dev\nCMD ["npm", "run", "dev:intake"]\n'
     require(role == "web", "NUE_CURRENT_DOCKERFILE_ROLE")
-    build = runtime.replace("\nWORKDIR /\n", " AS build\nWORKDIR /\n", 1)
+    build = runtime.replace("\nWORKDIR /\n", " AS build\nWORKDIR /\n", 1) + "RUN npm ci\n"
     return build + "RUN npm --workspace @catering/backoffice-ui run build\nRUN test -f /catering-product/backoffice-ui/dist/index.html && test -z \"$(find /catering-product/backoffice-ui/dist -type l -print)\"\nFROM " + current_local_reference("web", web_m) + "\nWORKDIR /\nRUN test -d /srv && test ! -L /srv && test ! -e /catering-public && test ! -L /catering-public && test ! -e /catering-previous-public && test ! -L /catering-previous-public && mv /srv /catering-previous-public && mkdir /catering-public && ln -s /catering-public /srv\nCOPY --from=build /catering-product/backoffice-ui/dist/ /catering-public/\nCOPY platform-infra/Caddyfile /etc/caddy/Caddyfile\nWORKDIR /srv\n"
 
 
