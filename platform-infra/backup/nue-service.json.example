@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "manifestSha256": "d7a6b39ae9631ef28e332c1e9841c55406b2d81c4730db4b06ad5e0100c64151",
+  "credentialGeneration": "REVIEWED_GENERATION_REQUIRED",
+  "timerState": "inactive",
+  "commonPath": "/usr/local/libexec/catering-backup-common.sh",
+  "offhostPath": "/etc/catering-backup/offhost-attestation",
+  "recoveryPath": "/etc/catering-backup/secret-attestation",
+  "credentialsPath": "/etc/catering-backup/nue-credentials.json",
+  "passwordPath": "/etc/catering-backup/restic-password",
+  "files": {
+    "/usr/local/libexec/catering-nue-core.py": "REVIEWED_PATCH_SHA256_REQUIRED",
+    "/usr/local/libexec/catering-nue-service.py": "REVIEWED_PATCH_SHA256_REQUIRED",
+    "/etc/systemd/system/catering-backup.service": "REVIEWED_NUE_UNIT_SHA256_REQUIRED",
+    "/etc/systemd/system/catering-backup.timer": "REVIEWED_EXISTING_TIMER_SHA256_REQUIRED",
+    "/usr/local/bin/restic": "REVIEWED_INSTALLED_BINARY_SHA256_REQUIRED",
+    "/opt/catering-nue-image-updates/d7a6b39ae9631ef28e332c1e9841c55406b2d81c4730db4b06ad5e0100c64151/tools/catering_target_nue_image_update.py": "60bfadf8c6f70cdc11c67723156845c4303df96d86df9d49e19028923bb91eee",
+    "/opt/catering-nue-image-updates/d7a6b39ae9631ef28e332c1e9841c55406b2d81c4730db4b06ad5e0100c64151/manifest.json": "d7a6b39ae9631ef28e332c1e9841c55406b2d81c4730db4b06ad5e0100c64151",
+    "/etc/catering-target/runtime.env": "REVIEWED_RUNTIME_ENV_SHA256_REQUIRED",
+    "/usr/local/libexec/catering-backup-common.sh": "67741391dbabedef7508c7fe9855f943761ead6eda879420cc9c7a81e60608de",
+    "/etc/catering-backup/offhost-attestation": "EXISTING_ATTESTATION_BYTES_SHA256_REQUIRED",
+    "/etc/catering-backup/secret-attestation": "EXISTING_ATTESTATION_BYTES_SHA256_REQUIRED",
+    "/etc/catering-backup/nue-credentials.json": "PROTECTED_CURRENT_CREDENTIALS_SHA256_REQUIRED",
+    "/etc/catering-backup/restic-password": "PROTECTED_CURRENT_PASSWORD_SHA256_REQUIRED"
+  },
+  "expectedCore": {
+    "runtimeEnvSha256": "REVIEWED_RUNTIME_ENV_SHA256_REQUIRED",
+    "containers": []
+  },
+  "installedSnapshot": {},
+  "parameters": {
+    "CATERING_BACKUP_REPOSITORY_VALUE": "REVIEWED_REPOSITORY_LOCATOR_REQUIRED",
+    "CATERING_BACKUP_EXPECTED_REPOSITORY_ID": "REVIEWED_REPOSITORY_ID_REQUIRED",
+    "CATERING_BACKUP_EXPECTED_REPOSITORY_SHA256": "REVIEWED_LOCATOR_SHA256_REQUIRED",
+    "CATERING_BACKUP_PRODUCTION_HOST_SHA256": "REVIEWED_HOST_SHA256_REQUIRED",
+    "CATERING_BACKUP_PRODUCTION_ADDRESSES_SHA256": "REVIEWED_ADDRESSES_SHA256_REQUIRED",
+    "CATERING_BACKUP_PRODUCTION_EXTERNAL_ADDRESSES": "REVIEWED_EXTERNAL_ADDRESSES_REQUIRED",
+    "CATERING_REQUIRED_SECRET_SCHEMA_SHA256": "EXISTING_REQUIRED_SCHEMA_SHA256_REQUIRED",
+    "CATERING_SECRET_RECOVERY_SOURCE_TYPE": "EXISTING_RECOVERY_SOURCE_TYPE_REQUIRED",
+    "CATERING_SECRET_RECOVERY_SOURCE_REFERENCE": "EXISTING_RECOVERY_REFERENCE_REQUIRED",
+    "CATERING_SECRET_RECOVERY_REFERENCE_SHA256": "EXISTING_RECOVERY_REFERENCE_SHA256_REQUIRED"
+  }
+}

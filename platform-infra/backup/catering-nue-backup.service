@@ -1,0 +1,18 @@
+[Unit]
+Description=Catering NUE full backup, offhost readback and isolated restore
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+UMask=0077
+ExecStart=/usr/bin/python3 -B -I /usr/local/libexec/catering-nue-service.py
+TimeoutStartSec=110min
+TimeoutStopSec=15min
+KillMode=mixed
+SendSIGKILL=yes
+NoNewPrivileges=true
+# Docker must see the host tmpfs paths created by the reviewed restore core.
+# Filesystem sandbox directives would give this job a private mount namespace.
