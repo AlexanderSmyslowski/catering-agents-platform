@@ -4,6 +4,7 @@ import datetime
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import signal
 import selectors
@@ -162,6 +163,22 @@ def check_web_readiness():
 SCHEDULER_GATE = None
 
 
+def observer_cron_admission(expected):
+    allowed = {'e2scrub_all', '.placeholder', 'sysstat'}
+    bindings = expected.get('observerFiles')
+    if bindings is not None:
+        require(SCHEDULER_GATE is not None and set(bindings) == {
+            '/usr/local/libexec/catering-backup-observer.py', '/etc/cron.d/catering-backup-monitor',
+            '/etc/catering-backup-monitor/policy.json', '/etc/catering-backup-monitor/heartbeat-url'}, 'OBSERVER_SCOPE_INVALID')
+        for name, expected_hash in bindings.items():
+            require(re.fullmatch('[0-9a-f]{64}', expected_hash), 'OBSERVER_DIGEST_INVALID')
+            verify_bound_regular_file(Path(name), expected_hash)
+            if name.startswith('/etc/catering-backup-monitor/'):
+                require(stat.S_IMODE(Path(name).lstat().st_mode) == 0o600, 'OBSERVER_PRIVATE_MODE')
+        allowed.add('catering-backup-monitor')
+    require({p.name for p in Path('/etc/cron.d').iterdir()} <= allowed, 'CRON_SCOPE_CHANGED')
+
+
 def assert_current(expected):
     require(isinstance(expected.get("runtimeEnvSha256"), str) and digest(Path("/etc/catering-target/runtime.env")) == expected["runtimeEnvSha256"], "CURRENT_RUNTIME_ENV_CHANGED")
     ids = command(["docker", "ps", "-aq", "--no-trunc"]).decode().splitlines()
@@ -193,7 +210,7 @@ def assert_current(expected):
         SCHEDULER_GATE()
     cron = subprocess.run(["crontab", "-l", "-u", "root"], capture_output=True, timeout=15)
     require(cron.returncode == 1 and not cron.stdout, "ROOT_CRONTAB_PRESENT")
-    require({p.name for p in Path("/etc/cron.d").iterdir()} <= {"e2scrub_all", ".placeholder", "sysstat"}, "CRON_SCOPE_CHANGED")
+    observer_cron_admission(expected)
     return rows
 
 

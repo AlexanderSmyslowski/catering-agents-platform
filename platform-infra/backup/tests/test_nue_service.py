@@ -381,6 +381,7 @@ class TransferChain(unittest.TestCase):
         job.config = {'manifestSha256': 'b' * 64, 'credentialGeneration': 'reviewed'}
         job.bindings = {str(service.CORE): 'c' * 64}
         job.gate = mock.Mock()
+        job.invocation_receipt = mock.Mock(return_value={'synthetic': True})
         job.check_repository = mock.Mock()
         job.restic = mock.Mock(return_value=json.dumps({'message_type': 'summary', 'snapshot_id': 'd' * 64}).encode())
         job.children = []
@@ -415,6 +416,7 @@ class TransferChain(unittest.TestCase):
         self.assertEqual(proof['status'], 'FULL_BACKUP_OFFHOST_READBACK_RESTORE_CLEANUP_PASS')
         self.assertIn('capture', proof)
         self.assertIn('finalHealth', proof)
+        self.assertEqual(proof['serviceInvocation'], {'synthetic': True})
         job.core.restore_from_offhost.assert_called_once()
         job.core.cleanup_workspace.assert_called_once_with(job.run_id, 'capture')
         job.core.verify_final.assert_called_once()

@@ -1,5 +1,99 @@
 # Catering-Beobachter: Installation und kontrollierter Betriebsstart
 
+## Nürnberg: Anschluss an den vollständigen Ein-Dienst-Nachweis
+
+Dieser Anschluss ist ein separat zu prüfendes Operationsdelta, noch kein
+Installations-, Empfangs- oder Pilotnachweis. Der historische Abschnitt darunter
+gilt weiterhin nur für seinen ursprünglichen Zweidienstpfad.
+
+Policyversion `1` verwendet weiterhin die historischen Evidence-/Receiptregeln.
+Version `2` verwendet den vollständigen NUE-Sicherungsdienst und seine sieben
+dauerhaften Records; historische Records werden weder umgeschrieben noch in
+vermeintliche Nürnberger Erfolge umetikettiert. Lock-, Fehler-/Uhrzeitgedächtnis,
+Publisher und begrenzter HTTPS-Sender bleiben gemeinsam. Der Sender akzeptiert
+die beiden Anbieterhosts `uptime.betterstack.com` und `incidents.betterstack.com`,
+keine Userinfo, fremden Hosts, Ports, Redirects oder Queryparameter. Siehe die
+[aktuelle Anbieteranleitung](https://betterstack.com/docs/uptime/cron-and-heartbeat-monitor/).
+
+Die Version-2-Policy behält `root`, `state_root`, die bisherigen `bindings`,
+`attestations` und `heartbeat`. `root` ist das geschützte Verzeichnis der
+aktuellen Attestationen. Zusätzlich enthält sie:
+
+```json
+"nue": {
+  "installedManifestSha256": "EXAKTES_INSTALLIERTES_MANIFEST",
+  "credentialGeneration": "TATSAECHLICH_GEPRUEFTE_GENERATION",
+  "files": {
+    "/usr/local/libexec/catering-nue-core.py": "GEPRUEFTER_SHA256",
+    "/usr/local/libexec/catering-nue-service.py": "GEPRUEFTER_SHA256",
+    "/usr/local/libexec/catering-backup-common.sh": "GEPRUEFTER_SHA256",
+    "/etc/systemd/system/catering-backup.service": "GEPRUEFTER_SHA256",
+    "/etc/systemd/system/catering-backup.timer": "GEPRUEFTER_SHA256"
+  }
+}
+```
+
+Die aktive `nue-service.json` enthält unter `expectedCore.observerFiles` genau
+vier SHA256-Bindungen: `/usr/local/libexec/catering-backup-observer.py`,
+`/etc/cron.d/catering-backup-monitor`,
+`/etc/catering-backup-monitor/policy.json` und
+`/etc/catering-backup-monitor/heartbeat-url`. Beide letzten Dateien sind Root0600.
+Der Core lässt ausschließlich diese gebundene Cronausnahme innerhalb des
+tatsächlich zugelassenen Sicherungsdiensts zu. Fremde Crondateien, Hashdrift,
+Rootcrontab oder derselbe Versuch im manuellen Corepfad bleiben gesperrt.
+Ohne `observerFiles` bleibt die bisherige No-Observer-Grenze bestehen.
+Kein zusätzlicher Timer und keine Namensumgehung der Schedulerinventur.
+
+Eine nach dieser Änderung neu erzeugte `service-proof.json` enthält zusätzlich
+`serviceInvocation` mit `id`, `mainPid`, `bootId`, `configSha256`. Der Dienst
+bestätigt vor Veröffentlichung den tatsächlichen eigenen MainPID. Der Beobachter
+bindet dies an echte aktuelle PID1-Start/Success/Done-Ereignisse und die
+strukturierte Prozess-PASS-Zeile im begrenzten Journal. Garbage Collection
+erzeugt keine erfundenen Unitfelder. Fehlendes/trunkiertes Journal oder ein neuer
+Fehler ergeben keinen Erfolg. Ein laufender Folgezyklus darf innerhalb seines
+Budgets den noch frischen vorigen Vollnachweis verwenden; ein späterer Fehler
+überstimmt ihn. Persistierte Fehlersperren verlangen einen später gesicherten
+Datenstand. Die sechs Stunden Datenalter beginnen konservativ beim Dienststart,
+nicht bei der Restorebestätigung. Dienstbudget6600s, Kalender-/Ausbleibe- und
+9300s-Publikationsgrenzen, NTP, Attestationsablauf und Früherkennungsmarge bleiben
+geprüft. Dies sind die bestehenden bedingten Fristen, keine Zustellgarantie.
+
+Der Beobachter liest ausschließlich geschützte kleine Records, Quellhashes und
+systemd-Metadaten. Er startet keinen Backup/Restore, liest keine Kundendokumente
+oder Datenbankinhalte und verändert keine Anwendungswriter. `--check` bleibt
+ohne Netzwerk, Publisher und flock. `delivery_accepted=true` ist nur HTTP-Annahme;
+`recipient_confirmed` bleibt ohne gesonderten Empfangsbeleg `false`.
+
+Private Records bleiben auf64KiB begrenzt. Nur die explizit hashgebundenen
+öffentlichen Quelldateien dürfen bis256KiB umfassen; der unveränderte gemeinsame
+Helfer überschreitet bereits64KiB. Keine größeren privaten Records oder
+Credentialdateien werden dadurch zugelassen.
+
+Vor Aktivierung: neue Core-/Servicehashes und Policy bewusst in vorhandener
+Config/Generation binden, unabhängige Review und Pflicht-CI abschließen, mit
+aktuellen Zugangsgates installieren, einen echten vollständigen normalen
+Dienstzyklus samt isoliertem Restore/Vergleich/Cleanup abnehmen. Historische D9-
+Belege ohne `serviceInvocation` werden nicht ergänzt oder erneut als neuer
+Nachweis benutzt. Dann lesendes `--check`, exklusiven Heartbeatwriter und
+bestehenden Alarmvertrag bestätigen und einen echten begrenzten
+Fehlersignal-/Empfangstest ausführen. Der unveränderte Fünf-Minuten-Cron kann
+vor dem ersten Abnahmelauf bereits installiert/hashgebunden sein, bleibt aber
+ohne `/var/lib/catering-backup-monitor/armed` vollständig ohne Signale und
+Zustandsveröffentlichung. Erst nach der Abnahme wird diese eigene Root0600-
+Datei mit exakt `NUE_OBSERVER_ARMED` plus LF erstellt. `--check` benötigt sie
+nicht. Diese Aktivierung verändert keine Config-/Policyhashes und vermeidet
+einen zirkulären erneuten Sicherungslauf nur zum Aktivieren des Zeitplans.
+Keine neuen Empfänger oder Kosten. Ein bekannt offengelegter Pingzugang muss
+vor Verwendung erneuert sein. Fehlt eine Rotationsfunktion, ist das Ersetzen des
+Providerchecks eine eigene konkrete Freigabeentscheidung; bis dahin keine Aktivierung.
+
+Rücknahme: zuerst ausschließlich den eigenen armed-Marker und Cron deaktivieren,
+eigene geänderte Quellen und Config/Generation aus geschützten Originalen
+zusammen zurücknehmen und die ursprüngliche Sicherung prüfen. Fremde Locks,
+bestehende Sicherungen und Produktdaten bleiben erhalten.
+
+## Historischer Helsinki-Vertrag
+
 Stand: 13.09.2026. Repository-Kandidat; **keine Installations- oder
 Aktivierungsfreigabe**. Der bestehende Drei-Stunden-Timer und die Folge
 `catering-backup.service` → `OnSuccess=catering-restore-probe.service` bleiben

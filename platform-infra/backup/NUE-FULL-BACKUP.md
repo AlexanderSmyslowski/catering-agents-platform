@@ -1,5 +1,14 @@
 # Nürnberg: vollständige serverlokale Sicherung
 
+Der optionale Nürnberger Beobachteranschluss steht in
+[OBSERVER-RUNBOOK.md](OBSERVER-RUNBOOK.md). Er verwendet die bestehenden
+Vollnachweise und denselben begrenzten Sender. Ohne explizite `observerFiles`-
+Hashbindungen bleibt jeder Beobachter-Cron gesperrt. Mit Anschluss muss vor
+Aktivierung ein neuer vollständiger Dienstlauf mit tatsächlicher
+`serviceInvocation`-Bindung angenommen werden; alte Nachweise werden nicht
+nachträglich ergänzt. Produktimages, Datenbanken, bestehende Konten und der
+Drei-Stunden-Timerplan werden dadurch nicht geändert.
+
 Dieses Paket führt einen einzigen zusammenhängenden Dienstlauf aus: vollständiger
 Cold Capture, Wiederanlauf der sieben Originalcontainer, Restic-Offhostbackup,
 authentifizierter Repository-ID-Vergleich, kompletter Readback mit SHA256/Bytevergleich,
