@@ -771,7 +771,8 @@ describe("backoffice internal usage smoke", () => {
     expect(document.body.textContent ?? "").not.toContain("Produktionsplan wurde erzeugt.");
     expect(document.body.textContent ?? "").toContain("manueller Import | wartet auf Prüfung");
     expect(document.body.textContent ?? "").toContain("noch kein Produktionsplan");
-    expect(document.body.textContent ?? "").not.toContain("Produktionsblatt exportieren");
+    expect(document.querySelector('a[href^="/api/exports/v1/exports/production-plans/"]')).toBeNull();
+    expect(document.querySelector('a[href^="/api/exports/v1/exports/production-folders/"]')).toBeNull();
     expect(document.body.textContent ?? "").not.toContain("Einkaufsliste exportieren");
     expect(document.body.textContent ?? "").toContain("Vegetarische Tomatensuppe");
     expect(document.body.textContent ?? "").not.toContain("Status: unzureichend");

@@ -629,10 +629,11 @@ describe("backoffice production presentation smoke", () => {
     expect(content).not.toContain("Mini-Pilot-Status vor Export");
     expect(content).not.toContain("Export erst nach gruenem Mini-Pilot-Check");
     expect(content).toContain("Plan, Einkaufsliste und Exportlinks bleiben getrennt sichtbar");
-    expect(content).toContain("Produktionsblatt exportieren");
+    expect(content).toContain("Produktionsmappe öffnen");
+    expect(content).toContain("Einzelnes Produktionsblatt öffnen");
     expect(content).toContain("Einkaufsliste exportieren");
     expect(content).toContain("Plan, Mengen und Rezeptquellen prüfen");
-    expect(content).toContain("Status: vollständig");
+    expect(content).toContain("Berechnungsstand: vollständig");
     expect(content).toContain("Arbeitsblätter: 1");
     expect(content).toContain("Rezeptblätter: 1");
     expect(content).toContain("Rezeptauswahl: 1");
