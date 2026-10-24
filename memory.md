@@ -1,3 +1,30 @@
+## Schlankere Runtimeinstallation — lokale Codevorbereitung, 23.10.2026
+
+Isolierter Branch `codex/lean-runtime-dependencies-20261023` auf Mainbasis
+`e628af08c6fb9e5014ea008b7fd667517ab151a8`: Vite und das React-Buildplugin sind
+Entwicklungsabhängigkeiten, `tsx` ist wegen der vorhandenen Backendstartbefehle
+explizite Runtimeabhängigkeit. Paketversionen, Integritäten, Imagepins und historische
+Releasebindungen bleiben unverändert. Repository- und generierte NUE-Runtime-
+Dockerfiles installieren mit `npm ci --omit=dev`; der Webbuild behält `npm ci`.
+Bestehende Bundleprüfungen sichern diese Trennung in allen drei Buildmodi ab.
+
+Frische Produktionsinstallation unter Node 22 ohne vorherige oder übergeordnete
+`node_modules`: 139 Pakete, alle vier Backend-Appmodule erfolgreich importiert;
+Vite, React-Buildplugin, Vitest und TypeScript dabei nicht auflösbar. Beim Importnachweis
+keine Appfactory und keinen Listener gestartet. Vollinstallation: 272 Pakete.
+Build und fünf Python-Acceptance-Sets (170 Tests) erfolgreich. Der einmal gestartete
+Vitest-Volltest wurde nach 11:13 Minuten kontrolliert abgebrochen (Exit 130), nachdem
+zwei unveränderte Tests ihre Zeitgrenzen überschritten hatten; keine grüne Vollabnahme.
+Beide Fälle bestehen unverändert im seriellen Nachlauf (2 Tests). Auch die vier lokalen
+Runtime-Smokes und alle acht Target-Vertragsdateien (111 Tests) bestehen. Dabei keine
+externe Datenbank verwendet; alle eigenen Testprozesse anschließend beendet.
+Unabhängiger Review der Paket-, Installations- und Releasebindung ohne wesentlichen Befund.
+
+Docker ist lokal nicht verfügbar: kein Imagebuild, kein gehosteter CI-Lauf und kein
+Deployment dieses Deltas. Die Pflicht-CI und eine spätere ausdrücklich freigegebene
+Installation bleiben erforderlich. NUE-`local-current` erbt bestehende Image-Schichten;
+der kleinere neue Installationsbaum ist kein Nachweis für die Größe des Gesamtimages.
+
 ## Vollständiger NUE-Backupdienst implementiert, noch nicht installiert — Version 5.541 / 23.10.2026
 
 PR750 enthält den serverlokalen Drei-DB-Backup-/Offhost-/Readback-/isolierten
