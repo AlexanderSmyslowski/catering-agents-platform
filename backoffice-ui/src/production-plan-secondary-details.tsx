@@ -52,6 +52,7 @@ export function ProductionPlanSecondaryDetails({
               plans={archivedPlans}
               specById={specById}
               submitting={submitting}
+              selectedPlanId={String(selectedPlan.planId)}
               setSelectedPlanId={setSelectedPlanId}
             />
           </>

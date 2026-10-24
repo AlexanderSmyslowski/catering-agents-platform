@@ -9,7 +9,7 @@ async () => {
     "Rückfragen und Antworten",
     "Interne Produktionsfreigabe:",
     "Produktionsplan nacharbeiten",
-    "Produktionsblatt exportieren",
+    "Produktionsblatt öffnen",
     "1 Liste ohne Positionen",
     "Export erst verfügbar, wenn Einkaufspositionen ermittelt sind.",
     "Audit-Spur",
