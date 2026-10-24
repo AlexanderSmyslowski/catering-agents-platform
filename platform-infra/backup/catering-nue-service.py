@@ -386,9 +386,20 @@ class Job:
                  'snapshotId': snapshot, 'credentialGeneration': self.config['credentialGeneration'], 'outer': outer,
                  'restore': result, 'capture': capture, 'captureCleanup': cleanup, 'finalHealth': health,
                  'remoteSourceSha256': self.bindings[str(CORE)],
+                 'serviceInvocation': self.invocation_receipt(),
                  'at': datetime.datetime.now(datetime.timezone.utc).isoformat()}
         self.core.put(self.core.paths(self.run_id, 'capture')[1] / 'service-proof.json', proof)
         return proof
+
+    def invocation_receipt(self):
+        # Bind the PASS to the real main process before systemd may collect it.
+        own = properties('catering-backup.service')
+        invocation = os.environ.get('INVOCATION_ID', '')
+        boot = Path('/proc/sys/kernel/random/boot_id').read_text().strip().replace('-', '')
+        require(re.fullmatch('[0-9a-f]{32}', invocation) and re.fullmatch('[0-9a-f]{32}', boot) and
+                own.get('InvocationID') == invocation and own.get('MainPID') == str(os.getpid()) and
+                own.get('ActiveState') == 'activating' and own.get('SubState') == 'start', 'PASS_MAINPID_REQUIRED')
+        return {'id': invocation, 'mainPid': str(os.getpid()), 'bootId': boot, 'configSha256': self.marker['configSha256']}
 
     def cleanup_admission(self):
         if not os.path.lexists(self.admission):
