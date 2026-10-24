@@ -721,7 +721,7 @@ describe("backoffice route smoke", () => {
     expect(production.text).not.toContain("Status: noch kein Ergebnis");
     expect(production.text).not.toContain("Mini-Pilot-Status vor Export");
     expect(production.text).not.toContain("Export erst nach gruenem Mini-Pilot-Check");
-    expect(production.text).toContain("Produktionsblatt exportieren für diesen Produktionsplan");
+    expect(production.text).toContain("Produktionsblatt öffnen für aktuellen Produktionsplan");
     expect(production.html).toContain("/api/exports/v1/exports/production-plans/corridor-plan-1/html");
     expect(production.text).toContain("Einkaufsliste exportieren für aktuellen Vorgang");
     expect(production.html).toContain("/api/exports/v1/exports/purchase-lists/corridor-purchase-1/csv");
@@ -1280,7 +1280,7 @@ describe("backoffice route smoke", () => {
     expect(production.text).not.toContain("Dokumentprüfung: Lesbarkeit: Textextraktion unsicher");
     expect(production.text).not.toContain("B5 Rohtext");
     expect(production.text).not.toContain("abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890");
-    expect(production.text).toContain("Produktionsblatt exportieren für aktuellen Produktionsplan");
+    expect(production.text).toContain("Produktionsblatt öffnen für aktuellen Produktionsplan");
     expect(production.html).toContain("/api/exports/v1/exports/production-plans/c4-plan-handoff/html");
     expect(production.text).toContain("Einkaufsliste exportieren für aktuellen Vorgang");
     expect(production.html).toContain("/api/exports/v1/exports/purchase-lists/c4-purchase-handoff/csv");
@@ -1323,8 +1323,9 @@ describe("backoffice route smoke", () => {
     expect(production.text).toContain("Downloadbereich");
     expect(production.text).toContain("Plan-Kontext: aktueller Produktionsplan");
     expect(production.text).not.toContain("Mini-Pilot-Status vor Export");
-    expect(production.text).toContain("Einzelheiten zu diesem Produktionsplan");
-    expect(production.text).toContain("Produktionsblatt exportieren für diesen Produktionsplan");
+    expect(production.text).not.toContain("Einzelheiten zu diesem Produktionsplan");
+    expect(production.text).toContain("Produktionsmappe öffnen für aktuellen Produktionsplan");
+    expect(production.text).toContain("Produktionsblatt öffnen für aktuellen Produktionsplan");
     expect(production.html).toContain("/api/exports/v1/exports/production-plans/b23-plan-detail/html");
   });
 

@@ -64,6 +64,9 @@ export function ProductionObjectsPanel({
     specById
   } = objectsState;
   const { setSelectedPlanId } = objectsActions;
+  const selectedPlanId = selectedPlan ? String(selectedPlan.planId ?? "").trim() : undefined;
+  const hasOnlySelectedPlan = Boolean(selectedPlanId) && currentSpecPlans.length === 1 &&
+    String(currentSpecPlans[0]?.planId ?? "").trim() === selectedPlanId;
 
   return (
     <article className="panel production-step-card">
@@ -125,11 +128,12 @@ export function ProductionObjectsPanel({
         <h4 className="subsection-title">{panelState.currentRunTitle}</h4>
       </header>
       <p className="helper-text">{panelState.currentRunHelperText}</p>
-      {panelState.showCurrentPlans ? (
+      {panelState.showCurrentPlans && !hasOnlySelectedPlan ? (
         <ProductionPlanList
           plans={currentSpecPlans}
           specById={specById}
           submitting={submitting}
+          selectedPlanId={selectedPlanId}
           setSelectedPlanId={setSelectedPlanId}
         />
       ) : null}

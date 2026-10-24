@@ -9,6 +9,7 @@ type ProductionPlanListProps = {
   plans: Array<Record<string, unknown>>;
   specById: Map<string, Record<string, unknown>>;
   submitting: boolean;
+  selectedPlanId?: string;
   setSelectedPlanId: (planId: string) => void;
 };
 
@@ -25,6 +26,7 @@ export function ProductionPlanList({
   plans,
   specById,
   submitting,
+  selectedPlanId,
   setSelectedPlanId
 }: ProductionPlanListProps) {
   return (
@@ -36,6 +38,7 @@ export function ProductionPlanList({
         const batchCount = Array.isArray(plan.productionBatches) ? plan.productionBatches.length : 0;
         const sheetCount = Array.isArray(plan.kitchenSheets) ? plan.kitchenSheets.length : 0;
         const selectionCount = Array.isArray(plan.recipeSelections) ? plan.recipeSelections.length : 0;
+        const hasSelectedDownloads = Boolean(selectedPlanId) && planId === formatProductionContextId(selectedPlanId);
         return (
           <li key={String(plan.planId)}>
             <strong>{relatedSpec ? getSpecLabel(relatedSpec) : "Produktionsplan"}</strong>
@@ -59,18 +62,18 @@ export function ProductionPlanList({
                 </span>
               </button>
             </div>
-            <a
+            {!hasSelectedDownloads ? <a
               className="ghost-link"
               href={productionExportUrl(planId)}
               target="_blank"
               rel="noreferrer"
             >
-              Produktionsblatt exportieren
+              Produktionsblatt öffnen
               <span className="visually-hidden">
                 {" "}
                 für diesen Produktionsplan
               </span>
-            </a>
+            </a> : null}
           </li>
         );
       })}

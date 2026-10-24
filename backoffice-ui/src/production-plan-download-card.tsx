@@ -50,7 +50,7 @@ export function ProductionPlanDownloadCard({
         Plan-Kontext: aktueller Produktionsplan
       </p>
       <p className="helper-text">
-        Status: {translateReadiness(String(readiness?.status ?? "-"))}
+        Berechnungsstand: {translateReadiness(String(readiness?.status ?? "-"))}
         {selectedPlanSpec
           ? ` · Serviceform: ${translateServiceForm(String(servicePlan?.serviceForm ?? "offen"))}`
           : ""}
@@ -59,35 +59,33 @@ export function ProductionPlanDownloadCard({
         {" · "}Rezeptauswahl: {recipeSelectionCount}
       </p>
       <div className="production-output-summary" aria-label="Produktionsplan-Export">
-        <div>
-          <p className="eyebrow">Plan</p>
-          <strong>Produktionsblatt</strong>
-          <p className="helper-text">Druckbares Ergebnis aus dem bestehenden Exportpfad.</p>
-        </div>
+        <p className="helper-text">In der Produktionsmappe Planung, Rezeptkarten und Einkauf gemeinsam prüfen. Beide Ansichten öffnen in einem neuen Tab zum Drucken.</p>
+        <div className="production-output-summary__actions">
+        <a
+          className="production-output-summary__primary"
+          href={productionFolderExportUrl(planId)}
+          target="_blank"
+          rel="noreferrer"
+        >
+          Produktionsmappe öffnen
+          <span className="visually-hidden">
+            {" "}
+            für aktuellen Produktionsplan
+          </span>
+        </a>
         <a
           className="ghost-link"
           href={productionExportUrl(planId)}
           target="_blank"
           rel="noreferrer"
         >
-          Produktionsblatt exportieren
+          Einzelnes Produktionsblatt öffnen
           <span className="visually-hidden">
             {" "}
             für aktuellen Produktionsplan
           </span>
         </a>
-        <a
-          className="ghost-link"
-          href={productionFolderExportUrl(planId)}
-          target="_blank"
-          rel="noreferrer"
-        >
-          Produktionsmappe (HTML)
-          <span className="visually-hidden">
-            {" "}
-            für aktuellen Produktionsplan
-          </span>
-        </a>
+        </div>
       </div>
       {miniPilotActionState ? (
         <div className="search-trace" aria-label="Mini-Pilot-Status vor Export">
