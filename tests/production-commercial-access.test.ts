@@ -450,7 +450,7 @@ describe("Gate B Slice 2 production commercial confidentiality", () => {
     const summary = calculateOfferPricing({ lines: [{
       id: "food", label: "SYNTHETISCHES MENÜ", category: "food", quantity: "100", unit: "guest", unitNetCents: 5800,
       taxRateBps: 1900, sourceKind: "synthetic", sourceReference: "SALES-COMMERCIAL-ONLY",
-      directCost: { totalNetCents: 185000, basis: "estimated", sourceReference: "COST-COMMERCIAL-ONLY" }
+      directCost: { totalNetCents: 185000, basis: "estimated", estimateDate: "2026-10-25", sourceReference: "COST-COMMERCIAL-ONLY" }
     }] }, 100);
     const draft = { draftId: "cost-projection", source: {}, reviewCards: [], draftArtifacts: { eventSpec: { servicePlan: { modules: [] }, budgetContext: { pricingSummary: summary } } } } as unknown as ProductionDraft;
     const productionActor = actorFromHeaders(productionHeaders);
