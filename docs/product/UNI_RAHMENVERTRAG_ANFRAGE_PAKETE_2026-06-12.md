@@ -163,12 +163,14 @@ Die eingereichten SKU-Preise (CSV-Export der Kalkulations-Numbers vom 12.06.2026
 
 Alle sechs Bänder sind mit den Vertrags-SKUs reproduzierbar — die Pakete können mit hinterlegtem SKU-Mengengerüst in den Konfigurator.
 
-**Neue Diskrepanz — Personalsatz:** Eingereicht und bezuschlagt sind **42,02 €/h** (+12,61 € Zuschlag ab 21 Uhr, Mo–So einheitlich); die 2026-Angebote rechnen durchgängig **45,55 €/h**. Nur das BZH-Angebot nennt noch 42,02 €. Klären: Preisindexierung im Vertrag oder versehentliche Nicht-RV-Rate? Der Konfigurator braucht den vertraglich richtigen Satz.
+**Historischer Befund — Personalsatz:** Eingereicht und bezuschlagt sind **42,02 €/h** (+12,61 € Zuschlag ab 21 Uhr, Mo–So einheitlich); die 2026-Angebote rechnen durchgängig **45,55 €/h**. Nur das BZH-Angebot nennt noch 42,02 €.
+
+**Betreiberbestätigung vom 25.10.2026:** Alexander bestätigt **45,55 € netto je Personenstunde** als aktuellen Stundensatz nach einer Erhöhung. Seine Angabe „Ich glaube zum 01.01.“ bestätigt weder Stichtag noch Jahr. Für neue Servicepersonal-Vorlagen gilt der bestätigte aktuelle Satz; bestehende gespeicherte Preise und Quellen bleiben erhalten. Für historische Leistungszeiträume ist der jeweilige Beleg maßgeblich. Der Erhöhungsstichtag und die Geltung für Küchenpersonal sind noch offen. Daraus folgen keine Steuerfestlegung, neue Zuschläge oder Angebotsfreigabe.
 
 ## 7. Offene Punkte vor Konfigurator-Bau
 
 1. ~~Fahrtkosten-Klausel~~ **geklärt (12.06.2026):** individuell vereinbart, dass Lieferkosten trotz Vertragstext abgerechnet werden — Staffel 150 € Standard, 300/450/600 € bei Mehrfach-Anlieferung, Ausnahme nur Kleinst-/Brötchen-Caterings (Abschnitt 5, Punkt 2).
-2. **Personalsatz klären** (Abschnitt 6): bezuschlagt 42,02 €/h vs. 45,55 €/h in der Angebotspraxis — vermutlich ebenfalls individuell angepasst; kurz bestätigen.
+2. **Erhöhungsstichtag und Küchensatz klären** (Abschnitt 6): aktueller Satz von 45,55 € netto am 25.10.2026 bestätigt; Stichtag/Jahr und Geltung für Küchenpersonal bleiben offen. Historische Angebote nicht rückwirkend umstellen.
 3. **MwSt-Logik:** Angebote mischen 7 % (Speisen-Lieferung) und 19 % (Service/Verleih); Konfigurator zeigt netto + Hinweis, die App rechnet wie bisher.
 4. **Draft-only bleibt:** Konfigurator-Anfragen erzeugen einen Intake-Datensatz, nie ein verbindliches Angebot — Preisbänder werden als „Richtwert pro Person" angezeigt (rechtlich unverbindlich, freibleibend wie die PDF-Angebote).
 5. Die 60 PDFs taugen zusätzlich als **Eval-Korpus** für die Batch-Klassifikation (Slice 5) — Uni-Cluster ist damit schon vor dem OpenAI-Lauf manuell gelabelt.

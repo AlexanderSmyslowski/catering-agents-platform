@@ -1,3 +1,9 @@
+## Bestätigter aktueller Service-Stundensatz — Version 5.565 / 25.10.2026
+
+Alexander bestätigt im aktuellen Chat **45,55 € netto je Personenstunde** als aktuellen Stundensatz nach einer Erhöhung. Für neue Servicepersonal-Vorlagen ist dies eine Betreiberbestätigung; die bisherige allgemeine Aussage „42,02 gegenüber45,55 ungeklärt“ ist für den aktuellen Service-Satz überholt. Die Angabe „Ich glaube zum01.01.“ bestätigt weder Erhöhungsstichtag noch Jahr. Historische42,02-Belege und gespeicherte Preise/Quellen bleiben erhalten; keine rückwirkende Umstellung.
+
+Die Geltung für Küchenpersonal ist noch offen;55,00 € in der bisherigen Küchenvorlage ist weiterhin ein ungeprüfter historischer Arbeitswert. Keine Steuerfestlegung, Zuschlagsänderung oder Angebotsfreigabe folgt daraus. Führende fachliche Fortschreibung: docs/product/UNI_RAHMENVERTRAG_ANFRAGE_PAKETE_2026-06-12.md, Abschnitt6. Editor und Quellenkorrektur in PR756;42gezielteTests/Build und tatsächliches Opus5.5-Review samt Quellenwechsel-Korrektur aad58b66/5d9e79b8 bestanden. Kein Installationsnachweis dieses Folgepatches.
+
 ## Vollständiger NUE-Backupdienst implementiert, noch nicht installiert — Version 5.541 / 23.10.2026
 
 PR750 enthält den serverlokalen Drei-DB-Backup-/Offhost-/Readback-/isolierten
@@ -3186,3 +3192,5 @@ Zwei tatsächliche Regressionen vor Fix FAIL, danach55 betroffene Tests in vier 
 Noch nicht installiert; Pflicht-CI und spätere gezielte Zielprüfung einschließlich Öffnen der echten Produktionsmappe bleiben nötig. Nürnberg bleibt D9/8dff671 mit separat19:48UTC installiertem unscharfem Monitoringanschluss ausPR754; dessen erster regulärer21:00UTC-Voll-/Empfangsnachweis steht weiterhin aus. Bekannte mobile Detailzusammenfassung, Mehrplan-Auswahlkennzeichnung und historische Archivbenennung sind separate begrenzte UX-Restpunkte, keine vollständige Produkt-/Pilotfreigabe. Reale Fachfreigaben bleiben offen.
 
 PR755-Nachtrag20:40UTC: Angrenzender Präsentationstest erwartete noch die alte Beschriftung, gezielt tatsächlich FAIL reproduziert. Nur erwartete neue Aktions-/Berechnungsstandtexte korrigiert; vor Freigabe fehlende Produktionsausgaben jetzt über beide tatsächlichen URL-Präfixe statt eines veralteten Texts geprüft. Zwei betroffene Suites/fünf Fälle PASS. Anwendungscode und Opus-Annahme unverändert.
+
+- Version5.565 (25.10.2026): aktueller45,55netto-Service-Satz bestätigt; Erhöhungsstichtag/Jahr/Küchensatz offen; historischeBestände erhalten. PR756.
