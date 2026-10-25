@@ -1,14 +1,16 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { OfferCalculationLineInput, PricingSummary } from "@catering/shared-core";
 import { calculateOfferPricing } from "../../shared-core/src/offer-calculation.js";
 import { reviseOfferPricing } from "./api.js";
 
 type Row = Omit<OfferCalculationLineInput, "unitNetCents" | "taxRateBps"> & { net: string; tax: string };
 const reference = "App-Transfer Angebotsrechner 0.6 (2026-06-01), Arbeitswerte – prüfen";
+const confirmedServiceRateCents = 4555;
+const confirmedServiceRateReference = "Betreiberbestätigung vom 25.10.2026: aktueller Service-Stundensatz; Erhöhungsstichtag offen";
 const templates = [
   { id: "delivery", label: "Lieferung & Abholung", category: "logistics", unit: "flat", cents: 15000 },
   { id: "setup", label: "Aufbau & Abbau", category: "logistics", unit: "flat", cents: 12000 },
-  { id: "staff", label: "Servicepersonal – Personenstunden gesamt", category: "staff", unit: "hour", cents: 4555 },
+  { id: "staff", label: "Servicepersonal – Personenstunden gesamt", category: "staff", unit: "hour", cents: confirmedServiceRateCents },
   { id: "kitchen", label: "Küchenpersonal – Personenstunden gesamt", category: "staff", unit: "hour", cents: 5500 },
   { id: "equipment", label: "Equipment / Table Top", category: "equipment", unit: "guest", cents: 850 },
   { id: "drinks", label: "Getränke", category: "drinks", unit: "guest", cents: 800 }
@@ -45,6 +47,7 @@ export function OfferPricingEditor({ draftId, revision, variants, menuPlan, pric
   const live = useRef(true);
   const submitting = useRef(false);
   const errorRef = useRef<HTMLParagraphElement>(null);
+  const fieldId = useId();
   useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
   const variant = variants.find(item => item.variantId === variantId);
   const calculation = pricingSummary?.calculation;
@@ -59,7 +62,16 @@ export function OfferPricingEditor({ draftId, revision, variants, menuPlan, pric
     setError(""); onEditingChange(true);
   }
   function update(index: number, patch: Partial<Row>) {
-    setRows(current => current?.map((row, at) => at === index ? { ...row, ...patch } : row));
+    setRows(current => current?.map((row, at) => {
+      if (at !== index) return row;
+      const next = { ...row, ...patch };
+      if (row.id === "staff" && row.sourceReference === confirmedServiceRateReference && patch.net !== undefined) {
+        let confirmedAmount = false;
+        try { confirmedAmount = hundredths(patch.net, row.label) === confirmedServiceRateCents; } catch { /* An incomplete price is an unconfirmed edit too. */ }
+        if (!confirmedAmount) next.sourceReference = "Manuell geänderter Service-Stundensatz – Preisquelle prüfen";
+      }
+      return next;
+    }));
   }
   let preview: PricingSummary | undefined;
   let previewError = "";
@@ -111,7 +123,10 @@ export function OfferPricingEditor({ draftId, revision, variants, menuPlan, pric
         <legend>{index + 1}. {row.label}</legend>
         <label>Leistung<input value={row.label} onChange={event => update(index, { label: event.target.value })} /></label>
         <label>{unitLabels[row.unit]}<input inputMode="decimal" value={row.quantity} readOnly={row.category === "food"} onChange={event => update(index, { quantity: event.target.value })} /></label>
-        <label>Einzelpreis netto · EUR<input inputMode="decimal" value={row.net} onChange={event => update(index, { net: event.target.value })} /></label>
+        <div>
+          <label>Einzelpreis netto · EUR<input inputMode="decimal" value={row.net} aria-describedby={row.id === "staff" && row.sourceKind === "operator" && row.sourceReference === confirmedServiceRateReference ? fieldId + "-service-rate" : undefined} onChange={event => update(index, { net: event.target.value })} /></label>
+          {row.id === "staff" && row.sourceKind === "operator" && row.sourceReference === confirmedServiceRateReference ? <p className="helper-text" id={fieldId + "-service-rate"}>{money(confirmedServiceRateCents)} netto je Personenstunde – bestätigter aktueller Stundensatz. Für frühere Leistungszeiträume den damaligen Beleg prüfen.</p> : null}
+        </div>
         <label>Steuerfestlegung · %<input inputMode="decimal" value={row.tax} onChange={event => update(index, { tax: event.target.value })} placeholder="Offen" /></label>
         <label>Preisquelle<select value={row.sourceKind} onChange={event => update(index, { sourceKind: event.target.value as Row["sourceKind"] })}>
           <option value="app_transfer">Historische Angebotsgrundlage · prüfen</option>
@@ -123,13 +138,13 @@ export function OfferPricingEditor({ draftId, revision, variants, menuPlan, pric
         {row.net.trim() && Number(row.net.replace(",", ".")) === 0 ? <label>Begründung für enthaltene/kostenfreie Leistung<input value={row.zeroPriceReason ?? ""} onChange={event => update(index, { zeroPriceReason: event.target.value })} /></label> : null}
         {row.category !== "food" ? <button type="button" className="secondary-button" onClick={() => setRows(current => current?.filter(item => item.id !== row.id))}>Leistung entfernen</button> : null}
       </fieldset>)}
-      <p className="helper-text">Ergänzen aus dem bestehenden Angebotsbaukasten (Arbeitswerte, keine Preisfreigabe):</p>
+      <p className="helper-text">Leistungen ergänzen. Vorbelegte Preise und Quellen vor der Angebotsfreigabe prüfen.</p>
       <div className="quiet-action-row">{templates.map(template => <button key={template.id} type="button" className="secondary-button" disabled={saving || rows.some(row => row.id === template.id)} onClick={() => setRows(current => [...(current ?? []), {
         id: template.id, label: template.label, category: template.category, unit: template.unit,
         quantity: template.unit === "guest" ? String(variant?.guests ?? "") : template.unit === "flat" ? "1" : "",
-        net: (template.cents / 100).toFixed(2), tax: "", sourceKind: "app_transfer", sourceReference: reference
+        net: (template.cents / 100).toFixed(2), tax: "", sourceKind: template.id === "staff" ? "operator" : "app_transfer", sourceReference: template.id === "staff" ? confirmedServiceRateReference : reference
       }])}>{template.label}</button>)}</div>
-      <p className="helper-text">Personenstunden = Personen × Einsatzstunden, getrennt für Service und Küche. Uni-Rahmenvertrag: 42,02 gegenüber 45,55 EUR/h historisch ungeklärt; Satz am konkreten Beleg prüfen. Steuer wird nicht vorbelegt.</p>
+      <p className="helper-text">Personenstunden = Personen × Einsatzstunden, getrennt für Service und Küche. Steuer wird nicht vorbelegt.</p>
       <p className="helper-text">Vorschau – maßgeblich ist die gespeicherte Berechnung. {previewError}</p>
       {totals(preview)}
       {preview?.calculation?.missingTaxLineIds.length ? <p role="status">Steuerfestlegung unvollständig: Speichern möglich, Freigabe gesperrt. Brutto bleibt offen.</p> : null}
