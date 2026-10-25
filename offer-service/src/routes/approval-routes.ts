@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { assertNoDirectCostWrites } from "../../../shared-core/src/persistence.js";
 import type { FastifyInstance } from "fastify";
 import {
   areJsonValuesEqual,
@@ -16,7 +17,6 @@ import {
   type AuditEntry,
   type CaseEvent,
   type OfferDraft,
-  type PricingSummary,
   type ProductionHandoff,
   type Queryable,
   type TrustedActor
@@ -32,14 +32,6 @@ import {
   type OfferDecisionTargetScope,
   type OfferStore
 } from "../store.js";
-
-// A rollback may read these snapshots, but must reject before the first
-// approval projection is published, rather than leave a partial decision.
-function requireCostFreeSummaries(...summaries: Array<PricingSummary | undefined>): void {
-  if (summaries.some(summary => summary?.calculation?.lines.some(line => line.directCost !== undefined))) {
-    throw Object.assign(new Error("Diese Version kann interne Kosten nur lesen. Zum Speichern eine Version mit Kostenerfassung verwenden."), { statusCode: 409 });
-  }
-}
 
 export interface OfferApprovalRouteDependencies {
   store: OfferStore;
@@ -256,6 +248,9 @@ export function registerOfferApprovalRoutes(app: FastifyInstance, deps: OfferApp
     aggregate: OfferDecisionAggregate,
     transactionalQueryable?: Queryable
   ): Promise<boolean> => {
+    // Replay and legacy adoption use their immutable decision snapshot;
+    // reading the current draft would make recovery depend on mutable state.
+    assertNoDirectCostWrites(aggregate);
     const currentCase = await scope.getCase(caseId);
     if (!currentCase) return false;
     if (
@@ -333,7 +328,7 @@ export function registerOfferApprovalRoutes(app: FastifyInstance, deps: OfferApp
     if (aggregate.approval.decision === "rejected") return "ok" as const;
 
     const approvedOffer = aggregate.approvedOffer!;
-    requireCostFreeSummaries(approvedOffer.pricingSummary, approvedOffer.selectedVariant.proposedEventSpec.budgetContext?.pricingSummary);
+    assertNoDirectCostWrites(approvedOffer);
     const approvedOfferProjection = scope
       ? await scope.getApprovedOffer(approvedOffer.approvedOfferId)
       : await store.getApprovedOffer(actor, approvedOffer.approvedOfferId);
@@ -747,10 +742,6 @@ export function registerOfferApprovalRoutes(app: FastifyInstance, deps: OfferApp
               requestedApproval!.target.revision
             );
             if (timelineError) return { status: "case_timeline_conflict" as const };
-            const fallbackDraft = await scope.getDraft(request.params.draftId);
-            if (fallbackDraft) requireCostFreeSummaries(fallbackDraft.pricingSummary,
-              fallbackDraft.proposedEventSpec.budgetContext?.pricingSummary,
-              ...fallbackDraft.variantSet.map(variant => variant.proposedEventSpec.budgetContext?.pricingSummary));
             const existingAggregate = await scope.getDecisionAggregate(requestedApproval!.approvalRequestId);
             if (existingAggregate) {
               if (!sameDecision(existingAggregate.approval, requestedApproval!)) {
@@ -899,7 +890,7 @@ export function registerOfferApprovalRoutes(app: FastifyInstance, deps: OfferApp
     }
     const aggregate = aggregates[0]!;
     const approvedOffer = aggregate.approvedOffer!;
-    requireCostFreeSummaries(approvedOffer.pricingSummary, approvedOffer.selectedVariant.proposedEventSpec.budgetContext?.pricingSummary);
+    assertNoDirectCostWrites(approvedOffer);
     const handoffCaseId = await store.findCaseIdForDraft(
       actor,
       approvedOffer.sourceDraft.draftId,

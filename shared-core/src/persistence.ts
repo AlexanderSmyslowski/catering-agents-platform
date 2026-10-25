@@ -1149,7 +1149,7 @@ function assertExpectedVersion(value: number): void {
 
 // The compatibility release must read future cost records without creating
 // them before its own rollback target understands their persisted shape.
-function assertNoDirectCostWrites(value: unknown): void {
+export function assertNoDirectCostWrites(value: unknown): void {
   const pending: unknown[] = [value];
   const seen = new WeakSet<object>();
   while (pending.length) {
