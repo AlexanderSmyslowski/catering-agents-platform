@@ -6,9 +6,6 @@ export function reviseOfferPricing(source: OfferDraft, caseId: string, variantId
   if (!variant) throw new Error("Bitte eine vorhandene Angebotsvariante wählen.");
   const guestCount = variant.proposedEventSpec.attendees.expected;
   const pricingSummary = calculateOfferPricing(input, guestCount ?? 0);
-  if (pricingSummary.calculation!.lines.some(line => line.directCost !== undefined)) {
-    throw new Error("Diese Version kann interne Kosten nur lesen. Zum Speichern eine Version mit Kostenerfassung verwenden.");
-  }
   const food = pricingSummary.calculation!.lines.filter(line => line.category === "food");
   if (food.length !== 1 || food[0]!.unit !== "guest" || food[0]!.quantity !== String(guestCount)) {
     throw new Error("Genau ein Speisen-Grundpaket für die Gästezahl dieser Fassung ist erforderlich. Es umfasst das vollständige Menü.");

@@ -1,8 +1,7 @@
-import { AuditLogStore } from "@catering/shared-core";
-import { mkdtempSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { buildOfferApp } from "../offer-service/src/app.js";
 import { OfferStore } from "../offer-service/src/store.js";
 import { calculateOfferPricing } from "../shared-core/src/offer-calculation.js";
@@ -68,19 +67,29 @@ describe("persisted offer price calculation", () => {
       expect(handoff.json().handoff.pricingSnapshot).toEqual(revised.pricingSummary);
     } finally { await app.close(); }
   });
-  it("rejects new cost writes before publishing a pricing revision during reader compatibility", async () => {
-    const { app, store, draft, caseId } = await harness();
+  it("persists partial estimated costs through approval and handoff without overwriting the source", async () => {
+    const { app, store, rootDir, draft } = await harness();
     try {
-      const before = await app.inject({ method: "GET", url: "/v1/offers/cases/" + caseId, headers });
-      const result = await app.inject({ method: "POST", url: "/v1/offers/drafts/" + draft.draftId + "/pricing", headers,
-        payload: { revision: 1, variantId: draft.variantSet[0].variantId, calculation: { lines: lines().map((line, at) => at ? line : {
-          ...line, directCost: { totalNetCents: 185000, basis: "estimated", estimateDate: "2026-10-25", sourceReference: "SYNTHETISCHER KOSTENVORSCHLAG" }
-        }) } } });
-      expect(result.statusCode, result.body).toBe(422);
-      expect(result.body).toContain("kann interne Kosten nur lesen");
+      const cost = { totalNetCents: 185000, basis: "estimated", estimateDate: "2026-10-25", sourceReference: "SYNTHETISCH: ältere Einkaufspreise", priceDate: "2026-09-12" };
+      const input = lines().map((line, at) => at === 0 ? { ...line, directCost: cost } : line);
+      const r = await app.inject({ method: "POST", url: "/v1/offers/drafts/" + draft.draftId + "/pricing", headers,
+        payload: { revision: 1, variantId: draft.variantSet[0].variantId, calculation: { lines: input } } });
+      expect(r.statusCode, r.body).toBe(201);
+      const revised = r.json();
+      expect(revised.pricingSummary.calculation.lines[0].directCost).toEqual(cost);
+      expect(revised.pricingSummary.calculation.lines[1]).not.toHaveProperty("directCost");
+      expect((await new OfferStore({ rootDir }).getDraft({ businessId: "alpha" }, revised.draftId))?.pricingSummary).toEqual(revised.pricingSummary);
       expect(await store.getDraft({ businessId: "alpha" }, draft.draftId)).toEqual(draft);
-      const after = await app.inject({ method: "GET", url: "/v1/offers/cases/" + caseId, headers });
-      expect(after.json()).toEqual(before.json());
+      const decision = await app.inject({ method: "POST", url: "/v1/offers/drafts/" + revised.draftId + "/decision", headers,
+        payload: { revision: 1, decision: "approved", variantId: revised.variantSet[0].variantId } });
+      expect(decision.statusCode, decision.body).toBe(201);
+      const offer = decision.json().approvedOffer;
+      const handoff = await app.inject({ method: "POST", url: "/v1/offers/approved/" + offer.approvedOfferId + "/handoffs", headers, payload: {} });
+      expect(handoff.statusCode, handoff.body).toBe(201);
+      expect(handoff.json().handoff.pricingSnapshot.calculation.lines[0].directCost).toEqual(cost);
+      const customerHtml = renderOfferHtml({ ...revised, reviewStatus: { ...revised.reviewStatus, publishApproved: true } });
+      expect(customerHtml).not.toContain("ältere Einkaufspreise");
+      expect(customerHtml).not.toContain("Deckungsbeitrag");
     } finally { await app.close(); }
   });
   it("retains the cost-bearing source when an unchanged menu deliberately creates an unpriced successor", async () => {
@@ -99,15 +108,6 @@ describe("persisted offer price calculation", () => {
       const file = path.join(rootDir, "businesses/alpha/offers/drafts", future.draftId + ".json");
       writeFileSync(file, JSON.stringify(future), { mode: 0o600 });
       const before = readFileSync(file);
-      const approvalsBefore = await store.listApprovalsForDraft({ businessId: "alpha" }, future.draftId);
-      const offersBefore = await store.listApprovedOffers({ businessId: "alpha" });
-      const blocked = await app.inject({ method: "POST", url: "/v1/offers/drafts/" + future.draftId + "/decision", headers,
-        payload: { revision: 1, decision: "approved", variantId: future.variantSet[0].variantId } });
-      expect(blocked.statusCode, blocked.body).toBe(409);
-      expect(blocked.json().message).toContain("kann interne Kosten nur lesen");
-      expect(await store.listApprovalsForDraft({ businessId: "alpha" }, future.draftId)).toEqual(approvalsBefore);
-      expect(await store.listApprovedOffers({ businessId: "alpha" })).toEqual(offersBefore);
-
       const menu = future.proposedEventSpec.menuPlan.map(({ componentId, label, servings, menuCategory, dietaryTags }: any) => ({ componentId, label, servings, menuCategory, dietaryTags }));
       const changed = await app.inject({ method: "POST", url: "/v1/offers/drafts/" + future.draftId + "/menu", headers,
         payload: { revision: 1, menuPlan: menu } });
@@ -122,42 +122,6 @@ describe("persisted offer price calculation", () => {
       expect(premature.statusCode, premature.body).toBe(422);
       expect(readFileSync(file)).toEqual(before);
       expect(await store.getDraft({ businessId: "alpha" }, future.draftId)).toEqual(future);
-    } finally { await app.close(); }
-  });
-  it("rejects a retained cost-bearing approved handoff before any audit or publication", async () => {
-    const { app, rootDir, draft } = await harness();
-    try {
-      const priced = await app.inject({ method: "POST", url: "/v1/offers/drafts/" + draft.draftId + "/pricing", headers,
-        payload: { revision: 1, variantId: draft.variantSet[0].variantId, calculation: { lines: lines() } } });
-      expect(priced.statusCode, priced.body).toBe(201);
-      const source = priced.json();
-      const decision = await app.inject({ method: "POST", url: "/v1/offers/drafts/" + source.draftId + "/decision", headers,
-        payload: { revision: 1, decision: "approved", variantId: source.variantSet[0].variantId } });
-      expect(decision.statusCode, decision.body).toBe(201);
-      const approved = decision.json().approvedOffer;
-      const root = path.join(rootDir, "businesses/alpha");
-      for (const relative of ["offers/drafts/" + source.draftId, "offers/approved/" + approved.approvedOfferId,
-        "offers/decision-aggregates/" + approved.approvalRequestId]) {
-        const file = path.join(root, relative + ".json");
-        const future = JSON.parse(readFileSync(file, "utf8"), (key, value) => {
-          if (key === "calculation" && value?.version === 1 && Array.isArray(value.lines)) {
-            value.lines[0].directCost = { totalNetCents: 185000, basis: "estimated", estimateDate: "2026-10-25", sourceReference: "SYNTHETISCHER RUECKFALL" };
-          }
-          return value;
-        });
-        writeFileSync(file, JSON.stringify(future), { mode: 0o600 });
-      }
-      const snapshot = () => readdirSync(root, { recursive: true }).map(String).filter(name => name.endsWith(".json")).sort()
-        .map(name => [name, readFileSync(path.join(root, name), "utf8")]);
-      const before = snapshot();
-      const auditWrites = vi.spyOn(AuditLogStore.prototype, "logForWithResult");
-      try {
-        const result = await app.inject({ method: "POST", url: "/v1/offers/approved/" + approved.approvedOfferId + "/handoffs", headers, payload: {} });
-        expect(result.statusCode, result.body).toBe(409);
-        expect(result.json().message).toContain("kann interne Kosten nur lesen");
-        expect(auditWrites).not.toHaveBeenCalled();
-        expect(snapshot()).toEqual(before);
-      } finally { auditWrites.mockRestore(); }
     } finally { await app.close(); }
   });
   it("invalidates a saved price calculation on a later menu revision and rejects forged stored totals", async () => {

@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import { calculateOfferPricing } from "../shared-core/src/offer-calculation.js";
 import { act, createElement, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -118,22 +117,6 @@ it("keeps source entry secondary for an opened draft and puts open questions bef
   expect(source.querySelector("summary")?.textContent).toContain("diesem Auftrag");
   expect(container.querySelector(".offer-calm-summary")?.textContent).not.toContain("Jetzt:");
   expect(container.querySelector(".offer-calm-summary")?.textContent).toContain("keine externe Freigabe");
-});
-
-it("explains rollback limits while allowing a new menu version and disabling cost-bearing approval", () => {
-  const priced = calculateOfferPricing({ lines: [{ id: "food", label: "SYNTHETISCH", category: "food", unit: "guest", quantity: "100", unitNetCents: 5800,
-    taxRateBps: 1900, sourceKind: "synthetic", sourceReference: "SYNTHETISCH", directCost: { totalNetCents: 185000, basis: "estimated", estimateDate: "2026-10-25", sourceReference: "SYNTHETISCH" } }] }, 100);
-  const future = { ...draft("future", "SYNTHETISCHER Rueckfall"), pricingSummary: priced,
-    proposedEventSpec: { event: { type: "SYNTHETISCH", date: "2026-11-20" }, attendees: { expected: 100 },
-      servicePlan: { serviceForm: "buffet", modules: [] }, menuPlan: [{ label: "SYNTHETISCH", servings: 100 }] } };
-  const container = document.createElement("div");
-  container.innerHTML = renderToStaticMarkup(createElement(OfferConversationalWorkbench, props({ selectedDraft: future, activeDraft: future, onMenuSaved: async () => undefined })));
-  const buttons = Array.from(container.querySelectorAll("button"));
-  expect(buttons.find(button => button.textContent === "Menü bearbeiten")?.disabled).toBe(false);
-  expect(buttons.find(button => button.textContent === "Veranstaltungsdaten bearbeiten")?.disabled).toBe(false);
-  expect(buttons.find(button => button.textContent === "Preisaufstellung bearbeiten")?.disabled).toBe(true);
-  expect(buttons.find(button => button.textContent?.startsWith("Variante freigeben"))?.disabled).toBe(true);
-  expect(container.textContent).toContain("Kosten bleiben in der Ursprungsfassung erhalten");
 });
 
 afterEach(() => {

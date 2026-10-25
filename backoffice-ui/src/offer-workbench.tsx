@@ -231,9 +231,6 @@ export function OfferConversationalWorkbench({
   const summaryActiveSpec = focusedDraftSpec ?? activeSpec;
   const focusedVariants = getDraftVariants(focusedDraft);
   const focusedPricing = focusedDraft?.pricingSummary as PricingSummary | undefined;
-  const costReadOnly = Boolean(focusedPricing?.calculation?.lines.some(line => line.directCost !== undefined)
-    || focusedVariants.some(variant => (variant.proposedEventSpec as import("@catering/shared-core").AcceptedEventSpec | undefined)
-      ?.budgetContext?.pricingSummary?.calculation?.lines.some(line => line.directCost !== undefined)));
   const incompletePricingTax = Boolean(focusedPricing?.calculationRequired || (focusedPricing?.calculation && focusedPricing.calculation.grossCents === undefined));
   const focusedOpenQuestions = Array.isArray(focusedDraft?.openQuestions)
     ? (focusedDraft.openQuestions as string[])
@@ -472,7 +469,7 @@ export function OfferConversationalWorkbench({
                       key={variantId}
                       className="secondary-button"
                       aria-pressed={selectedVariantId === variantId}
-                      disabled={submitting || editingMenu || editingPricing || editingEvent || costReadOnly || incompletePricingTax || focusedDraftRevision === undefined}
+                      disabled={submitting || editingMenu || editingPricing || editingEvent || incompletePricingTax || focusedDraftRevision === undefined}
                       onClick={() => {
                         setSelectedVariantId(variantId);
                         if (focusedDraftRevision !== undefined) {
@@ -495,7 +492,7 @@ export function OfferConversationalWorkbench({
                 {focusedApprovalBinding && !focusedHandoffId && createHandoff ? (
                   <button
                     className="secondary-button"
-                    disabled={submitting || editingMenu || editingPricing || editingEvent || costReadOnly}
+                    disabled={submitting || editingMenu || editingPricing || editingEvent}
                     onClick={() => void createHandoff(focusedDraftId, focusedApprovalBinding.offerDraftRevision, focusedApprovalBinding.approvedOfferId)}
                   >
                     An Produktion übergeben

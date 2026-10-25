@@ -49,7 +49,7 @@ function harness(mode: "file" | "postgres") {
   return { collection, initial, seedFutureRecord };
 }
 
-describe('read compatibility before enabling cost writes', () => {
+describe('read compatibility when enabling cost writes', () => {
   it('pins the actual installed reader and proves both directions of the rollout boundary', () => {
     expect(createHash('sha256').update(oldSource).digest('hex')).toBe('4bd26381f12d583d46d6444a1ec13feb7f11030152bb969a9eaaf1553f24445c');
     expect(scope.exports.validOfferPricingCalculation!(costed)).toBe(false);
@@ -68,38 +68,32 @@ describe('read compatibility before enabling cost writes', () => {
   });
 
   describe.each(['file', 'postgres'] as const)('%s storage', mode => {
-    it.each(['set', 'insert', 'insertWithResult', 'compareAndSet', 'compareAndSetExact'] as const)('fences %s before publishing a cost-bearing record', async method => {
+    it.each(['set', 'insert', 'insertWithResult', 'compareAndSet', 'compareAndSetExact'] as const)('enables %s with intact costs after the compatible reader is established', async method => {
       const { collection, initial } = harness(mode);
-      await collection.set(context, initial);
+      const isCompare = method === 'compareAndSet' || method === 'compareAndSetExact';
+      if (isCompare) await collection.set(context, initial);
       const next: Item = { ...initial, version: 2, pricingSummary: costed };
-      const operation = method === 'compareAndSet'
-        ? collection.compareAndSet(context, 'record', 1, next)
-        : method === 'compareAndSetExact'
-          ? collection.compareAndSetExact(context, 'record', initial, next)
-          : collection[method](context, next);
-      await expect(operation).rejects.toThrow('kann interne Kosten nur lesen');
-      expect(await collection.get(context, 'record')).toEqual(initial);
-      expect(await collection.list(context)).toEqual([initial]);
+      if (method === 'compareAndSet') expect(await collection.compareAndSet(context, 'record', 1, next)).toBe('updated');
+      else if (method === 'compareAndSetExact') expect(await collection.compareAndSetExact(context, 'record', initial, next)).toBe('updated');
+      else await collection[method](context, next);
+      expect(await collection.get(context, 'record')).toEqual(next);
+      expect(await collection.list(context)).toEqual([next]);
     });
-    it.each([undefined, null, {}])('does not introduce even an empty directCost field through another nested payload: %j', async directCost => {
-      const { collection, initial } = harness(mode);
-      await expect(collection.insert(context, { ...initial, nested: { future: { version: 1, roundingPolicy: "net-line-tax-group-half-up-v1", lines: [{ directCost }] } } })).rejects.toThrow('kann interne Kosten nur lesen');
-      expect(await collection.list(context)).toEqual([]);
-    });
-    it('does not fence unrelated legacy metadata that happens to use the same property name', async () => {
+    it('retains unrelated legacy metadata using the same property name', async () => {
       const { collection, initial } = harness(mode);
       const legacy = { ...initial, nested: { directCost: 'legacy unrelated text' } };
       await collection.insert(context, legacy);
       expect(await collection.get(context, 'record')).toEqual(legacy);
     });
-    it('reads and retains future-version records without silently dropping costs on an attempted edit', async () => {
+    it('reads a future-version record and preserves costs when publishing its next revision', async () => {
       const { collection, initial, seedFutureRecord } = harness(mode);
       const future = { ...initial, pricingSummary: costed };
       await seedFutureRecord(future);
       expect(await collection.get(context, 'record')).toEqual(future);
-      expect(await collection.list(context)).toEqual([future]);
-      await expect(collection.compareAndSet(context, 'record', 1, { ...future, version: 2 })).rejects.toThrow('kann interne Kosten nur lesen');
-      expect(await collection.get(context, 'record')).toEqual(future);
+      const next = { ...future, version: 2 };
+      expect(await collection.compareAndSet(context, 'record', 1, next)).toBe('updated');
+      expect(await collection.get(context, 'record')).toEqual(next);
+      expect(future).toEqual({ ...initial, pricingSummary: costed });
     });
   });
 });
