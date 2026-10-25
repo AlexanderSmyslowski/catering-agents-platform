@@ -5,7 +5,7 @@ const line = (id: string, extra: Record<string, unknown> = {}) => ({
   id, label: id, category: "food", quantity: "100", unit: "guest", unitNetCents: 5800,
   taxRateBps: 1900, sourceKind: "synthetic", sourceReference: "SYNTHETISCHER-100-GAESTE-TEST", ...extra
 });
-const estimate = { totalNetCents: 185000, basis: "estimated", sourceReference: "SYNTHETISCH: älterer Einkaufspreis, nicht aktuell bestätigt" };
+const estimate = { totalNetCents: 185000, basis: "estimated", estimateDate: "2026-10-25", sourceReference: "SYNTHETISCH: älterer Einkaufspreis, nicht aktuell bestätigt" };
 const summarize = (lines: unknown[]) => summarizeOfferDirectCosts(calculateOfferPricing({ lines }, 100).calculation!);
 
 describe("internal direct costs alongside quoted selling prices", () => {
@@ -47,6 +47,15 @@ describe("internal direct costs alongside quoted selling prices", () => {
     { ...estimate, basis: "documented" }, { ...estimate, marginCents: 123 }
   ])("rejects invalid or fabricated cost fields: %j", directCost => {
     expect(() => calculateOfferPricing({ lines: [line("food", { directCost })] }, 100)).toThrow();
+  });
+  it("requires the estimate snapshot date separately from an unknown receipt date", () => {
+    const missing = { ...estimate, estimateDate: undefined };
+    expect(() => calculateOfferPricing({ lines: [line("food", { directCost: missing })] }, 100)).toThrow(/Schätzstand/);
+    const dated = { ...estimate, estimateDate: "2026-10-25" };
+    const priced = calculateOfferPricing({ lines: [line("food", { directCost: dated })] }, 100);
+    expect(priced.calculation?.lines[0]?.directCost).toEqual(dated);
+    expect(priced.calculation?.lines[0]?.directCost?.priceDate).toBeUndefined();
+    expect(() => calculateOfferPricing({ lines: [line("food", { directCost: { ...dated, estimateDate: "2026-02-30" } })] }, 100)).toThrow(/Schätzstand/);
   });
   it("bounds summed costs and validates persisted cost provenance too", () => {
     expect(() => summarize([line("a", { directCost: { ...estimate, totalNetCents: 1_000_000_000_000 } }), line("b", { directCost: estimate })])).toThrow();

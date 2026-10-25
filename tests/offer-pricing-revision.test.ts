@@ -1,9 +1,10 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildOfferApp } from "../offer-service/src/app.js";
 import { OfferStore } from "../offer-service/src/store.js";
+import { calculateOfferPricing } from "../shared-core/src/offer-calculation.js";
 import { renderOfferHtml } from "../print-export/src/index.js";
 
 const secret = "synthetic-pricing-test-secret";
@@ -69,7 +70,7 @@ describe("persisted offer price calculation", () => {
   it("persists partial estimated costs through approval and handoff without overwriting the source", async () => {
     const { app, store, rootDir, draft } = await harness();
     try {
-      const cost = { totalNetCents: 185000, basis: "estimated", sourceReference: "SYNTHETISCH: ältere Einkaufspreise", priceDate: "2026-09-12" };
+      const cost = { totalNetCents: 185000, basis: "estimated", estimateDate: "2026-10-25", sourceReference: "SYNTHETISCH: ältere Einkaufspreise", priceDate: "2026-09-12" };
       const input = lines().map((line, at) => at === 0 ? { ...line, directCost: cost } : line);
       const r = await app.inject({ method: "POST", url: "/v1/offers/drafts/" + draft.draftId + "/pricing", headers,
         payload: { revision: 1, variantId: draft.variantSet[0].variantId, calculation: { lines: input } } });
@@ -89,6 +90,38 @@ describe("persisted offer price calculation", () => {
       const customerHtml = renderOfferHtml({ ...revised, reviewStatus: { ...revised.reviewStatus, publishApproved: true } });
       expect(customerHtml).not.toContain("ältere Einkaufspreise");
       expect(customerHtml).not.toContain("Deckungsbeitrag");
+    } finally { await app.close(); }
+  });
+  it("retains the cost-bearing source when an unchanged menu deliberately creates an unpriced successor", async () => {
+    const { app, store, rootDir, draft } = await harness();
+    try {
+      const base = await app.inject({ method: "POST", url: "/v1/offers/drafts/" + draft.draftId + "/pricing", headers,
+        payload: { revision: 1, variantId: draft.variantSet[0].variantId, calculation: { lines: lines() } } });
+      expect(base.statusCode, base.body).toBe(201);
+      const future = base.json();
+      const costs = calculateOfferPricing({ lines: lines().map((line, at) => at ? line : { ...line,
+        directCost: { totalNetCents: 185000, basis: "estimated", estimateDate: "2026-10-25", sourceReference: "SYNTHETISCHER ZUKUNFTSDATENSATZ" } }) }, 100);
+      future.pricingSummary = costs;
+      future.proposedEventSpec.budgetContext.pricingSummary = structuredClone(costs);
+      future.variantSet[0].proposedEventSpec.budgetContext.pricingSummary = structuredClone(costs);
+      // Simulate a record retained from the later cost-enabled binary.
+      const file = path.join(rootDir, "businesses/alpha/offers/drafts", future.draftId + ".json");
+      writeFileSync(file, JSON.stringify(future), { mode: 0o600 });
+      const before = readFileSync(file);
+      const menu = future.proposedEventSpec.menuPlan.map(({ componentId, label, servings, menuCategory, dietaryTags }: any) => ({ componentId, label, servings, menuCategory, dietaryTags }));
+      const changed = await app.inject({ method: "POST", url: "/v1/offers/drafts/" + future.draftId + "/menu", headers,
+        payload: { revision: 1, menuPlan: menu } });
+      expect(changed.statusCode, changed.body).toBe(201);
+      const successor = changed.json();
+      expect(successor.draftId).not.toBe(future.draftId);
+      expect(successor.pricingSummary.calculation).toBeUndefined();
+      expect(successor.pricingSummary.calculationRequired).toBe(true);
+      expect(successor.reviewStatus.publishApproved).toBe(false);
+      const premature = await app.inject({ method: "POST", url: "/v1/offers/drafts/" + successor.draftId + "/decision", headers,
+        payload: { revision: 1, decision: "approved", variantId: successor.variantSet[0].variantId } });
+      expect(premature.statusCode, premature.body).toBe(422);
+      expect(readFileSync(file)).toEqual(before);
+      expect(await store.getDraft({ businessId: "alpha" }, future.draftId)).toEqual(future);
     } finally { await app.close(); }
   });
   it("invalidates a saved price calculation on a later menu revision and rejects forged stored totals", async () => {

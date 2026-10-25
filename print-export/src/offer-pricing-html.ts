@@ -16,7 +16,8 @@ export function renderOfferPricingHtml(summary: PricingSummary, includeSources =
     costs.status === "documented" ? "<p>Belegpreise laut Eingabe. Preisstand und Gültigkeit für diesen Auftrag prüfen.</p>" : "",
     "<ul>", ...c.lines.filter(line => line.directCost).map(line => "<li>" + escape(line.label) + ": " + euro(line.directCost!.totalNetCents)
       + " · " + (line.directCost!.basis === "estimated" ? "Geschätzt" : "Belegpreis") + " · " + escape(line.directCost!.sourceReference)
-      + " · Preisstand: " + escape(line.directCost!.priceDate ?? "nicht bekannt") + "</li>"), "</ul></section>"
+      + " · Preisstand: " + escape(line.directCost!.priceDate ?? "nicht bekannt")
+      + (line.directCost!.estimateDate ? " · Schätzstand: " + escape(line.directCost!.estimateDate) : "") + "</li>"), "</ul></section>"
   ].join("") : "";
   return [
     '<section class="offer-pricing"><h2>Preisaufstellung</h2><p>Verkaufspreise netto. Preis- und Steuergrundlage bleiben prüfpflichtig.</p>',

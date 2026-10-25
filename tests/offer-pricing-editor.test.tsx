@@ -6,7 +6,7 @@ import { OfferPricingEditor } from "../backoffice-ui/src/offer-pricing-editor.js
 import { reviseOfferPricing } from "../backoffice-ui/src/api.js";
 import { calculateOfferPricing } from "../shared-core/src/offer-calculation.js";
 vi.mock("../backoffice-ui/src/api.js", () => ({ reviseOfferPricing: vi.fn() }));
-afterEach(() => { vi.clearAllMocks(); document.body.innerHTML = ""; });
+afterEach(() => { vi.useRealTimers(); vi.clearAllMocks(); document.body.innerHTML = ""; });
 
 const input = [{ id: "food", label: "Speisenpaket", category: "food", quantity: "100", unit: "guest",
   unitNetCents: 5800, taxRateBps: 1900, sourceKind: "synthetic", sourceReference: "SYNTHETISCHER-100-GAESTE-TEST" }];
@@ -40,6 +40,8 @@ describe("offer pricing editor", () => {
     await act(async () => root.unmount());
   });
   it("saves an approximate total cost separately from quoted sales and reloads its provenance", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 9, 25, 12));
     const { root } = await mount();
     await act(async () => button("Preisaufstellung bearbeiten").click());
     await change(field("Kosten gesamt netto"), "1850,00");
@@ -49,8 +51,55 @@ describe("offer pricing editor", () => {
     vi.mocked(reviseOfferPricing).mockResolvedValueOnce({ draftId: "cost-revised" } as any);
     await act(async () => button("Preisaufstellung als neue Fassung speichern").click());
     expect(reviseOfferPricing).toHaveBeenCalledWith("draft-a", 1, "calculated", [expect.objectContaining({
-      unitNetCents: 5800, directCost: { totalNetCents: 185000, basis: "estimated", sourceReference: "Ältere Einkaufsrechnung – Preisstand offen" }
+      unitNetCents: 5800, directCost: { totalNetCents: 185000, basis: "estimated", estimateDate: "2026-10-25", sourceReference: "Ältere Einkaufsrechnung – Preisstand offen" }
     })]);
+    await act(async () => root.unmount());
+  });
+  it("preserves a saved or explicitly corrected estimate date across source metadata edits", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 9, 25, 12));
+    const priced = calculateOfferPricing({ lines: [{ ...input[0], directCost: {
+      totalNetCents: 185000, basis: "estimated", sourceReference: "SYNTHETISCHER Arbeitswert", estimateDate: "2026-10-20"
+    } }] }, 100);
+    const { root } = await mount(priced);
+    await act(async () => button("Preisaufstellung bearbeiten").click());
+    expect(field("Schätzstand").value).toBe("2026-10-20");
+    await change(field("Schätzstand"), "2026-10-21");
+    await change(field("Preisstand"), "2026-09-12");
+    await change(field("Beleg oder Schätzgrund"), "SYNTHETISCH: Quellenhinweis berichtigt");
+    expect(field("Schätzstand").value).toBe("2026-10-21");
+    vi.mocked(reviseOfferPricing).mockResolvedValueOnce({ draftId: "date-revised" } as any);
+    await act(async () => button("Preisaufstellung als neue Fassung speichern").click());
+    expect(reviseOfferPricing).toHaveBeenCalledWith("draft-a", 1, "calculated", [expect.objectContaining({
+      directCost: expect.objectContaining({ estimateDate: "2026-10-21", priceDate: "2026-09-12" })
+    })]);
+    await act(async () => root.unmount());
+  });
+  it("renews the snapshot date when the estimated amount changes", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 9, 25, 12));
+    const priced = calculateOfferPricing({ lines: [{ ...input[0], directCost: {
+      totalNetCents: 185000, basis: "estimated", sourceReference: "SYNTHETISCHER Arbeitswert", estimateDate: "2026-10-20"
+    } }] }, 100);
+    const { root } = await mount(priced);
+    await act(async () => button("Preisaufstellung bearbeiten").click());
+    await change(field("Kosten gesamt netto"), "1900,00");
+    expect(field("Schätzstand").value).toBe("2026-10-25");
+    await act(async () => root.unmount());
+  });
+  it("rejects a deliberately cleared estimate date without blocking an entirely unknown cost", async () => {
+    const { root } = await mount();
+    await act(async () => button("Preisaufstellung bearbeiten").click());
+    await change(field("Kosten gesamt netto"), "1850,00");
+    await change(field("Beleg oder Schätzgrund"), "SYNTHETISCHER Arbeitswert");
+    await change(field("Schätzstand"), "");
+    await act(async () => button("Preisaufstellung als neue Fassung speichern").click());
+    expect(reviseOfferPricing).not.toHaveBeenCalled();
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain("Schätzstand: gültiges Datum erforderlich.");
+    await change(field("Kosten gesamt netto"), "");
+    vi.mocked(reviseOfferPricing).mockResolvedValueOnce({ draftId: "unknown-cost" } as any);
+    await act(async () => button("Preisaufstellung als neue Fassung speichern").click());
+    expect(reviseOfferPricing).toHaveBeenCalledWith("draft-a", 1, "calculated", [expect.not.objectContaining({ directCost: expect.anything() })]);
     await act(async () => root.unmount());
   });
   it("preserves a stored evidenced cost and downgrades a manually changed amount to estimated", async () => {

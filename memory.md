@@ -1,3 +1,11 @@
+## Schaetzstand unabhaengig angenommen; Reader-Rueckfall bleibt Voraussetzung — Version 5.572 / 25.10.2026
+
+Kostenfeature757 erhaelt verpflichtenden estimateDate-Schaetzstand, getrennt vom optional unbekannten Preis-/Belegdatum. Vorhandene Belegpreise brauchen weiterhin priceDate. Echter390px-Editornachweis estimate-date-mobile.png ohne Horizontaloverflow; lokale heutige Vorbelegung, gespeichertes/manuell korrigiertes Datum bleibt bei Metadatenkorrektur erhalten. Kostenbetrag/Menge/Leistung/Kostengrundlageaenderung erneuert Schaetzung. Intern gedruckt, Kundenexport ohne Kostendatierung. Kein neues Schema/API. GitHub-Befund4371149586 damit gezielt behandelt.
+
+Tatsaechliches Opus5.5/firstParty71379b12 fand das stille Ueberschreiben eines manuell gesetzten Schaetzstands bei Quellennotiz-/Preisdatumkorrektur. Genau korrigiert, drei Zustandsregressionen PASS und Deltaa0581c86 ACCEPT. Erster Reviewaufruf397da738 endete am zu kleinen Turnbudget ohne Urteil und zaehlt nicht als Abnahme. 83 betroffene Tests zuvor PASS, nach Korrektur gezielte UI-/Druck-/API-Nachweise und Build PASS; Pflicht-CI fuer neuen Head noch erforderlich. Schaetzstandtest und realer API-Test belegen zusaetzlich: unbewertet bleibende Kosten sind moeglich; unveraendertes Menuespeichern erzeugt bewusst neue kalkulationspflichtige Fassung und laesst den kostentragenden Ursprungsdatensatz bytegleich erhalten, vorzeitige Freigabe422.
+
+Kompatibler Leser758 muss vor Aktivierung exakt diesen Parser verstehen; vorher keine Installation der Kostenfunktion. Der aus4371273485 geforderte pauschale Vollfreeze ist laut tatsaechlichem Opus5.5/firstParty873edac7 nicht erforderlich: Ursprungsfassung samt Kosten bleibt erhalten, neue Menue-/Veranstaltungsfassung wird wie bisher neu kalkuliert. Kein neuer Server-/UI-Freeze allein wegen offener Kosten. Kompatibilitaetsanzeige und Runbook sind entsprechend zu praezisieren; kostenfuehrende Schreibvorgaenge im Rueckfall bleiben gesperrt. Normale755-Generation hat echten15UTC-Vollbackup-/Offhost-Restore-/Cleanup-PASS05db3c16; Beleg W/tmp/nue-observer-20261024/ui757-current-read-20261025T151117888761Z.private.json. Noch keine757-/758-Installation, kein allgemeines Pilot-GO.
+
 ## Kostenfunktion geprueft; kompatibler Rueckfall zuerst — Version 5.570 / 25.10.2026
 
 PR756 ist nach Pflicht-CI regulaer integriert; Main793de815 und CI40199021773 SUCCESS. Die neue interne Kostenfunktion ist als PR757/c7a26047 vorbereitet, Pflicht-CI40201558370 SUCCESS, 109 relevante Tests/Build und tatsaechliche Opus5.5/firstParty-Reviews546f3967 sowie1f16a755 ACCEPT. Sechs Positionen der bestehenden Testeinkaufsliste wurden aus echten Metro-/Schwan-Belegen normiert; geschuetzte Stichprobe im Preischeckout tmp/offer-costs-20261025/source-sample.private.json. Historische/vergleichbare Arbeitswerte, keine vollstaendige Kostendeckung oder Livepreisanbindung. Kundenexport ohne interne Kosten, Herkunft oder Deckungsbeitrag. PR757 noch nicht integriert oder installiert.
@@ -3229,3 +3237,6 @@ PR755-Nachtrag20:40UTC: Angrenzender Präsentationstest erwartete noch die alte 
 
 ### Version 5.570 — 25.10.2026
 Kostenfunktion757 CI/Opus gruen; tatsaechlichen Altleser-Rueckfallfehler nachgewiesen, kompatible Lesezwischenversion mit Schreibfence gezielt umgesetzt und unabhaengig angenommen. Noch keine Installation.
+
+### Version 5.572 — 25.10.2026
+Datierter Schaetzstand mit expliziter Metadatenkorrektur und echter Opus5.5-Deltaannahme; kompatibler Reader und Standardauslieferung weiterhin erforderlich.

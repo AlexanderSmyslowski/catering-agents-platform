@@ -560,7 +560,7 @@ describe("production reference acceptance contract", () => {
     const input = { ...syntheticEvidenceInput(), pricingSummary: calculateOfferPricing({ lines: [{
       id: "food", label: "Synthetisches Menü", category: "food", quantity: "100", unit: "guest", unitNetCents: 5800,
       taxRateBps: 1900, sourceKind: "synthetic", sourceReference: "SYNTHETISCH",
-      directCost: { totalNetCents: 185000, basis: "estimated", sourceReference: "SYNTHETISCHE KOSTEN" }
+      directCost: { totalNetCents: 185000, basis: "estimated", estimateDate: "2026-10-25", sourceReference: "SYNTHETISCHE KOSTEN" }
     }] }, 100) };
     const token = resolveProductionReferenceValidatedEvidence(input, createTrustedProductionReferencePersistenceCapability(() => ({
       sourceCaseId: input.sourceCaseId, sourceSha256: input.sourceSha256, sourceLineageId: input.sourceLineageId,

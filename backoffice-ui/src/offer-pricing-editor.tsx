@@ -4,7 +4,7 @@ import { calculateOfferPricing, parseOfferDirectCost, summarizeOfferDirectCosts 
 import { reviseOfferPricing } from "./api.js";
 
 type Row = Omit<OfferCalculationLineInput, "unitNetCents" | "taxRateBps" | "directCost"> & {
-  net: string; tax: string; costNet?: string; costBasis?: "documented" | "estimated"; costReference?: string; costDate?: string;
+  net: string; tax: string; costNet?: string; costBasis?: "documented" | "estimated"; costReference?: string; costDate?: string; costEstimateDate?: string;
 };
 const reference = "App-Transfer Angebotsrechner 0.6 (2026-06-01), Arbeitswerte – prüfen";
 const confirmedServiceRateCents = 4555;
@@ -28,15 +28,20 @@ function hundredths(raw: string, label: string): number {
   const [whole, fraction = ""] = normalized.split(".");
   return Number(BigInt(whole!) * 100n + BigInt(fraction.padEnd(2, "0")));
 }
+function localDate(): string {
+  const now = new Date();
+  return [now.getFullYear(), String(now.getMonth() + 1).padStart(2, "0"), String(now.getDate()).padStart(2, "0")].join("-");
+}
 function inputLines(rows: Row[], costErrors?: string[]): OfferCalculationLineInput[] {
-  return rows.map(({ net, tax, taxReason, zeroPriceReason, costNet, costBasis, costReference, costDate, ...row }) => {
+  return rows.map(({ net, tax, taxReason, zeroPriceReason, costNet, costBasis, costReference, costDate, costEstimateDate, ...row }) => {
     let directCost: OfferCalculationLineInput["directCost"];
     if (costNet?.trim()) {
       try {
         directCost = parseOfferDirectCost({
           totalNetCents: hundredths(costNet, "Direkte Kosten gesamt"),
           basis: costBasis ?? "estimated", sourceReference: costReference?.trim() ?? "",
-          ...(costDate ? { priceDate: costDate } : {})
+          ...(costDate ? { priceDate: costDate } : {}),
+          ...((costBasis ?? "estimated") === "estimated" ? { estimateDate: costEstimateDate ?? localDate() } : {})
         });
       } catch (cause) {
         const message = row.label + ": " + (cause instanceof Error ? cause.message : "Kostenangabe prüfen.");
@@ -75,7 +80,7 @@ export function OfferPricingEditor({ draftId, revision, variants, menuPlan, pric
     setRows(calculation ? calculation.lines.map(({ netCents: _net, unitNetCents, taxRateBps, directCost, ...line }) => ({
       ...line, net: (unitNetCents / 100).toFixed(2), tax: taxRateBps === undefined ? "" : String(taxRateBps / 100),
       ...(directCost ? { costNet: (directCost.totalNetCents / 100).toFixed(2), costBasis: directCost.basis,
-        costReference: directCost.sourceReference, costDate: directCost.priceDate ?? "" } : {})
+        costReference: directCost.sourceReference, costDate: directCost.priceDate ?? "", costEstimateDate: directCost.estimateDate } : {})
     })) : [{
       id: "food", label: "Speisen-Grundpaket – vollständiges Menü", category: "food", quantity: "",
       unit: "guest", net: "", tax: "", sourceKind: "app_transfer", sourceReference: reference
@@ -93,6 +98,11 @@ export function OfferPricingEditor({ draftId, revision, variants, menuPlan, pric
         || (patch.label !== undefined && patch.label !== row.label)
       )) {
         next.costBasis = "estimated";
+      }
+      if (next.costNet?.trim() && (next.costBasis ?? "estimated") === "estimated"
+        && patch.costEstimateDate === undefined && ["costNet", "costBasis", "quantity", "label"]
+          .some(key => key in patch && patch[key as keyof Row] !== row[key as keyof Row])) {
+        next.costEstimateDate = localDate();
       }
       if (row.id === "staff" && row.sourceReference === confirmedServiceRateReference && patch.net !== undefined) {
         let confirmedAmount = false;
@@ -164,7 +174,7 @@ export function OfferPricingEditor({ draftId, revision, variants, menuPlan, pric
         setVariantId(event.target.value); setError("");
         setRows(current => current?.map(row => row.unit === "guest" ? {
           ...row, quantity: selected ? String(selected.guests) : "",
-          ...(row.costNet?.trim() && row.quantity !== (selected ? String(selected.guests) : "") ? { costBasis: "estimated" as const } : {})
+          ...(row.costNet?.trim() && row.quantity !== (selected ? String(selected.guests) : "") ? { costBasis: "estimated" as const, costEstimateDate: localDate() } : {})
         } : row));
       }}><option value="">Bitte wählen</option>{variants.map(item => <option key={item.variantId} value={item.variantId}>{item.label} · {item.guests} Gäste</option>)}</select></label>
       <p className="helper-text">Speisen-Grundpaket umfasst: {(variant?.menuPlan ?? menuPlan).map(item => String(item.label) + " (" + String(item.servings ?? "offen") + " Portionen)").join(", ")}.</p>
@@ -193,6 +203,7 @@ export function OfferPricingEditor({ draftId, revision, variants, menuPlan, pric
               <option value="documented">Belegpreis · für Auftrag geprüft</option>
             </select></label>
             <label>Beleg oder Schätzgrund<input value={row.costReference ?? ""} onChange={event => update(index, { costReference: event.target.value })} /></label>
+            {(row.costBasis ?? "estimated") === "estimated" ? <label>Schätzstand · Datum der Schätzung<input type="date" value={row.costEstimateDate ?? localDate()} onChange={event => update(index, { costEstimateDate: event.target.value })} /></label> : null}
             <label>Preisstand · Datum, falls bekannt<input type="date" value={row.costDate ?? ""} onChange={event => update(index, { costDate: event.target.value })} /></label>
           </div>
           {row.costBasis === "documented" ? <p className="helper-text">Nur wählen, wenn Beleg und Gültigkeit für diesen Auftrag geprüft sind. Ein Preisdatum ist dafür erforderlich.</p> : null}
@@ -224,7 +235,7 @@ export function OfferPricingEditor({ draftId, revision, variants, menuPlan, pric
       {directCosts(pricingSummary)}
       <ul className="item-list compact">{calculation.lines.map(line => <li key={line.id}>
         {line.label}: {line.quantity} {Number(line.quantity) === 1 ? singularUnitLabels[line.unit] : unitLabels[line.unit]} × {money(line.unitNetCents)} = {money(line.netCents)} netto · Steuer {line.taxRateBps === undefined ? "offen" : line.taxRateBps / 100 + " %"} · Quelle: {line.sourceReference}{line.sourceKind === "synthetic" ? " · synthetisch" : " · prüfpflichtig"}
-        {line.directCost ? <p>Direkte Kosten gesamt: {money(line.directCost.totalNetCents)} · {line.directCost.basis === "estimated" ? "Geschätzt" : "Belegpreis"} · {line.directCost.sourceReference} · Preisstand: {line.directCost.priceDate ?? "nicht bekannt"}</p> : <p>Kosten offen</p>}
+        {line.directCost ? <p>Direkte Kosten gesamt: {money(line.directCost.totalNetCents)} · {line.directCost.basis === "estimated" ? "Geschätzt" : "Belegpreis"} · {line.directCost.sourceReference} · Preisstand: {line.directCost.priceDate ?? "nicht bekannt"}{line.directCost.estimateDate ? " · Schätzstand: " + line.directCost.estimateDate : ""}</p> : <p>Kosten offen</p>}
       </li>)}</ul>
       <button type="button" className="secondary-button" disabled={disabled} onClick={begin}>Preisaufstellung bearbeiten</button>
     </> : <>
