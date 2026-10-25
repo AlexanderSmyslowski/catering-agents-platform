@@ -1160,7 +1160,7 @@ function assertNoDirectCostWrites(value: unknown): void {
     if (calculation.version === 1 && calculation.roundingPolicy === "net-line-tax-group-half-up-v1"
       && Array.isArray(calculation.lines) && calculation.lines.some(line => line && typeof line === "object"
         && Object.prototype.hasOwnProperty.call(line, "directCost"))) {
-      throw new Error("Diese Version kann interne Kosten nur lesen. Zum Speichern eine Version mit Kostenerfassung verwenden.");
+      throw Object.assign(new Error("Diese Version kann interne Kosten nur lesen. Zum Speichern eine Version mit Kostenerfassung verwenden."), { statusCode: 409 });
     }
     for (const value of Object.values(item)) pending.push(value);
   }

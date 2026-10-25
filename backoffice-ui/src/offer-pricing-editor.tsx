@@ -113,7 +113,7 @@ export function OfferPricingEditor({ draftId, revision, variants, menuPlan, pric
   return <section className="offer-pricing" aria-label="Preisaufstellung">
     <h3>Preisaufstellung</h3>
     <p className="helper-text">Speisenpaket für das gesamte Menü; Personal, Logistik und Zusatzleistungen separat. Verkaufspreise netto. Diese Ansicht zeigt keine internen Kosten oder Margen.</p>
-    {costReadOnly ? <p role="status">Interne Kosten sind gespeichert und werden in dieser Version nicht angezeigt. Zum Bearbeiten der Preisaufstellung ist die Version mit Kostenerfassung erforderlich. Die gespeicherten Daten bleiben erhalten.</p> : null}
+    {costReadOnly ? <p role="status">Interne Kosten sind gespeichert und werden in dieser Version nicht angezeigt. Zum Bearbeiten der Preisaufstellung ist die Version mit Kostenerfassung erforderlich. Freigabe und Produktionsübergabe dieser Fassung sind hier nicht möglich. Die gespeicherten Daten bleiben erhalten. Menü- oder Veranstaltungsänderungen legen eine neue Fassung ohne Preisaufstellung an; die Kosten bleiben in der Ursprungsfassung erhalten.</p> : null}
     {rows ? <>
       <label>Zu kalkulierende Variante<select disabled={saving} value={variantId} onChange={event => {
         const selected = variants.find(item => item.variantId === event.target.value);

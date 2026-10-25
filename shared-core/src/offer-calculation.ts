@@ -50,20 +50,27 @@ function halfUp(numerator: bigint, denominator: bigint): number {
 
 export function parseOfferDirectCost(value: unknown): OfferDirectCost {
   const raw = record(value);
-  if (Object.keys(raw).some(key => !["totalNetCents", "basis", "sourceReference", "priceDate"].includes(key))) {
+  if (Object.keys(raw).some(key => !["totalNetCents", "basis", "sourceReference", "priceDate", "estimateDate"].includes(key))) {
     throw new Error("Unbekanntes Kostenfeld.");
   }
   if (raw.basis !== "documented" && raw.basis !== "estimated") throw new Error("Kostengrundlage ist ungültig.");
-  const priceDate = raw.priceDate;
-  if (priceDate !== undefined && (typeof priceDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(priceDate)
-    || !Number.isFinite(Date.parse(priceDate)) || new Date(priceDate).toISOString().slice(0, 10) !== priceDate)) {
-    throw new Error("Preisstand: gültiges Datum erforderlich.");
+  function date(value: unknown, label: string): string | undefined {
+    if (value === undefined) return undefined;
+    if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)
+      || !Number.isFinite(Date.parse(value)) || new Date(value).toISOString().slice(0, 10) !== value) {
+      throw new Error(label + ": gültiges Datum erforderlich.");
+    }
+    return value;
   }
+  const priceDate = date(raw.priceDate, "Preisstand");
+  const estimateDate = date(raw.estimateDate, "Schätzstand");
   if (raw.basis === "documented" && !priceDate) throw new Error("Für einen Belegpreis bitte den Preisstand angeben; sonst als Schätzung verwenden.");
+  if (raw.basis === "estimated" && !estimateDate) throw new Error("Schätzstand: Datum der Schätzung erforderlich; das Belegdatum darf unbekannt bleiben.");
   return {
     totalNetCents: boundedInteger(raw.totalNetCents, MAX_CENTS, "Direkte Kosten in Cent"),
     basis: raw.basis, sourceReference: text(raw.sourceReference, "Beleg oder Schätzgrund"),
-    ...(priceDate ? { priceDate } : {})
+    ...(priceDate ? { priceDate } : {}),
+    ...(estimateDate ? { estimateDate } : {})
   };
 }
 

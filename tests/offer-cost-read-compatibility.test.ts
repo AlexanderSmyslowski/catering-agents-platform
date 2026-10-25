@@ -26,7 +26,7 @@ const scope = { exports: {} as Record<string, (...args: any[]) => any> };
 vm.runInNewContext(ts.transpileModule(oldSource, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, scope);
 const input = { id: "food", label: "SYNTHETISCHES Menü", category: "food", quantity: "100", unit: "guest", unitNetCents: 5800,
   taxRateBps: 1900, sourceKind: "synthetic", sourceReference: "SYNTHETISCHER-100-GAESTE-TEST" };
-const costed = calculateOfferPricing({ lines: [{ ...input, directCost: { totalNetCents: 185000, basis: "estimated", sourceReference: "SYNTHETISCH: Arbeitswert" } }] }, 100);
+const costed = calculateOfferPricing({ lines: [{ ...input, directCost: { totalNetCents: 185000, basis: "estimated", estimateDate: "2026-10-25", sourceReference: "SYNTHETISCH: Arbeitswert" } }] }, 100);
 
 function harness(mode: "file" | "postgres") {
   const rootDir = mkdtempSync(path.join(tmpdir(), 'catering-cost-reader-compat-')); roots.push(rootDir);

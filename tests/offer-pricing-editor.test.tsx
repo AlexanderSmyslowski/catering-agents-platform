@@ -32,7 +32,7 @@ async function mount(pricingSummary = summary) {
 describe("offer pricing editor", () => {
   it("reads a future costed offer honestly and prevents an unsupported edit", async () => {
     const priced = calculateOfferPricing({ lines: [{ ...input[0], directCost: {
-      totalNetCents: 185000, basis: "estimated", sourceReference: "SYNTHETISCHE INTERNE KOSTEN" }
+      totalNetCents: 185000, basis: "estimated", estimateDate: "2026-10-25", sourceReference: "SYNTHETISCHE INTERNE KOSTEN" }
     }] }, 100);
     const { root } = await mount(priced);
     expect(document.body.textContent).toContain("Interne Kosten sind gespeichert");

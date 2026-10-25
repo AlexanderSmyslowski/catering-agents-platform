@@ -222,6 +222,7 @@ export interface OfferDirectCost {
   basis: "documented" | "estimated";
   sourceReference: string;
   priceDate?: string;
+  estimateDate?: string;
 }
 
 export interface OfferCalculationLineInput {

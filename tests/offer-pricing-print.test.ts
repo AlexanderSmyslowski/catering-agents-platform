@@ -34,7 +34,7 @@ describe("price calculation in print", () => {
     const priced = calculateOfferPricing({ lines: [{
       id: "food", label: "Speisen", category: "food", quantity: "100", unit: "guest", unitNetCents: 5800,
       taxRateBps: 1900, sourceKind: "synthetic", sourceReference: "SYNTHETISCH",
-      directCost: { totalNetCents: 185000, basis: "estimated", sourceReference: "INTERNAL-COST-REFERENCE" }
+      directCost: { totalNetCents: 185000, basis: "estimated", estimateDate: "2026-10-25", sourceReference: "INTERNAL-COST-REFERENCE" }
     }] }, 100);
     const internal = renderOfferPricingHtml(priced);
     expect(internal).toContain("Interne Kosten sind gespeichert");
