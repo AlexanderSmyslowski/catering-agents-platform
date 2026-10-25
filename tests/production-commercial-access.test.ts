@@ -19,6 +19,7 @@ import type { BusinessContext } from "../shared-core/src/business-context.js";
 import type { CaseSourceRef } from "../shared-core/src/case-contracts.js";
 import type { AcceptedEventSpec, OfferDraft, PricingSummary, ProductionDraft } from "../shared-core/src/types.js";
 import { InMemoryIntakeRecordsPort } from "./support/in-memory-intake-records-port.js";
+import { calculateOfferPricing } from "../shared-core/src/offer-calculation.js";
 import { AuditLogStore } from "../shared-core/src/audit-log.js";
 import { llmReadinessContractVersion } from "../shared-core/src/llm-readiness.js";
 import type { LlmReadinessProviderAdapter } from "../shared-core/src/llm-readiness-provider-adapter.js";
@@ -445,6 +446,20 @@ async function createCanonicalProduction(options: {
 }
 
 describe("Gate B Slice 2 production commercial confidentiality", () => {
+  it("keeps new nested cost provenance out of production-reader responses", () => {
+    const summary = calculateOfferPricing({ lines: [{
+      id: "food", label: "SYNTHETISCHES MENÜ", category: "food", quantity: "100", unit: "guest", unitNetCents: 5800,
+      taxRateBps: 1900, sourceKind: "synthetic", sourceReference: "SALES-COMMERCIAL-ONLY",
+      directCost: { totalNetCents: 185000, basis: "estimated", sourceReference: "COST-COMMERCIAL-ONLY" }
+    }] }, 100);
+    const draft = { draftId: "cost-projection", source: {}, reviewCards: [], draftArtifacts: { eventSpec: { servicePlan: { modules: [] }, budgetContext: { pricingSummary: summary } } } } as unknown as ProductionDraft;
+    const productionActor = actorFromHeaders(productionHeaders);
+    const adminActor = actorFromHeaders(adminHeaders);
+    expect(JSON.stringify(projectProductionDraft(productionActor, draft))).not.toContain("COST-COMMERCIAL-ONLY");
+    expect(JSON.stringify(projectProductionDraft(adminActor, draft))).toContain("COST-COMMERCIAL-ONLY");
+    expect(draft.draftArtifacts.eventSpec?.budgetContext?.pricingSummary).toEqual(summary);
+  });
+
   const roots: string[] = [];
 
   afterEach(() => {

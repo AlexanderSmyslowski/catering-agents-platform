@@ -30,6 +30,31 @@ describe("price calculation in print", () => {
     expect(internal).not.toContain("<img");
     expect(renderOfferPricingHtml(summary, false)).not.toContain("PRIVATE-REFERENCE");
   });
+  it("prints estimated internal costs without leaking them into customer output", () => {
+    const summary = calculateOfferPricing({ lines: [{
+      id: "food", label: "Speisen", category: "food", quantity: "100", unit: "guest", unitNetCents: 5800,
+      taxRateBps: 1900, sourceKind: "operator", sourceReference: "Verkaufspreis",
+      directCost: { totalNetCents: 185000, basis: "estimated", sourceReference: "INTERNAL-COST-<img src=x>", priceDate: "2026-09-12" }
+    }] }, 100);
+    const internal = renderOfferPricingHtml(summary);
+    expect(internal).toContain("1.850,00");
+    expect(internal).toContain("3.950,00");
+    expect(internal).toContain("Deckungsbeitrag vorläufig");
+    expect(internal).toContain("2026-09-12");
+    expect(internal).toContain("&lt;img");
+    expect(internal).not.toContain("<img");
+    const customer = renderOfferPricingHtml(summary, false);
+    for (const secret of ["INTERNAL-COST", "1.850,00", "3.950,00", "Deckungsbeitrag", "2026-09-12"]) expect(customer).not.toContain(secret);
+    expect(customer).toContain("5.800,00");
+  });
+  it("does not print a zero cost or complete margin for an older calculation without costs", () => {
+    const summary = calculateOfferPricing({ lines: [{ id: "food", label: "Speisen", category: "food", quantity: "100", unit: "guest", unitNetCents: 5800,
+      taxRateBps: 1900, sourceKind: "operator", sourceReference: "Verkaufspreis" }] }, 100);
+    const internal = renderOfferPricingHtml(summary);
+    expect(internal).toContain("Kosten offen: Speisen");
+    expect(internal).toContain("Erfasste direkte Kosten netto: offen");
+    expect(internal).toContain("Deckungsbeitrag vor Gemeinkosten: noch unvollständig");
+  });
   it("keeps unassigned tax and gross open in the printed document", () => {
     const summary = calculateOfferPricing({ lines: [{
       id: "food", label: "Speisen", category: "food", quantity: "100",

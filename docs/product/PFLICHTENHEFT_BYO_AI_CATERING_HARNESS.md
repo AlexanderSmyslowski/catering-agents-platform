@@ -2,7 +2,7 @@
 
 Status: verbindlicher Zielanker v2 fuer Produkt, Architektur und Ballast-Abbau
 
-Stand: 2026-08-09
+Stand: 2026-08-09; Preisquellen und Naeherungskalkulation praezisiert am 25.10.2026
 
 ## 1. Vorrang und Zweck
 
@@ -399,15 +399,72 @@ durch den Kuechenchef aktiv.
 
 ### 8.2 Preisquellen
 
-Lexware, Metro und andere Systeme sind austauschbare Quellen, nicht Teil der
-Kernlogik. Ein Preisdatensatz enthaelt mindestens Artikel, Gebinde, Einheit,
-Lieferant, Netto-/Bruttobezug, Kaufdatum, Standort, Quelle und Pruefstatus.
+Betreibervorgabe vom 25.10.2026: Eine nachvollziehbare Kalkulation mit
+gekennzeichneten Circa-Preisen ist besser als keine Kalkulation. Fehlende
+Tagespreise duerfen den Angebotsentwurf nicht verhindern. Die folgenden
+Quellen gehoeren zum vorgesehenen Umfang; die Nennung belegt noch keine
+technische Anbindung oder erfolgreiche Anmeldung.
+
+| Quelle | Verwendung |
+| --- | --- |
+| Metro, bestehender digitaler Zugang | Passende aktuelle Einkaufs-/Portalpreise im jeweiligen Konto und Markt |
+| Selgros, bestehender digitaler Zugang | Passende aktuelle Einkaufs-/Portalpreise im jeweiligen Konto und Markt |
+| Schwan RegioFruit / ehemals Kuhn, Mannheimer Grossmarkt (Betreiberbezeichnung) | Lieferantenpreise und letzte zuordenbare Einkaufsbelege; genaue Lieferantenidentitaet am Beleg pruefen |
+| Weitere wiederkehrende Lieferanten | Letzte per E-Mail erhaltene Einkaufsrechnungen und vorhandene Preislisten |
+| Lexware Office | Saemtliche dort hochgeladenen Rechnungen als Sichtungsbestand; fuer Einkaufskosten ausschliesslich passende Eingangs-/Lieferantenrechnungspositionen |
+| Vorhandene Angebote und Kalkulationen der Fachprojekte | Wiederverwendung nach Artikel, Kundensegment, Vertragsbezug und Datum; Verkaufspreise und Einkaufskosten getrennt halten |
+
+Diese Quellen bleiben ausserhalb der Kernlogik austauschbar. Bereits vorhandene
+Leser und Importe verwenden, soweit vorhanden; keine zweite Preisplattform aufbauen. Vorhandene
+Portalzugaenge erlauben nicht automatisch neue API-Verbindungen oder eine
+Erweiterung von Berechtigungen. Private Originalrechnungen und Zugangsdaten
+bleiben in ihren geschuetzten Quellen, nicht in Git oder oeffentlichen Exporten.
+
+Ein Preisdatensatz enthaelt mindestens Artikel, Gebinde, Einheit, Lieferant,
+Netto-/Bruttobezug, Preis-/Belegdatum, Abrufdatum soweit vorhanden, Markt/Standort,
+Quellenreferenz und Pruefstatus. Unbekannte Angaben bleiben ausdruecklich
+unbekannt; fehlender Lieferant, Standort oder Beleg verhindern eine begruendete
+Schaetzung nicht. Arbeitswerte benoetigen eine Herkunft oder Begruendung,
+Annahme und einen datierten Schaetzstand; fehlende Belegdaten nicht erfinden.
+Konto-/Mengenbezug, Aktionsgueltigkeit und
+Rabatte sind zu beruecksichtigen, soweit sie am Beleg vorhanden sind. Pfand,
+Fracht und Zuschlaege getrennt ausweisen; unbekannte Umsatzsteuer nicht
+stillschweigend in einen Nettopreis umrechnen. Identische Rechnung aus Mail und
+Lexware nicht doppelt als unabhängigen Preisbeleg zaehlen. Preisvergleich nur
+bei passender Ware und umgerechneter vergleichbarer Basiseinheit; Ersatzartikel
+oder Qualitaetsabweichungen ausdruecklich kennzeichnen.
 
 Rechnungen, Scans, Bilder und Portalimporte erzeugen pruefpflichtige
-Preisvorschlaege. Kalkulation verwendet den juengsten passenden geprueften
-Preis. Ein alter Preis bleibt mit Alter und Warnung nutzbar. Ohne belegten Preis
-bleibt die Position sichtbar offen; Produktion und Einkauf werden nicht
-blockiert, aber ein Angebot darf keine scheinbar vollstaendige Marge zeigen.
+Preisvorschlaege. Grundsaetzlich dient der juengste passende gepruefte Preis
+als Referenz. Geprueft bedeutet jedoch nicht automatisch heute aktuell:
+Preisstand immer anzeigen. Ist seine heutige Anwendbarkeit unklar, wird er
+als Arbeitswert mit Unsicherheit verwendet. Ein neuerer, noch ungepruefter
+Belegpreis darf als solcher gekennzeichnet ebenfalls als Arbeitswert dienen;
+er wird nicht durch eine alte Pruefung still verdraengt. Fehlt ein geeigneter
+Referenzpreis, ist ein nachvollziehbarer Arbeitswert zulaessig: etwa ein aelterer passender
+Einkaufspreis, ein kenntlich gemachter vergleichbarer Artikel oder eine
+begruendete Schaetzung. Keine still erfundenen Lieferantenpreise. Ein plausibler
+Circa-Preis darf fuer die Entwurfskalkulation verwendet werden, ohne dadurch als
+aktueller oder gepruefter Lieferantenpreis zu gelten.
+
+Im Entwurf steht verstaendlich beispielsweise: **„Geschaetzte Einkaufskosten –
+Preisstand pruefen“**, zusammen mit Herkunft, Preisstand und Annahme. Bestaetigte
+und geschaetzte Kosten bleiben unterscheidbar; Summe und Marge mit solchen
+Anteilen heissen **vorlaeufig**. Falls gar kein sinnvoller Arbeitswert vorliegt,
+bleibt die Position als **„Kosten offen“** sichtbar; keine verdeckte Null und
+keine scheinbar vollstaendige Marge. Der restliche Entwurf bleibt berechenbar.
+Produktion und Einkauf werden durch fehlende Tagespreise nicht blockiert.
+
+Eine spaetere Aktualisierung darf einen gespeicherten oder freigegebenen
+Angebotspreis nicht still veraendern. Schaetzung ist keine automatische
+Preis-, Steuer- oder Angebotsfreigabe; bestehende Freigaben bleiben bestehen.
+Ein echter Angebotsfall kann mit bewusst geprueften und akzeptierten
+Preisannahmen freigegeben werden, ohne vorher saemtliche Tagespreise belegen
+zu muessen. Offene Kosten erzeugen aus diesem Abschnitt ebenfalls keine neue
+technische Freigabesperre; sie sind im bestehenden Freigabeschritt ausdruecklich
+sichtbar zu behandeln. Die Marge bleibt dann unvollstaendig und vorlaeufig,
+auch wenn der Verkaufspreis feststeht. Bestehende Freigaberegeln bleiben
+massgeblich. Annahmen und offene Kosten bleiben in der internen Kalkulation erhalten.
 
 ### 8.3 Lagerbestand
 
@@ -812,8 +869,12 @@ belegt sind:
     funktionslosen Statusknoepfe oder unkontrollierten Layoutspruenge.
 13. Automatisierte Tests sichern Vertraege und Fallklassen; Operatorproben sichern
     Verstaendlichkeit und reale Arbeitsfaehigkeit.
-14. Ein realer Angebotsfall verwendet belegte Preise, zeigt fehlende oder alte
-    Preise ehrlich, wird freigegeben und erzeugt einen unveraenderlichen
+14. Ein realer Angebotsfall verwendet passende belegte Preise oder bewusst
+    akzeptierte, gekennzeichnete Preisannahmen gemaess Abschnitt 8.2. Offene
+    Kosten werden im bestehenden Freigabeschritt sichtbar behandelt, ohne neue
+    technische Sperre allein aus diesem Kriterium. Fehlende, alte und geschaetzte
+    Kosten bleiben ehrlich sichtbar; die Marge ist bei Schaetzungen vorlaeufig
+    und bei fehlenden Kosten zusaetzlich unvollstaendig. Der freigegebene Fall erzeugt einen unveraenderlichen
     `ProductionHandoff` ohne scheinpraezise Marge.
 15. Ein frueherer Auftrag kann gefunden, fortgesetzt und fuer eine neue
     Veranstaltung kopiert werden, ohne seine Historie zu ueberschreiben.

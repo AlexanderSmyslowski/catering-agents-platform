@@ -217,6 +217,13 @@ export interface ServiceModule {
 }
 
 
+export interface OfferDirectCost {
+  totalNetCents: number;
+  basis: "documented" | "estimated";
+  sourceReference: string;
+  priceDate?: string;
+}
+
 export interface OfferCalculationLineInput {
   id: string;
   label: string;
@@ -229,6 +236,7 @@ export interface OfferCalculationLineInput {
   zeroPriceReason?: string;
   sourceKind: "app_transfer" | "operator" | "synthetic";
   sourceReference: string;
+  directCost?: OfferDirectCost;
 }
 
 export interface OfferCalculation {

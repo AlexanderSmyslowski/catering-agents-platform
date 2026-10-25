@@ -30,6 +30,72 @@ async function mount(pricingSummary = summary) {
   return { root, saved, editing };
 }
 describe("offer pricing editor", () => {
+  it("shows unknown costs without a numeric zero or apparent full contribution", async () => {
+    const { root } = await mount();
+    const section = document.querySelector('[aria-label="Interne Kosten und Deckungsbeitrag"]')!;
+    expect(section.textContent).toContain("Noch offen");
+    expect(section.textContent).toContain("Noch unvollständig");
+    expect(section.textContent).toContain("Kosten offen: Speisenpaket");
+    expect(section.textContent).not.toContain("5.800");
+    await act(async () => root.unmount());
+  });
+  it("saves an approximate total cost separately from quoted sales and reloads its provenance", async () => {
+    const { root } = await mount();
+    await act(async () => button("Preisaufstellung bearbeiten").click());
+    await change(field("Kosten gesamt netto"), "1850,00");
+    await change(field("Beleg oder Schätzgrund"), "Ältere Einkaufsrechnung – Preisstand offen");
+    expect(document.body.textContent).toContain("Deckungsbeitrag vorläufig");
+    expect(document.body.textContent).toContain("3.950");
+    vi.mocked(reviseOfferPricing).mockResolvedValueOnce({ draftId: "cost-revised" } as any);
+    await act(async () => button("Preisaufstellung als neue Fassung speichern").click());
+    expect(reviseOfferPricing).toHaveBeenCalledWith("draft-a", 1, "calculated", [expect.objectContaining({
+      unitNetCents: 5800, directCost: { totalNetCents: 185000, basis: "estimated", sourceReference: "Ältere Einkaufsrechnung – Preisstand offen" }
+    })]);
+    await act(async () => root.unmount());
+  });
+  it("preserves a stored evidenced cost and downgrades a manually changed amount to estimated", async () => {
+    const priced = calculateOfferPricing({ lines: [{ ...input[0], directCost: {
+      totalNetCents: 185000, basis: "documented", sourceReference: "SYNTHETISCHER BELEG", priceDate: "2026-10-25"
+    } }] }, 100);
+    const { root } = await mount(priced);
+    await act(async () => button("Preisaufstellung bearbeiten").click());
+    expect(field("Kosten gesamt netto").value).toBe("1850.00");
+    expect(field("Preisstand").value).toBe("2026-10-25");
+    await change(field("Kosten gesamt netto"), "1900,00");
+    const basis = Array.from(document.querySelectorAll("label")).find(x => x.textContent?.startsWith("Kostengrundlage"))!.querySelector("select")!;
+    expect(basis.value).toBe("estimated");
+    expect(document.body.textContent).toContain("Deckungsbeitrag vorläufig");
+    await act(async () => root.unmount());
+  });
+  it("withdraws a documented total cost when its service quantity changes", async () => {
+    const priced = calculateOfferPricing({ lines: [...input, {
+      ...input[0], id: "staff", label: "Servicepersonal", category: "staff", unit: "hour", quantity: "8", unitNetCents: 4555,
+      directCost: { totalNetCents: 16000, basis: "documented", sourceReference: "SYNTHETISCH: 8 Personenstunden", priceDate: "2026-10-25" }
+    }] }, 100);
+    const { root } = await mount(priced);
+    await act(async () => button("Preisaufstellung bearbeiten").click());
+    const staff = Array.from(document.querySelectorAll("fieldset")).find(x => x.querySelector("legend")?.textContent?.includes("Servicepersonal"))!;
+    const quantity = Array.from(staff.querySelectorAll("label")).find(x => x.textContent?.startsWith("Personenstunden"))!.querySelector("input")!;
+    await change(quantity, "12");
+    const basis = Array.from(staff.querySelectorAll("label")).find(x => x.textContent?.startsWith("Kostengrundlage"))!.querySelector("select")!;
+    expect(basis.value).toBe("estimated");
+    await act(async () => root.unmount());
+  });
+  it("keeps selling totals while an internal estimate is unfinished and names the affected position", async () => {
+    const { root } = await mount();
+    await act(async () => button("Preisaufstellung bearbeiten").click());
+    await change(field("Kosten gesamt netto"), "1850,00");
+    expect(document.body.textContent).toContain("5.800");
+    expect(document.body.textContent).toContain("6.902");
+    expect(document.body.textContent).toContain("Speisenpaket: Beleg oder Schätzgrund fehlt");
+    expect(document.body.textContent).toContain("Noch unvollständig");
+    await act(async () => button("Preisaufstellung als neue Fassung speichern").click());
+    expect(reviseOfferPricing).not.toHaveBeenCalled();
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain("Speisenpaket");
+    await change(field("Kosten gesamt netto"), "");
+    expect(document.body.textContent).not.toContain("Beleg oder Schätzgrund fehlt");
+    await act(async () => root.unmount());
+  });
   it("identifies the current operator-confirmed service rate next to its field", async () => {
     const { root } = await mount();
     await act(async () => button("Preisaufstellung bearbeiten").click());

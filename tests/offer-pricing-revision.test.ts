@@ -66,6 +66,31 @@ describe("persisted offer price calculation", () => {
       expect(handoff.json().handoff.pricingSnapshot).toEqual(revised.pricingSummary);
     } finally { await app.close(); }
   });
+  it("persists partial estimated costs through approval and handoff without overwriting the source", async () => {
+    const { app, store, rootDir, draft } = await harness();
+    try {
+      const cost = { totalNetCents: 185000, basis: "estimated", sourceReference: "SYNTHETISCH: ältere Einkaufspreise", priceDate: "2026-09-12" };
+      const input = lines().map((line, at) => at === 0 ? { ...line, directCost: cost } : line);
+      const r = await app.inject({ method: "POST", url: "/v1/offers/drafts/" + draft.draftId + "/pricing", headers,
+        payload: { revision: 1, variantId: draft.variantSet[0].variantId, calculation: { lines: input } } });
+      expect(r.statusCode, r.body).toBe(201);
+      const revised = r.json();
+      expect(revised.pricingSummary.calculation.lines[0].directCost).toEqual(cost);
+      expect(revised.pricingSummary.calculation.lines[1]).not.toHaveProperty("directCost");
+      expect((await new OfferStore({ rootDir }).getDraft({ businessId: "alpha" }, revised.draftId))?.pricingSummary).toEqual(revised.pricingSummary);
+      expect(await store.getDraft({ businessId: "alpha" }, draft.draftId)).toEqual(draft);
+      const decision = await app.inject({ method: "POST", url: "/v1/offers/drafts/" + revised.draftId + "/decision", headers,
+        payload: { revision: 1, decision: "approved", variantId: revised.variantSet[0].variantId } });
+      expect(decision.statusCode, decision.body).toBe(201);
+      const offer = decision.json().approvedOffer;
+      const handoff = await app.inject({ method: "POST", url: "/v1/offers/approved/" + offer.approvedOfferId + "/handoffs", headers, payload: {} });
+      expect(handoff.statusCode, handoff.body).toBe(201);
+      expect(handoff.json().handoff.pricingSnapshot.calculation.lines[0].directCost).toEqual(cost);
+      const customerHtml = renderOfferHtml({ ...revised, reviewStatus: { ...revised.reviewStatus, publishApproved: true } });
+      expect(customerHtml).not.toContain("ältere Einkaufspreise");
+      expect(customerHtml).not.toContain("Deckungsbeitrag");
+    } finally { await app.close(); }
+  });
   it("invalidates a saved price calculation on a later menu revision and rejects forged stored totals", async () => {
     const { app, store, caseId, draft } = await harness();
     try {

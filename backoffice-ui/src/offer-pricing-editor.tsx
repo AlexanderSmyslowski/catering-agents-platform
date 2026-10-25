@@ -1,9 +1,11 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { OfferCalculationLineInput, PricingSummary } from "@catering/shared-core";
-import { calculateOfferPricing } from "../../shared-core/src/offer-calculation.js";
+import { calculateOfferPricing, parseOfferDirectCost, summarizeOfferDirectCosts } from "../../shared-core/src/offer-calculation.js";
 import { reviseOfferPricing } from "./api.js";
 
-type Row = Omit<OfferCalculationLineInput, "unitNetCents" | "taxRateBps"> & { net: string; tax: string };
+type Row = Omit<OfferCalculationLineInput, "unitNetCents" | "taxRateBps" | "directCost"> & {
+  net: string; tax: string; costNet?: string; costBasis?: "documented" | "estimated"; costReference?: string; costDate?: string;
+};
 const reference = "App-Transfer Angebotsrechner 0.6 (2026-06-01), Arbeitswerte – prüfen";
 const confirmedServiceRateCents = 4555;
 const confirmedServiceRateReference = "Betreiberbestätigung vom 25.10.2026: aktueller Service-Stundensatz; Erhöhungsstichtag offen";
@@ -26,14 +28,31 @@ function hundredths(raw: string, label: string): number {
   const [whole, fraction = ""] = normalized.split(".");
   return Number(BigInt(whole!) * 100n + BigInt(fraction.padEnd(2, "0")));
 }
-function inputLines(rows: Row[]): OfferCalculationLineInput[] {
-  return rows.map(({ net, tax, taxReason, zeroPriceReason, ...row }) => ({
-    ...row, quantity: row.quantity.trim().replace(",", "."),
-    unitNetCents: hundredths(net, row.label + " – Netto-Einzelpreis"),
-    ...(tax.trim() ? { taxRateBps: hundredths(tax, row.label + " – Steuer in %") } : {}),
-    ...(taxReason?.trim() ? { taxReason: taxReason.trim() } : {}),
-    ...(zeroPriceReason?.trim() ? { zeroPriceReason: zeroPriceReason.trim() } : {})
-  }));
+function inputLines(rows: Row[], costErrors?: string[]): OfferCalculationLineInput[] {
+  return rows.map(({ net, tax, taxReason, zeroPriceReason, costNet, costBasis, costReference, costDate, ...row }) => {
+    let directCost: OfferCalculationLineInput["directCost"];
+    if (costNet?.trim()) {
+      try {
+        directCost = parseOfferDirectCost({
+          totalNetCents: hundredths(costNet, "Direkte Kosten gesamt"),
+          basis: costBasis ?? "estimated", sourceReference: costReference?.trim() ?? "",
+          ...(costDate ? { priceDate: costDate } : {})
+        });
+      } catch (cause) {
+        const message = row.label + ": " + (cause instanceof Error ? cause.message : "Kostenangabe prüfen.");
+        if (costErrors) costErrors.push(message);
+        else throw new Error(message);
+      }
+    }
+    return {
+      ...row, quantity: row.quantity.trim().replace(",", "."),
+      unitNetCents: hundredths(net, row.label + " – Netto-Einzelpreis"),
+      ...(tax.trim() ? { taxRateBps: hundredths(tax, row.label + " – Steuer in %") } : {}),
+      ...(taxReason?.trim() ? { taxReason: taxReason.trim() } : {}),
+      ...(zeroPriceReason?.trim() ? { zeroPriceReason: zeroPriceReason.trim() } : {}),
+      ...(directCost ? { directCost } : {})
+    };
+  });
 }
 export function OfferPricingEditor({ draftId, revision, variants, menuPlan, pricingSummary, disabled, onSaved, onEditingChange }: {
   draftId: string; revision: number; variants: Array<{ variantId: string; label: string; guests: number; menuPlan?: Array<Record<string, unknown>> }>;
@@ -53,8 +72,10 @@ export function OfferPricingEditor({ draftId, revision, variants, menuPlan, pric
   const calculation = pricingSummary?.calculation;
   function begin() {
     setVariantId(calculation && variants.length === 1 ? variants[0]!.variantId : "");
-    setRows(calculation ? calculation.lines.map(({ netCents: _net, unitNetCents, taxRateBps, ...line }) => ({
-      ...line, net: (unitNetCents / 100).toFixed(2), tax: taxRateBps === undefined ? "" : String(taxRateBps / 100)
+    setRows(calculation ? calculation.lines.map(({ netCents: _net, unitNetCents, taxRateBps, directCost, ...line }) => ({
+      ...line, net: (unitNetCents / 100).toFixed(2), tax: taxRateBps === undefined ? "" : String(taxRateBps / 100),
+      ...(directCost ? { costNet: (directCost.totalNetCents / 100).toFixed(2), costBasis: directCost.basis,
+        costReference: directCost.sourceReference, costDate: directCost.priceDate ?? "" } : {})
     })) : [{
       id: "food", label: "Speisen-Grundpaket – vollständiges Menü", category: "food", quantity: "",
       unit: "guest", net: "", tax: "", sourceKind: "app_transfer", sourceReference: reference
@@ -62,9 +83,17 @@ export function OfferPricingEditor({ draftId, revision, variants, menuPlan, pric
     setError(""); onEditingChange(true);
   }
   function update(index: number, patch: Partial<Row>) {
+    setError("");
     setRows(current => current?.map((row, at) => {
       if (at !== index) return row;
       const next = { ...row, ...patch };
+      if (row.costBasis === "documented" && (
+        (patch.costNet !== undefined && patch.costNet !== row.costNet)
+        || (patch.quantity !== undefined && patch.quantity !== row.quantity)
+        || (patch.label !== undefined && patch.label !== row.label)
+      )) {
+        next.costBasis = "estimated";
+      }
       if (row.id === "staff" && row.sourceReference === confirmedServiceRateReference && patch.net !== undefined) {
         let confirmedAmount = false;
         try { confirmedAmount = hundredths(patch.net, row.label) === confirmedServiceRateCents; } catch { /* An incomplete price is an unconfirmed edit too. */ }
@@ -75,8 +104,9 @@ export function OfferPricingEditor({ draftId, revision, variants, menuPlan, pric
   }
   let preview: PricingSummary | undefined;
   let previewError = "";
+  const costPreviewErrors: string[] = [];
   if (rows && variant) {
-    try { preview = calculateOfferPricing({ lines: inputLines(rows) }, variant.guests); }
+    try { preview = calculateOfferPricing({ lines: inputLines(rows, costPreviewErrors) }, variant.guests); }
     catch (cause) { previewError = cause instanceof Error ? cause.message : "Angaben unvollständig."; }
   }
   async function save() {
@@ -109,14 +139,33 @@ export function OfferPricingEditor({ draftId, revision, variants, menuPlan, pric
       <div><dt>Netto je Gast · gerundet</dt><dd>{summary?.perPerson ? money(Math.round(summary.perPerson.amount * 100)) : "Noch offen"}</dd></div>
     </dl>;
   }
+  function directCosts(summary?: PricingSummary) {
+    const c = summary?.calculation;
+    if (!c) return null;
+    const costs = summarizeOfferDirectCosts(c);
+    return <section aria-label="Interne Kosten und Deckungsbeitrag">
+      <h4>Interne Kosten</h4>
+      <dl className="offer-pricing__totals">
+        <div><dt>Erfasste direkte Kosten netto</dt><dd>{money(costs.enteredNetCents)}</dd></div>
+        <div><dt>Deckungsbeitrag vor Gemeinkosten{costs.status === "estimated" ? " · vorläufig" : ""}</dt><dd>{costs.contributionNetCents === undefined ? "Noch unvollständig" : money(costs.contributionNetCents)}</dd></div>
+      </dl>
+      <p className="helper-text">Verkauf netto minus direkte Kosten der erfassten Positionen. Weitere Gemeinkosten sind nicht berücksichtigt; der Betrag ist kein Gewinn.</p>
+      {costs.missingLineIds.length ? <p role="status">Kosten offen: {c.lines.filter(line => costs.missingLineIds.includes(line.id)).map(line => line.label).join(", ")}. Fehlende Kosten werden nicht als null gerechnet.</p> : null}
+      {costs.estimatedLineIds.length ? <p role="status">Enthält geschätzte Kosten – Preisstand prüfen.{costs.status === "estimated" ? " Deckungsbeitrag vorläufig." : ""}</p> : null}
+      {costs.status === "documented" ? <p className="helper-text">Belegpreise laut Eingabe. Preisstand und Gültigkeit für diesen Auftrag prüfen.</p> : null}
+    </section>;
+  }
   return <section className="offer-pricing" aria-label="Preisaufstellung">
     <h3>Preisaufstellung</h3>
-    <p className="helper-text">Speisenpaket für das gesamte Menü; Personal, Logistik und Zusatzleistungen separat. Verkaufspreise netto. Einkaufskosten und Marge sind nicht erfasst.</p>
+    <p className="helper-text">Speisenpaket für das gesamte Menü; Personal, Logistik und Zusatzleistungen separat. Verkaufspreise netto. Interne direkte Kosten können getrennt ergänzt werden; Schätzungen sind möglich.</p>
     {rows ? <>
       <label>Zu kalkulierende Variante<select disabled={saving} value={variantId} onChange={event => {
         const selected = variants.find(item => item.variantId === event.target.value);
-        setVariantId(event.target.value);
-        setRows(current => current?.map(row => row.unit === "guest" ? { ...row, quantity: selected ? String(selected.guests) : "" } : row));
+        setVariantId(event.target.value); setError("");
+        setRows(current => current?.map(row => row.unit === "guest" ? {
+          ...row, quantity: selected ? String(selected.guests) : "",
+          ...(row.costNet?.trim() && row.quantity !== (selected ? String(selected.guests) : "") ? { costBasis: "estimated" as const } : {})
+        } : row));
       }}><option value="">Bitte wählen</option>{variants.map(item => <option key={item.variantId} value={item.variantId}>{item.label} · {item.guests} Gäste</option>)}</select></label>
       <p className="helper-text">Speisen-Grundpaket umfasst: {(variant?.menuPlan ?? menuPlan).map(item => String(item.label) + " (" + String(item.servings ?? "offen") + " Portionen)").join(", ")}.</p>
       {rows.map((row, index) => <fieldset className="offer-pricing__fields" key={row.id} disabled={saving}>
@@ -134,6 +183,20 @@ export function OfferPricingEditor({ draftId, revision, variants, menuPlan, pric
           <option value="synthetic">Synthetische Testannahme</option>
         </select></label>
         <label>Quellenreferenz<input value={row.sourceReference} onChange={event => update(index, { sourceReference: event.target.value })} /></label>
+        <details className="offer-pricing__cost-input">
+          <summary>Interne Kosten · {row.costNet?.trim() ? row.costBasis === "documented" ? "Belegpreis" : "Geschätzt" : "Kosten offen"}</summary>
+          <p className="helper-text" id={fieldId + "-cost-" + row.id}>Gesamte direkte Kosten dieser Position, nicht je Gast oder Stunde. Leer lassen, wenn unbekannt. Schätzungen sind zulässig. Geänderte Belegbeträge oder Mengen werden zur Schätzung; Gesamtkosten werden nicht automatisch mit der Menge skaliert.</p>
+          <div className="offer-pricing__cost-fields">
+            <label>Kosten gesamt netto · EUR<input inputMode="decimal" value={row.costNet ?? ""} aria-describedby={fieldId + "-cost-" + row.id} onChange={event => update(index, { costNet: event.target.value })} /></label>
+            <label>Kostengrundlage<select value={row.costBasis ?? "estimated"} onChange={event => update(index, { costBasis: event.target.value as Row["costBasis"] })}>
+              <option value="estimated">Geschätzt / älterer Preis</option>
+              <option value="documented">Belegpreis · für Auftrag geprüft</option>
+            </select></label>
+            <label>Beleg oder Schätzgrund<input value={row.costReference ?? ""} onChange={event => update(index, { costReference: event.target.value })} /></label>
+            <label>Preisstand · Datum, falls bekannt<input type="date" value={row.costDate ?? ""} onChange={event => update(index, { costDate: event.target.value })} /></label>
+          </div>
+          {row.costBasis === "documented" ? <p className="helper-text">Nur wählen, wenn Beleg und Gültigkeit für diesen Auftrag geprüft sind. Ein Preisdatum ist dafür erforderlich.</p> : null}
+        </details>
         {row.tax.trim() && Number(row.tax.replace(",", ".")) === 0 ? <label>Begründung für 0 % Steuer<input value={row.taxReason ?? ""} onChange={event => update(index, { taxReason: event.target.value })} /></label> : null}
         {row.net.trim() && Number(row.net.replace(",", ".")) === 0 ? <label>Begründung für enthaltene/kostenfreie Leistung<input value={row.zeroPriceReason ?? ""} onChange={event => update(index, { zeroPriceReason: event.target.value })} /></label> : null}
         {row.category !== "food" ? <button type="button" className="secondary-button" onClick={() => setRows(current => current?.filter(item => item.id !== row.id))}>Leistung entfernen</button> : null}
@@ -146,18 +209,22 @@ export function OfferPricingEditor({ draftId, revision, variants, menuPlan, pric
       }])}>{template.label}</button>)}</div>
       <p className="helper-text">Personenstunden = Personen × Einsatzstunden, getrennt für Service und Küche. Steuer wird nicht vorbelegt.</p>
       <p className="helper-text">Vorschau – maßgeblich ist die gespeicherte Berechnung. {previewError}</p>
+      {costPreviewErrors.length ? <p role="status">{costPreviewErrors.join(" ")} Bitte ergänzen oder den Kostenbetrag leer lassen.</p> : null}
       {totals(preview)}
+      {directCosts(preview)}
       {preview?.calculation?.missingTaxLineIds.length ? <p role="status">Steuerfestlegung unvollständig: Speichern möglich, Freigabe gesperrt. Brutto bleibt offen.</p> : null}
       <div className="quiet-action-row">
         <button type="button" disabled={saving || disabled} onClick={() => void save()}>{saving ? "Wird gespeichert …" : "Preisaufstellung als neue Fassung speichern"}</button>
         <button type="button" className="secondary-button" disabled={saving} onClick={() => { setRows(undefined); setError(""); onEditingChange(false); }}>Verwerfen</button>
       </div>
     </> : calculation ? <>
-      <p className="helper-text">{calculation.missingTaxLineIds.length ? "Unvollständig – Steuerfestlegung fehlt; Freigabe gesperrt." : "Vollständig erfasst – fachliche Preis-/Steuerprüfung weiterhin erforderlich."}</p>
+      <p className="helper-text">{calculation.missingTaxLineIds.length ? "Unvollständig – Steuerfestlegung fehlt; Freigabe gesperrt." : "Verkaufspreise und Steuer erfasst – fachliche Prüfung weiterhin erforderlich."}</p>
       {calculation.containsSynthetic ? <p role="status">Enthält synthetische Testannahmen – keine Unternehmenspreise.</p> : null}
       {totals(pricingSummary)}
+      {directCosts(pricingSummary)}
       <ul className="item-list compact">{calculation.lines.map(line => <li key={line.id}>
         {line.label}: {line.quantity} {Number(line.quantity) === 1 ? singularUnitLabels[line.unit] : unitLabels[line.unit]} × {money(line.unitNetCents)} = {money(line.netCents)} netto · Steuer {line.taxRateBps === undefined ? "offen" : line.taxRateBps / 100 + " %"} · Quelle: {line.sourceReference}{line.sourceKind === "synthetic" ? " · synthetisch" : " · prüfpflichtig"}
+        {line.directCost ? <p>Direkte Kosten gesamt: {money(line.directCost.totalNetCents)} · {line.directCost.basis === "estimated" ? "Geschätzt" : "Belegpreis"} · {line.directCost.sourceReference} · Preisstand: {line.directCost.priceDate ?? "nicht bekannt"}</p> : <p>Kosten offen</p>}
       </li>)}</ul>
       <button type="button" className="secondary-button" disabled={disabled} onClick={begin}>Preisaufstellung bearbeiten</button>
     </> : <>

@@ -3,6 +3,7 @@ import path from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 import {
+  calculateOfferPricing,
   createCuratedOfferDraft,
   createEventRequestFromManualForm,
   internalRecipes,
@@ -553,6 +554,25 @@ describe("production reference acceptance contract", () => {
     expect(token?.pricingSummary.subtotal.amount).toBe(originalAmount);
     expect(Object.isFrozen(token?.pricingSummary)).toBe(true);
     expect(Object.isFrozen(token?.pricingSummary.subtotal)).toBe(true);
+  });
+
+  it("copies and freezes nested direct costs in issued pricing evidence", () => {
+    const input = { ...syntheticEvidenceInput(), pricingSummary: calculateOfferPricing({ lines: [{
+      id: "food", label: "Synthetisches Menü", category: "food", quantity: "100", unit: "guest", unitNetCents: 5800,
+      taxRateBps: 1900, sourceKind: "synthetic", sourceReference: "SYNTHETISCH",
+      directCost: { totalNetCents: 185000, basis: "estimated", sourceReference: "SYNTHETISCHE KOSTEN" }
+    }] }, 100) };
+    const token = resolveProductionReferenceValidatedEvidence(input, createTrustedProductionReferencePersistenceCapability(() => ({
+      sourceCaseId: input.sourceCaseId, sourceSha256: input.sourceSha256, sourceLineageId: input.sourceLineageId,
+      eventSpecId: input.eventSpecId, approvalRequestId: input.approvalRequestId, approvedOfferId: input.offerId,
+      handoffId: input.handoffId, approvalAuditId: input.approvalAuditId, handoffAuditId: input.handoffAuditId,
+      kitchenAcceptanceAuditId: input.kitchenAcceptanceAuditId, acceptedBy: "synthetic-kitchen-reviewer", acceptedAt: "2099-10-15T12:00:00.000Z",
+      pricingSummary: input.pricingSummary, pricingBasis: input.pricingBasis, rescueChatUsed: input.rescueChatUsed
+    })));
+    expect(token).toBeDefined();
+    input.pricingSummary.calculation!.lines[0]!.directCost!.totalNetCents = 1;
+    expect(token?.pricingSummary.calculation?.lines[0]?.directCost?.totalNetCents).toBe(185000);
+    expect(Object.isFrozen(token?.pricingSummary.calculation?.lines[0]?.directCost)).toBe(true);
   });
 
   it("does not treat an unsupported full-cost claim as a complete cost basis", async () => {
