@@ -1,4 +1,4 @@
-import type { OfferCalculationLineInput, PricingSummary } from "./types.js";
+import type { OfferCalculation, OfferCalculationLineInput, OfferDirectCost, PricingSummary } from "./types.js";
 
 function canonicalJson(value: unknown): string | undefined {
   if (Array.isArray(value)) return "[" + value.map(canonicalJson).join(",") + "]";
@@ -11,7 +11,7 @@ const areJsonValuesEqual = (left: unknown, right: unknown) => canonicalJson(left
 const MAX_CENTS = 1_000_000_000_000;
 const categories = ["food", "staff", "logistics", "equipment", "drinks", "other"];
 const units = ["guest", "hour", "flat", "piece"];
-const keys = ["id", "label", "category", "quantity", "unit", "unitNetCents", "taxRateBps", "taxReason", "zeroPriceReason", "sourceKind", "sourceReference"];
+const keys = ["id", "label", "category", "quantity", "unit", "unitNetCents", "taxRateBps", "taxReason", "zeroPriceReason", "sourceKind", "sourceReference", "directCost"];
 
 function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Ungültige Preisaufstellung.");
@@ -48,6 +48,48 @@ function halfUp(numerator: bigint, denominator: bigint): number {
   return Number(value);
 }
 
+export function parseOfferDirectCost(value: unknown): OfferDirectCost {
+  const raw = record(value);
+  if (Object.keys(raw).some(key => !["totalNetCents", "basis", "sourceReference", "priceDate"].includes(key))) {
+    throw new Error("Unbekanntes Kostenfeld.");
+  }
+  if (raw.basis !== "documented" && raw.basis !== "estimated") throw new Error("Kostengrundlage ist ungültig.");
+  const priceDate = raw.priceDate;
+  if (priceDate !== undefined && (typeof priceDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(priceDate)
+    || !Number.isFinite(Date.parse(priceDate)) || new Date(priceDate).toISOString().slice(0, 10) !== priceDate)) {
+    throw new Error("Preisstand: gültiges Datum erforderlich.");
+  }
+  if (raw.basis === "documented" && !priceDate) throw new Error("Für einen Belegpreis bitte den Preisstand angeben; sonst als Schätzung verwenden.");
+  return {
+    totalNetCents: boundedInteger(raw.totalNetCents, MAX_CENTS, "Direkte Kosten in Cent"),
+    basis: raw.basis, sourceReference: text(raw.sourceReference, "Beleg oder Schätzgrund"),
+    ...(priceDate ? { priceDate } : {})
+  };
+}
+
+export interface OfferDirectCostSummary {
+  status: "open" | "estimated" | "documented";
+  enteredNetCents?: number;
+  contributionNetCents?: number;
+  missingLineIds: string[];
+  estimatedLineIds: string[];
+}
+
+// Costs cover an entire quoted position, independent of its selling unit.
+// Missing positions never become zero costs or an apparently complete margin.
+export function summarizeOfferDirectCosts(calculation: OfferCalculation): OfferDirectCostSummary {
+  const entered = calculation.lines.filter(line => line.directCost !== undefined);
+  const missingLineIds = calculation.lines.filter(line => !line.directCost).map(line => line.id);
+  const estimatedLineIds = entered.filter(line => line.directCost!.basis === "estimated").map(line => line.id);
+  const enteredNetCents = entered.length ? boundedInteger(entered.reduce((sum, line) => sum + line.directCost!.totalNetCents, 0), MAX_CENTS, "Direkte Kostensumme") : undefined;
+  return {
+    status: missingLineIds.length ? "open" : estimatedLineIds.length ? "estimated" : "documented",
+    ...(enteredNetCents !== undefined ? { enteredNetCents } : {}),
+    ...(!missingLineIds.length && enteredNetCents !== undefined ? { contributionNetCents: calculation.netCents - enteredNetCents } : {}),
+    missingLineIds, estimatedLineIds
+  };
+}
+
 function parseLine(value: unknown): OfferCalculationLineInput {
   const raw = record(value);
   if (Object.keys(raw).some(key => !keys.includes(key))) throw new Error("Unbekanntes Preisfeld; Summen werden ausschließlich vom Server berechnet.");
@@ -69,7 +111,8 @@ function parseLine(value: unknown): OfferCalculationLineInput {
     quantity: decimal(raw.quantity).canonical, unit: unit as OfferCalculationLineInput["unit"], unitNetCents,
     ...(taxRateBps !== undefined ? { taxRateBps } : {}),
     ...(taxReason ? { taxReason } : {}), ...(zeroPriceReason ? { zeroPriceReason } : {}),
-    sourceKind: sourceKind as OfferCalculationLineInput["sourceKind"], sourceReference: text(raw.sourceReference, "Quellenreferenz")
+    sourceKind: sourceKind as OfferCalculationLineInput["sourceKind"], sourceReference: text(raw.sourceReference, "Quellenreferenz"),
+    ...(raw.directCost !== undefined ? { directCost: parseOfferDirectCost(raw.directCost) } : {})
   };
 }
 
@@ -96,19 +139,21 @@ export function calculateOfferPricing(input: unknown, guestCount: number): Prici
   const taxCents = missingTaxLineIds.length ? undefined : taxGroups.reduce((sum, group) => sum + group.taxCents, 0);
   const grossCents = taxCents === undefined ? undefined : boundedInteger(netCents + taxCents, MAX_CENTS, "Bruttosumme");
   const containsSynthetic = lines.some(line => line.sourceKind === "synthetic");
+  const calculation: OfferCalculation = {
+    version: 1, roundingPolicy: "net-line-tax-group-half-up-v1", guestCount, containsSynthetic,
+    lines, netCents, taxGroups, missingTaxLineIds,
+    ...(taxCents !== undefined ? { taxCents, grossCents } : {})
+  };
+  summarizeOfferDirectCosts(calculation);
   return {
     subtotal: { amount: netCents / 100, currency: "EUR" },
     perPerson: { amount: halfUp(BigInt(netCents), BigInt(guestCount)) / 100, currency: "EUR" },
     notes: [
-      "Netto-Verkaufspreise; Preisgrundlage und Steuerfestlegung bleiben prüfpflichtig. Einkaufskosten und Marge sind nicht erfasst.",
+      "Netto-Verkaufspreise; Preisgrundlage und Steuerfestlegung bleiben prüfpflichtig.",
       ...(containsSynthetic ? ["Enthält synthetische Testannahmen – keine Unternehmenspreise."] : []),
       ...(missingTaxLineIds.length ? ["Steuerfestlegung unvollständig; keine Bruttosumme und keine Freigabe."] : [])
     ],
-    calculation: {
-      version: 1, roundingPolicy: "net-line-tax-group-half-up-v1", guestCount, containsSynthetic,
-      lines, netCents, taxGroups, missingTaxLineIds,
-      ...(taxCents !== undefined ? { taxCents, grossCents } : {})
-    }
+    calculation
   };
 }
 

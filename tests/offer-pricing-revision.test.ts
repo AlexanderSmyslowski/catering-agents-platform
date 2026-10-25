@@ -66,6 +66,21 @@ describe("persisted offer price calculation", () => {
       expect(handoff.json().handoff.pricingSnapshot).toEqual(revised.pricingSummary);
     } finally { await app.close(); }
   });
+  it("rejects new cost writes before publishing a pricing revision during reader compatibility", async () => {
+    const { app, store, draft, caseId } = await harness();
+    try {
+      const before = await app.inject({ method: "GET", url: "/v1/offers/cases/" + caseId, headers });
+      const result = await app.inject({ method: "POST", url: "/v1/offers/drafts/" + draft.draftId + "/pricing", headers,
+        payload: { revision: 1, variantId: draft.variantSet[0].variantId, calculation: { lines: lines().map((line, at) => at ? line : {
+          ...line, directCost: { totalNetCents: 185000, basis: "estimated", sourceReference: "SYNTHETISCHER KOSTENVORSCHLAG" }
+        }) } } });
+      expect(result.statusCode, result.body).toBe(422);
+      expect(result.body).toContain("kann interne Kosten nur lesen");
+      expect(await store.getDraft({ businessId: "alpha" }, draft.draftId)).toEqual(draft);
+      const after = await app.inject({ method: "GET", url: "/v1/offers/cases/" + caseId, headers });
+      expect(after.json()).toEqual(before.json());
+    } finally { await app.close(); }
+  });
   it("invalidates a saved price calculation on a later menu revision and rejects forged stored totals", async () => {
     const { app, store, caseId, draft } = await harness();
     try {

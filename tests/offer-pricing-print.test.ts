@@ -30,6 +30,19 @@ describe("price calculation in print", () => {
     expect(internal).not.toContain("<img");
     expect(renderOfferPricingHtml(summary, false)).not.toContain("PRIVATE-REFERENCE");
   });
+  it("identifies retained future costs only in the internal view without printing their amounts", () => {
+    const priced = calculateOfferPricing({ lines: [{
+      id: "food", label: "Speisen", category: "food", quantity: "100", unit: "guest", unitNetCents: 5800,
+      taxRateBps: 1900, sourceKind: "synthetic", sourceReference: "SYNTHETISCH",
+      directCost: { totalNetCents: 185000, basis: "estimated", sourceReference: "INTERNAL-COST-REFERENCE" }
+    }] }, 100);
+    const internal = renderOfferPricingHtml(priced);
+    expect(internal).toContain("Interne Kosten sind gespeichert");
+    expect(internal).not.toContain("1.850");
+    const customer = renderOfferPricingHtml(priced, false);
+    expect(customer).not.toContain("Interne Kosten sind gespeichert");
+    expect(customer).not.toContain("INTERNAL-COST-REFERENCE");
+  });
   it("keeps unassigned tax and gross open in the printed document", () => {
     const summary = calculateOfferPricing({ lines: [{
       id: "food", label: "Speisen", category: "food", quantity: "100",

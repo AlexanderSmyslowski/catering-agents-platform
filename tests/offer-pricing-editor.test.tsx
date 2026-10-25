@@ -30,6 +30,17 @@ async function mount(pricingSummary = summary) {
   return { root, saved, editing };
 }
 describe("offer pricing editor", () => {
+  it("reads a future costed offer honestly and prevents an unsupported edit", async () => {
+    const priced = calculateOfferPricing({ lines: [{ ...input[0], directCost: {
+      totalNetCents: 185000, basis: "estimated", sourceReference: "SYNTHETISCHE INTERNE KOSTEN" }
+    }] }, 100);
+    const { root } = await mount(priced);
+    expect(document.body.textContent).toContain("Interne Kosten sind gespeichert");
+    expect(document.body.textContent).toContain("Daten bleiben erhalten");
+    expect(button("Preisaufstellung bearbeiten").disabled).toBe(true);
+    expect(document.body.textContent).not.toContain("1.850");
+    await act(async () => root.unmount());
+  });
   it("identifies the current operator-confirmed service rate next to its field", async () => {
     const { root } = await mount();
     await act(async () => button("Preisaufstellung bearbeiten").click());

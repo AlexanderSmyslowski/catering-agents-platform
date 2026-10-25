@@ -298,7 +298,9 @@ function issueValidatedEvidenceToken(
   const calculation = pricingSummary.calculation;
   const immutableCalculation = calculation ? Object.freeze({
     ...calculation,
-    lines: Object.freeze(calculation.lines.map(line => Object.freeze({ ...line }))),
+    lines: Object.freeze(calculation.lines.map(line => Object.freeze({
+      ...line, ...(line.directCost ? { directCost: Object.freeze({ ...line.directCost }) } : {})
+    }))),
     taxGroups: Object.freeze(calculation.taxGroups.map(group => Object.freeze({ ...group }))),
     missingTaxLineIds: Object.freeze([...calculation.missingTaxLineIds])
   }) : undefined;

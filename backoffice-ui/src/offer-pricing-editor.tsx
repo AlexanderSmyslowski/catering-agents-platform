@@ -51,6 +51,7 @@ export function OfferPricingEditor({ draftId, revision, variants, menuPlan, pric
   useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
   const variant = variants.find(item => item.variantId === variantId);
   const calculation = pricingSummary?.calculation;
+  const costReadOnly = calculation?.lines.some(line => line.directCost !== undefined) ?? false;
   function begin() {
     setVariantId(calculation && variants.length === 1 ? variants[0]!.variantId : "");
     setRows(calculation ? calculation.lines.map(({ netCents: _net, unitNetCents, taxRateBps, ...line }) => ({
@@ -111,7 +112,8 @@ export function OfferPricingEditor({ draftId, revision, variants, menuPlan, pric
   }
   return <section className="offer-pricing" aria-label="Preisaufstellung">
     <h3>Preisaufstellung</h3>
-    <p className="helper-text">Speisenpaket für das gesamte Menü; Personal, Logistik und Zusatzleistungen separat. Verkaufspreise netto. Einkaufskosten und Marge sind nicht erfasst.</p>
+    <p className="helper-text">Speisenpaket für das gesamte Menü; Personal, Logistik und Zusatzleistungen separat. Verkaufspreise netto. Diese Ansicht zeigt keine internen Kosten oder Margen.</p>
+    {costReadOnly ? <p role="status">Interne Kosten sind gespeichert und werden in dieser Version nicht angezeigt. Zum Bearbeiten der Preisaufstellung ist die Version mit Kostenerfassung erforderlich. Die gespeicherten Daten bleiben erhalten.</p> : null}
     {rows ? <>
       <label>Zu kalkulierende Variante<select disabled={saving} value={variantId} onChange={event => {
         const selected = variants.find(item => item.variantId === event.target.value);
@@ -159,7 +161,7 @@ export function OfferPricingEditor({ draftId, revision, variants, menuPlan, pric
       <ul className="item-list compact">{calculation.lines.map(line => <li key={line.id}>
         {line.label}: {line.quantity} {Number(line.quantity) === 1 ? singularUnitLabels[line.unit] : unitLabels[line.unit]} × {money(line.unitNetCents)} = {money(line.netCents)} netto · Steuer {line.taxRateBps === undefined ? "offen" : line.taxRateBps / 100 + " %"} · Quelle: {line.sourceReference}{line.sourceKind === "synthetic" ? " · synthetisch" : " · prüfpflichtig"}
       </li>)}</ul>
-      <button type="button" className="secondary-button" disabled={disabled} onClick={begin}>Preisaufstellung bearbeiten</button>
+      <button type="button" className="secondary-button" disabled={disabled || costReadOnly} onClick={begin}>Preisaufstellung bearbeiten</button>
     </> : <>
       {pricingSummary?.calculationRequired ? <p role="status">Angebot geändert – Preisaufstellung veraltet. Vor Freigabe neu kalkulieren.</p> : null}
       <p className="helper-text">Preis offen. Katalogrichtwerte sind keine geprüften Angebotspreise. Preisaufstellung mit Leistungsumfang, Quellen, Netto, Steuer und Brutto erfassen.</p>
