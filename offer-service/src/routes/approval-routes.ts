@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { assertNoDirectCostWrites } from "../../../shared-core/src/persistence.js";
 import type { FastifyInstance } from "fastify";
 import {
   areJsonValuesEqual,
@@ -247,6 +248,9 @@ export function registerOfferApprovalRoutes(app: FastifyInstance, deps: OfferApp
     aggregate: OfferDecisionAggregate,
     transactionalQueryable?: Queryable
   ): Promise<boolean> => {
+    // Replay and legacy adoption use their immutable decision snapshot;
+    // reading the current draft would make recovery depend on mutable state.
+    assertNoDirectCostWrites(aggregate);
     const currentCase = await scope.getCase(caseId);
     if (!currentCase) return false;
     if (
@@ -324,6 +328,7 @@ export function registerOfferApprovalRoutes(app: FastifyInstance, deps: OfferApp
     if (aggregate.approval.decision === "rejected") return "ok" as const;
 
     const approvedOffer = aggregate.approvedOffer!;
+    assertNoDirectCostWrites(approvedOffer);
     const approvedOfferProjection = scope
       ? await scope.getApprovedOffer(approvedOffer.approvedOfferId)
       : await store.getApprovedOffer(actor, approvedOffer.approvedOfferId);
@@ -885,6 +890,7 @@ export function registerOfferApprovalRoutes(app: FastifyInstance, deps: OfferApp
     }
     const aggregate = aggregates[0]!;
     const approvedOffer = aggregate.approvedOffer!;
+    assertNoDirectCostWrites(approvedOffer);
     const handoffCaseId = await store.findCaseIdForDraft(
       actor,
       approvedOffer.sourceDraft.draftId,

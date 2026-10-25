@@ -1147,6 +1147,25 @@ function assertExpectedVersion(value: number): void {
   }
 }
 
+// The compatibility release must read future cost records without creating
+// them before its own rollback target understands their persisted shape.
+export function assertNoDirectCostWrites(value: unknown): void {
+  const pending: unknown[] = [value];
+  const seen = new WeakSet<object>();
+  while (pending.length) {
+    const item = pending.pop();
+    if (!item || typeof item !== "object" || seen.has(item)) continue;
+    seen.add(item);
+    const calculation = item as { version?: unknown; roundingPolicy?: unknown; lines?: unknown };
+    if (calculation.version === 1 && calculation.roundingPolicy === "net-line-tax-group-half-up-v1"
+      && Array.isArray(calculation.lines) && calculation.lines.some(line => line && typeof line === "object"
+        && Object.prototype.hasOwnProperty.call(line, "directCost"))) {
+      throw Object.assign(new Error("Diese Version kann interne Kosten nur lesen. Zum Speichern eine Version mit Kostenerfassung verwenden."), { statusCode: 409 });
+    }
+    for (const value of Object.values(item)) pending.push(value);
+  }
+}
+
 class FileBackedBusinessScopedCollection<T> implements BusinessScopedPersistentCollection<T> {
   constructor(private readonly options: PersistentCollectionOptions<T>) {}
 
@@ -1168,6 +1187,7 @@ class FileBackedBusinessScopedCollection<T> implements BusinessScopedPersistentC
   async set(context: BusinessContext, item: T): Promise<void> {
     const normalized = this.normalizeForContext(context, item);
     assertIncomingVersion(normalized, this.options.getVersion);
+    assertNoDirectCostWrites(normalized);
     const filePath = this.filePathFor(context, this.options.getId(normalized));
     ensureCollectionDirectory(path.dirname(filePath), this.options.fileDirectoryMode);
     const releaseLock = acquireFileLock(filePath);
@@ -1193,6 +1213,7 @@ class FileBackedBusinessScopedCollection<T> implements BusinessScopedPersistentC
   async insertWithResult(context: BusinessContext, item: T): Promise<PersistentInsertResult> {
     const normalized = this.normalizeForContext(context, item);
     assertIncomingVersion(normalized, this.options.getVersion);
+    assertNoDirectCostWrites(normalized);
     const filePath = this.filePathFor(context, this.options.getId(normalized));
     ensureCollectionDirectory(path.dirname(filePath), this.options.fileDirectoryMode);
     return atomicInsertWithResult(
@@ -1208,6 +1229,7 @@ class FileBackedBusinessScopedCollection<T> implements BusinessScopedPersistentC
     assertExpectedVersion(expectedVersion);
     const normalized = this.normalizeForContext(context, item);
     assertIncomingVersion(normalized, this.options.getVersion);
+    assertNoDirectCostWrites(normalized);
     if (this.options.getId(normalized) !== id) throw new Error("Payload-ID passt nicht zum angeforderten Record.");
     const filePath = this.filePathFor(context, id);
     ensureCollectionDirectory(path.dirname(filePath), this.options.fileDirectoryMode);
@@ -1239,6 +1261,7 @@ class FileBackedBusinessScopedCollection<T> implements BusinessScopedPersistentC
     const normalized = this.normalizeForContext(context, item);
     assertIncomingVersion(normalizedExpected, this.options.getVersion);
     assertIncomingVersion(normalized, this.options.getVersion);
+    assertNoDirectCostWrites(normalized);
     if (this.options.getId(normalizedExpected) !== id || this.options.getId(normalized) !== id) {
       throw new Error("Payload-ID passt nicht zum angeforderten Record.");
     }
@@ -1334,6 +1357,7 @@ class PostgresBackedBusinessScopedCollection<T> implements BusinessScopedPersist
   async set(context: BusinessContext, item: T): Promise<void> {
     const normalized = this.normalizeForContext(context, item);
     assertIncomingVersion(normalized, this.options.getVersion);
+    assertNoDirectCostWrites(normalized);
     await this.ensureInitialized();
     await this.queryable.query(
       "INSERT INTO catering_business_records (business_id, collection_name, record_id, payload, version_number, updated_at) VALUES ($1, $2, $3, $4::jsonb, $5, NOW()) ON CONFLICT (business_id, collection_name, record_id) DO UPDATE SET payload = EXCLUDED.payload, version_number = EXCLUDED.version_number, updated_at = NOW()",
@@ -1350,6 +1374,7 @@ class PostgresBackedBusinessScopedCollection<T> implements BusinessScopedPersist
   async insertWithResult(context: BusinessContext, item: T): Promise<PersistentInsertResult> {
     const normalized = this.normalizeForContext(context, item);
     assertIncomingVersion(normalized, this.options.getVersion);
+    assertNoDirectCostWrites(normalized);
     await this.ensureInitialized();
     const result = await this.queryable.query(
       "INSERT INTO catering_business_records (business_id, collection_name, record_id, payload, version_number, updated_at) VALUES ($1, $2, $3, $4::jsonb, $5, NOW()) ON CONFLICT DO NOTHING RETURNING record_id",
@@ -1362,6 +1387,7 @@ class PostgresBackedBusinessScopedCollection<T> implements BusinessScopedPersist
     assertExpectedVersion(expectedVersion);
     const normalized = this.normalizeForContext(context, item);
     assertIncomingVersion(normalized, this.options.getVersion);
+    assertNoDirectCostWrites(normalized);
     if (this.options.getId(normalized) !== id) throw new Error("Payload-ID passt nicht zum angeforderten Record.");
     const businessId = assertBusinessId(context.businessId);
     await this.ensureInitialized();
@@ -1383,6 +1409,7 @@ class PostgresBackedBusinessScopedCollection<T> implements BusinessScopedPersist
     const normalized = this.normalizeForContext(context, item);
     assertIncomingVersion(normalizedExpected, this.options.getVersion);
     assertIncomingVersion(normalized, this.options.getVersion);
+    assertNoDirectCostWrites(normalized);
     if (this.options.getId(normalizedExpected) !== id || this.options.getId(normalized) !== id) {
       throw new Error("Payload-ID passt nicht zum angeforderten Record.");
     }

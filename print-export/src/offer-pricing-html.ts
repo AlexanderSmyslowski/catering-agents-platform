@@ -7,7 +7,8 @@ export function renderOfferPricingHtml(summary: PricingSummary, includeSources =
   const c = summary.calculation;
   if (!c) return "";
   return [
-    '<section class="offer-pricing"><h2>Preisaufstellung</h2><p>Verkaufspreise netto. Einkaufskosten und Marge sind nicht erfasst. Preis- und Steuergrundlage bleiben prüfpflichtig.</p>',
+    '<section class="offer-pricing"><h2>Preisaufstellung</h2><p>Verkaufspreise netto. Diese Ansicht zeigt keine internen Kosten oder Margen. Preis- und Steuergrundlage bleiben prüfpflichtig.</p>',
+    includeSources && c.lines.some(line => line.directCost !== undefined) ? "<p>Interne Kosten sind gespeichert und werden in dieser Version nicht angezeigt. Die gespeicherten Daten bleiben erhalten.</p>" : "",
     c.containsSynthetic ? "<p><strong>Enthält synthetische Testannahmen – keine Unternehmenspreise.</strong></p>" : "",
     "<table><thead><tr><th>Leistung</th><th>Menge / Einheit</th><th>Einzelpreis netto</th><th>Betrag netto</th><th>Steuer</th>",
     includeSources ? "<th>Quelle · prüfpflichtig</th>" : "", "</tr></thead><tbody>",
