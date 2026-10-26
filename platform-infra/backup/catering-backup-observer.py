@@ -5,6 +5,7 @@ import fcntl
 import hashlib
 import http.client
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -297,11 +298,13 @@ NUE_RESOURCES = 'ae8f7b866b0347b9af31fe1c80b127c0'
 NUE_PASS = 'FULL_BACKUP_OFFHOST_READBACK_RESTORE_CLEANUP_PASS'
 
 
-def bounded_metadata(arguments):
+def bounded_metadata(arguments, *, deadline=None):
     """The journal may contain diagnostics; keep its bytes private and bounded."""
     mask = signal.pthread_sigmask(signal.SIG_BLOCK, {signal.SIGTERM, signal.SIGINT})
-    process, selector, body, deadline = None, selectors.DefaultSelector(), bytearray(), time.monotonic() + 5
+    process, selector, body = None, selectors.DefaultSelector(), bytearray()
+    deadline = min(time.monotonic() + 5, deadline) if deadline is not None else time.monotonic() + 5
     try:
+        require(time.monotonic() < deadline, 'METADATA_TIMEOUT')
         process = subprocess.Popen(arguments, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                                    env=ENV, start_new_session=True)
         CHILD_GROUPS.add(process.pid)
@@ -335,24 +338,30 @@ def get_nue_units():
               'ExecMainStatus,ExecMainStartTimestamp,ExecMainExitTimestamp,FragmentPath,DropInPaths,'
               'NeedDaemonReload,UnitFileState,Persistent,AccuracyUSec,RandomizedDelayUSec,TimersCalendar,'
               'ActiveEnterTimestamp,LastTriggerUSec,Unit')
-    units = {}
-    for key, unit in (('backup', 'catering-backup.service'), ('timer', 'catering-backup.timer'),
-                      ('legacy', 'catering-restore-probe.service')):
-        raw = bounded_metadata(['/usr/bin/systemctl', 'show', unit, '--all', '--property=' + fields])
-        units[key] = dict(line.split('=', 1) for line in raw.decode().splitlines() if '=' in line)
-    raw = bounded_metadata(['/usr/bin/timedatectl', 'show', '--property=NTPSynchronized'])
-    units['clock'] = dict(line.split('=', 1) for line in raw.decode().splitlines())
+    # Both attempts share the original five-command maximum of 25 seconds.
+    deadline = time.monotonic() + 25
+    def properties(unit):
+        raw = bounded_metadata(['/usr/bin/systemctl', 'show', unit, '--all', '--property=' + fields], deadline=deadline)
+        return dict(line.split('=', 1) for line in raw.decode().splitlines() if '=' in line)
     boot = Path('/proc/sys/kernel/random/boot_id').read_text().strip().replace('-', '')
     require(re.fullmatch('[0-9a-f]{32}', boot), 'BOOT_INVALID')
-    # The same trusted PID1/process provenance used by the accepted manual reader
-    # survives oneshot garbage collection. No synthetic InvocationID is invented.
-    raw = bounded_metadata(['/usr/bin/journalctl', '--quiet', '--no-pager', '--output=json', '--all',
-        '--lines=128', '--boot=' + boot, '--since=@' + str(utc_now() - 21600),
-        '--output-fields=MESSAGE,MESSAGE_ID,INVOCATION_ID,UNIT,JOB_ID,JOB_TYPE,JOB_RESULT,_PID,_UID,_EXE,_COMM,_TRANSPORT,_BOOT_ID,_SYSTEMD_UNIT,_SYSTEMD_CGROUP,_SYSTEMD_INVOCATION_ID,__REALTIME_TIMESTAMP,__MONOTONIC_TIMESTAMP,__CURSOR',
-        'UNIT=catering-backup.service', '+', '_SYSTEMD_UNIT=catering-backup.service'])
-    units.update(nue_boot=boot, nue_journal=[json.loads(line) for line in raw.splitlines() if line])
-    require(Path('/proc/sys/kernel/random/boot_id').read_text().strip().replace('-', '') == boot, 'BOOT_CHANGED')
-    return units
+    for _ in range(2):
+        units = {key: properties(unit) for key, unit in (
+            ('backup', 'catering-backup.service'), ('timer', 'catering-backup.timer'),
+            ('legacy', 'catering-restore-probe.service'))}
+        raw = bounded_metadata(['/usr/bin/timedatectl', 'show', '--property=NTPSynchronized'], deadline=deadline)
+        units['clock'] = dict(line.split('=', 1) for line in raw.decode().splitlines())
+        # Retain the accepted PID1/process provenance across oneshot collection.
+        raw = bounded_metadata(['/usr/bin/journalctl', '--quiet', '--no-pager', '--output=json', '--all',
+            '--lines=128', '--boot=' + boot, '--since=@' + str(utc_now() - 21600),
+            '--output-fields=MESSAGE,MESSAGE_ID,INVOCATION_ID,UNIT,JOB_ID,JOB_TYPE,JOB_RESULT,_PID,_UID,_EXE,_COMM,_TRANSPORT,_BOOT_ID,_SYSTEMD_UNIT,_SYSTEMD_CGROUP,_SYSTEMD_INVOCATION_ID,__REALTIME_TIMESTAMP,__MONOTONIC_TIMESTAMP,__CURSOR',
+            'UNIT=catering-backup.service', '+', '_SYSTEMD_UNIT=catering-backup.service'], deadline=deadline)
+        units.update(nue_boot=boot, nue_journal=[json.loads(line) for line in raw.splitlines() if line])
+        confirmed = {'backup': properties('catering-backup.service'), 'timer': properties('catering-backup.timer')}
+        require(Path('/proc/sys/kernel/random/boot_id').read_text().strip().replace('-', '') == boot, 'BOOT_CHANGED')
+        if all(units[key] == confirmed[key] for key in confirmed):
+            return units
+    raise ValueError('UNIT_SNAPSHOT_UNSTABLE')
 
 
 def nue_history(units, now):
@@ -592,15 +601,20 @@ def run(policy_path, send=False):
         require(state['status'] == 'observer' and state['backup_health'] in ('unknown', 'healthy', 'warning', 'critical') and
                 state['delivery_accepted'] in ('true', 'false'), 'STATE_INVALID')
         now, failure = utc_now(), int(state['failure_epoch'])
+        observed_now = now
         require(now >= int(state['last_seen_epoch']) and 0 <= failure <= now, 'CLOCK_ROLLBACK')
         try:
             units = read_units()
-            observed_failure = failed_service(units, now)
+            # Journal timestamps have microseconds and may arrive while reading.
+            # Validate against the actual read completion, with no future tolerance.
+            observed_now = time.time() if policy['version'] == 2 else now
+            require(observed_now >= now, 'CLOCK_ROLLBACK')
+            observed_failure = failed_service(units, observed_now)
             failure = max(failure, observed_failure)
             require(not observed_failure, 'SERVICE_FAILED')
-            created, verified, deadline = (proof(records, policy, now) if policy['version'] == 1 else nue_proof(records, policy, now, units))
+            created, verified, deadline = (proof(records, policy, now) if policy['version'] == 1 else nue_proof(records, policy, observed_now, units))
             output['data_epoch'] = int(created)
-            check_health(units, now, created, verified, failure)
+            check_health(units, observed_now, created, verified, failure)
             output.update(backup_health='healthy', reason='HEALTHY')
         except Exception as error:
             reason = str(error) if type(error) is ValueError and re.fullmatch(r'[A-Z_]+', str(error)) else 'OBSERVATION_FAILED'
@@ -616,6 +630,7 @@ def run(policy_path, send=False):
         url = url_bytes[:-1].decode('ascii')
         heartbeat_url(url)
         terminal_now = utc_now()
+        require(policy['version'] != 2 or time.time() >= observed_now, 'CLOCK_ROLLBACK')
         require(now <= terminal_now and time.monotonic() - started < 95, 'OBSERVER_BUDGET_EXCEEDED')
         if output['backup_health'] == 'healthy' and terminal_now >= deadline - sum(durations):
             output.update(backup_health='warning', reason='INSUFFICIENT_DETECTION_MARGIN')
@@ -627,15 +642,18 @@ def run(policy_path, send=False):
             records.stable()
             if output['backup_health'] == 'healthy':
                 units = read_units()
-                checked_now = utc_now()
+                checked_now = time.time() if policy['version'] == 2 else utc_now()
+                require(policy['version'] != 2 or checked_now >= max(terminal_now, observed_now), 'CLOCK_ROLLBACK')
+                observed_now = checked_now
                 observed_failure = failed_service(units, max(terminal_now, checked_now))
                 if observed_failure:
                     failure = max(failure, observed_failure)
                     # Keep the failure and the already published clock mark before aborting.
-                    publish_state(state_root, max(terminal_now, checked_now), failure, 'critical')
+                    publish_state(state_root, max(terminal_now, int(checked_now)), failure, 'critical')
                     raise ValueError('SERVICE_FAILED')
                 check_health(units, checked_now, created, verified, failure)
             terminal_now = utc_now()
+            require(policy['version'] != 2 or time.time() >= observed_now, 'CLOCK_ROLLBACK')
             require(now <= terminal_now and time.monotonic() - started < 95, 'OBSERVER_BUDGET_EXCEEDED')
             if output['backup_health'] == 'healthy' and terminal_now >= deadline - sum(durations):
                 output.update(backup_health='warning', reason='INSUFFICIENT_DETECTION_MARGIN')
@@ -647,8 +665,8 @@ def run(policy_path, send=False):
             except Exception as error:
                 output['delivery_accepted'] = False
                 if type(error) is ValueError and str(error) == 'PING_WINDOW_CLOSED':
-                    # The worker observed at least cutoff, even if the parent clock rolls back.
-                    publish_state(state_root, max(terminal_now, cutoff), failure, 'warning')
+                    # Keep the worker's whole-second watermark if the parent clock rolls back.
+                    publish_state(state_root, max(terminal_now, math.ceil(cutoff)), failure, 'warning')
             if not output['delivery_accepted']:
                 output['reason'] = 'DELIVERY_FAILED'
         output['observer_run'] = 'completed'

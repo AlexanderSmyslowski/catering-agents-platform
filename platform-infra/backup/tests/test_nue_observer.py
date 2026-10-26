@@ -8,6 +8,7 @@ import socket
 import stat
 import sys
 import tempfile
+import time
 import types
 import unittest
 from unittest import mock
@@ -77,6 +78,12 @@ class JournalContracts(unittest.TestCase):
             observer.bounded_metadata([sys.executable, '-I', '-c', 'import os;os.write(1,b"x"*300000)'])
         self.assertFalse(observer.CHILD_GROUPS)
 
+    def test_shared_metadata_deadline_still_reaps_an_incomplete_worker(self):
+        with self.assertRaisesRegex(ValueError, 'METADATA_TIMEOUT'):
+            observer.bounded_metadata([sys.executable, '-I', '-c', 'import time; time.sleep(5)'],
+                                      deadline=time.monotonic() + .05)
+        self.assertFalse(observer.CHILD_GROUPS)
+
     def test_large_versioned_source_does_not_raise_private_record_limit(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory).resolve() / 'source'
@@ -130,6 +137,45 @@ class JournalContracts(unittest.TestCase):
                     'https://user@incidents.betterstack.com/api/v1/heartbeat/SYNTHETIC',
                     'https://incidents.betterstack.com/api/v1/heartbeat/SYNTHETIC?redirect=1'):
             with self.assertRaises(ValueError): observer.heartbeat_url(url)
+
+
+class ObservationSnapshotContracts(unittest.TestCase):
+    def setUp(self):
+        fixture = JournalContracts()
+        fixture.setUp()
+        self.units = fixture.units
+        self.running = dict(self.units['backup'], ActiveState='activating', MainPID='456', InvocationID='d' * 32)
+        self.journal = self.units['nue_journal'] + [row(-1, START, invocation='d' * 32)]
+
+    def observe(self, backups, timers=None):
+        backups = iter(backups)
+        timers = iter(timers or [{'LastTriggerUSec': 'stable'}] * 4)
+        def metadata(argv, **kwargs):
+            if argv[0] == '/usr/bin/journalctl':
+                return b'\n'.join(json.dumps(item).encode() for item in self.journal)
+            if argv[0] == '/usr/bin/timedatectl':
+                return b'NTPSynchronized=yes\n'
+            unit = argv[2]
+            value = next(backups) if unit == 'catering-backup.service' else next(timers) if unit == 'catering-backup.timer' else {'LoadState': 'not-found'}
+            return ''.join(k + '=' + v + '\n' for k, v in value.items()).encode()
+        with mock.patch.object(observer, 'bounded_metadata', side_effect=metadata), \
+             mock.patch.object(Path, 'read_text', return_value=BOOT):
+            return observer.get_nue_units()
+
+    def test_start_between_unit_and_journal_reads_uses_one_new_consistent_snapshot(self):
+        units = self.observe([self.units['backup'], self.running, self.running, self.running])
+        self.assertEqual(units['backup']['InvocationID'], 'd' * 32)
+        self.assertEqual(observer.nue_cycle(units, NOW)['runId'], RUN)
+
+    def test_timer_trigger_between_reads_is_reobserved_with_the_backup(self):
+        units = self.observe([self.running] * 4, [{'LastTriggerUSec': 'old'}, {'LastTriggerUSec': 'new'},
+                                                {'LastTriggerUSec': 'new'}, {'LastTriggerUSec': 'new'}])
+        self.assertEqual(units['timer']['LastTriggerUSec'], 'new')
+        self.assertEqual(observer.nue_cycle(units, NOW)['runId'], RUN)
+
+    def test_continuously_changing_unit_stays_unknown_after_one_retry(self):
+        with self.assertRaisesRegex(ValueError, 'UNIT_SNAPSHOT_UNSTABLE'):
+            self.observe([self.units['backup'], self.running, self.units['backup'], self.running])
 
 
 class ProofContracts(unittest.TestCase):
@@ -237,6 +283,128 @@ class MainProcessContracts(unittest.TestCase):
 
 
 class VersionDispatchContracts(unittest.TestCase):
+    def near_start(self, *, send=False, precise_now=None, precise_times=None, future=False,
+                   main_pid='456', failed=False, second_failure=False, closed_window=False):
+        path = Path(__file__).resolve().parents[3] / 'tests/catering_backup_observer_test.py'
+        spec = importlib.util.spec_from_file_location('near_start_observer_fixture', path)
+        legacy = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(legacy)
+        fixture = legacy.ObserverContracts('test_complete_proof_is_healthy_without_transport')
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        m = fixture.module
+        clock = 1800003600  # Exact regular three-hour boundary.
+        precise_now = clock + .75 if precise_now is None else precise_now
+        fixed_root = Path('/var/lib/catering-backup-monitor')
+        fixture.policy.update(version=2, state_root=str(fixed_root))
+        fixture.save_policy()
+        fixture.write(fixture.state / 'armed', b'NUE_OBSERVER_ARMED\n')
+        journal = JournalContracts()
+        journal.setUp()
+        units = journal.units
+        for entry in units['nue_journal']:
+            entry['__REALTIME_TIMESTAMP'] = str(int(entry['__REALTIME_TIMESTAMP']) - 1000 * 1000000)
+        started = row(0, START, invocation='d' * 32)
+        started['__REALTIME_TIMESTAMP'] = str(int((clock + (2 if future else .5)) * 1000000))
+        units['nue_journal'].append(started)
+        units['backup'].update(ActiveState='activating', MainPID=main_pid, InvocationID='d' * 32,
+                              LoadState='loaded', FragmentPath='/etc/systemd/system/catering-backup.service',
+                              DropInPaths='', NeedDaemonReload='no')
+        units.update(clock={'NTPSynchronized': 'yes'}, legacy={'LoadState': 'not-found', 'ActiveState': 'inactive'},
+            timer={'LoadState': 'loaded', 'FragmentPath': '/etc/systemd/system/catering-backup.timer',
+                'DropInPaths': '', 'NeedDaemonReload': 'no', 'ActiveState': 'active', 'UnitFileState': 'enabled',
+                'Persistent': 'yes', 'AccuracyUSec': '1min', 'RandomizedDelayUSec': '0',
+                'TimersCalendar': '{ OnCalendar=*-*-* 00,03,06,09,12,15,18,21:00:00 UTC ; next_elapse=synthetic }',
+                'ActiveEnterTimestamp': legacy.system_stamp(clock - 2000), 'LastTriggerUSec': legacy.system_stamp(clock)})
+        if failed or second_failure:
+            failed_units = copy.deepcopy(units)
+            failure = row(1, 'be02cf6855d2428ba40df7e9d022f03d', invocation='d' * 32)
+            failure['__REALTIME_TIMESTAMP'] = str(int((clock + (.85 if second_failure else .6)) * 1000000))
+            failed_units['nue_journal'].append(failure)
+            failed_units['backup'].update(ActiveState='failed', MainPID='0', Result='exit-code', ExecMainStatus='1')
+            if failed:
+                units = failed_units
+        def local_path(value):
+            value = Path(value)
+            return fixture.state / value.relative_to(fixed_root) if value == fixed_root or fixed_root in value.parents else value
+        delivered = []
+        def transport(url, healthy, seconds, cutoff=None):
+            delivered.append(healthy)
+            if closed_window:
+                raise ValueError('PING_WINDOW_CLOSED')
+            return True
+        with mock.patch.object(m, 'Path', side_effect=local_path), \
+             mock.patch.object(m, 'utc_now', return_value=clock), \
+             mock.patch.object(m.time, 'time', return_value=precise_now, side_effect=precise_times), \
+             mock.patch.object(m, 'get_nue_units', return_value=units,
+                               side_effect=[units, failed_units] if second_failure else None), \
+             mock.patch.object(m, 'nue_proof', return_value=(clock - 1000, clock - 800,
+                               clock + (10000.25 if closed_window else 10000))), \
+             mock.patch.object(m, 'transmit', side_effect=transport):
+            result = m.run(fixture.policy_path, send=send)
+        return result, delivered, (fixture.state / 'state').read_text()
+
+    def test_nue_run_accepts_real_start_after_coarse_initial_clock(self):
+        result, delivered, _ = self.near_start()
+        self.assertEqual(result['backup_health'], 'healthy')
+        self.assertEqual(result['data_epoch'], 1800002600)
+        self.assertEqual(delivered, [])
+
+    def test_nue_sender_rechecks_fractional_start_without_false_fail_signal(self):
+        result, delivered, state = self.near_start(send=True)
+        self.assertEqual(result['backup_health'], 'healthy')
+        self.assertEqual(delivered, [True])
+        self.assertIn('failure_epoch=0\n', state)
+        self.assertIn('last_seen_epoch=1800003600\n', state)
+
+    def test_nue_run_still_rejects_a_row_after_actual_observation_time(self):
+        result, delivered, _ = self.near_start(send=True, future=True)
+        self.assertEqual(result['reason'], 'JOURNAL_ORDER_INVALID')
+        self.assertEqual(result['backup_health'], 'critical')
+        self.assertEqual(delivered, [False])
+
+    def test_nue_clock_rollback_during_metadata_is_not_a_healthy_observation(self):
+        result, delivered, _ = self.near_start(precise_now=1800003599.75)
+        self.assertEqual(result['reason'], 'CLOCK_ROLLBACK')
+        self.assertNotEqual(result['backup_health'], 'healthy')
+        self.assertEqual(delivered, [])
+
+    def test_nue_sender_does_not_signal_healthy_after_recheck_clock_rollback(self):
+        result, delivered, _ = self.near_start(send=True,
+            precise_times=[1800003600.75, 1800003600.8, 1800003600.7])
+        self.assertEqual(result['reason'], 'CLOCK_ROLLBACK')
+        self.assertNotEqual(result['backup_health'], 'healthy')
+        self.assertEqual(delivered, [])
+
+    def test_nue_start_without_main_process_remains_critical(self):
+        result, delivered, _ = self.near_start(send=True, main_pid='0')
+        self.assertEqual(result['reason'], 'SERVICE_UNKNOWN')
+        self.assertEqual(result['backup_health'], 'critical')
+        self.assertEqual(delivered, [False])
+
+    def test_real_failure_during_start_is_still_latched_and_signalled(self):
+        result, delivered, state = self.near_start(send=True, failed=True)
+        self.assertEqual(result['reason'], 'SERVICE_FAILED')
+        self.assertEqual(result['backup_health'], 'critical')
+        self.assertEqual(delivered, [False])
+        self.assertIn('failure_epoch=1800003600\n', state)
+
+    def test_failure_during_sender_recheck_keeps_the_integer_state_format(self):
+        result, delivered, state = self.near_start(send=True, second_failure=True,
+            precise_times=[1800003600.75, 1800003600.8, 1800003600.9])
+        self.assertEqual(result['reason'], 'SERVICE_FAILED')
+        self.assertEqual(delivered, [])
+        self.assertIn('failure_epoch=1800003600\n', state)
+        self.assertIn('last_seen_epoch=1800003600\n', state)
+        self.assertIn('backup_health=critical', state)
+
+    def test_closed_fractional_ping_window_preserves_the_observed_integer_watermark(self):
+        result, _, state = self.near_start(send=True, closed_window=True)
+        self.assertFalse(result['delivery_accepted'])
+        self.assertIn('last_seen_epoch=1800013166\n', state)
+        self.assertIn('failure_epoch=0\n', state)
+        self.assertIn('backup_health=warning', state)
+
     def test_nue_check_uses_new_readers_without_network_or_state_writes(self):
         path = Path(__file__).resolve().parents[3] / 'tests/catering_backup_observer_test.py'
         spec = importlib.util.spec_from_file_location('legacy_observer_fixture', path)
@@ -249,7 +417,8 @@ class VersionDispatchContracts(unittest.TestCase):
         fixture.save_policy()
         before = (fixture.state / 'state').read_bytes()
         m = fixture.module
-        with mock.patch.object(m, 'get_units', side_effect=AssertionError('legacy reader used')), \
+        with mock.patch.object(m.time, 'time', return_value=legacy.NOW), \
+             mock.patch.object(m, 'get_units', side_effect=AssertionError('legacy reader used')), \
              mock.patch.object(m, 'get_nue_units', return_value={}), \
              mock.patch.object(m, 'nue_service_failure', return_value=0), \
              mock.patch.object(m, 'nue_proof', return_value=(legacy.NOW - 1000 + .75, legacy.NOW - 800, legacy.NOW + 10000)), \
