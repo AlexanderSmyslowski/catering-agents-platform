@@ -3272,3 +3272,12 @@ Datierter kompatibler Leser und echte Teilpublikations-/Handoffregression vor Er
 
 ### Version 5.576 — 25.10.2026
 Finale CI-Restbefunde ohne Abschwaechung korrigiert: datiertes synthetisches Fixture und wiederanlauffaehige unveraenderliche Freigabeautoritaet; Opus5.5-Delta fe3b2099 ACCEPT, noch keine Installation.
+
+
+## Produktionsprüfung verständlicher dargestellt — Version 5.594 / 26.10.2026
+
+PR 759 korrigiert ausschließlich die Darstellung der bestehenden Produktionsprüfung: gemeinsame präzise deutsche Mengenformatierung mit lesbaren Grammwerten (2 g beziehungsweise 0,002 kg), übernommener Plan gemeinsam mit offenen fachlichen Rückfragen, erklärter bereits übernommener Nachfolger und vorhandener Veranstaltungstyp als Ersatz für den optional fehlenden Titel. Berechnungen, Datenhaltung, Auswahl-/Abstammungsregeln, Rezept- und fachliche Freigaben bleiben unverändert. Vier Regressionen nachgewiesen, danach 78 gezielte Tests in sechs vorhandenen Suiten, Build und Desktop-/gemessene 390-Pixel-Ansicht bestanden. Tatsächliches unabhängiges Opus-5.5-Review a1703330-49d3-4207-bfcc-c26b68333267: ACCEPT für PR/CI.
+
+Die Pflicht-CI 40323162833 für Anwendungscode 7567163f1c14d3cbc4ce5b9e04dacd8373c229d5 ist vollständig SUCCESS; der unveränderte branchgebundene Backup-Integrationstest blieb erwartungsgemäß skipped. Diese Fortschreibung schließt ausschließlich den Reviewbefund discussion_r4377237231 zur fehlenden versionierten Projekt-Memory. Sie ändert keinen Anwendungscode. Noch keine Integration oder Installation der Korrektur; vor Auslieferung sind regulärer Merge, exakte Main-CI und der vorhandene signierte Update-/Rückfallweg einzuhalten.
+
+Der gleiche synthetische 100-Gäste-Auftrag ist auf Nürnberg mit dem vorherigen Kostenstand 321d559 tatsächlich bis Angebot, Produktion, neun Rezeptblättern, 29 Einkaufspositionen und Exporten bestanden (Opus-5.5-Annahme 932c1785; ausführliche lokale Übergabe 5.592–5.593). 55/25/20 Portionen und 2 g Zimt bleiben erhalten. Vier Sonderkost-/Kennzeichnungsfragen und neun fachliche Rezeptprüfungen bleiben offen; kein reales Küchen-, Allergen-, Laien- oder Pilot-GO. Alexander hat am 26.10. die Integration/Installation und anschließende Arbeit am realen Angebotsfall autorisiert. Bereits angenommene unveränderte Nachweise wiederverwenden; keine neue Migration oder Prüfplattform.
