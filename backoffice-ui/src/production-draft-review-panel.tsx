@@ -620,8 +620,8 @@ export function ProductionDraftReviewPanel({
         </div>
       ) : appliedSuccessor ? (
         <div className="production-draft-state" role="status">
-          <strong>Eine neuere Fassung dieses Entwurfs wurde bereits übernommen.</strong>
-          <p>Produktionsplan und Einkaufsliste sind gespeichert. Fachliche Rückfragen und Freigabegrenzen bleiben separat sichtbar.</p>
+          <strong>Für diesen Auftrag ist bereits ein Produktionsstand übernommen.</strong>
+          <p>Der angeforderte Entwurf ist eine frühere Fassung. Öffne den übernommenen Stand, um die aktuelle Prüfung zu sehen. Fachliche Rückfragen und Freigabegrenzen bleiben separat sichtbar.</p>
           <button type="button" className="secondary-button" disabled={submitting || loading} onClick={() => {
             const url = new URL(window.location.href);
             url.searchParams.set("productionDraftId", appliedSuccessor);

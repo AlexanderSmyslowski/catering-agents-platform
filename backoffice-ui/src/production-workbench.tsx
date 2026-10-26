@@ -100,7 +100,11 @@ function buildProductionSummaryFacts(input: {
   return [
     {
       label: "Status",
-      value: formatOperatorReadiness(input.readinessLabel)
+      value: input.approvalState === "applied"
+        ? input.openVisibleQuestionCount > 0
+          ? `Plan übernommen · ${input.openVisibleQuestionCount} fachliche ${input.openVisibleQuestionCount === 1 ? "Rückfrage offen" : "Rückfragen offen"}`
+          : `Plan übernommen · fachliche Prüfung: ${formatOperatorReadiness(input.readinessLabel)}`
+        : formatOperatorReadiness(input.readinessLabel)
     },
     {
       label: "Rückfragen",

@@ -29,8 +29,4 @@ export function formatProductionStation(value: string, explicitlyAssigned = fals
   return label ? explicitlyAssigned ? label : `Vorschlag: ${label} (ungeprüft)` : value;
 }
 
-export function formatKitchenQuantity(amount: number, unit: string): string {
-  const decimal = (value: number) => value.toLocaleString("de-DE", { useGrouping: false, maximumSignificantDigits: 15 });
-  return unit === "kg" && amount > 0 && amount < 1
-    ? `${decimal(Number((amount * 1000).toPrecision(15)))} g` : `${decimal(amount)} ${unit}`;
-}
+export { formatKitchenQuantity } from "../../shared-core/src/quantity-display.js";
