@@ -3,6 +3,7 @@ import {
   recipeSourceReferenceLabel
 } from "../../shared-core/src/export-source-metadata.js";
 import type { RecipeSourceExportMetadata } from "../../shared-core/src/types.js";
+import { formatQuantityNumber } from "../../shared-core/src/quantity-display.js";
 
 export type PurchaseListPreviewItem = {
   articleName: string;
@@ -23,11 +24,11 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
     : undefined;
 }
 
-function readStringOrNumber(record: Record<string, unknown> | undefined, keys: string[]): string | undefined {
+function readStringOrNumber(record: Record<string, unknown> | undefined, keys: string[], formatNumbers = false): string | undefined {
   for (const key of keys) {
     const value = record?.[key];
     if (typeof value === "string" || typeof value === "number") {
-      return String(value);
+      return typeof value === "number" && formatNumbers ? formatQuantityNumber(value) : String(value);
     }
   }
   return undefined;
@@ -134,8 +135,8 @@ export function getPurchaseListPreviewItems(
       readStringOrNumber(itemRecord, ["displayName", "articleName", "name", "label", "ingredientName"]) ??
       "Artikel";
     const quantity =
-      readStringOrNumber(itemRecord, ["purchaseQty", "normalizedQty", "qty", "amount"]) ??
-      readStringOrNumber(quantityRecord, ["amount"]) ??
+      readStringOrNumber(itemRecord, ["purchaseQty", "normalizedQty", "qty", "amount"], true) ??
+      readStringOrNumber(quantityRecord, ["amount"], true) ??
       "-";
     const unit =
       readStringOrNumber(itemRecord, ["purchaseUnit", "normalizedUnit", "unit"]) ??

@@ -218,7 +218,7 @@ describe("ProductionDraftReviewPanel", () => {
         });
         const openSaved = [...container.querySelectorAll("button")].find(button => button.textContent === "Übernommenen Stand anzeigen");
         if (proof === "confirmed") {
-          expect(container.textContent).toContain("Eine neuere Fassung dieses Entwurfs wurde bereits übernommen.");
+          expect(container.textContent).toContain("Für diesen Auftrag ist bereits ein Produktionsstand übernommen.");
           expect(container.textContent).not.toContain("angeforderte Produktionsentwurf ist nicht verfügbar");
           expect(container.textContent).not.toContain("Dieser Produktionsentwurf wurde bereits übernommen.");
           expect(new URL(window.location.href).searchParams.get("productionDraftId")).toBe(original.draftId);

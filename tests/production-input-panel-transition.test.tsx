@@ -101,6 +101,24 @@ afterEach(() => {
 });
 
 describe("production input panel upload transition", () => {
+  it("distinguishes an applied plan from its still open professional questions", async () => {
+    const container = document.body.appendChild(document.createElement("div"));
+    const root = createRoot(container);
+    try {
+      await act(async () => root.render(createElement(ProductionConversationalWorkbench, {
+        summary: { approvalState: "applied", hasActiveContext: true, activeSpecLabel: "Synthetischer Testauftrag",
+          readinessLabel: "unzureichend", planStatusLabel: "vollständig", purchaseStatusLabel: "1 Liste · 29 Positionen",
+          questionCount: 4, answeredQuestionCount: 0, unansweredQuestionCount: 4,
+          productionObjectCount: 1, productionObjectStatusLabel: "1 Plan · vollständig", purchaseListCount: 1 },
+        nextStep: { title: "Unterlagen", description: "Unterlagen prüfen" },
+        miniPilotRawResult: "", setMiniPilotRawResult: noop, miniPilotReportState: { status: "empty", summary: "" } as never,
+        slots: { inputSlot: null, questionsSlot: null, productionObjectsSlot: null, purchaseListSlot: null, lowerSlots: null }
+      })));
+      expect(container.textContent).toContain("Plan übernommen · 4 fachliche Rückfragen offen");
+      expect(container.textContent).toContain("erteilt · übernommen");
+      expect(container.textContent).not.toContain("Küchenfreigabe erteilt");
+    } finally { await act(async () => root.unmount()); }
+  });
   it("preserves the input DOM and user value when a production context arrives", async () => {
     const container = document.body.appendChild(document.createElement("div"));
     const root = createRoot(container);

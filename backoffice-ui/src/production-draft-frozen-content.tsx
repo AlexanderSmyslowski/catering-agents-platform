@@ -1,5 +1,7 @@
 import type { ProductionDraft, ProductionDraftReviewCard } from "./api.js";
 import { formatRecipeApprovalStateLabel } from "../../shared-core/src/export-source-metadata.js";
+import { formatKitchenQuantity, formatQuantityNumber } from "../../shared-core/src/quantity-display.js";
+import { formatEventTypeLabel } from "../../shared-core/src/taxonomies/labels.js";
 
 type RecordValue = Record<string, unknown>;
 function record(value: unknown): RecordValue | undefined {
@@ -15,7 +17,14 @@ function value(value: unknown, missing = "Angabe fehlt"): string {
   return text(value) ?? number(value)?.toString() ?? `unvollständig: ${missing}`;
 }
 function quantity(amount: unknown, unit: unknown): string {
-  return `${number(amount) ?? "unvollständig: Menge fehlt"} ${unit === "servings" ? amount === 1 ? "Portion" : "Portionen" : text(unit) ?? "unvollständig: Einheit fehlt"}`;
+  const numericAmount = number(amount);
+  const unitLabel = unit === "servings" ? amount === 1 ? "Portion" : "Portionen" : text(unit);
+  if (numericAmount === undefined || !unitLabel) {
+    return `${numericAmount === undefined ? "unvollständig: Menge fehlt" : formatQuantityNumber(numericAmount)} ${unitLabel ?? "unvollständig: Einheit fehlt"}`;
+  }
+  const kitchen = formatKitchenQuantity(numericAmount, unitLabel);
+  return unitLabel === "kg" && numericAmount > 0 && numericAmount < 1
+    ? `${kitchen} (${formatQuantityNumber(numericAmount)} kg)` : kitchen;
 }
 function label(input: unknown, labels: Record<string, string>, missing: string): string {
   const key = text(input);
@@ -91,7 +100,7 @@ function EventContent({ spec }: { spec: RecordValue }) {
   const event = record(spec.event);
   const attendees = record(spec.attendees);
   return <>
-    <p><strong>{value(event?.title, "Veranstaltungsname fehlt")}</strong></p>
+    <p><strong>{value(text(event?.title) ?? formatEventTypeLabel(text(event?.type)), "Veranstaltungsangabe fehlt")}</strong></p>
     <p>Datum: {value(event?.date)} · Gäste: {value(attendees?.expected ?? attendees?.guaranteed)}</p>
     <p><strong>Zeitfenster</strong></p>
     {Array.isArray(event?.schedule) && event.schedule.length ? <ul>{event.schedule.map((item, index) => {

@@ -5,6 +5,14 @@ import {
 } from "../backoffice-ui/src/production-purchase-list-preview.js";
 
 describe("production purchase list preview", () => {
+  it("formats canonical quantities in German without rounding away small amounts", () => {
+    const preview = getPurchaseListPreviewItems({ items: [
+      { displayName: "Fond", purchaseQty: 1.375, purchaseUnit: "l" },
+      { displayName: "Zimt", purchaseQty: 0.002, purchaseUnit: "kg" },
+      { displayName: "Vorhandener Bestand", purchaseQty: 0, purchaseUnit: "kg" }
+    ] });
+    expect(preview.map(item => item.quantity)).toEqual(["1,375", "0,002", "0"]);
+  });
   it("reads the canonical purchase list item fields used by production exports", () => {
     expect(
       getPurchaseListPreviewItems({

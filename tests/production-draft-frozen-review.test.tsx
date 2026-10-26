@@ -57,6 +57,29 @@ function card(title: string) {
 afterEach(async () => { if (root) await act(async () => root!.unmount()); root = undefined; container?.remove(); globalThis.fetch = originalFetch; vi.restoreAllMocks(); });
 
 describe("frozen production review content", () => {
+  it("uses the available event type when the optional title is absent", async () => {
+    const draft = frozenDraft();
+    draft.draftArtifacts!.eventSpec!.event = { type: "Wissenschaftliche Abendveranstaltung", date: "2026-11-13" };
+    await mount(draft);
+    expect(card("Event prüfen").textContent).toContain("Wissenschaftliche Abendveranstaltung");
+    expect(card("Event prüfen").textContent).not.toContain("Veranstaltungsname fehlt");
+  });
+  it("shows decimal commas and precise grams in frozen recipe and purchase decisions", async () => {
+    const draft = frozenDraft();
+    (draft.draftArtifacts!.recipes![0]!.ingredients as Array<Record<string, unknown>>).push(
+      { name: "Zimt", quantity: { amount: 0.002, unit: "kg" } },
+      { name: "Fond", quantity: { amount: 1.375, unit: "l" } }
+    );
+    (draft.draftArtifacts!.purchaseList!.items as Array<Record<string, unknown>>).push(
+      { displayName: "Zimt", purchaseQty: 0.002, purchaseUnit: "kg", normalizedQty: 0.002, normalizedUnit: "kg" }
+    );
+    await mount(draft);
+    expect(card("Rezept prüfen").textContent).toContain("Zimt: 2 g (0,002 kg)");
+    expect(card("Rezept prüfen").textContent).toContain("Fond: 1,375 l");
+    const row = [...card("Einkauf prüfen").querySelectorAll("tbody tr")].find(item => item.textContent?.includes("Zimt"))!;
+    expect(row.querySelectorAll("td")[1]!.textContent).toBe("2 g (0,002 kg)");
+    expect(row.querySelectorAll("td")[2]!.textContent).toBe("2 g (0,002 kg)");
+  });
   it("shows event identity, date, attendance, schedule, categories and modes in its own card", async () => {
     await mount(frozenDraft());
     const text = card("Event prüfen").textContent;
@@ -66,7 +89,7 @@ describe("frozen production review content", () => {
   it("distinguishes one 35-serving batch from four charges and includes both frozen kitchen sheets", async () => {
     await mount(frozenDraft());
     const text = card("Plan prüfen").textContent;
-    for (const value of ["Vollständig berechnet", "1 Produktionsansatz", "35 Portionen", "4 Chargen", "350 g", "70 g", "3.5 l", "Küchenblatt Kaffeepause", "Getränke", "Küchenblatt Zukauf", "Zukauf bereitstellen", "Gebinde und Lieferant noch fachlich klären"]) expect(text).toContain(value);
+    for (const value of ["Vollständig berechnet", "1 Produktionsansatz", "35 Portionen", "4 Chargen", "350 g", "70 g", "3,5 l", "Küchenblatt Kaffeepause", "Getränke", "Küchenblatt Zukauf", "Zukauf bereitstellen", "Gebinde und Lieferant noch fachlich klären"]) expect(text).toContain(value);
   });
   it("translates the canonical beverage station in batch and kitchen sheet", async () => {
     await mount(frozenDraft());
@@ -77,7 +100,7 @@ describe("frozen production review content", () => {
     await mount(frozenDraft());
     const rows = card("Einkauf prüfen").querySelectorAll("tbody tr");
     expect(rows).toHaveLength(5);
-    for (const [index, name, amount] of [[0, "Kaffeebohnen", "350 g"], [1, "Tee", "70 g"], [2, "Haferdrink", "3.5 l"], [3, "Croissants", "35 Stück"], [4, "Wasser", "17.5 l"]] as const) {
+    for (const [index, name, amount] of [[0, "Kaffeebohnen", "350 g"], [1, "Tee", "70 g"], [2, "Haferdrink", "3,5 l"], [3, "Croissants", "35 Stück"], [4, "Wasser", "17,5 l"]] as const) {
       expect(rows[index]!.querySelectorAll("td")[0]!.textContent).toBe(name);
       expect(rows[index]!.querySelectorAll("td")[1]!.textContent).toBe(amount);
       expect(rows[index]!.querySelectorAll("td")[2]!.textContent).toBe(amount);
@@ -98,7 +121,7 @@ describe("frozen production review content", () => {
   it("shows recipe base and linked scaling without transferring predecessor decisions or requesting live data", async () => {
     const fetchMock = await mount(frozenDraft());
     const text = card("Rezept prüfen").textContent;
-    for (const value of ["recipe-frozen", "Synthetische Kaffeepause", "10 Portionen", "synthetic:coffee-fixture", "Prüfung nötig", "35 Portionen", "4 Chargen", "350 g", "70 g", "3.5 l", "synthetische", "menschliche Küchenprüfung", "Allergenfreigabe"]) expect(text).toContain(value);
+    for (const value of ["recipe-frozen", "Synthetische Kaffeepause", "10 Portionen", "synthetic:coffee-fixture", "Prüfung nötig", "35 Portionen", "4 Chargen", "350 g", "70 g", "3,5 l", "synthetische", "menschliche Küchenprüfung", "Allergenfreigabe"]) expect(text).toContain(value);
     expect(container.textContent).not.toContain("LIVE RECIPE MUST NOT APPEAR");
     expect(fetchMock.mock.calls).toHaveLength(1);
     for (const title of ["Event prüfen", "Plan prüfen", "Einkauf prüfen", "Rezept prüfen"]) {
@@ -141,7 +164,7 @@ describe("frozen production review content", () => {
     (recipe.ingredients as Array<Record<string, unknown>>).push({ name: "Zimt", quantity: { amount: 0.002, unit: "kg" } });
     await mount(draft);
     expect(card("Rezept prüfen").textContent).toContain("unvollständig: Rezeptstatus klären");
-    expect(card("Rezept prüfen").textContent).toContain("Zimt: 0.002 kg");
+    expect(card("Rezept prüfen").textContent).toContain("Zimt: 2 g (0,002 kg)");
     expect(card("Rezept prüfen").textContent).not.toContain("intern freigegeben");
   });
   it("shows readable frozen purchase provenance and a keyboard-focusable scroll area instead of raw identifiers", async () => {
