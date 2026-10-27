@@ -183,6 +183,27 @@ describe("offer workbench approval binding", () => {
     expect(doc.body.textContent).toContain("Erfasste Veranstaltungsdaten");
   });
 
+  it("offers no customer export while the offer needs a successful refresh", () => {
+    const normal = renderToStaticMarkup(createElement(OfferConversationalWorkbench, props()));
+    expect(normal).toContain("Angebot exportieren");
+    const blocked = renderToStaticMarkup(createElement(OfferConversationalWorkbench, { ...props(), refreshRequired: true }));
+    expect(blocked).not.toContain("Angebot exportieren");
+    expect(blocked).toContain("Zum Export den Auftrag zuerst erneut laden.");
+    const doc = new DOMParser().parseFromString(blocked, "text/html");
+    const approval = [...doc.querySelectorAll("button")].find(button => button.textContent === "Variante freigeben: Klassisch");
+    expect(approval).toBeDefined();
+    expect(approval!.disabled).toBe(true);
+  });
+
+  it("does not expose stale offer text while the case needs a refresh", () => {
+    const staleDraft = { ...draft("draft-a", "Synthetisch"), internalWorkingText: "SYNTHETISCH-VERALTET" };
+    const blocked = renderToStaticMarkup(createElement(OfferConversationalWorkbench, props({
+      activeDraft: staleDraft, selectedDraft: staleDraft, refreshRequired: true
+    })));
+    expect(blocked).not.toContain("SYNTHETISCH-VERALTET");
+    expect(blocked).toContain("Angebotstexte sind erst nach dem erneuten Laden verfügbar.");
+  });
+
   it("offers customer entry for a new text request and hides it in a bound case", async () => {
     const setCustomerName = vi.fn();
     const root = createRoot(document.body.appendChild(document.createElement("div")));

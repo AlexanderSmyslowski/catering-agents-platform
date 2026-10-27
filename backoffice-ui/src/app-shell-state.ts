@@ -57,6 +57,38 @@ export function getPathname(): string {
   return window.location.pathname;
 }
 
+const OFFER_CASE_FOCUS_KEY = "catering.offerCaseFocus";
+
+// The browser entry remembers only a case reference, and only for its authenticated user.
+export function offerCaseFocusFromHistory(userId?: string): string | undefined {
+  if (!userId || typeof window === "undefined") return undefined;
+  try {
+    const state: unknown = window.history.state;
+    if (!state || typeof state !== "object" || Array.isArray(state)) return undefined;
+    const focus: unknown = (state as Record<string, unknown>)[OFFER_CASE_FOCUS_KEY];
+    if (!focus || typeof focus !== "object" || Array.isArray(focus)) return undefined;
+    const { caseId, userId: savedUserId } = focus as Record<string, unknown>;
+    return savedUserId === userId && typeof caseId === "string" && caseId.trim() &&
+      caseId.length <= 512 ? caseId : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function rememberOfferCaseFocus(userId: string | undefined, caseId: string | undefined) {
+  if (!userId || typeof window === "undefined") return;
+  try {
+    const current: unknown = window.history.state;
+    if (current !== null && (typeof current !== "object" || Array.isArray(current))) return;
+    const next: Record<string, unknown> = { ...(current as Record<string, unknown> | null) };
+    if (caseId && caseId.trim() && caseId.length <= 512) next[OFFER_CASE_FOCUS_KEY] = { userId, caseId };
+    else delete next[OFFER_CASE_FOCUS_KEY];
+    window.history.replaceState(next, "");
+  } catch {
+    // A blocked history state must not prevent normal use of the current page.
+  }
+}
+
 export function getBaseUrl(): string {
   if (typeof window === "undefined") {
     return "";

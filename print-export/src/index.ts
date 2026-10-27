@@ -188,12 +188,15 @@ function renderSourceAnchorsSection(record: Record<string, unknown>): string[] {
   ];
 }
 
-export function renderOfferHtml(draft: OfferDraft): string {
+export function renderOfferHtml(draft: OfferDraft, options: { unverifiedCase?: boolean; historical?: boolean } = {}): string {
   const spec = draft.proposedEventSpec;
+  const publishApproved = !options.unverifiedCase && !options.historical && draft.reviewStatus?.publishApproved === true;
   const documentStart = '<!doctype html><html lang="de"><head><meta charset="utf-8"><title>CateringOS · Angebot</title><style>@page{size:A4;margin:18mm}body{font-family:Arial,sans-serif;color:#1f2933;font-size:12px;line-height:1.45}h1{font-size:22px;margin:0 0 8px}h2{font-size:16px;margin:22px 0 8px}header{border-bottom:1px solid #cbd5df;padding-bottom:12px}p{margin:6px 0}pre{font:inherit;white-space:pre-wrap}td,th{padding:6px;text-align:left}li,td{overflow-wrap:anywhere}.offer-pricing table{width:100%;border-collapse:collapse}.offer-pricing .money,.offer-pricing .quantity{white-space:nowrap;font-variant-numeric:tabular-nums}@media print{h2{break-after:avoid-page}tr,header{break-inside:avoid-page}}</style></head><body>';
   const eventHeader = [
     "<header>",
-    "<h1>" + (draft.reviewStatus?.publishApproved ? "Angebot" : "Angebotsentwurf · interne Prüfung") + "</h1>",
+    "<h1>" + (publishApproved ? "Angebot" : "Angebotsentwurf · interne Prüfung") + "</h1>",
+    ...(options.unverifiedCase ? ['<p role="alert"><strong>Fassung nicht als aktuelles Angebot bestätigt.</strong> Diese Unterlage ist nicht eindeutig einem Auftrag zugeordnet. Nur intern verwenden und nicht an Kunden versenden.</p>'] : []),
+    ...(options.historical ? ['<p role="alert"><strong>Ältere Angebotsfassung.</strong> Diese Unterlage dient nur der internen Nachverfolgung; bitte nicht an Kunden versenden.</p>'] : []),
     "<p>Kunde: " + escapeHtml(spec.customer?.name ?? "offen") + "</p>",
     "<p>Veranstaltung: " + escapeHtml(spec.event?.title ?? spec.event?.type ?? "offen") + "</p>",
     "<p>Datum: " + escapeHtml(formatDocumentDate(spec.event?.date)) + " · Gäste: " + escapeHtml(spec.attendees?.expected ?? "offen") + "</p>",
@@ -202,7 +205,6 @@ export function renderOfferHtml(draft: OfferDraft): string {
     ...(spec.venue ? ["<p>Veranstaltungsort: " + escapeHtml([spec.venue.name, spec.venue.address].filter(Boolean).join(" · ") || "offen") + "</p>"] : []),
     "</header>"
   ].join("");
-  const publishApproved = draft.reviewStatus?.publishApproved === true;
   const openQuestionsSection =
     draft.openQuestions.length > 0
       ? [
@@ -497,7 +499,7 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
     });
   });
 
-  app.get<{ Params: { draftId: string } }>(
+  app.get<{ Params: { draftId: string }; Querystring: { ansicht?: string } }>(
     "/v1/exports/offers/:draftId/html",
     async (request, reply) => {
       const forbidden = requireOfferOperator(request, reply, trustedActorSecret, allowDevActorHeader);
@@ -505,18 +507,33 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
         return forbidden;
       }
 
-      const draft = await offerStore.getDraft(actorForRequest(request), request.params.draftId);
-      if (!draft) {
+      reply.header("cache-control", "no-store");
+      const actor = actorForRequest(request);
+      const result = await offerStore.resolveDraftForExport(actor, request.params.draftId);
+      if (result.status === "missing") {
         return reply.code(404).send({ message: "OfferDraft nicht gefunden." });
       }
-
+      if (result.status === "conflict") {
+        return reply.code(409).type("text/html; charset=utf-8").send(
+          '<!doctype html><html lang="de"><head><meta charset="utf-8"><title>Angebot prüfen</title></head><body><main><h1>Diese Angebotsfassung lässt sich nicht eindeutig zuordnen</h1><p>Bitte den Auftrag neu laden und die Angebotsdaten prüfen.</p></main></body></html>'
+        );
+      }
+      if (result.status === "historical" && request.query.ansicht !== "archiv") {
+        return reply.code(409).type("text/html; charset=utf-8").send(
+          '<!doctype html><html lang="de"><head><meta charset="utf-8"><title>Angebot aktualisieren</title></head><body><main><h1>Der Auftrag wurde inzwischen geändert</h1><p>Bitte zum Auftrag zurückkehren, ihn erneut laden und die aktuelle Fassung prüfen.</p><p><a href="?ansicht=archiv">Ältere Fassung als interne Unterlage ansehen</a></p></main></body></html>'
+        );
+      }
+      const html = renderOfferHtml(result.draft, {
+        unverifiedCase: result.status === "unverified",
+        historical: result.status === "historical"
+      });
       reply.header(
         "content-disposition",
         `inline; filename="${request.params.draftId}.html"`
       );
       return reply
         .type("text/html; charset=utf-8")
-        .send(renderOfferHtml(draft));
+        .send(html);
     }
   );
 

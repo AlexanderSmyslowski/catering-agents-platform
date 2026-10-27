@@ -57,6 +57,7 @@ type SpecEditActions = {
 
 export type OfferWorkbenchProps = {
   submitting: boolean;
+  refreshRequired?: boolean;
   hasActiveOfferCase?: boolean;
   latestSourceLabel: string;
   offerText: string;
@@ -175,7 +176,8 @@ function getSpecRequestId(spec: Record<string, unknown>): string {
 }
 
 export function OfferConversationalWorkbench({
-  submitting,
+  submitting: actionInFlight,
+  refreshRequired = false,
   hasActiveOfferCase,
   latestSourceLabel,
   offerText,
@@ -214,6 +216,7 @@ export function OfferConversationalWorkbench({
   specEdit,
   specEditActions
 }: OfferWorkbenchProps) {
+  const submitting = actionInFlight || refreshRequired;
   const miniPilotActionState = buildOfferMiniPilotActionState(miniPilotReportState, miniPilotStorageHintLabel);
   const showMiniPilotActionClear = miniPilotRawResult.trim().length > 0;
   const showMiniPilotPanel = shouldShowMiniPilotPanel();
@@ -323,7 +326,7 @@ export function OfferConversationalWorkbench({
             <dl className="order-status-facts" role="status">
               <div><dt>Angebot</dt><dd>{focusedApprovalBinding ? "Intern freigegeben" : "Noch nicht freigegeben"}</dd></div>
               <div><dt>Küche</dt><dd>{focusedHandoffId ? "Übergeben – Planung im Produktionsauftrag" : "Noch nicht übergeben"}</dd></div>
-              <div><dt>Unterlagen</dt><dd>{editingMenu || editingPricing || editingEvent ? "Nach dem Speichern verfügbar" : incompletePricingTax || !focusedPricing?.calculation ? "Export als Entwurf; Kalkulation unvollständig" : "Angebot zum Drucken und Exportieren verfügbar"}</dd></div>
+              <div><dt>Unterlagen</dt><dd>{refreshRequired ? "Nach erfolgreichem Aktualisieren verfügbar" : editingMenu || editingPricing || editingEvent ? "Nach dem Speichern verfügbar" : incompletePricingTax || !focusedPricing?.calculation ? "Export als Entwurf; Kalkulation unvollständig" : "Angebot zum Drucken und Exportieren verfügbar"}</dd></div>
             </dl>
             <section className="order-safety-notes" aria-label="Vor jeder Freigabe prüfen">
               <h4>Vor jeder Freigabe prüfen</h4>
@@ -483,6 +486,8 @@ export function OfferConversationalWorkbench({
                 })}
                 {editingMenu || editingPricing || editingEvent ? (
                   <span className="helper-text">Vor dem Export Änderungen speichern oder verwerfen.</span>
+                ) : refreshRequired ? (
+                  <span className="helper-text">Zum Export den Auftrag zuerst erneut laden.</span>
                 ) : (
                   <a className="ghost-link" href={offerExportUrl(focusedDraftId)} target="_blank" rel="noreferrer">
                     Angebot exportieren
@@ -511,8 +516,10 @@ export function OfferConversationalWorkbench({
               </div>
               <details className="nested-details">
                 <summary>Angebotstexte anzeigen</summary>
-                {focusedPricing?.calculation ? <pre className="detail-pre">{String(focusedDraft.customerFacingText ?? "")}</pre> : <p>Kein Kundentext freigegeben: Leistungsumfang und Preisaufstellung zuerst erfassen. Automatische Paketvorschläge sind keine bestätigten Leistungen.</p>}
-                <pre className="detail-pre">{String(focusedDraft.internalWorkingText ?? "")}</pre>
+                {refreshRequired ? <p>Angebotstexte sind erst nach dem erneuten Laden verfügbar.</p> : <>
+                  {focusedPricing?.calculation ? <pre className="detail-pre">{String(focusedDraft.customerFacingText ?? "")}</pre> : <p>Kein Kundentext freigegeben: Leistungsumfang und Preisaufstellung zuerst erfassen. Automatische Paketvorschläge sind keine bestätigten Leistungen.</p>}
+                  <pre className="detail-pre">{String(focusedDraft.internalWorkingText ?? "")}</pre>
+                </>}
               </details>
             </div>
           ) : (

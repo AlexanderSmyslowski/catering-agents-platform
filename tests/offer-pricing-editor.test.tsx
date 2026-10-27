@@ -39,6 +39,69 @@ describe("offer pricing editor", () => {
     expect(section.textContent).not.toContain("5.800");
     await act(async () => root.unmount());
   });
+  it("explains how to estimate complete costs without confusing gross and net prices", async () => {
+    const { root } = await mount();
+    await act(async () => button("Preisaufstellung bearbeiten").click());
+    const costs = field("Kosten gesamt netto");
+    const hints = costs.getAttribute("aria-describedby")!.split(" ").map(id => document.getElementById(id)?.textContent).join(" ");
+    expect(hints).toContain("Gesamtkosten dieser Position");
+    expect(hints).toContain("Fehlende Beträge schätzen");
+    expect(hints).toContain("Zutaten");
+    expect(hints).toContain("nicht doppelt zählen");
+    expect(hints).toContain("Brutto nicht als Netto");
+    const reference = field("Beleg oder Schätzgrund");
+    const sourceHint = document.getElementById(reference.getAttribute("aria-describedby")!);
+    expect(sourceHint?.textContent).toContain("Brutto nicht als Netto");
+    expect(sourceHint?.textContent).toContain("Schätzung mit Quelle");
+    await act(async () => root.unmount());
+  });
+  it("does not label an invalid or incomplete cost as an accepted estimate", async () => {
+    const { root } = await mount();
+    await act(async () => button("Preisaufstellung bearbeiten").click());
+    const summary = document.querySelector(".offer-pricing__cost-input summary")!;
+    expect(summary.textContent).toContain("Kosten offen");
+    await change(field("Kosten gesamt netto"), "1850,00");
+    expect(summary.textContent).toContain("Kostenangabe prüfen");
+    await change(field("Beleg oder Schätzgrund"), "SYNTHETISCHER Testwert");
+    expect(summary.textContent).toContain("Geschätzt");
+    await change(field("Kosten gesamt netto"), "abc");
+    expect(summary.textContent).toContain("Kostenangabe prüfen");
+    await act(async () => root.unmount());
+  });
+  it("reloads an already saved price revision without posting it again", async () => {
+    const { root, saved, editing } = await mount();
+    saved.mockRejectedValueOnce(new Error("Synthetischer Verbindungsfehler")).mockResolvedValueOnce(undefined);
+    vi.mocked(reviseOfferPricing).mockResolvedValueOnce({ draftId: "saved-price" } as any);
+    await act(async () => button("Preisaufstellung bearbeiten").click());
+    await act(async () => button("Preisaufstellung als neue Fassung speichern").click());
+    expect(document.body.textContent).toContain("Die neue Fassung wurde gespeichert");
+    expect(field("Einzelpreis netto").matches(":disabled")).toBe(true);
+    expect(Array.from(document.querySelectorAll("button")).find(x => x.textContent === "Preisaufstellung als neue Fassung speichern")).toBeUndefined();
+    await act(async () => button("Gespeicherte Fassung laden").click());
+    expect(reviseOfferPricing).toHaveBeenCalledTimes(1);
+    expect(saved.mock.calls.map(args => args[0])).toEqual(["saved-price", "saved-price"]);
+    expect(editing).toHaveBeenLastCalledWith(false);
+    await act(async () => root.unmount());
+  });
+
+  it("allows closing an already saved price revision without another write after repeated refresh failures", async () => {
+    const { root, saved, editing } = await mount();
+    saved.mockRejectedValue(new Error("Synthetischer Verbindungsfehler"));
+    vi.mocked(reviseOfferPricing).mockResolvedValueOnce({ draftId: "saved-price" } as any);
+    await act(async () => button("Preisaufstellung bearbeiten").click());
+    await act(async () => button("Preisaufstellung als neue Fassung speichern").click());
+    await act(async () => button("Gespeicherte Fassung laden").click());
+    expect(reviseOfferPricing).toHaveBeenCalledTimes(1);
+    expect(document.body.textContent).toContain("Fassung bleibt gespeichert");
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain("Zugriff auf den Auftrag prüfen");
+    expect(document.querySelector('[role="alert"]')?.textContent).not.toContain("Verbindung prüfen");
+    await act(async () => button("Bearbeitung schließen").click());
+    expect(editing).toHaveBeenLastCalledWith(false);
+    expect(reviseOfferPricing).toHaveBeenCalledTimes(1);
+    expect(document.body.textContent).toContain("Fassung bleibt gespeichert");
+    await act(async () => root.unmount());
+  });
+
   it("saves an approximate total cost separately from quoted sales and reloads its provenance", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date(2026, 9, 25, 12));

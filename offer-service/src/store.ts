@@ -737,6 +737,92 @@ export class OfferStore {
     return this.cases.compareAndSet(context, caseId, expectedVersion, next);
   }
 
+  // Export and continuation share the case lock, so the chosen draft and its
+  // timeline describe one committed point in time even when another tab saves.
+  async resolveDraftForExport(
+    context: BusinessContext,
+    draftId: string
+  ): Promise<
+    | { status: "missing" }
+    | { status: "conflict" }
+    | { status: "unverified"; draft: OfferDraft }
+    | { status: "current"; draft: OfferDraft }
+    | { status: "historical"; draft: OfferDraft }
+  > {
+    const draft = await this.getDraft(context, draftId);
+    if (!draft) return { status: "missing" };
+    const relatedCases = (events: readonly CaseEvent[]) => [...new Set(events
+      .filter((event) => event.artifactId === draftId || event.revisionRef?.artifactId === draftId)
+      .map((event) => event.caseId))];
+    const initialCases = relatedCases(await this.caseEvents.list(context));
+    if (initialCases.length === 0) return { status: "unverified", draft };
+    if (initialCases.length !== 1) return { status: "conflict" };
+
+    const caseId = initialCases[0]!;
+    const storage = this.storageOptions ?? {};
+    return withBusinessTargetCriticalSection({
+      storage,
+      context,
+      target: { kind: "offer_case", artifactId: caseId, revision: 0 },
+      collectionNamespace: "offers/case-events",
+      queueFullMessage: "Die Warteschlange für Angebotsverläufe benötigt eine betriebliche Bereinigung.",
+      queueExhaustedMessage: "Die Warteschlange für Angebotsverläufe ist ausgeschöpft.",
+      timeoutMessage: "Der Angebotsverlauf konnte nicht rechtzeitig gesperrt werden.",
+      legacyTimeoutMessage: "Der alte Angebotsverlauf konnte nicht rechtzeitig entsperrt werden.",
+      postgresPoolMessage: "PostgreSQL-Angebotsverläufe benötigen einen Pool mit exklusivem Client-Checkout.",
+      operation: async (transactionalQueryable) => {
+        const collections = transactionalQueryable
+          ? createOfferCaseCollections({ rootDir: storage.rootDir, pgPool: transactionalQueryable })
+          : { cases: this.cases, events: this.caseEvents };
+        const drafts = transactionalQueryable
+          ? createOfferDecisionCollections({ rootDir: storage.rootDir, pgPool: transactionalQueryable }).drafts
+          : this.drafts;
+        if (!await collections.cases.get(context, caseId)) return { status: "conflict" };
+        const lockedDraft = await drafts.get(context, draftId);
+        if (!lockedDraft || lockedDraft.revision !== draft.revision) return { status: "conflict" };
+        const allEvents = await collections.events.list(context);
+        const linkedCases = relatedCases(allEvents);
+        if (linkedCases.length !== 1 || linkedCases[0] !== caseId) return { status: "conflict" };
+        const events = allEvents.filter((event) => event.caseId === caseId);
+        const sequences = new Set<number>();
+        const draftIds = new Set<string>();
+        const draftEvents: CaseEvent[] = [];
+        for (const event of events) {
+          if (!Number.isSafeInteger(event.sequence) || event.sequence < 1 || sequences.has(event.sequence)) {
+            return { status: "conflict" };
+          }
+          sequences.add(event.sequence);
+          if (event.kind !== "draft_created") continue;
+          const ref = event.revisionRef;
+          if (!event.artifactId || ref?.artifactType !== "OfferDraft" ||
+              ref.artifactId !== event.artifactId || !Number.isSafeInteger(ref.revision) ||
+              ref.revision < 1 || draftIds.has(event.artifactId)) return { status: "conflict" };
+          draftIds.add(event.artifactId);
+          draftEvents.push(event);
+        }
+        const exact = draftEvents.find((event) => event.artifactId === draftId &&
+          event.revisionRef?.revision === lockedDraft.revision);
+        if (!exact) return { status: "conflict" };
+        const latest = draftEvents.reduce((current, event) => event.sequence > current.sequence ? event : current);
+        for (const event of events) {
+          const ref = event.revisionRef;
+          if (event.kind === "revision_created" && ref?.artifactType !== "OfferDraft") return { status: "conflict" };
+          if (ref?.artifactType !== "OfferDraft") continue;
+          if (!ref.artifactId || !Number.isSafeInteger(ref.revision) || ref.revision < 1 ||
+              (event.kind === "revision_created" && event.artifactId !== ref.artifactId)) return { status: "conflict" };
+          const creation = draftEvents.find((created) => created.artifactId === ref.artifactId &&
+            created.revisionRef?.revision === ref.revision);
+          if (!creation || event.sequence < creation.sequence) return { status: "conflict" };
+          if (event.sequence > latest.sequence &&
+              (ref.artifactId !== latest.artifactId || ref.revision !== latest.revisionRef?.revision)) {
+            return { status: "conflict" };
+          }
+        }
+        return { status: exact.sequence < latest.sequence ? "historical" : "current", draft: lockedDraft };
+      }
+    });
+  }
+
   async findCaseIdForDraft(
     context: BusinessContext,
     draftId: string,
