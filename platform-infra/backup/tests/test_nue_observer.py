@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import socket
 import stat
+import subprocess
 import sys
 import tempfile
 import time
@@ -328,8 +329,11 @@ class VersionDispatchContracts(unittest.TestCase):
             value = Path(value)
             return fixture.state / value.relative_to(fixed_root) if value == fixed_root or fixed_root in value.parents else value
         delivered = []
-        def transport(url, healthy, seconds, cutoff=None):
+        def transport(url, healthy, seconds, cutoff=None, diagnostic=None):
             delivered.append(healthy)
+            if not healthy:
+                self.assertEqual(diagnostic['backup_health'], 'critical')
+                self.assertIn(diagnostic['reason'], ('SERVICE_FAILED', 'SERVICE_UNKNOWN', 'JOURNAL_ORDER_INVALID'))
             if closed_window:
                 raise ValueError('PING_WINDOW_CLOSED')
             return True
@@ -444,6 +448,104 @@ class VersionDispatchContracts(unittest.TestCase):
         observe.assert_not_called()
         publish.assert_not_called()
         transmit.assert_not_called()
+
+
+class DiagnosticContracts(unittest.TestCase):
+    def setUp(self):
+        self.clock = mock.patch.object(observer, 'utc_now', return_value=NOW)
+        self.clock.start()
+        self.addCleanup(self.clock.stop)
+        self.failure = dict(backup_health='critical', reason='SERVICE_FAILED', data_epoch=NOW - 1000,
+                            delivery_accepted=False)
+
+    def test_report_excludes_credentials_unknown_reasons_and_unbounded_values(self):
+        report = observer.diagnostic_report(dict(self.failure, reason='SYNTHETIC_SECRET',
+            observation_reason='https://secret.example/token', password='SYNTHETIC_SECRET',
+            data_epoch=True, arbitrary='x' * 100000))
+        encoded = json.dumps(report)
+        self.assertLess(len(encoded), 512)
+        self.assertNotIn('SYNTHETIC_SECRET', encoded)
+        self.assertNotIn('secret.example', encoded)
+        self.assertEqual(report['reason'], 'OBSERVER_FAILED')
+        self.assertIsNone(report['data_epoch'])
+        self.assertEqual(report['checked_at_epoch'], NOW)
+        for invalid in (['SERVICE_FAILED'], {'token': 'SYNTHETIC_SECRET'}, None):
+            self.assertEqual(observer.diagnostic_report({'reason': invalid})['reason'], 'OBSERVER_FAILED')
+
+    def test_failure_request_contains_diagnosis_and_healthy_request_stays_bodyless(self):
+        connection = mock.MagicMock()
+        connection.getresponse.return_value.status = 200
+        url = 'https://incidents.betterstack.com/api/v1/heartbeat/SYNTHETIC_TOKEN'
+        with mock.patch.object(observer.http.client, 'HTTPSConnection', return_value=connection):
+            self.assertTrue(observer.http_send(url, False, 5, diagnostic=self.failure))
+            call = connection.request.call_args
+            self.assertEqual(call.args, ('POST', '/api/v1/heartbeat/SYNTHETIC_TOKEN/fail'))
+            report = json.loads(call.kwargs['body'])
+            self.assertEqual(report['reason'], 'SERVICE_FAILED')
+            self.assertEqual(report['data_epoch'], NOW - 1000)
+            self.assertNotIn('SYNTHETIC_TOKEN', call.kwargs['body'].decode())
+            observer.http_send(url, True, 5, diagnostic=self.failure)
+            self.assertEqual(connection.request.call_args.args, ('GET', '/api/v1/heartbeat/SYNTHETIC_TOKEN'))
+            self.assertEqual(connection.request.call_args.kwargs, {})
+
+    def test_worker_keeps_secret_in_stdin_and_sends_only_closed_diagnostic_fields(self):
+        url = 'https://incidents.betterstack.com/api/v1/heartbeat/SYNTHETIC_TOKEN'
+        with mock.patch.object(observer.subprocess, 'run', return_value=types.SimpleNamespace(returncode=0)) as child:
+            self.assertTrue(observer.transmit(url, False, 5, diagnostic=dict(self.failure, password='PRIVATE_VALUE')))
+        args, kwargs = child.call_args
+        self.assertNotIn('SYNTHETIC_TOKEN', repr(args) + repr(kwargs['env']))
+        payload = json.loads(kwargs['input'])
+        self.assertEqual(payload[0], url)
+        self.assertEqual(payload[4]['reason'], 'SERVICE_FAILED')
+        self.assertNotIn('PRIVATE_VALUE', kwargs['input'].decode())
+        self.assertEqual(kwargs['timeout'], 5)
+
+    def test_journal_retains_observation_reason_when_delivery_fails(self):
+        outcome = dict(self.failure, reason='DELIVERY_FAILED', observation_reason='SERVICE_FAILED')
+        with mock.patch.object(observer.subprocess, 'run', return_value=types.SimpleNamespace(returncode=0)) as logger:
+            self.assertTrue(observer.journal_outcome(outcome))
+        args, kwargs = logger.call_args
+        self.assertEqual(args[0][:4], ['/usr/bin/logger', '-t', 'catering-backup-observer', '--'])
+        report = json.loads(args[0][-1])
+        self.assertEqual(report['reason'], 'DELIVERY_FAILED')
+        self.assertEqual(report['observation_reason'], 'SERVICE_FAILED')
+        self.assertEqual(kwargs['timeout'], 1)
+
+    def test_logging_failure_never_changes_a_failure_to_success(self):
+        with mock.patch.object(observer, 'journal_outcome', return_value=False), mock.patch('builtins.print') as output:
+            self.assertEqual(observer.finish(self.failure), 1)
+        report = json.loads(output.call_args.args[0])
+        self.assertFalse(report['diagnostic_logged'])
+        self.assertEqual(report['reason'], 'SERVICE_FAILED')
+
+    def test_read_only_check_and_healthy_signal_do_not_write_failure_logs(self):
+        with mock.patch.object(observer, 'journal_outcome') as journal, mock.patch('builtins.print'):
+            self.assertEqual(observer.finish(self.failure, check=True), 1)
+            self.assertEqual(observer.finish(dict(self.failure, backup_health='healthy',
+                                                reason='HEALTHY', delivery_accepted=True)), 0)
+        journal.assert_not_called()
+
+    def test_logger_timeout_or_error_is_bounded_and_does_not_escape(self):
+        for error in (subprocess.TimeoutExpired('logger', 1), OSError('SYNTHETIC_SECRET')):
+            with self.subTest(error=type(error).__name__), \
+                 mock.patch.object(observer.subprocess, 'run', side_effect=error), mock.patch('builtins.print') as output:
+                self.assertFalse(observer.journal_outcome(self.failure))
+                output.assert_not_called()
+
+    def test_failed_delivery_preserves_original_monitor_failure(self):
+        path = Path(__file__).resolve().parents[3] / 'tests/catering_backup_observer_test.py'
+        spec = importlib.util.spec_from_file_location('diagnostic_sender_fixture', path)
+        legacy = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(legacy)
+        fixture = legacy.ObserverContracts('test_complete_proof_is_healthy_without_transport')
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        fixture.units['backup'].update(Result='exit-code', ActiveState='failed', ExecMainStatus='1')
+        with mock.patch.object(fixture.module, 'transmit', return_value=False) as send:
+            result = fixture.check(send=True)
+        self.assertEqual(result['reason'], 'DELIVERY_FAILED')
+        self.assertEqual(result['observation_reason'], 'SERVICE_FAILED')
+        self.assertEqual(send.call_args.kwargs['diagnostic']['reason'], 'SERVICE_FAILED')
 
 
 if __name__ == '__main__': unittest.main()

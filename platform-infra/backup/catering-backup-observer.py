@@ -545,23 +545,85 @@ def heartbeat_url(value):
     return parsed
 
 
-def http_send(url, healthy, seconds, cutoff=None):
+DIAGNOSTIC_REASONS = frozenset('''
+ACCOUNT_UNBOUND ARGUMENT_INVALID ATTESTATION_INVALID BINDING_INVALID BOOT_CHANGED BOOT_INVALID
+CAPTURE_BINDING CLOCK_INVALID CLOCK_ROLLBACK CLOCK_UNSYNCED CYCLE_CHANGED CYCLE_MISSING
+DELIVERY_FAILED DISPATCH_BUDGET_EXCEEDED DUPLICATE_INVOCATION EVIDENCE_AGE_INVALID FAILURE_LATCHED
+FINAL_HEALTH_REQUIRED FULL_RESTORE_REQUIRED GENERATION_CHANGED HEALTHY HOST_BINDING_INVALID
+INSUFFICIENT_DETECTION_MARGIN JOURNAL_COMPLETION_INVALID JOURNAL_INCOMPLETE JOURNAL_INVOCATION_INVALID
+JOURNAL_ORDER_INVALID JOURNAL_PASS_MISSING JOURNAL_START_INVALID JOURNAL_START_MISSING
+LEGACY_RESTORE_PRESENT MAIN_PROCESS_BINDING METADATA_BUDGET METADATA_FAILED METADATA_TIMEOUT
+NUE_FILE_SCOPE NUE_GENERATION_CHANGED NUE_PROOF_BINDING NUE_SOURCE_CHANGED NUE_STATE_ROOT
+OBSERVER_BUDGET_EXCEEDED OBSERVER_FAILED OBSERVER_FILE_SCOPE OBSERVER_NOT_ARMED OBSERVATION_FAILED
+OFFHOST_PROOF_FIELDS ORIGINAL_STATE_BINDING ORIGINAL_STATE_SCOPE OWNED_CLEANUP_REQUIRED
+PASS_PROVENANCE_REQUIRED PID1_PROVENANCE_REQUIRED PING_WINDOW_CLOSED POLICY_VERSION PRIVILEGE_INVALID
+PROCESS_INVOCATION_INVALID PROTECTION_INVALID PUBLICATION_MISSING RESTORE_BUDGET_EXCEEDED
+RESTORE_DISPATCH_MISSING SERVICE_BUDGET_EXCEEDED SERVICE_FAILED SERVICE_UNKNOWN SOURCE_RESUME_REQUIRED
+STATE_INVALID TARGET_INVALID TIMER_NOT_ARMED TIMING_UNBOUND TRANSMIT_INPUT_BUDGET UNIT_DRIFT
+UNIT_SNAPSHOT_UNSTABLE VALIDATOR_FAILED
+'''.split())
+
+
+def diagnostic_report(outcome):
+    # Only reviewed codes and scalar health facts may leave the process. Exception
+    # text, policy paths, heartbeat credentials and arbitrary fields are excluded.
+    value = outcome if type(outcome) is dict else {}
+    code = lambda key: value.get(key) if type(value.get(key)) is str and value.get(key) in DIAGNOSTIC_REASONS else 'OBSERVER_FAILED'
+    source = value.get('data_epoch')
+    health = value.get('backup_health')
+    return dict(scope='CATERING_BACKUP_RESTORE', reason=code('reason'),
+                observation_reason=code('observation_reason') if 'observation_reason' in value else code('reason'),
+                backup_health=health if health in ('healthy', 'warning', 'critical', 'unknown') else 'unknown',
+                data_epoch=source if type(source) is int and 0 <= source <= 4102444800 else None,
+                checked_at_epoch=utc_now(), delivery_accepted=value.get('delivery_accepted') is True)
+
+
+def journal_outcome(outcome):
+    try:
+        result = subprocess.run(['/usr/bin/logger', '-t', 'catering-backup-observer', '--',
+                                 json.dumps(diagnostic_report(outcome), sort_keys=True)],
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                env=ENV, timeout=1, check=False)
+        return result.returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+def finish(outcome, check=False):
+    result = dict(outcome)
+    if not check and (result['backup_health'] != 'healthy' or not result['delivery_accepted']):
+        result['diagnostic_logged'] = journal_outcome(result)
+    print(json.dumps(result, sort_keys=True))
+    return 0 if result['backup_health'] == 'healthy' and (check or result['delivery_accepted']) else 1
+
+
+def http_send(url, healthy, seconds, cutoff=None, diagnostic=None):
     target = heartbeat_url(url)
     connection = http.client.HTTPSConnection(target.hostname, timeout=seconds, context=ssl.create_default_context())
     try:
         connection.connect()
         require(not healthy or cutoff is None or utc_now() < cutoff, 'INSUFFICIENT_DETECTION_MARGIN')
-        connection.request('GET', target.path + ('' if healthy else '/fail'))
+        if not healthy and diagnostic is not None:
+            body = json.dumps(diagnostic_report(diagnostic), sort_keys=True).encode('ascii')
+            connection.request('POST', target.path + '/fail', body=body,
+                               headers={'Content-Type': 'text/plain; charset=utf-8'})
+        else:
+            connection.request('GET', target.path + ('' if healthy else '/fail'))
         response = connection.getresponse()
         return response.status == 200
     finally:
         connection.close()
 
 
-def transmit(url, healthy, seconds, cutoff=None):
+def transmit(url, healthy, seconds, cutoff=None, diagnostic=None):
     # A child deadline also bounds DNS. The secret travels only through stdin.
+    payload = [url, healthy, seconds, cutoff]
+    if diagnostic is not None:
+        payload.append(diagnostic_report(diagnostic))
+    body = json.dumps(payload).encode()
+    require(len(body) <= 4096, 'TRANSMIT_INPUT_BUDGET')
     result = subprocess.run([sys.executable, '-I', str(Path(__file__).resolve()), '--transmit'],
-                            input=json.dumps([url, healthy, seconds, cutoff]).encode(), stdout=subprocess.DEVNULL,
+                            input=body, stdout=subprocess.DEVNULL,
                             stderr=subprocess.DEVNULL, env=ENV, timeout=seconds, check=False)
     require(result.returncode != 3, 'PING_WINDOW_CLOSED')
     return result.returncode == 0
@@ -661,13 +723,18 @@ def run(policy_path, send=False):
             publish_state(state_root, terminal_now, failure, output['backup_health'])
             try:
                 cutoff = deadline - sum(durations) if output['backup_health'] == 'healthy' else None
-                output['delivery_accepted'] = transmit(url, output['backup_health'] == 'healthy', heartbeat['request_seconds'], cutoff) is True
+                if output['backup_health'] == 'healthy':
+                    output['delivery_accepted'] = transmit(url, True, heartbeat['request_seconds'], cutoff) is True
+                else:
+                    output['delivery_accepted'] = transmit(url, False, heartbeat['request_seconds'], cutoff,
+                                                          diagnostic=diagnostic_report(output)) is True
             except Exception as error:
                 output['delivery_accepted'] = False
                 if type(error) is ValueError and str(error) == 'PING_WINDOW_CLOSED':
                     # Keep the worker's whole-second watermark if the parent clock rolls back.
                     publish_state(state_root, max(terminal_now, math.ceil(cutoff)), failure, 'warning')
             if not output['delivery_accepted']:
+                output['observation_reason'] = output['reason']
                 output['reason'] = 'DELIVERY_FAILED'
         output['observer_run'] = 'completed'
     except Exception as error:
@@ -691,5 +758,4 @@ if __name__ == '__main__':
             sys.exit(1)
     require(sys.argv[1:] in ([], ['--check']), 'ARGUMENT_INVALID')
     outcome = run('/etc/catering-backup-monitor/policy.json', send=not sys.argv[1:])
-    print(json.dumps(outcome, sort_keys=True))
-    sys.exit(0 if outcome['backup_health'] == 'healthy' and (sys.argv[1:] or outcome['delivery_accepted']) else 1)
+    sys.exit(finish(outcome, check=bool(sys.argv[1:])))
