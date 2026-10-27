@@ -78,9 +78,14 @@ describe("case history in the rendered offer route", () => {
       configurable: true,
       value: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined }
     });
+    const sessionValues = new Map<string, string>();
     Object.defineProperty(window, "sessionStorage", {
       configurable: true,
-      value: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined }
+      value: {
+        getItem: (key: string) => sessionValues.get(key) ?? null,
+        setItem: (key: string, value: string) => { sessionValues.set(key, String(value)); },
+        removeItem: (key: string) => { sessionValues.delete(key); }
+      }
     });
     window.history.replaceState({}, "", "/angebot");
 
