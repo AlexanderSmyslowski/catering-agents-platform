@@ -77,7 +77,10 @@ export function OfferPricingEditor({ draftId, revision, variants, menuPlan, pric
   const [rows, setRows] = useState<Row[]>();
   const [variantId, setVariantId] = useState("");
   const [saving, setSaving] = useState(false);
+  const [pendingSavedDraft, setPendingSavedDraft] = useState<string>();
+  const frozen = saving || Boolean(pendingSavedDraft);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const live = useRef(true);
   const submitting = useRef(false);
   const errorRef = useRef<HTMLParagraphElement>(null);
@@ -95,7 +98,7 @@ export function OfferPricingEditor({ draftId, revision, variants, menuPlan, pric
       id: "food", label: "Speisen-Grundpaket – vollständiges Menü", category: "food", quantity: "",
       unit: "guest", net: "", tax: "", sourceKind: "app_transfer", sourceReference: reference
     }]);
-    setError(""); onEditingChange(true);
+    setError(""); setNotice(""); onEditingChange(true);
   }
   function update(index: number, patch: Partial<Row>) {
     setError("");
@@ -130,7 +133,8 @@ export function OfferPricingEditor({ draftId, revision, variants, menuPlan, pric
     catch (cause) { previewError = cause instanceof Error ? cause.message : "Angaben unvollständig."; }
   }
   async function save() {
-    if (!rows || submitting.current || disabled) return;
+    if (!rows || submitting.current || disabled || pendingSavedDraft) return;
+    let postedDraftId: string | undefined;
     try {
       if (!variant) throw new Error("Bitte zuerst die Angebotsvariante wählen.");
       const lines = inputLines(rows);
@@ -138,17 +142,42 @@ export function OfferPricingEditor({ draftId, revision, variants, menuPlan, pric
       submitting.current = true; setSaving(true); setError("");
       const saved = await reviseOfferPricing(draftId, revision, variantId, lines);
       if (!live.current) return;
+      postedDraftId = saved.draftId;
+      setPendingSavedDraft(saved.draftId);
       await onSaved(saved.draftId);
       if (!live.current) return;
-      setRows(undefined); onEditingChange(false);
+      setRows(undefined); setPendingSavedDraft(undefined); onEditingChange(false);
     } catch (cause) {
       if (!live.current) return;
-      setError(cause instanceof Error ? cause.message : "Preisaufstellung konnte nicht gespeichert werden.");
+      setError(postedDraftId
+        ? "Die neue Fassung wurde gespeichert. Die Ansicht konnte nicht aktualisiert werden. Bitte die gespeicherte Fassung laden."
+        : cause instanceof Error ? cause.message : "Preisaufstellung konnte nicht gespeichert werden.");
       requestAnimationFrame(() => errorRef.current?.focus());
     } finally {
       submitting.current = false;
       if (live.current) setSaving(false);
     }
+  }
+  async function reloadSaved() {
+    if (!pendingSavedDraft || submitting.current) return;
+    submitting.current = true; setSaving(true); setError("");
+    try {
+      await onSaved(pendingSavedDraft);
+      if (!live.current) return;
+      setRows(undefined); setPendingSavedDraft(undefined); onEditingChange(false);
+    } catch {
+      if (live.current) {
+        setError("Die Fassung bleibt gespeichert. Sie konnte noch nicht geladen werden. Bitte später erneut versuchen oder den Zugriff auf den Auftrag prüfen.");
+        requestAnimationFrame(() => errorRef.current?.focus());
+      }
+    } finally {
+      submitting.current = false;
+      if (live.current) setSaving(false);
+    }
+  }
+  function closeSaved() {
+    setRows(undefined); setPendingSavedDraft(undefined); setError(""); onEditingChange(false);
+    setNotice("Die Fassung bleibt gespeichert. Bitte den Auftrag später erneut laden.");
   }
   function totals(summary?: PricingSummary) {
     const c = summary?.calculation;
@@ -179,7 +208,7 @@ export function OfferPricingEditor({ draftId, revision, variants, menuPlan, pric
     <h3>Preisaufstellung</h3>
     <p className="helper-text">Speisenpaket für das gesamte Menü; Personal, Logistik und Zusatzleistungen separat. Verkaufspreise netto. Interne direkte Kosten können getrennt ergänzt werden; Schätzungen sind möglich.</p>
     {rows ? <>
-      <label>Zu kalkulierende Variante<select disabled={saving} value={variantId} onChange={event => {
+      <label>Zu kalkulierende Variante<select disabled={frozen} value={variantId} onChange={event => {
         const selected = variants.find(item => item.variantId === event.target.value);
         setVariantId(event.target.value); setError("");
         setRows(current => current?.map(row => row.unit === "guest" ? {
@@ -188,7 +217,7 @@ export function OfferPricingEditor({ draftId, revision, variants, menuPlan, pric
         } : row));
       }}><option value="">Bitte wählen</option>{variants.map(item => <option key={item.variantId} value={item.variantId}>{item.label} · {item.guests} Gäste</option>)}</select></label>
       <p className="helper-text">Speisen-Grundpaket umfasst: {(variant?.menuPlan ?? menuPlan).map(item => String(item.label) + " (" + String(item.servings ?? "offen") + " Portionen)").join(", ")}.</p>
-      {rows.map((row, index) => <fieldset className="offer-pricing__fields" key={row.id} disabled={saving}>
+      {rows.map((row, index) => <fieldset className="offer-pricing__fields" key={row.id} disabled={frozen}>
         <legend>{index + 1}. {row.label}</legend>
         <label>Leistung<input value={row.label} onChange={event => update(index, { label: event.target.value })} /></label>
         <label>{unitLabels[row.unit]}<input inputMode="decimal" value={row.quantity} readOnly={row.category === "food"} onChange={event => update(index, { quantity: event.target.value })} /></label>
@@ -226,7 +255,7 @@ export function OfferPricingEditor({ draftId, revision, variants, menuPlan, pric
         {row.category !== "food" ? <button type="button" className="secondary-button" onClick={() => setRows(current => current?.filter(item => item.id !== row.id))}>Leistung entfernen</button> : null}
       </fieldset>)}
       <p className="helper-text">Leistungen ergänzen. Vorbelegte Preise und Quellen vor der Angebotsfreigabe prüfen.</p>
-      <div className="quiet-action-row">{templates.map(template => <button key={template.id} type="button" className="secondary-button" disabled={saving || rows.some(row => row.id === template.id)} onClick={() => setRows(current => [...(current ?? []), {
+      <div className="quiet-action-row">{templates.map(template => <button key={template.id} type="button" className="secondary-button" disabled={frozen || rows.some(row => row.id === template.id)} onClick={() => setRows(current => [...(current ?? []), {
         id: template.id, label: template.label, category: template.category, unit: template.unit,
         quantity: template.unit === "guest" ? String(variant?.guests ?? "") : template.unit === "flat" ? "1" : "",
         net: (template.cents / 100).toFixed(2), tax: "", sourceKind: template.id === "staff" ? "operator" : "app_transfer", sourceReference: template.id === "staff" ? confirmedServiceRateReference : reference
@@ -238,8 +267,13 @@ export function OfferPricingEditor({ draftId, revision, variants, menuPlan, pric
       {directCosts(preview)}
       {preview?.calculation?.missingTaxLineIds.length ? <p role="status">Steuerfestlegung unvollständig: Speichern möglich, Freigabe gesperrt. Brutto bleibt offen.</p> : null}
       <div className="quiet-action-row">
-        <button type="button" disabled={saving || disabled} onClick={() => void save()}>{saving ? "Wird gespeichert …" : "Preisaufstellung als neue Fassung speichern"}</button>
-        <button type="button" className="secondary-button" disabled={saving} onClick={() => { setRows(undefined); setError(""); onEditingChange(false); }}>Verwerfen</button>
+        {pendingSavedDraft ? <>
+          <button type="button" disabled={saving} onClick={() => void reloadSaved()}>{saving ? "Wird geladen …" : "Gespeicherte Fassung laden"}</button>
+          <button type="button" className="secondary-button" disabled={saving} onClick={closeSaved}>Bearbeitung schließen</button>
+        </> : <>
+          <button type="button" disabled={saving || disabled} onClick={() => void save()}>{saving ? "Wird gespeichert …" : "Preisaufstellung als neue Fassung speichern"}</button>
+          <button type="button" className="secondary-button" disabled={saving} onClick={() => { setRows(undefined); setError(""); onEditingChange(false); }}>Verwerfen</button>
+        </>}
       </div>
     </> : calculation ? <>
       <p className="helper-text">{calculation.missingTaxLineIds.length ? "Unvollständig – Steuerfestlegung fehlt; Freigabe gesperrt." : "Verkaufspreise und Steuer erfasst – fachliche Prüfung weiterhin erforderlich."}</p>
@@ -257,5 +291,6 @@ export function OfferPricingEditor({ draftId, revision, variants, menuPlan, pric
       <button type="button" className="secondary-button" disabled={disabled} onClick={begin}>Preisaufstellung erfassen</button>
     </>}
     {error ? <p role="alert" tabIndex={-1} ref={errorRef}>{error}</p> : null}
+    {notice ? <p role="status">{notice}</p> : null}
   </section>;
 }

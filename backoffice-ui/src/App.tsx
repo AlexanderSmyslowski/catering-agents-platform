@@ -1,3 +1,4 @@
+import { OFFER_RECOVERY_STORAGE_ERROR, OFFER_SAVED_DRAFT_SUPERSEDED_ERROR } from "./use-offer-workspace-data.js";
 import {
   useEffect,
   useMemo,
@@ -126,6 +127,37 @@ import type { OfferWorkbenchProps } from "./offer-workbench.js";
 // Product route content is composed directly from the typed route boundaries.
 
 const PROMOTED_PRODUCTION_SPEC_FOCUS_KEY = "catering.promotedProductionSpecFocus";
+const OFFER_CASE_FOCUS_KEY = "catering.offerCaseFocus";
+
+// The browser entry remembers only a case reference, and only for its authenticated user.
+function offerCaseFocusFromHistory(userId?: string): string | undefined {
+  if (!userId || typeof window === "undefined") return undefined;
+  try {
+    const state: unknown = window.history.state;
+    if (!state || typeof state !== "object" || Array.isArray(state)) return undefined;
+    const focus: unknown = (state as Record<string, unknown>)[OFFER_CASE_FOCUS_KEY];
+    if (!focus || typeof focus !== "object" || Array.isArray(focus)) return undefined;
+    const { caseId, userId: savedUserId } = focus as Record<string, unknown>;
+    return savedUserId === userId && typeof caseId === "string" && caseId.trim() &&
+      caseId.length <= 512 ? caseId : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function rememberOfferCaseFocus(userId: string | undefined, caseId: string | undefined) {
+  if (!userId || typeof window === "undefined") return;
+  try {
+    const current: unknown = window.history.state;
+    if (current !== null && (typeof current !== "object" || Array.isArray(current))) return;
+    const next: Record<string, unknown> = { ...(current as Record<string, unknown> | null) };
+    if (caseId && caseId.trim() && caseId.length <= 512) next[OFFER_CASE_FOCUS_KEY] = { userId, caseId };
+    else delete next[OFFER_CASE_FOCUS_KEY];
+    window.history.replaceState(next, "");
+  } catch {
+    // A blocked history state must not prevent normal use of the current page.
+  }
+}
 
 function rememberPromotedProductionSpecFocus(specId: string) {
   if (typeof window === "undefined") {
@@ -161,6 +193,7 @@ type ProductWorkspaceProps = {
   loaderError?: string;
   refreshDashboard: (options?: WorkspaceRefreshOptions) => Promise<void>;
   activeOfferCaseId?: string;
+  loadedOfferCaseId?: string;
   activeOfferDraftId?: string;
   setActiveOfferCaseId: (caseId: string | undefined) => void;
   activeProductionCaseId?: string;
@@ -420,6 +453,7 @@ function ProductWorkspaceView({
   loaderError,
   refreshDashboard,
   activeOfferCaseId,
+  loadedOfferCaseId,
   activeOfferDraftId,
   setActiveOfferCaseId,
   activeProductionCaseId,
@@ -652,6 +686,19 @@ function ProductWorkspaceView({
   }, [workspaceSearchText]);
   const acceptedSourceFileRef = useRef<File | undefined>(undefined);
   const sourceSwitchError = "Begonnene Eingaben zuerst übernehmen oder über „Eingabefelder leeren“ verwerfen. Gespeicherte Aufträge bleiben erhalten.";
+  const unavailableSourceSwitchError = "Der Auftrag ist nicht verfügbar. Bitte Text kopieren oder über „Eingabefelder leeren“ verwerfen. Ausgewählte Dateien bleiben auf deinem Gerät.";
+  const loadingSourceSwitchError = "Der Auftrag wird noch geladen. Bitte warte, bevor du zu einem anderen Auftrag wechselst.";
+  const offerCaseNotReady = route === "offer" && Boolean(activeOfferCaseId) && loadedOfferCaseId !== activeOfferCaseId;
+  const offerCaseUnavailable = offerCaseNotReady && !loading;
+  const offerCaseNeedsRefresh = route === "offer" && Boolean(activeOfferCaseId) && Boolean(loaderError);
+  const offerCaseRefreshFailed = offerCaseNeedsRefresh && !offerCaseNotReady && !loading;
+  useEffect(() => {
+    setError(current => {
+      if (current === loadingSourceSwitchError && !loading) return undefined;
+      if (current === unavailableSourceSwitchError && (loading || !offerCaseNotReady)) return undefined;
+      return current;
+    });
+  }, [loading, offerCaseNotReady]);
   const hasSourceInputs = Boolean(offerText.trim() || intakeText.trim() || (intakeFile && intakeFile !== acceptedSourceFileRef.current) ||
     manualSpecForm.manualCustomerName.trim() || manualSpecForm.manualEventDate.trim() ||
     manualSpecForm.manualAttendeeCount.trim() || manualSpecForm.manualMenuItems.trim() ||
@@ -662,7 +709,10 @@ function ProductWorkspaceView({
     if (route === "offer" && offerMenuEditingRef.current) {
       setError("Bitte Angebotsbearbeitung zuerst speichern oder abbrechen."); return false;
     }
-    if (hasSourceInputs) { setError(sourceSwitchError); return false; }
+    if (hasSourceInputs) {
+      setError(offerCaseUnavailable ? unavailableSourceSwitchError : offerCaseNotReady ? loadingSourceSwitchError : sourceSwitchError);
+      return false;
+    }
     if (intakeFile && intakeFile === acceptedSourceFileRef.current) {
       setIntakeFile(null);
       resetDocumentProgress();
@@ -1390,12 +1440,39 @@ function ProductWorkspaceView({
 
       {(route === "offer" ? activeOfferCaseId : activeProductionCaseId) ? <section className="panel current-order-header" aria-label="Geöffneter Auftrag">
         <h2>{activeCase?.displayName ?? "Auftrag geöffnet"}</h2>
-        <p role="status">{activeCase ? formatCaseStatus(route === "offer" ? "offer" : "production", activeCase.status) : loaderError ? "Auftragsname nicht verfügbar. Der Auftrag bleibt geöffnet." : "Auftragsdaten werden geladen …"}</p>
+        <p role="status">{(offerCaseUnavailable || offerCaseRefreshFailed) &&
+          (loaderError === OFFER_RECOVERY_STORAGE_ERROR || loaderError === OFFER_SAVED_DRAFT_SUPERSEDED_ERROR) ? loaderError
+          : offerCaseUnavailable ? "Der Auftrag konnte nicht geladen werden. Bitte erneut versuchen oder zur Auftragsübersicht zurückkehren."
+          : offerCaseRefreshFailed ? "Auftragsdaten konnten nicht aktualisiert werden. Bitte erneut laden, bevor du speicherst, freigibst oder exportierst."
+            : offerCaseNeedsRefresh && loading ? "Auftragsdaten werden erneut geladen …"
+              : offerCaseNotReady ? "Auftragsdaten werden geladen …"
+              : activeCase ? formatCaseStatus(route === "offer" ? "offer" : "production", activeCase.status)
+                : loaderError ? "Auftragsname nicht verfügbar. Der Auftrag bleibt geöffnet." : "Auftragsdaten werden geladen …"}</p>
         {route === "production" && activeCase?.status === "completed" ? <p className="helper-text">Plan und Einkaufsliste sind gespeichert. Offene Rezept-, Allergen- und Hygieneprüfungen bleiben vor der tatsächlichen Produktion erforderlich.</p> : null}
+        {offerCaseRefreshFailed && offerMenuEditing ? <p className="helper-text">{loaderError === OFFER_SAVED_DRAFT_SUPERSEDED_ERROR
+          ? "Schließe die Bearbeitung und wähle anschließend „Aktuelle Fassung prüfen“. Sichere ungespeicherte Eingaben, bevor du abbrichst."
+          : "Die Bearbeitung ist geöffnet. Gespeicherte Fassungen kannst du im Editor laden oder die Bearbeitung schließen. Sichere ungespeicherte Eingaben, bevor du abbrichst."}</p> : null}
+        {offerCaseUnavailable || offerCaseRefreshFailed ? (
+          <div className="quiet-action-row">
+            {loaderError === OFFER_SAVED_DRAFT_SUPERSEDED_ERROR ? <button type="button" disabled={submitting || offerMenuEditing} onClick={() => {
+              void refreshDashboard({ acceptNewerOfferDraft: true }).catch((cause) => setError(cause instanceof Error ? cause.message : "Auftrag konnte nicht geladen werden."));
+            }}>Aktuelle Fassung prüfen</button> : null}
+            <button type="button" className="secondary-button" disabled={submitting || offerMenuEditing} onClick={() => {
+              setError(current => current === unavailableSourceSwitchError ? undefined : current);
+              void refreshDashboard().catch((cause) => setError(cause instanceof Error ? cause.message : "Auftrag konnte nicht geladen werden."));
+            }}>Erneut versuchen</button>
+            <button type="button" className="secondary-button" disabled={submitting || offerMenuEditing} onClick={() => {
+              if (canChangeHistoryCase()) {
+                setActiveOfferCaseId(undefined);
+                clearMessages();
+              }
+            }}>Zur Auftragsübersicht</button>
+          </div>
+        ) : null}
       </section> : null}
       {workspaceSearchText ? <p className="workspace-filter-notice" role="status">Ansicht ist gefiltert: „{workspaceSearchText}“ <button type="button" className="secondary-button" onClick={() => setWorkspaceSearchText("")}>Filter aufheben</button></p> : null}
 
-      {error === sourceSwitchError && hasSourceInputs ? <p className="workspace-filter-notice"><button type="button" className="secondary-button" disabled={submitting} onClick={clearSourceInputs}>Eingabefelder leeren</button><span>Nur aktuelle Eingaben; gespeicherte Aufträge bleiben erhalten.</span></p> : null}
+      {(error === sourceSwitchError || error === unavailableSourceSwitchError) && hasSourceInputs ? <p className="workspace-filter-notice"><button type="button" className="secondary-button" disabled={submitting} onClick={clearSourceInputs}>Eingabefelder leeren</button><span>Nur aktuelle Eingaben; gespeicherte Aufträge bleiben erhalten.</span></p> : null}
       <CaseHistoryPanel
         product={route === "offer" ? "offer" : "production"}
         items={historyState.items}
@@ -1415,16 +1492,19 @@ function ProductWorkspaceView({
         error={historyError}
       />
 
-      <CaseNextActionBar
-        product={route}
-        action={nextAction}
-        onAction={(action) => void runNextAction(action).catch((cause) => setError(cause instanceof Error ? cause.message : "Nächster Schritt konnte nicht ausgeführt werden."))}
-        busy={submitting}
-        disabled={route === "offer" && offerMenuEditing}
-        error={error}
-      />
+      {offerCaseNotReady ? (error ? <p className="form-error" role="alert">{error}</p> : null) : (
+        <CaseNextActionBar
+          product={route}
+          action={nextAction}
+          onAction={(action) => void runNextAction(action).catch((cause) => setError(cause instanceof Error ? cause.message : "Nächster Schritt konnte nicht ausgeführt werden."))}
+          busy={submitting}
+          disabled={route === "offer" && (offerMenuEditing || offerCaseNeedsRefresh)}
+          disabledReason={offerCaseNeedsRefresh ? offerMenuEditing ? "Bitte den Hinweis in der geöffneten Bearbeitung beachten." : loading ? "Auftragsdaten werden erneut geladen." : "Zuerst Auftragsdaten erneut laden." : undefined}
+          error={error}
+        />
+      )}
 
-      {route === "offer" ? <OfferConversationalWorkbench {...offerWorkbenchState} /> : null}
+      {route === "offer" ? <OfferConversationalWorkbench {...offerWorkbenchState} refreshRequired={offerCaseNotReady || offerCaseNeedsRefresh} /> : null}
       {route === "production" ? <ProductionRouteMainLayout {...productionRouteMainLayoutState}
         workbenchSummary={{
           ...productionRouteMainLayoutState.workbenchSummary,
@@ -1469,7 +1549,13 @@ type ProductRouteControllerProps = {
 /** Own the active case reference above each product shell so loaders can never
  * fall back to a global first record when the operator changes workspaces. */
 function ProductRouteController({ route, shell, masthead }: ProductRouteControllerProps) {
-  const [activeOfferCaseId, setActiveOfferCaseId] = useState<string>();
+  const userId = useCateringSession()?.session.user.userId;
+  const [activeOfferCaseId, setActiveOfferCaseId] = useState<string | undefined>(
+    () => route === "offer" ? offerCaseFocusFromHistory(userId) : undefined
+  );
+  useEffect(() => {
+    if (route === "offer") rememberOfferCaseFocus(userId, activeOfferCaseId);
+  }, [route, userId, activeOfferCaseId]);
   const [activeProductionCaseId, setActiveProductionCaseId] = useState<string | undefined>(
     () => productionCaseIdFromLocation(route)
   );
@@ -1491,6 +1577,7 @@ function ProductRouteController({ route, shell, masthead }: ProductRouteControll
             loaderError={product.error}
             refreshDashboard={product.refresh}
             activeOfferCaseId={activeOfferCaseId}
+            loadedOfferCaseId={product.data.activeCase?.caseId}
             activeOfferDraftId={product.data.currentDraft?.draftId}
             setActiveOfferCaseId={setActiveOfferCaseId}
             activeProductionCaseId={activeProductionCaseId}

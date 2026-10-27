@@ -55,6 +55,7 @@ export interface OfferWorkspaceState {
   activeCase?: OfferCase;
   activeEvents: CaseEvent[];
   activeSources: CaseSourceRef[];
+  caseEventsInScope?: boolean;
   currentDraft?: OfferDraft;
   approvedOffer?: ApprovedOffer;
   handoff?: ProductionHandoff;
@@ -284,6 +285,7 @@ export interface ProductionRouteAccessData {
 
 export interface WorkspaceRefreshOptions {
   requiredOfferDraftId?: string;
+  acceptNewerOfferDraft?: boolean;
   focusedSpecId?: string;
   focusedOfferCaseId?: string;
 }
@@ -452,6 +454,9 @@ export async function loadOfferWorkspaceState(activeCaseId?: string): Promise<Of
   if (detail.case.caseId !== activeCaseId || detail.case.product !== "offer") {
     return { ...emptyOfferWorkspaceState, cases };
   }
+  // Preserve whether filtering discarded any foreign event for the recovery guard.
+  const caseEventsInScope = detail.events.every((event) =>
+    event.caseId === activeCaseId && event.businessId === detail.case.businessId);
   const activeEvents = detail.events.filter((event) => event.caseId === activeCaseId);
   const draftId = artifactIdFromCaseEvents(activeEvents, "OfferDraft");
   const currentDraft = detail.currentDraft && (!draftId || detail.currentDraft.draftId === draftId)
@@ -474,6 +479,7 @@ export async function loadOfferWorkspaceState(activeCaseId?: string): Promise<Of
     activeCase: detail.case,
     activeEvents,
     activeSources: sourcesFromCaseEvents(activeEvents),
+    caseEventsInScope,
     ...(currentDraft ? { currentDraft } : {}),
     ...(detail.approvedOffer ? { approvedOffer: detail.approvedOffer } : {}),
     ...(handoff ? { handoff } : {})
