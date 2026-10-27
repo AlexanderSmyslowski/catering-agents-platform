@@ -39,6 +39,35 @@ describe("offer pricing editor", () => {
     expect(section.textContent).not.toContain("5.800");
     await act(async () => root.unmount());
   });
+  it("explains how to estimate complete costs without confusing gross and net prices", async () => {
+    const { root } = await mount();
+    await act(async () => button("Preisaufstellung bearbeiten").click());
+    const costs = field("Kosten gesamt netto");
+    const hints = costs.getAttribute("aria-describedby")!.split(" ").map(id => document.getElementById(id)?.textContent).join(" ");
+    expect(hints).toContain("Gesamtkosten dieser Position");
+    expect(hints).toContain("Fehlende Beträge schätzen");
+    expect(hints).toContain("Zutaten");
+    expect(hints).toContain("nicht doppelt zählen");
+    expect(hints).toContain("Brutto nicht als Netto");
+    const reference = field("Beleg oder Schätzgrund");
+    const sourceHint = document.getElementById(reference.getAttribute("aria-describedby")!);
+    expect(sourceHint?.textContent).toContain("Brutto nicht als Netto");
+    expect(sourceHint?.textContent).toContain("Schätzung mit Quelle");
+    await act(async () => root.unmount());
+  });
+  it("does not label an invalid or incomplete cost as an accepted estimate", async () => {
+    const { root } = await mount();
+    await act(async () => button("Preisaufstellung bearbeiten").click());
+    const summary = document.querySelector(".offer-pricing__cost-input summary")!;
+    expect(summary.textContent).toContain("Kosten offen");
+    await change(field("Kosten gesamt netto"), "1850,00");
+    expect(summary.textContent).toContain("Kostenangabe prüfen");
+    await change(field("Beleg oder Schätzgrund"), "SYNTHETISCHER Testwert");
+    expect(summary.textContent).toContain("Geschätzt");
+    await change(field("Kosten gesamt netto"), "abc");
+    expect(summary.textContent).toContain("Kostenangabe prüfen");
+    await act(async () => root.unmount());
+  });
   it("saves an approximate total cost separately from quoted sales and reloads its provenance", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date(2026, 9, 25, 12));

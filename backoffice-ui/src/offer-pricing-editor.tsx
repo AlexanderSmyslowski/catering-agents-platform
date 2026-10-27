@@ -32,22 +32,32 @@ function localDate(): string {
   const now = new Date();
   return [now.getFullYear(), String(now.getMonth() + 1).padStart(2, "0"), String(now.getDate()).padStart(2, "0")].join("-");
 }
+function parseRowDirectCost({ costNet, costBasis, costReference, costDate, costEstimateDate }: Pick<Row, "costNet" | "costBasis" | "costReference" | "costDate" | "costEstimateDate">): OfferCalculationLineInput["directCost"] {
+  if (!costNet?.trim()) return undefined;
+  return parseOfferDirectCost({
+    totalNetCents: hundredths(costNet, "Direkte Kosten gesamt"),
+    basis: costBasis ?? "estimated", sourceReference: costReference?.trim() ?? "",
+    ...(costDate ? { priceDate: costDate } : {}),
+    ...((costBasis ?? "estimated") === "estimated" ? { estimateDate: costEstimateDate ?? localDate() } : {})
+  });
+}
+function costInputStatus(row: Row): string {
+  try {
+    const cost = parseRowDirectCost(row);
+    return !cost ? "Kosten offen" : cost.basis === "documented" ? "Belegpreis" : "Geschätzt";
+  } catch {
+    return "Kostenangabe prüfen";
+  }
+}
 function inputLines(rows: Row[], costErrors?: string[]): OfferCalculationLineInput[] {
   return rows.map(({ net, tax, taxReason, zeroPriceReason, costNet, costBasis, costReference, costDate, costEstimateDate, ...row }) => {
     let directCost: OfferCalculationLineInput["directCost"];
-    if (costNet?.trim()) {
-      try {
-        directCost = parseOfferDirectCost({
-          totalNetCents: hundredths(costNet, "Direkte Kosten gesamt"),
-          basis: costBasis ?? "estimated", sourceReference: costReference?.trim() ?? "",
-          ...(costDate ? { priceDate: costDate } : {}),
-          ...((costBasis ?? "estimated") === "estimated" ? { estimateDate: costEstimateDate ?? localDate() } : {})
-        });
-      } catch (cause) {
-        const message = row.label + ": " + (cause instanceof Error ? cause.message : "Kostenangabe prüfen.");
-        if (costErrors) costErrors.push(message);
-        else throw new Error(message);
-      }
+    try {
+      directCost = parseRowDirectCost({ costNet, costBasis, costReference, costDate, costEstimateDate });
+    } catch (cause) {
+      const message = row.label + ": " + (cause instanceof Error ? cause.message : "Kostenangabe prüfen.");
+      if (costErrors) costErrors.push(message);
+      else throw new Error(message);
     }
     return {
       ...row, quantity: row.quantity.trim().replace(",", "."),
@@ -194,15 +204,18 @@ export function OfferPricingEditor({ draftId, revision, variants, menuPlan, pric
         </select></label>
         <label>Quellenreferenz<input value={row.sourceReference} onChange={event => update(index, { sourceReference: event.target.value })} /></label>
         <details className="offer-pricing__cost-input">
-          <summary>Interne Kosten · {row.costNet?.trim() ? row.costBasis === "documented" ? "Belegpreis" : "Geschätzt" : "Kosten offen"}</summary>
-          <p className="helper-text" id={fieldId + "-cost-" + row.id}>Gesamte direkte Kosten dieser Position, nicht je Gast oder Stunde. Leer lassen, wenn unbekannt. Schätzungen sind zulässig. Geänderte Belegbeträge oder Mengen werden zur Schätzung; Gesamtkosten werden nicht automatisch mit der Menge skaliert.</p>
+          <summary>Interne Kosten · {costInputStatus(row)}</summary>
+          <p className="helper-text" id={fieldId + "-cost-" + row.id}>Gesamtkosten dieser Position, nicht je Gast oder Stunde. {row.category === "food" ? "Zutaten und weitere zugehörige Kosten addieren; separate Leistungen nicht doppelt zählen. " : ""}Fehlende Beträge schätzen; ist keine Gesamtschätzung möglich, Feld leer lassen. Bei Mengenänderung werden die Kosten nicht automatisch angepasst.</p>
           <div className="offer-pricing__cost-fields">
-            <label>Kosten gesamt netto · EUR<input inputMode="decimal" value={row.costNet ?? ""} aria-describedby={fieldId + "-cost-" + row.id} onChange={event => update(index, { costNet: event.target.value })} /></label>
+            <label>Kosten gesamt netto · EUR<input inputMode="decimal" value={row.costNet ?? ""} aria-describedby={fieldId + "-cost-" + row.id + " " + fieldId + "-cost-source-" + row.id} onChange={event => update(index, { costNet: event.target.value })} /></label>
             <label>Kostengrundlage<select value={row.costBasis ?? "estimated"} onChange={event => update(index, { costBasis: event.target.value as Row["costBasis"] })}>
               <option value="estimated">Geschätzt / älterer Preis</option>
               <option value="documented">Belegpreis · für Auftrag geprüft</option>
             </select></label>
-            <label>Beleg oder Schätzgrund<input value={row.costReference ?? ""} onChange={event => update(index, { costReference: event.target.value })} /></label>
+            <div>
+              <label>Beleg oder Schätzgrund<input value={row.costReference ?? ""} aria-describedby={fieldId + "-cost-source-" + row.id} onChange={event => update(index, { costReference: event.target.value })} /></label>
+              <p className="helper-text" id={fieldId + "-cost-source-" + row.id}>Brutto nicht als Netto eintragen. Ältere oder unsichere Preise als Schätzung mit Quelle kennzeichnen.</p>
+            </div>
             {(row.costBasis ?? "estimated") === "estimated" ? <label>Schätzstand · Datum der Schätzung<input type="date" value={row.costEstimateDate ?? localDate()} onChange={event => update(index, { costEstimateDate: event.target.value })} /></label> : null}
             <label>Preisstand · Datum, falls bekannt<input type="date" value={row.costDate ?? ""} onChange={event => update(index, { costDate: event.target.value })} /></label>
           </div>
