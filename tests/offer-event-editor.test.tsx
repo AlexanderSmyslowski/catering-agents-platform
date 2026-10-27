@@ -48,6 +48,23 @@ describe("safe event editing", () => {
     expect(container.querySelector('input[type="number"]')?.getAttribute("value")).toBe("100");
     expect(container.querySelector('input[type="time"]')).toBeNull();
   });
+  it("can close a saved event edit without another write if the saved version cannot load", async () => {
+    await mount(); await click("Veranstaltungsdaten bearbeiten");
+    vi.mocked(reviseOfferMenu).mockResolvedValue({draftId:"saved-event"} as never);
+    onSaved.mockRejectedValue(new Error("Synthetischer Verbindungsfehler"));
+    await click("Änderungen speichern");
+    expect(container.textContent).toContain("Die neue Fassung wurde gespeichert");
+    await click("Gespeicherte Fassung laden");
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("Zugriff auf den Auftrag prüfen");
+    expect(container.querySelector('[role="alert"]')?.textContent).not.toContain("Verbindung prüfen");
+    await click("Bearbeitung schließen");
+    expect(onEditingChange).toHaveBeenLastCalledWith(false);
+    expect(reviseOfferMenu).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain("Fassung bleibt gespeichert");
+    await mount("saved-event");
+    expect(container.textContent).not.toContain("Bitte den Auftrag später erneut laden");
+  });
+
   it("stores a selected German event label as its existing key", async () => {
     await mount();await click("Veranstaltungsdaten bearbeiten");
     const input=container.querySelector('input[list]') as HTMLInputElement;

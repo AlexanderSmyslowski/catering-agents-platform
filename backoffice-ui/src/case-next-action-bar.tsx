@@ -6,6 +6,7 @@ export type CaseNextActionBarProps = {
   action: CaseNextAction;
   onAction: (action: CaseNextAction) => void | Promise<void>;
   disabled?: boolean;
+  disabledReason?: string;
   busy?: boolean;
   error?: string;
   children?: ReactNode;
@@ -37,6 +38,7 @@ export function CaseNextActionBar({
   product,
   onAction,
   disabled = false,
+  disabledReason,
   busy = false,
   error,
   children
@@ -62,7 +64,7 @@ export function CaseNextActionBar({
 
   return (
     <aside className="case-next-action-bar" aria-label="Nächster Schritt" data-testid="case-next-action-bar">
-      {product ? <div className="case-next-action-bar__guidance"><h2>Nächster Schritt</h2><p>{disabled ? "Änderungen zuerst speichern oder abbrechen." : hints[action.kind]}</p></div> : null}
+      {product ? <div className="case-next-action-bar__guidance"><h2>Nächster Schritt</h2><p>{disabled ? disabledReason ?? "Änderungen zuerst speichern oder abbrechen." : hints[action.kind]}</p></div> : null}
       {product && !terminal ? <p className="case-next-action-bar__mobile-phase">{`Schritt ${activePhase + 1} von 4 · ${labels[activePhase]}`}</p> : null}
       <ol className="case-next-action-bar__phases" aria-label="Arbeitsstand">
         {labels.map((label, index) => (

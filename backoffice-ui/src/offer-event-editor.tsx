@@ -29,6 +29,7 @@ export function OfferEventEditor({ draftId, revision, spec, disabled, onSaved, o
   const live = useRef(true);
   const inFlight = useRef(false);
   const savedDraft = useRef<string | undefined>(undefined);
+  const awaitingSavedReload = useRef(false);
   const form = useRef<HTMLFormElement>(null);
   const id = useId();
   useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
@@ -41,7 +42,8 @@ export function OfferEventEditor({ draftId, revision, spec, disabled, onSaved, o
   const [notice, setNotice] = useState("");
   useEffect(() => {
     setEvent(undefined); setError(""); setErrors({}); setPendingSavedDraft(undefined);
-    if (savedDraft.current !== draftId) setNotice("");
+    if (savedDraft.current !== draftId || awaitingSavedReload.current) setNotice("");
+    awaitingSavedReload.current = false;
   }, [draftId, revision]);
   useEffect(() => {
     if (Object.keys(errors).length) form.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
@@ -90,7 +92,7 @@ export function OfferEventEditor({ draftId, revision, spec, disabled, onSaved, o
       setEvent(undefined); setPendingSavedDraft(undefined); setError(""); onEditingChange(false);
       setNotice("Gespeichert als neue Fassung. Die bisherige Fassung bleibt im Verlauf. Bitte Menü und Kalkulation prüfen.");
     } catch {
-      if (live.current) setError("Die Fassung bleibt gespeichert. Laden weiterhin nicht möglich. Bitte die Verbindung prüfen und erneut laden.");
+      if (live.current) setError("Die Fassung bleibt gespeichert. Sie konnte noch nicht geladen werden. Bitte später erneut versuchen oder den Zugriff auf den Auftrag prüfen.");
     } finally { inFlight.current = false; if (live.current) setSaving(false); }
   }
   function validation(key: string) {
@@ -134,7 +136,11 @@ export function OfferEventEditor({ draftId, revision, spec, disabled, onSaved, o
         {pendingSavedDraft
           ? <button type="button" disabled={saving} onClick={() => void reloadSaved()}>{saving ? "Wird geladen …" : "Gespeicherte Fassung laden"}</button>
           : <button type="submit" disabled={disabled || saving}>{saving ? "Wird gespeichert …" : "Änderungen speichern"}</button>}
-        <button type="button" className="secondary-button" disabled={frozen} onClick={() => { setEvent(undefined); setError(""); setErrors({}); onEditingChange(false); }}>Abbrechen</button>
+        {pendingSavedDraft ? <button type="button" className="secondary-button" disabled={saving} onClick={() => {
+          awaitingSavedReload.current = true;
+          setEvent(undefined); setPendingSavedDraft(undefined); setError(""); setErrors({}); onEditingChange(false);
+          setNotice("Die Fassung bleibt gespeichert. Bitte den Auftrag später erneut laden.");
+        }}>Bearbeitung schließen</button> : <button type="button" className="secondary-button" disabled={frozen} onClick={() => { setEvent(undefined); setError(""); setErrors({}); onEditingChange(false); }}>Abbrechen</button>}
       </div>
     </form> : <>
       <p>{spec.customer?.name ?? "Kunde offen"}</p>

@@ -1,3 +1,4 @@
+import { OFFER_RECOVERY_STORAGE_ERROR, OFFER_SAVED_DRAFT_SUPERSEDED_ERROR } from "./use-offer-workspace-data.js";
 import {
   useEffect,
   useMemo,
@@ -689,7 +690,8 @@ function ProductWorkspaceView({
   const loadingSourceSwitchError = "Der Auftrag wird noch geladen. Bitte warte, bevor du zu einem anderen Auftrag wechselst.";
   const offerCaseNotReady = route === "offer" && Boolean(activeOfferCaseId) && loadedOfferCaseId !== activeOfferCaseId;
   const offerCaseUnavailable = offerCaseNotReady && !loading;
-  const offerCaseRefreshFailed = route === "offer" && Boolean(activeOfferCaseId) && !offerCaseNotReady && !loading && Boolean(loaderError);
+  const offerCaseNeedsRefresh = route === "offer" && Boolean(activeOfferCaseId) && Boolean(loaderError);
+  const offerCaseRefreshFailed = offerCaseNeedsRefresh && !offerCaseNotReady && !loading;
   useEffect(() => {
     setError(current => {
       if (current === loadingSourceSwitchError && !loading) return undefined;
@@ -1438,15 +1440,23 @@ function ProductWorkspaceView({
 
       {(route === "offer" ? activeOfferCaseId : activeProductionCaseId) ? <section className="panel current-order-header" aria-label="Geöffneter Auftrag">
         <h2>{activeCase?.displayName ?? "Auftrag geöffnet"}</h2>
-        <p role="status">{offerCaseUnavailable
-          ? "Der Auftrag konnte nicht geladen werden. Bitte erneut versuchen oder zur Auftragsübersicht zurückkehren."
-          : offerCaseRefreshFailed ? "Auftragsdaten konnten nicht aktualisiert werden. Der angezeigte Stand kann veraltet sein."
-            : offerCaseNotReady ? "Auftragsdaten werden geladen …"
+        <p role="status">{(offerCaseUnavailable || offerCaseRefreshFailed) &&
+          (loaderError === OFFER_RECOVERY_STORAGE_ERROR || loaderError === OFFER_SAVED_DRAFT_SUPERSEDED_ERROR) ? loaderError
+          : offerCaseUnavailable ? "Der Auftrag konnte nicht geladen werden. Bitte erneut versuchen oder zur Auftragsübersicht zurückkehren."
+          : offerCaseRefreshFailed ? "Auftragsdaten konnten nicht aktualisiert werden. Bitte erneut laden, bevor du speicherst, freigibst oder exportierst."
+            : offerCaseNeedsRefresh && loading ? "Auftragsdaten werden erneut geladen …"
+              : offerCaseNotReady ? "Auftragsdaten werden geladen …"
               : activeCase ? formatCaseStatus(route === "offer" ? "offer" : "production", activeCase.status)
                 : loaderError ? "Auftragsname nicht verfügbar. Der Auftrag bleibt geöffnet." : "Auftragsdaten werden geladen …"}</p>
         {route === "production" && activeCase?.status === "completed" ? <p className="helper-text">Plan und Einkaufsliste sind gespeichert. Offene Rezept-, Allergen- und Hygieneprüfungen bleiben vor der tatsächlichen Produktion erforderlich.</p> : null}
+        {offerCaseRefreshFailed && offerMenuEditing ? <p className="helper-text">{loaderError === OFFER_SAVED_DRAFT_SUPERSEDED_ERROR
+          ? "Schließe die Bearbeitung und wähle anschließend „Aktuelle Fassung prüfen“. Sichere ungespeicherte Eingaben, bevor du abbrichst."
+          : "Die Bearbeitung ist geöffnet. Gespeicherte Fassungen kannst du im Editor laden oder die Bearbeitung schließen. Sichere ungespeicherte Eingaben, bevor du abbrichst."}</p> : null}
         {offerCaseUnavailable || offerCaseRefreshFailed ? (
           <div className="quiet-action-row">
+            {loaderError === OFFER_SAVED_DRAFT_SUPERSEDED_ERROR ? <button type="button" disabled={submitting || offerMenuEditing} onClick={() => {
+              void refreshDashboard({ acceptNewerOfferDraft: true }).catch((cause) => setError(cause instanceof Error ? cause.message : "Auftrag konnte nicht geladen werden."));
+            }}>Aktuelle Fassung prüfen</button> : null}
             <button type="button" className="secondary-button" disabled={submitting || offerMenuEditing} onClick={() => {
               setError(current => current === unavailableSourceSwitchError ? undefined : current);
               void refreshDashboard().catch((cause) => setError(cause instanceof Error ? cause.message : "Auftrag konnte nicht geladen werden."));
@@ -1488,12 +1498,13 @@ function ProductWorkspaceView({
           action={nextAction}
           onAction={(action) => void runNextAction(action).catch((cause) => setError(cause instanceof Error ? cause.message : "Nächster Schritt konnte nicht ausgeführt werden."))}
           busy={submitting}
-          disabled={route === "offer" && offerMenuEditing}
+          disabled={route === "offer" && (offerMenuEditing || offerCaseNeedsRefresh)}
+          disabledReason={offerCaseNeedsRefresh ? offerMenuEditing ? "Bitte den Hinweis in der geöffneten Bearbeitung beachten." : loading ? "Auftragsdaten werden erneut geladen." : "Zuerst Auftragsdaten erneut laden." : undefined}
           error={error}
         />
       )}
 
-      {route === "offer" ? <OfferConversationalWorkbench {...offerWorkbenchState} submitting={submitting || offerCaseNotReady} /> : null}
+      {route === "offer" ? <OfferConversationalWorkbench {...offerWorkbenchState} refreshRequired={offerCaseNotReady || offerCaseNeedsRefresh} /> : null}
       {route === "production" ? <ProductionRouteMainLayout {...productionRouteMainLayoutState}
         workbenchSummary={{
           ...productionRouteMainLayoutState.workbenchSummary,
