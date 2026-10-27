@@ -11,8 +11,10 @@ const load = vi.mocked(loadOfferProductData);
 type ProductData = Awaited<ReturnType<typeof loadOfferProductData>>;
 let current: ReturnType<typeof useOfferWorkspaceData>;
 let root: Root | undefined;
+const renders: Array<{ caseId?: string; loading: boolean }> = [];
 function Harness({ caseId }: { caseId?: string }) {
   current = useOfferWorkspaceData(caseId);
+  renders.push({ caseId, loading: current.loading });
   return null;
 }
 function result(caseId?: string): ProductData {
@@ -31,9 +33,45 @@ async function render(caseId?: string) {
 }
 afterEach(async () => {
   if (root) await act(async () => root!.unmount());
-  root = undefined; document.body.innerHTML = ""; vi.resetAllMocks();
+  root = undefined; renders.length = 0; document.body.innerHTML = ""; vi.resetAllMocks();
 });
 describe("offer workspace refresh after case creation", () => {
+
+  it("treats a newly selected case as loading from the first render until its request settles", async () => {
+    let finish!: (value: ProductData) => void;
+    load.mockImplementation(async caseId => caseId === "case-b"
+      ? new Promise<ProductData>(resolve => { finish = resolve; })
+      : result(caseId));
+    await render("case-a");
+    renders.length = 0;
+    await render("case-b");
+    expect(renders.filter(entry => entry.caseId === "case-b").every(entry => entry.loading)).toBe(true);
+    await act(async () => { finish(result("case-b")); });
+    expect(current.loading).toBe(false);
+    expect(current.data.activeCase?.caseId).toBe("case-b");
+  });
+
+  it("does not accept an earlier result after switching away and back to the same case", async () => {
+    let finishB!: (value: ProductData) => void;
+    let finishA!: (value: ProductData) => void;
+    let visitsA = 0;
+    load.mockImplementation(async caseId => {
+      if (caseId === "case-b") return new Promise<ProductData>(resolve => { finishB = resolve; });
+      if (caseId === "case-a" && ++visitsA > 1) return new Promise<ProductData>(resolve => { finishA = resolve; });
+      return result(caseId);
+    });
+    await render("case-a");
+    await render("case-b");
+    renders.length = 0;
+    await render("case-a");
+    expect(renders.filter(entry => entry.caseId === "case-a").every(entry => entry.loading)).toBe(true);
+    await act(async () => { finishB(result("case-b")); });
+    expect(current.loading).toBe(true);
+    await act(async () => { finishA(result("case-a")); });
+    expect(current.loading).toBe(false);
+    expect(current.data.activeCase?.caseId).toBe("case-a");
+  });
+
   it("refreshes the explicitly created case through the callback captured before it existed", async () => {
     load.mockImplementation(async (caseId) => result(caseId));
     await render();

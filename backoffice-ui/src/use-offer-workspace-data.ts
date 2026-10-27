@@ -20,6 +20,9 @@ export function useOfferWorkspaceData(activeCaseId?: string) {
   const refreshVersion = useRef(0);
   const requestedCaseId = useRef(activeCaseId);
   const loadedCaseId = useRef<string | undefined>(undefined);
+  const caseContext = useRef<{ caseId: string | undefined }>({ caseId: activeCaseId });
+  const [settledContext, setSettledContext] = useState<typeof caseContext.current>();
+  if (caseContext.current.caseId !== activeCaseId) caseContext.current = { caseId: activeCaseId };
   requestedCaseId.current = activeCaseId;
 
   const refresh = useCallback(async (options?: WorkspaceRefreshOptions) => {
@@ -29,13 +32,15 @@ export function useOfferWorkspaceData(activeCaseId?: string) {
     if (requestedCaseId.current !== requestedActiveCaseId) {
       return;
     }
+    const requestedContext = caseContext.current;
     const version = ++refreshVersion.current;
     setLoading(true);
     try {
       const productData = await loadOfferProductData(requestedActiveCaseId);
       if (
         version !== refreshVersion.current ||
-        requestedCaseId.current !== requestedActiveCaseId
+        requestedCaseId.current !== requestedActiveCaseId ||
+        requestedContext !== caseContext.current
       ) {
         return;
       }
@@ -43,6 +48,7 @@ export function useOfferWorkspaceData(activeCaseId?: string) {
         throw new Error("Die neue Angebotsfassung konnte noch nicht geladen werden. Bitte erneut laden.");
       }
       loadedCaseId.current = requestedActiveCaseId;
+      setSettledContext(requestedContext);
       setData(productData.workspace);
       setIntakeRequests(productData.intakeRequests);
       setAcceptedSpecs(productData.acceptedSpecs);
@@ -52,14 +58,16 @@ export function useOfferWorkspaceData(activeCaseId?: string) {
     } catch (cause) {
       if (
         version !== refreshVersion.current ||
-        requestedCaseId.current !== requestedActiveCaseId
+        requestedCaseId.current !== requestedActiveCaseId ||
+        requestedContext !== caseContext.current
       ) {
         return;
       }
+      setSettledContext(requestedContext);
       setError(cause instanceof Error ? cause.message : "Angebotsdaten konnten nicht geladen werden.");
       if (options?.requiredOfferDraftId) throw cause;
     } finally {
-      if (version === refreshVersion.current) {
+      if (version === refreshVersion.current && requestedContext === caseContext.current) {
         setLoading(false);
       }
     }
@@ -96,8 +104,8 @@ export function useOfferWorkspaceData(activeCaseId?: string) {
     acceptedSpecs: loadedCaseId.current === activeCaseId ? acceptedSpecs : [],
     offerDrafts: loadedCaseId.current === activeCaseId ? offerDrafts : [],
     serviceHealth,
-    loading,
-    error,
+    loading: loading || settledContext !== caseContext.current,
+    error: settledContext === caseContext.current ? error : undefined,
     refresh
   };
 }
