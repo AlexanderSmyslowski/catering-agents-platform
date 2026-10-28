@@ -611,10 +611,7 @@ export async function loadProductionWorkspaceHealth(): Promise<ServiceHealth> {
 }
 
 export async function loadOfferProductData(activeCaseId?: string): Promise<OfferProductData> {
-  const [workspace, health] = await Promise.all([
-    loadOfferWorkspaceState(activeCaseId),
-    loadOfferWorkspaceHealth()
-  ]);
+  const workspace = await loadOfferWorkspaceState(activeCaseId);
 
   const activeRequestIds = new Set(
     [
@@ -657,7 +654,7 @@ export async function loadOfferProductData(activeCaseId?: string): Promise<Offer
     intakeRequests: activeCaseId ? intakeRequests : [],
     acceptedSpecs: activeCaseId ? acceptedSpecs : [],
     offerDrafts: workspace.currentDraft ? [workspace.currentDraft] : [],
-    serviceHealth: serviceHealthStateFor("offer", health)
+    serviceHealth: serviceHealthStateFor("offer", unknownServiceHealth("offer-service"))
   };
 }
 
@@ -665,9 +662,8 @@ export async function loadProductionProductData(
   activeCaseId?: string,
   _focusedSpecId?: string
 ): Promise<ProductionProductData> {
-  const [workspace, health, recipeLibrary] = await Promise.all([
+  const [workspace, recipeLibrary] = await Promise.all([
     loadProductionWorkspaceState(activeCaseId),
-    loadProductionWorkspaceHealth(),
     activeCaseId ? loadProductionRecipeLibrary() : Promise.resolve({ items: [] })
   ]);
 
@@ -684,7 +680,7 @@ export async function loadProductionProductData(
     purchaseLists: workspace.currentPurchaseList ? [workspace.currentPurchaseList] : [],
     recipes: recipeLibrary.items,
     auditEvents: activeCaseId ? auditEntriesFromCaseEvents(workspace.activeEvents) : [],
-    serviceHealth: serviceHealthStateFor("production", health)
+    serviceHealth: serviceHealthStateFor("production", unknownServiceHealth("production-service"))
   };
 }
 
