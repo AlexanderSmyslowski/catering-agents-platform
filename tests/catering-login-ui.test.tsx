@@ -234,7 +234,7 @@ describe("Catering session boundary", () => {
       expect(container.textContent).toContain("Angebotsassistent");
       expect(container.querySelector("textarea[aria-label='Kundenanfrage als Text']")).not.toBeNull();
       expect(calls).toContain("/api/offers/v1/offers/cases");
-      expect(calls).toContain("/api/offers/health");
+      expect(calls).not.toContain("/api/offers/health");
     });
 
     it.each([
