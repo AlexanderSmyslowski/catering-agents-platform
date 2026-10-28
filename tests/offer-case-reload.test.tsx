@@ -149,6 +149,42 @@ describe("Angebotsauftrag nach Neuladen", () => {
     window.history.replaceState({}, "", "/");
   });
 
+  it("guards leaving while the menu editor is open and removes the guard on cancel or unmount", async () => {
+    window.history.replaceState({}, "", "/angebot");
+    const { container, mount } = setup({ draft: true });
+    const root = await mount();
+    await openCase(container);
+    const leaving = () => {
+      const event = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    const button = (label: string) => Array.from(container.querySelectorAll("button")).find(b => b.textContent === label)!;
+    expect(leaving()).toBe(false);
+    await act(async () => { button("Menü bearbeiten").click(); await flush(); });
+    expect(leaving()).toBe(true);
+    await act(async () => { button("Abbrechen").click(); await flush(); });
+    expect(leaving()).toBe(false);
+    await act(async () => { button("Menü bearbeiten").click(); await flush(); });
+    expect(leaving()).toBe(true);
+    await act(async () => root.unmount());
+    roots.splice(roots.indexOf(root), 1);
+    expect(leaving()).toBe(false);
+  });
+
+  it("removes the leave guard after saving and loading the new menu", async () => {
+    window.history.replaceState({}, "", "/angebot");
+    const { container, mount } = setup({ draft: true });
+    await mount();
+    await openCase(container);
+    const button = (label: string) => Array.from(container.querySelectorAll("button")).find(b => b.textContent === label)!;
+    await act(async () => { button("Menü bearbeiten").click(); await flush(); });
+    await act(async () => { button("Menü als neue Fassung speichern").click(); await flush(); });
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+  });
+
   it("opens the previously selected offer again after a page reload for the same user", async () => {
     window.history.replaceState({ existingContext: "preserve" }, "", "/angebot");
     const { container, mount } = setup();
@@ -337,6 +373,9 @@ describe("Angebotsauftrag nach Neuladen", () => {
     expect(input.value).toBe("Synthetische Änderung");
     expect(input.disabled).toBe(true);
     expect(menu.textContent).toContain("Die neue Fassung wurde gespeichert");
+    const leaving = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(leaving);
+    expect(leaving.defaultPrevented).toBe(true);
     expect(Array.from(menu.querySelectorAll("button")).find(button => button.textContent === "Menü als neue Fassung speichern")).toBeUndefined();
     const retry = Array.from(container.querySelectorAll("button")).find(button => button.textContent === "Erneut versuchen")!;
     expect(retry.disabled).toBe(true);

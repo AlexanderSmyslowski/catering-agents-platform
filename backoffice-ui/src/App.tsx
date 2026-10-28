@@ -445,6 +445,15 @@ function ProductWorkspaceView({
   const [submitting, setSubmitting] = useState(false);
   const [offerMenuEditing, setOfferMenuEditing] = useState(false);
   const offerMenuEditingRef = useRef(false);
+  useEffect(() => {
+    if (!offerMenuEditing) return;
+    const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnBeforeLeaving);
+    return () => window.removeEventListener("beforeunload", warnBeforeLeaving);
+  }, [offerMenuEditing]);
   const offerFocusRef = useRef({ caseId: activeOfferCaseId, draftId: activeOfferDraftId });
   offerFocusRef.current = { caseId: activeOfferCaseId, draftId: activeOfferDraftId };
 
