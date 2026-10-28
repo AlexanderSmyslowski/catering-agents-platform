@@ -633,6 +633,32 @@ Kandidaten und prüft den echten Compose-/Image-/Restart-/Health-/Smoke-Rückweg
 aktuelle Daten werden nicht zurückgesetzt. Unklare Recovery behält den eigenen
 Update-Lock und einen Recovery-HOLD-Beleg. Fremde Locks werden nie übernommen.
 
+Build, Stage und Apply prüfen unter ihrem eigenen Guard, dass der reguläre,
+gebundene Backupservice vollständig beendet und ohne wartenden Job oder
+bevölkerte Service-CGroup ist. Ein laufendes oder nicht eindeutig abgeschlossenes
+Backup führt vor der eigenen Mutation zu HOLD; der eigene Guard wird regulär
+freigegeben. Der Timer wird nicht verändert. Diese Systemd-Prüfung umfasst keine
+separat gestartete privilegierte manuelle Recovery, für die weiterhin die
+bestehenden Ausführungs- und Koordinationsgrenzen gelten.
+
+Ein Timeout, Signal oder Fehler bei `docker load`, `build`, `compose`, `update`
+oder `stop` belegt nicht, dass die Arbeit des Docker-Daemons beendet ist. Der
+eigene Guard bleibt deshalb gehalten; insbesondere kann nach einem Stop-Timeout
+ein Teil der Anwendungen mit deaktiviertem automatischem Restart gestoppt sein.
+Keinen automatischen Rollback, Neustart oder erneuten Versuch aus einer bloßen
+CLI-Fehlermeldung ableiten. Ein Build-HOLD kann ohne separaten Recovery-Beleg
+auftreten; Guard-Eigentümer, ausstehende Docker-Arbeit und tatsächlichen Zustand
+vor einem separat freigegebenen eigenen Rückweg klären. Fremde oder unzuordenbare
+Guards bleiben unverändert; einen Guard nie blind freigeben.
+
+Ein eindeutig gebundener terminaler Abbruch vor jeder Writeränderung erlaubt
+einen neuen, frisch signierten Apply mit anderer Nonce. Der Helper bewahrt den
+vorherigen Versuch und seine Load-/Compose-Proben im noncegebundenen Archiv auf.
+Dies ist kein automatischer Retry: Stage, Backup, aktuelle Baseline und Admission
+werden erneut geprüft. Unvollständige Archivierung, fehlende oder widersprüchliche
+Abschlussbelege sowie Erfolg oder Rollback bleiben HOLD und dürfen nicht durch
+manuelle Bearbeitung der Belege in einen frischen Versuch umgewandelt werden.
+
 Die begrenzte HTTP-Readiness verlangt auf localhost:18081 weiterhin 200/401.
 TLS prüft das echte Zertifikat unverändert. Die tatsächlich ursprüngliche
 Loopback-ACL antwortet absichtlich mit 403 vor Authentifizierung; ausschließlich

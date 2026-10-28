@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import argparse
 import base64
+import ctypes
+import errno
 import datetime
 import gzip
 import hashlib
@@ -77,11 +79,21 @@ def digest(path):
     return h.hexdigest()
 
 
+class UncertainDockerMutation(RuntimeError):
+    pass
+
+
 def command(args, timeout=90, data=None):
-    result = subprocess.run(args, input=data, capture_output=True, timeout=timeout)
-    # Docker/psql and auth errors can carry credentials; do not echo their output.
-    require(result.returncode == 0, "COMMAND_FAILED:" + args[0] + ":" + str(result.returncode))
-    return result.stdout
+    mutation = args[:2] in (["docker", "load"], ["docker", "build"], ["docker", "compose"], ["docker", "update"], ["docker", "stop"])
+    try:
+        result = subprocess.run(args, input=data, capture_output=True, timeout=timeout)
+        # Docker/psql and auth errors can carry credentials; do not echo their output.
+        require(result.returncode == 0, "COMMAND_FAILED:" + args[0] + ":" + str(result.returncode))
+        return result.stdout
+    except BaseException as error:
+        if mutation:
+            raise UncertainDockerMutation("NUE_DOCKER_MUTATION_OUTCOME_UNKNOWN_HOLD") from error
+        raise
 
 
 def load_module(name, path):
@@ -109,6 +121,13 @@ def put(path, value):
         target.write(body)
         target.flush()
         os.fsync(target.fileno())
+
+
+def put_durable(path, value):
+    put(path, value)
+    fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try: os.fsync(fd)
+    finally: os.close(fd)
 
 
 def read_bound(path, expected):
@@ -188,6 +207,13 @@ def require_admission(path, expected_sha, manifest, manifest_sha, phase, bundle,
     body = read_bounded_bytes(path, expected_sha, ADMISSION_LIMIT)
     signature = read_bounded_bytes(signature_path, signature_sha, SIGNATURE_LIMIT)
     verify_admission_signature(body, signature)
+    admission = bound_admission(body, manifest, manifest_sha, phase, bundle, parameters)
+    age = (datetime.datetime.now(datetime.timezone.utc) - datetime.datetime.fromisoformat(admission["issuedAt"])).total_seconds()
+    require(0 <= age <= 900, "NUE_MAC_ADMISSION_EXPIRED")
+    return admission
+
+
+def bound_admission(body, manifest, manifest_sha, phase, bundle, parameters):
     admission = json.loads(body)
     require(body == canonical(admission), "NUE_CANONICAL_ADMISSION_REQUIRED")
     require(set(admission) == {"schemaVersion", "mode", "targetId", "hostAddress", "phase", "productCommit", "operationsCommit", "sourceTreeSha256", "helpers", "manifestSha256", "remoteBundleDir", "parameters", "issuedAt", "nonce"}, "NUE_ADMISSION_SHAPE")
@@ -195,8 +221,6 @@ def require_admission(path, expected_sha, manifest, manifest_sha, phase, bundle,
     if manifest is not None: bind_admission_manifest(admission, manifest)
     require(admission["manifestSha256"] == manifest_sha and admission["remoteBundleDir"] == str(bundle) and admission["parameters"] == parameters, "NUE_ADMISSION_CALL_BINDING")
     require(re.fullmatch(r"[0-9a-f]{32}", admission["nonce"]), "NUE_ADMISSION_NONCE")
-    age = (datetime.datetime.now(datetime.timezone.utc) - datetime.datetime.fromisoformat(admission["issuedAt"])).total_seconds()
-    require(0 <= age <= 900, "NUE_MAC_ADMISSION_EXPIRED")
     return admission
 
 
@@ -343,13 +367,7 @@ def build_prepared(directory, request_sha, output, node_base, caddy_base, *, bas
     if binding is not None:
         require(base_mode == "local-current", "NUE_ACCEPTED_CURRENT_BASE_MODE")
     protected(output.parent, directory=True)
-    if binding is not None:
-        return create_bundle(operator, directory / "source", request["productCommit"], request["operationsCommit"], output, node_base, caddy_base, exported=True, base_mode=base_mode, runtime_base=runtime_base, web_base=web_base, accepted_current_release=binding)
-    token = own_lock()
-    try:
-        owned(token)
-        return create_bundle(operator, directory / "source", request["productCommit"], request["operationsCommit"], output, node_base, caddy_base, exported=True, base_mode=base_mode, runtime_base=runtime_base, web_base=web_base, accepted_current_release=binding)
-    finally: unlock(token)
+    return create_bundle(operator, directory / "source", request["productCommit"], request["operationsCommit"], output, node_base, caddy_base, exported=True, base_mode=base_mode, runtime_base=runtime_base, web_base=web_base, accepted_current_release=binding)
 
 
 
@@ -370,6 +388,19 @@ RELEASE_681213B_MANIFEST_SHA256 = "3eac18160cf862620ce6b4c7843368a5344dbc1f4837b
 RELEASE_681213B_HELPER_SHA256 = "21e42c3890f63a11b4b860a35f9c0efe7371fd620f870cd70abb903cd80b9cf9"
 RELEASE_681213B_IMAGES = {"runtime": "sha256:2c11dc76480fba75e21f3184779d9aa8e786d2271a5bbe6676daa9ae29b8ed01",
                          "web": "sha256:fe2169fa79724d105c1199b28921f24f59bc477bc6ad278201875660018d6160"}
+# Only completed, accepted historical manifests may predate terminal receipts.
+# The shared helper alone cannot exempt an uninstalled bundle such as PR761.
+LEGACY_COMPLETED_RELEASES = {
+    PR735_MANIFEST_SHA256: PR735_HELPER_SHA256,
+    RELEASE_3D287D8_MANIFEST_SHA256: RELEASE_3D287D8_HELPER_SHA256,
+    RELEASE_681213B_MANIFEST_SHA256: RELEASE_681213B_HELPER_SHA256,
+    **dict.fromkeys((
+        "4be064779e5e0d7e5b255e18356a66e779c9a52623bda6b8660e52760f7c6323",
+        "58ef6fafc3feaf17e5a147da1a0f0528c3ce3f947c6390b53bf7c4752aab861d",
+        "b3d8bd80a4a28964543b42efa32c8bd0d1fb8405e64c4faa93353b537becbe5f",
+        "35f2262d9829f7fabe442c2e3f48b2b48e44925383d66fa7376af604edb704a3",
+    ), "60bfadf8c6f70cdc11c67723156845c4303df96d86df9d49e19028923bb91eee"),
+}
 PR727_CADDY_ROOT_NAME = "Caddy_Local_Authority_-_2026_ECC_Root_230535653603960188253814079773346015816"
 PR727_CADDY_ROOT_SHA256 = "e70877424f5913ab6146fb751750fd1deb4a862c2820811287459d3b213e2b88"
 PR727_CADDY_CA_BUNDLE_SHA256 = "f0cbbbeb86b1ca821634896f134c3c3b73db0bb525664b643ac80159242f9778"
@@ -443,8 +474,14 @@ def accepted_pr727_bundle():
     return root, manifest
 
 
+def require_no_legacy_attempt(root):
+    require(not any(os.path.lexists(root / name) for name in ("apply-attempt.json", "apply-terminal.json")) and
+            not any(path.name.startswith("apply-aborted-") for path in root.iterdir()), "NUE_LEGACY_ATTEMPT_REQUIRES_RECONCILIATION")
+
+
 def accepted_pr735_bundle(oci):
     root = protected(RELEASES / PR735_MANIFEST_SHA256, directory=True)
+    require_no_legacy_attempt(root)
     manifest = read_bound(protected(root / "manifest.json"), PR735_MANIFEST_SHA256)
     require(manifest["productCommit"] == "61ea18f28ba47ed1266a903916c9c43240594b83" and
             manifest["operationsCommit"] == "5c7b44b8d474da0166a1f64a0a43f51e0fa7bc15" and
@@ -474,6 +511,7 @@ def accepted_pr735_bundle(oci):
 
 def accepted_3d287d8_bundle(oci):
     root = protected(RELEASES / RELEASE_3D287D8_MANIFEST_SHA256, directory=True)
+    require_no_legacy_attempt(root)
     manifest = read_bound(protected(root / "manifest.json"), RELEASE_3D287D8_MANIFEST_SHA256)
     require(manifest["productCommit"] == "3d287d83ef489bda6bcf581b5e93e0b1009d5639" and
             manifest["operationsCommit"] == "3d287d83ef489bda6bcf581b5e93e0b1009d5639" and
@@ -503,6 +541,7 @@ def accepted_3d287d8_bundle(oci):
 
 def accepted_681213b_bundle(oci):
     root = protected(RELEASES / RELEASE_681213B_MANIFEST_SHA256, directory=True)
+    require_no_legacy_attempt(root)
     manifest = read_bound(protected(root / "manifest.json"), RELEASE_681213B_MANIFEST_SHA256)
     require(manifest["productCommit"] == "681213b775851d32fe2c5823a229b7f5b3d739d8" and
             manifest["operationsCommit"] == "3a1bb5588adc84d205265662c7a30e5196098303" and
@@ -558,6 +597,7 @@ def accepted_current_bundle(oci, binding, *, before_lock=False):
             installed["manifestSha256"] == sha and installed["status"] == "NUE_IMAGE_ONLY_INSTALLED" and
             installed["images"] == images and hashlib.sha256(candidate).hexdigest() == installed["composeSha256"],
             "NUE_ACCEPTED_CURRENT_INSTALL_BINDING")
+    require_completed_apply(root, sha, manifest, stage, installed)
     if before_lock:
         require(predecessor.verify(root, sha)["status"] == "NUE_IMAGE_ONLY_VERIFIED", "NUE_ACCEPTED_CURRENT_VERIFY")
     else:
@@ -721,18 +761,17 @@ def create_bundle(operator, source, product, operations, output, node_base, cadd
     binding = accepted_current_binding(accepted_current_release) if accepted_current_release is not None else None
     kwargs = dict(exported=exported, base_mode=base_mode, runtime_base=runtime_base, web_base=web_base,
                   accepted_current_release=binding)
-    if binding is None:
-        return _create_bundle(operator, source, product, operations, output, node_base, caddy_base, **kwargs)
-    require(exported and base_mode == "local-current", "NUE_ACCEPTED_CURRENT_BUILD_SCOPE")
-    # Both public build entries share this ordering. Public Verify refuses any
-    # update lock; under our own lock the pinned runtime verifier checks again.
-    accepted_current_bundle(operator._oci(), binding, before_lock=True)
+    if binding is not None:
+        require(exported and base_mode == "local-current", "NUE_ACCEPTED_CURRENT_BUILD_SCOPE")
+        # Public Verify refuses any update lock; check the pinned release first.
+        accepted_current_bundle(operator._oci(), binding, before_lock=True)
     token = own_lock()
     try:
         owned(token)
+        require_backup_service_idle(token)
         return _create_bundle(operator, source, product, operations, output, node_base, caddy_base, **kwargs)
     finally:
-        unlock(token)
+        if not isinstance(sys.exc_info()[1], UncertainDockerMutation): unlock(token)
 
 
 def _create_bundle(operator, source, product, operations, output, node_base, caddy_base, *, exported=False, base_mode="repository", runtime_base=None, web_base=None, accepted_current_release=None):
@@ -893,11 +932,40 @@ def backup_gate(proof, baseline):
         require(row["Id"] == previous["id"] and row["Image"] == previous["image"] and row["HostConfig"]["RestartPolicy"] == previous["restart"], "NUE_BACKUP_BASELINE_BINDING")
 
 
+def sync_guard_directory(path):
+    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try: os.fsync(fd)
+    finally: os.close(fd)
+
+
+def publish_guard_without_replace(prepared, target):
+    # The shared guard can be created by the backup concurrently. Never fall
+    # back to rename(), which may replace an existing empty directory.
+    require(sys.platform == "linux", "NUE_GUARD_RENAME_LINUX_REQUIRED")
+    libc = ctypes.CDLL(None, use_errno=True)
+    require(hasattr(libc, "renameat2"), "NUE_GUARD_RENAME_NOREPLACE_REQUIRED")
+    call = libc.renameat2
+    call.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
+    call.restype = ctypes.c_int
+    if call(-100, os.fsencode(prepared), -100, os.fsencode(target), 1) != 0:
+        error = ctypes.get_errno()
+        if error in (errno.EEXIST, errno.ENOTEMPTY):
+            raise RuntimeError("NUE_FOREIGN_UPDATE_LOCK")
+        raise OSError(error, os.strerror(error))
+
+
 def own_lock():
     require(not os.path.lexists(LOCK), "NUE_FOREIGN_UPDATE_LOCK")
+    protected(LOCK.parent, directory=True)
     token = uuid.uuid4().hex
-    LOCK.mkdir(mode=0o700)
-    put(LOCK / "owner.json", {"mode": "nue-image-only", "token": token})
+    prepared = LOCK.parent / ("." + LOCK.name + ".prepared-" + uuid.uuid4().hex)
+    prepared.mkdir(mode=0o700)
+    put(prepared / "owner.json", {"mode": "nue-image-only", "token": token})
+    sync_guard_directory(prepared)
+    sync_guard_directory(LOCK.parent)
+    publish_guard_without_replace(prepared, LOCK)
+    sync_guard_directory(LOCK.parent)
+    owned(token)
     return token
 
 
@@ -906,9 +974,49 @@ def owned(token):
     require(json.loads(protected(LOCK / "owner.json").read_bytes()) == {"mode": "nue-image-only", "token": token}, "NUE_LOCK_NOT_OWNED")
 
 
+def require_backup_service_idle(token):
+    # Capture releases the shared guard before off-host restore; wait for the
+    # entire synchronous service, not just its capture phase, to finish.
+    owned(token)
+    unit = protected(Path('/etc/systemd/system/catering-backup.service'))
+    require(digest(unit) == 'a9fba2585d6dea22ee63639f574bbc0f2344a417539f0c617718fdc19d7f8e8e', 'NUE_BACKUP_UNIT_BINDING_HOLD')
+    fields = ('Id','LoadState','FragmentPath','DropInPaths','NeedDaemonReload','ActiveState','SubState','Result',
+              'MainPID','ControlPID','ControlGroup','ExecStart','Type','User','ExecMainStatus')
+    raw = command(['/usr/bin/systemctl','show','catering-backup.service','--no-pager','--all',
+                   '--property='+','.join(fields)], timeout=15).decode('utf-8')
+    rows = {}
+    for line in raw.splitlines():
+        require('=' in line, 'NUE_BACKUP_SERVICE_METADATA_HOLD')
+        key,value = line.split('=',1)
+        require(key not in rows, 'NUE_BACKUP_SERVICE_METADATA_HOLD'); rows[key]=value
+    require(set(rows)==set(fields), 'NUE_BACKUP_SERVICE_METADATA_HOLD')
+    expected={'Id':'catering-backup.service','LoadState':'loaded','FragmentPath':str(unit),'DropInPaths':'',
+              'NeedDaemonReload':'no','ActiveState':'inactive','SubState':'dead','Result':'success',
+              'MainPID':'0','ControlPID':'0','Type':'oneshot','User':'root','ExecMainStatus':'0'}
+    require(all(rows[k]==v for k,v in expected.items()), 'NUE_BACKUP_SERVICE_BUSY_HOLD')
+    require(re.fullmatch(r'\{ path=/usr/bin/python3 ; argv\[\]=/usr/bin/python3 -B -I /usr/local/libexec/catering-nue-service\.py ; [^{}]*\}',
+                         rows['ExecStart']) is not None, 'NUE_BACKUP_EXEC_BINDING_HOLD')
+    jobs=command(['/usr/bin/systemctl','list-jobs','--no-legend','--no-pager'],timeout=15).decode('utf-8')
+    require(not any('catering-backup.service' in line.split() for line in jobs.splitlines()), 'NUE_BACKUP_JOB_QUEUED_HOLD')
+    group=rows['ControlGroup']
+    if group:
+        require(group=='/system.slice/catering-backup.service','NUE_BACKUP_CGROUP_BINDING_HOLD')
+        events=Path('/sys/fs/cgroup/system.slice/catering-backup.service/cgroup.events').read_text().splitlines()
+        require(events.count('populated 0')==1 and not any(line.startswith('populated ') and line!='populated 0' for line in events),
+                'NUE_BACKUP_CGROUP_BUSY_HOLD')
+    owned(token)
+
+
 def unlock(token):
     owned(token)
-    (LOCK / "owner.json").unlink(); LOCK.rmdir()
+    retired = LOCK.parent / ("." + LOCK.name + ".released-" + token)
+    # Move the complete owned guard out of the shared name in one operation.
+    # If interrupted before this point, its ownership remains inspectable.
+    publish_guard_without_replace(LOCK, retired)
+    sync_guard_directory(LOCK.parent)
+    (retired / "owner.json").unlink()
+    retired.rmdir()
+    sync_guard_directory(LOCK.parent)
 
 
 def candidate_compose(old, images):
@@ -932,6 +1040,7 @@ def stage(bundle, manifest_sha, expected_path, expected_sha, proof_path, proof_s
     proof = read_bound(protected(proof_path), proof_sha)
     token = own_lock()
     try:
+        require_backup_service_idle(token)
         baseline = snapshot()
         previous = {r["name"].lstrip("/"): r for r in expected["containers"]}
         require(set(previous) == set(NAMES), "NUE_EXPECTED_SCOPE")
@@ -1085,6 +1194,113 @@ def interrupted(signum, frame):
     if not RECOVERING: raise RuntimeError("NUE_INTERRUPTED:" + str(signum))
 
 
+ABORT_ARTIFACTS = ("runtime.loaded.tar", "runtime.loaded.tar.gz", "web.loaded.tar", "web.loaded.tar.gz",
+                   "compose.before.json", "compose.candidate.json")
+ABORT_ARCHIVE_PREFIX = "apply-aborted-"
+
+
+def validate_aborted_attempt(bundle, record_dir, manifest_sha, manifest):
+    try:
+        attempt_path = protected(record_dir / "apply-attempt.json")
+        terminal_path = protected(record_dir / "apply-terminal.json")
+        attempt = json.loads(attempt_path.read_bytes()); terminal = json.loads(terminal_path.read_bytes())
+    except (OSError, ValueError):
+        raise RuntimeError("NUE_APPLY_ATTEMPT_EXISTS_HOLD") from None
+    fields = {"schemaVersion", "status", "runId", "manifestSha256", "admissionSha256", "admission", "admissionSignature", "lockToken", "stageSha256", "baselineSha256", "backupProofSha256", "smokeSha256"}
+    require(type(attempt) is dict and set(attempt) == fields and type(attempt["schemaVersion"]) is int and
+            attempt["schemaVersion"] == 1 and attempt["status"] == "NUE_APPLY_ATTEMPT_RESERVED" and
+            attempt["manifestSha256"] == manifest_sha and re.fullmatch(r"[0-9a-f]{32}", attempt["runId"]) and
+            re.fullmatch(r"[0-9a-f]{32}", attempt["lockToken"]), "NUE_ABORT_ATTEMPT_BINDING")
+    stage = json.loads(protected(bundle / "stage.json").read_bytes())
+    require(stage["manifestSha256"] == manifest_sha and stage["mode"] == "nue-image-only" and
+            attempt["stageSha256"] == digest(bundle / "stage.json") and
+            attempt["baselineSha256"] == stage["baselineSha256"] == digest(protected(bundle / "baseline.json")) and
+            attempt["backupProofSha256"] == stage["backupProofSha256"] == digest(protected(bundle / "backup-proof.json")),
+            "NUE_ABORT_INPUT_BINDING")
+    require(type(terminal) is dict and type(terminal.get("schemaVersion")) is int and terminal == {
+        "schemaVersion": 1, "runId": attempt["runId"], "manifestSha256": manifest_sha,
+        "attemptSha256": digest(attempt_path), "status": "NUE_APPLY_ABORTED_BEFORE_WRITER_CHANGE"}, "NUE_ABORT_TERMINAL_BINDING")
+    body = canonical(attempt["admission"])
+    require(hashlib.sha256(body).hexdigest() == attempt["admissionSha256"], "NUE_APPLY_ADMISSION_DIGEST")
+    verify_admission_signature(body, base64.b64decode(attempt["admissionSignature"], validate=True))
+    parameters = attempt["admission"]["parameters"]
+    require(set(parameters) == {"protectedSmoke", "protectedSmokeSha256"} and
+            parameters["protectedSmokeSha256"] == attempt["smokeSha256"], "NUE_APPLY_ADMISSION_SMOKE")
+    admission = bound_admission(body, manifest, manifest_sha, "apply", bundle, parameters)
+    require(admission["nonce"] == attempt["runId"], "NUE_APPLY_ADMISSION_RUN")
+    return attempt["runId"]
+
+
+def require_fresh_apply(bundle, manifest_sha=None, manifest=None, nonce=None):
+    require(not any(os.path.lexists(bundle / name) for name in ("installed.json", "rollback-verified.json")), "NUE_APPLY_ATTEMPT_EXISTS_HOLD")
+    archives = sorted(p for p in bundle.iterdir() if p.name.startswith(ABORT_ARCHIVE_PREFIX))
+    attempt_exists = os.path.lexists(bundle / "apply-attempt.json")
+    terminal_exists = os.path.lexists(bundle / "apply-terminal.json")
+    if not archives and not attempt_exists and not terminal_exists:
+        require(not any(os.path.lexists(bundle / name) for name in ABORT_ARTIFACTS) and
+                not list(bundle.glob("recovery-hold-*.json")), "NUE_ABORT_ARTIFACT_RECONCILIATION_HOLD")
+        return None
+    require(manifest_sha is not None and manifest is not None and isinstance(nonce, str) and
+            re.fullmatch(r"[0-9a-f]{32}", nonce) and not list(bundle.glob("recovery-hold-*.json")), "NUE_APPLY_ATTEMPT_EXISTS_HOLD")
+    seen = set()
+    for directory in archives:
+        require(re.fullmatch(ABORT_ARCHIVE_PREFIX + r"[0-9a-f]{32}", directory.name) is not None, "NUE_ABORT_ARCHIVE_HOLD")
+        protected(directory, directory=True)
+        require({p.name for p in directory.iterdir()} <= set(ABORT_ARTIFACTS) | {"apply-attempt.json", "apply-terminal.json"}, "NUE_ABORT_ARCHIVE_HOLD")
+        old_nonce = validate_aborted_attempt(bundle, directory, manifest_sha, manifest)
+        require(directory.name == ABORT_ARCHIVE_PREFIX + old_nonce and old_nonce not in seen and old_nonce != nonce, "NUE_ABORT_NONCE_REPLAY")
+        seen.add(old_nonce)
+    require(attempt_exists == terminal_exists, "NUE_APPLY_ATTEMPT_EXISTS_HOLD")
+    if attempt_exists:
+        old_nonce = validate_aborted_attempt(bundle, bundle, manifest_sha, manifest)
+        require(old_nonce not in seen and old_nonce != nonce, "NUE_ABORT_NONCE_REPLAY")
+        return old_nonce
+    require(not any(os.path.lexists(bundle / name) for name in ABORT_ARTIFACTS), "NUE_ABORT_ARTIFACT_RECONCILIATION_HOLD")
+    return None
+
+
+def archive_aborted_attempt(bundle, nonce):
+    archive = bundle / (ABORT_ARCHIVE_PREFIX + nonce)
+    archive.mkdir(mode=0o700)
+    sync_guard_directory(bundle)
+    # Terminal moves last: any interrupted move leaves an incomplete archive,
+    # which must be reconciled rather than replayed automatically.
+    for name in (*ABORT_ARTIFACTS, "apply-attempt.json", "apply-terminal.json"):
+        source = bundle / name
+        if os.path.lexists(source):
+            protected(source)
+            os.rename(source, archive / name)
+            sync_guard_directory(archive); sync_guard_directory(bundle)
+
+
+def require_completed_apply(bundle, manifest_sha, manifest, stage, installed):
+    legacy_helper = LEGACY_COMPLETED_RELEASES.get(manifest_sha)
+    if legacy_helper is not None and legacy_helper == manifest["helpers"]["catering_target_nue_image_update.py"]:
+        require_no_legacy_attempt(bundle)
+        return
+    attempt = json.loads(protected(bundle / "apply-attempt.json").read_bytes())
+    terminal = json.loads(protected(bundle / "apply-terminal.json").read_bytes())
+    require(type(attempt) is dict and set(attempt) == {"schemaVersion", "status", "runId", "manifestSha256", "admissionSha256", "admission", "admissionSignature", "lockToken", "stageSha256", "baselineSha256", "backupProofSha256", "smokeSha256"}, "NUE_APPLY_ATTEMPT_SHAPE")
+    require(type(attempt["schemaVersion"]) is int and attempt["schemaVersion"] == 1 and attempt["status"] == "NUE_APPLY_ATTEMPT_RESERVED" and
+            attempt["manifestSha256"] == manifest_sha and re.fullmatch(r"[0-9a-f]{32}", attempt["lockToken"]), "NUE_APPLY_ATTEMPT_BINDING")
+    require(attempt["stageSha256"] == digest(bundle / "stage.json") and attempt["baselineSha256"] == stage["baselineSha256"] and
+            attempt["backupProofSha256"] == stage["backupProofSha256"] == digest(protected(bundle / "backup-proof.json")) and
+            attempt["smokeSha256"] == installed["smokeSha256"], "NUE_APPLY_ATTEMPT_INPUT_BINDING")
+    require(type(terminal.get("schemaVersion")) is int and terminal == {"schemaVersion": 1, "runId": attempt["runId"], "manifestSha256": manifest_sha,
+            "attemptSha256": digest(bundle / "apply-attempt.json"), "status": "NUE_IMAGE_ONLY_INSTALLED", "receipt": "installed.json",
+            "receiptSha256": digest(bundle / "installed.json")}, "NUE_APPLY_TERMINAL_BINDING")
+    body = canonical(attempt["admission"])
+    require(hashlib.sha256(body).hexdigest() == attempt["admissionSha256"], "NUE_APPLY_ADMISSION_DIGEST")
+    signature = base64.b64decode(attempt["admissionSignature"], validate=True)
+    verify_admission_signature(body, signature)
+    parameters = attempt["admission"]["parameters"]
+    require(set(parameters) == {"protectedSmoke", "protectedSmokeSha256"} and parameters["protectedSmokeSha256"] == installed["smokeSha256"], "NUE_APPLY_ADMISSION_SMOKE")
+    admission = bound_admission(body, manifest, manifest_sha, "apply", bundle, parameters)
+    require(admission["nonce"] == attempt["runId"], "NUE_APPLY_ADMISSION_RUN")
+    # This authenticates a historical result; only require_admission admits a new
+    # operation and enforces the unchanged 900-second execution window.
+
+
 def apply(bundle, manifest_sha, smoke, smoke_sha, admission_path=None, admission_sha=None, signature_path=None, signature_sha=None):
     global RECOVERING
     host_identity(); bundle = protected(bundle, directory=True)
@@ -1093,6 +1309,7 @@ def apply(bundle, manifest_sha, smoke, smoke_sha, admission_path=None, admission
                       {"protectedSmoke": str(smoke), "protectedSmokeSha256": smoke_sha}, signature_path, signature_sha)
     manifest = verify_bundle(bundle, manifest_sha)
     bind_admission_manifest(admission, manifest)
+    require_fresh_apply(bundle, manifest_sha, manifest, admission["nonce"])
     oci = load_module("nue_bound_oci", bundle / "tools/catering_target_oci.py")
     receipt = json.loads(protected(bundle / "stage.json").read_bytes())
     require(receipt["manifestSha256"] == manifest_sha and receipt["mode"] == "nue-image-only", "NUE_STAGE_BINDING")
@@ -1103,9 +1320,29 @@ def apply(bundle, manifest_sha, smoke, smoke_sha, admission_path=None, admission
     smoke = protected(smoke)
     require(smoke.stat().st_mode & 0o100, "NUE_SMOKE_EXECUTABLE")
     require(SHA.fullmatch(smoke_sha or "") and digest(smoke) == smoke_sha, "NUE_SMOKE_EXPLICIT_BINDING")
-    token = own_lock(); pending = set(); mutated = False; old = COMPOSE.read_bytes(); safe = False
-    handlers = {kind: signal.signal(kind, interrupted) for kind in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)}
+    require(hashlib.sha256(canonical(admission)).hexdigest() == admission_sha, "NUE_APPLY_ADMISSION_DIGEST")
+    signature = read_bounded_bytes(signature_path, signature_sha, SIGNATURE_LIMIT)
+    token = own_lock(); pending = set(); mutated = False; safe = False
+    terminal = None; terminal_started = False; reservation_started = False; handlers = {}
     try:
+        for kind in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+            handlers[kind] = signal.signal(kind, interrupted)
+        owned(token)
+        require_backup_service_idle(token)
+        previous_abort = require_fresh_apply(bundle, manifest_sha, manifest, admission["nonce"])
+        if previous_abort is not None:
+            reservation_started = True
+            archive_aborted_attempt(bundle, previous_abort)
+        attempt = {"schemaVersion": 1, "status": "NUE_APPLY_ATTEMPT_RESERVED", "runId": admission["nonce"],
+                   "manifestSha256": manifest_sha, "admissionSha256": admission_sha, "lockToken": token,
+                   "admission": admission, "admissionSignature": base64.b64encode(signature).decode("ascii"),
+                   "stageSha256": digest(bundle / "stage.json"), "baselineSha256": receipt["baselineSha256"],
+                   "backupProofSha256": receipt["backupProofSha256"], "smokeSha256": smoke_sha}
+        reservation_started = True
+        put_durable(bundle / "apply-attempt.json", attempt)
+        terminal = {"schemaVersion": 1, "runId": admission["nonce"], "manifestSha256": manifest_sha,
+                    "attemptSha256": hashlib.sha256(canonical(attempt)).hexdigest()}
+        old = COMPOSE.read_bytes()
         require(snapshot() == baseline, "NUE_BASELINE_CHANGED_SINCE_STAGE")
         for service in SERVICES[:-1]:
             require(runtime_schema("platform-infra-" + service + "-1") == manifest["schemaBinding"], "NUE_RUNTIME_DDL_DRIFT_HOLD")
@@ -1141,13 +1378,28 @@ def apply(bundle, manifest_sha, smoke, smoke_sha, admission_path=None, admission
         compose_up(); set_policies(baseline, token)
         verify_runtime(baseline, images, candidate, candidate_oci=oci, candidate_layout=manifest["bases"], candidate_schema=manifest["schemaBinding"])
         command([str(smoke)], timeout=180)
+        # Once success recording begins, an interrupted write/ack must retain the
+        # guard. Rolling back here could contradict an already durable receipt.
+        terminal_started = True
+        owned(token)
         put(bundle / "installed.json", {"status": "NUE_IMAGE_ONLY_INSTALLED", "manifestSha256": manifest_sha, "composeSha256": hashlib.sha256(candidate).hexdigest(), "images": images, "smokeSha256": smoke_sha, "observerInstalled": False, "automaticBackupRestoreChainAccepted": False})
+        put_durable(bundle / "apply-terminal.json", dict(terminal, status="NUE_IMAGE_ONLY_INSTALLED",
+                    receipt="installed.json", receiptSha256=digest(bundle / "installed.json")))
         safe = True
         return {"status": "NUE_IMAGE_ONLY_INSTALLED", "manifestSha256": manifest_sha, "observerInstalled": False}
-    except BaseException:
+    except BaseException as error:
+        safe = False
         RECOVERING = True
+        if not reservation_started:
+            # No reservation or update actions began; finally still checks the
+            # exact token before releasing the guard acquired by this invocation.
+            safe = True
+            raise
         try:
             owned(token)
+            require(not isinstance(error, UncertainDockerMutation), "NUE_DOCKER_MUTATION_OUTCOME_UNKNOWN_HOLD")
+            require(not terminal_started, "NUE_TERMINAL_OUTCOME_REQUIRES_RECONCILIATION")
+            require(terminal is not None, "NUE_APPLY_RESERVATION_UNCERTAIN_HOLD")
             if mutated:
                 settle_stops(pending)
                 pause_applications(baseline, {row["image"] for row in baseline["containers"].values()} | set(images.values()), pending, token)
@@ -1157,14 +1409,20 @@ def apply(bundle, manifest_sha, smoke, smoke_sha, admission_path=None, admission
                 verify_runtime(baseline, previous, old)
                 command([str(smoke)], timeout=180)
                 put(bundle / "rollback-verified.json", {"status": "NUE_ORIGINAL_COMPOSE_IMAGES_AND_HEALTH_RESTORED", "dataRolledBack": False})
+                put_durable(bundle / "apply-terminal.json", dict(terminal, status="NUE_ORIGINAL_COMPOSE_IMAGES_AND_HEALTH_RESTORED",
+                            receipt="rollback-verified.json", receiptSha256=digest(bundle / "rollback-verified.json")))
+            else:
+                put_durable(bundle / "apply-terminal.json", dict(terminal, status="NUE_APPLY_ABORTED_BEFORE_WRITER_CHANGE"))
             safe = True
         except BaseException:
             put(bundle / ("recovery-hold-" + token + ".json"), {"status": "NUE_MANUAL_RECOVERY_REQUIRED", "lockRetained": True})
         raise
     finally:
         RECOVERING = False
-        for kind, previous in handlers.items(): signal.signal(kind, previous)
-        if safe: unlock(token)
+        try:
+            if safe: unlock(token)
+        finally:
+            for kind, previous in handlers.items(): signal.signal(kind, previous)
 
 
 def verify(bundle, manifest_sha):
@@ -1180,6 +1438,7 @@ def verify(bundle, manifest_sha):
     require(hashlib.sha256(candidate).hexdigest() == installed["composeSha256"], "NUE_INSTALLED_COMPOSE_BINDING")
     images = {s: manifest["images"]["web" if s == "web" else "runtime"]["platformManifestDigest"] for s in SERVICES}
     require(images == installed["images"] and installed["status"] == "NUE_IMAGE_ONLY_INSTALLED", "NUE_INSTALLED_IMAGE_BINDING")
+    require_completed_apply(bundle, manifest_sha, manifest, stage_receipt, installed)
     oci = load_module("nue_verify_oci", bundle / "tools/catering_target_oci.py")
     verify_runtime(baseline, images, candidate, candidate_oci=oci, candidate_layout=manifest["bases"], candidate_schema=manifest["schemaBinding"])
     return {"status": "NUE_IMAGE_ONLY_VERIFIED", "observerInstalled": False, "automaticBackupRestoreChainAccepted": False}
