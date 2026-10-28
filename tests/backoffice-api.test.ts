@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { activateCateringSessionRequests, subscribeCateringSessionInvalidation } from "../backoffice-ui/src/session-api.js";
 import {
   createAcceptedSpecFromText,
   createOfferCase,
   createOfferDraftFromRequest,
   createOfferFromText,
   loadOfferProductData,
+  loadProductionProductData,
   createProductionCase,
   createProductionDraftFromAcceptedEventSpec,
   createProductionDraftFromDocument,
@@ -60,6 +62,68 @@ afterEach(() => {
 });
 
 describe("backoffice API session requests", () => {
+  it.each(["failure", "hang"])("loads offer data when diagnostic health would %s", async (mode) => {
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      calls.push(url);
+      if (url === "/api/offers/health") {
+        return mode === "failure" ? new Response(null, { status: 503 }) : new Promise<Response>(() => {});
+      }
+      if (url === "/api/offers/v1/offers/cases") return Response.json({ items: [{ caseId: "case-a" }] });
+      throw new Error("Unexpected fetch: " + url);
+    }));
+    const outcome = await Promise.race([
+      loadOfferProductData(),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("workspace blocked by health")), 100))
+    ]);
+    expect(outcome.workspace.cases).toEqual([{ caseId: "case-a" }]);
+    expect(outcome.serviceHealth.offers.status).toBe("unknown");
+    expect(calls).toEqual(["/api/offers/v1/offers/cases"]);
+  });
+
+  it.each(["failure", "hang"])("loads production data when diagnostic health would %s", async (mode) => {
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      calls.push(url);
+      if (url === "/api/production/health") {
+        return mode === "failure" ? new Response(null, { status: 503 }) : new Promise<Response>(() => {});
+      }
+      if (url === "/api/production/v1/production/cases") return Response.json({ items: [{ caseId: "case-p" }] });
+      if (url === "/api/production/v1/production/cases/case-p") return Response.json({ case: { caseId: "case-p", product: "production" }, events: [] });
+      if (url === "/api/production/v1/production/recipes") return Response.json({ items: [{ recipeId: "recipe-p" }] });
+      throw new Error("Unexpected fetch: " + url);
+    }));
+    const result = await Promise.race([
+      loadProductionProductData("case-p"),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("workspace blocked by health")), 100))
+    ]);
+    expect(result.workspace.activeCase?.caseId).toBe("case-p");
+    expect(result.recipes).toEqual([{ recipeId: "recipe-p" }]);
+    expect(result.serviceHealth.production.status).toBe("unknown");
+    expect(calls).not.toContain("/api/production/health");
+  });
+
+  it("still rejects workspace errors", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("unavailable", { status: 503 })));
+    await expect(loadOfferProductData()).rejects.toThrow();
+  });
+
+  it("still invalidates an expired session on a workspace response", async () => {
+    activateCateringSessionRequests();
+    const invalidated = vi.fn();
+    const unsubscribe = subscribeCateringSessionInvalidation(invalidated);
+    try {
+      vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 401 })));
+      await expect(loadOfferProductData()).rejects.toThrow();
+      expect(invalidated).toHaveBeenCalledOnce();
+    } finally {
+      unsubscribe();
+      activateCateringSessionRequests();
+    }
+  });
+
   it("loads intake specs only from typed snapshots, never from unrelated case artifacts", async () => {
     const calls: string[] = [];
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
