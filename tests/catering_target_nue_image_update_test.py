@@ -13,8 +13,9 @@ import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
-from contextlib import ExitStack, contextmanager, redirect_stderr
+from contextlib import ExitStack, contextmanager, nullcontext, redirect_stderr
 import io
+import os
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,6 +24,82 @@ nue = importlib.util.module_from_spec(SPEC); SPEC.loader.exec_module(nue)
 
 
 class NueTests(unittest.TestCase):
+    def setUp(self):
+        self.backup_idle_patch=patch.object(nue,"require_backup_service_idle")
+        self.backup_idle_patch.start();self.addCleanup(self.backup_idle_patch.stop)
+
+    def test_backup_service_state_and_cgroup_fail_closed(self):
+        self.backup_idle_patch.stop()
+        rows={'Id':'catering-backup.service','LoadState':'loaded','FragmentPath':'/etc/systemd/system/catering-backup.service',
+              'DropInPaths':'','NeedDaemonReload':'no','ActiveState':'inactive','SubState':'dead','Result':'success',
+              'MainPID':'0','ControlPID':'0','ControlGroup':'','Type':'oneshot','User':'root','ExecMainStatus':'0',
+              'ExecStart':'{ path=/usr/bin/python3 ; argv[]=/usr/bin/python3 -B -I /usr/local/libexec/catering-nue-service.py ; ignore_errors=no ; }'}
+        mutations=(None,'active','deactivating','failed','queued','populated','missing','exec','dropin','childpid')
+        for mutation in mutations:
+            with self.subTest(mutation=mutation):
+                value=dict(rows);jobs=b'';events='populated 0\n'
+                if mutation=='active':value.update(ActiveState='active',SubState='running',MainPID='123')
+                if mutation=='deactivating':value.update(ActiveState='deactivating',SubState='stop-sigterm')
+                if mutation=='failed':value.update(ActiveState='failed',SubState='failed',Result='exit-code')
+                if mutation=='queued':jobs=b'17 catering-backup.service start waiting\n'
+                if mutation=='populated':value['ControlGroup']='/system.slice/catering-backup.service';events='populated 1\n'
+                if mutation=='missing':value.pop('ControlPID')
+                if mutation=='exec':value['ExecStart']='{ path=/bin/true ; argv[]=/bin/true ; }'
+                if mutation=='dropin':value['DropInPaths']='/etc/systemd/system/catering-backup.service.d/override.conf'
+                if mutation=='childpid':value['ControlPID']='123'
+                show=''.join(k+'='+v+'\n' for k,v in value.items()).encode()
+                with patch.object(nue,'owned') as owned, patch.object(nue,'protected',side_effect=lambda p,**kw:Path(p)), \
+                     patch.object(nue,'digest',return_value='a9fba2585d6dea22ee63639f574bbc0f2344a417539f0c617718fdc19d7f8e8e'), \
+                     patch.object(nue,'command',side_effect=[show,jobs]),patch.object(Path,'read_text',return_value=events):
+                    if mutation is None:
+                        nue.require_backup_service_idle('token');self.assertEqual(owned.call_count,2)
+                    else:
+                        with self.assertRaises(RuntimeError):nue.require_backup_service_idle('token')
+
+    def test_backup_busy_build_releases_own_guard_before_any_build(self):
+        self.backup_idle_patch.stop();events=[]
+        binding={'manifestSha256':'a'*64,'helperSha256':'b'*64}
+        operator=SimpleNamespace(_oci=lambda:object())
+        with patch.object(nue,'accepted_current_bundle'),patch.object(nue,'own_lock',side_effect=lambda:events.append('lock') or 'token'), \
+             patch.object(nue,'owned',side_effect=lambda token:events.append('owned')), \
+             patch.object(nue,'require_backup_service_idle',side_effect=lambda token:(_ for _ in ()).throw(RuntimeError('BACKUP_BUSY'))), \
+             patch.object(nue,'_create_bundle') as build,patch.object(nue,'unlock',side_effect=lambda token:events.append('unlock')):
+            with self.assertRaisesRegex(RuntimeError,'BACKUP_BUSY'):
+                nue.create_bundle(operator,Path('/source'),'1'*40,'2'*40,Path('/output'),None,None,
+                                  exported=True,base_mode='local-current',accepted_current_release=binding)
+        self.assertEqual(events,['lock','owned','unlock']);build.assert_not_called()
+
+    def test_backup_busy_stops_stage_and_apply_before_first_mutation(self):
+        self.backup_idle_patch.stop()
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);sha='a'*64;bundle=root/sha;bundle.mkdir()
+            smoke=root/'smoke';smoke.write_bytes(b'smoke');smoke.chmod(0o700)
+            signature=root/'signature';signature.write_bytes(b'synthetic')
+            stage={'manifestSha256':sha,'mode':'nue-image-only','baselineSha256':'b'*64,'backupProofSha256':'c'*64}
+            (bundle/'stage.json').write_bytes(nue.canonical(stage))
+            admission={'nonce':'d'*32};admission_sha=hashlib.sha256(nue.canonical(admission)).hexdigest()
+            for phase in ('stage','apply'):
+                with self.subTest(phase=phase),ExitStack() as stack:
+                    stack.enter_context(patch.multiple(nue,RELEASES=root))
+                    stack.enter_context(patch.object(nue,'host_identity'))
+                    stack.enter_context(patch.object(nue,'protected',side_effect=lambda p,**kw:Path(p)))
+                    stack.enter_context(patch.object(nue,'require_admission',return_value=admission))
+                    stack.enter_context(patch.object(nue,'bind_admission_manifest'))
+                    stack.enter_context(patch.object(nue,'verify_bundle',return_value={}))
+                    stack.enter_context(patch.object(nue,'read_bound',return_value={}))
+                    stack.enter_context(patch.object(nue,'backup_gate'))
+                    stack.enter_context(patch.object(nue,'load_module'))
+                    stack.enter_context(patch.object(nue,'own_lock',return_value='token'))
+                    stack.enter_context(patch.object(nue,'owned'))
+                    stack.enter_context(patch.object(nue,'require_backup_service_idle',side_effect=RuntimeError('BACKUP_BUSY')))
+                    unlock=stack.enter_context(patch.object(nue,'unlock'))
+                    snapshot=stack.enter_context(patch.object(nue,'snapshot'))
+                    with self.assertRaisesRegex(RuntimeError,'BACKUP_BUSY'):
+                        if phase=='stage':nue.stage(bundle,sha,root/'expected','b'*64,root/'proof','c'*64)
+                        else:nue.apply(bundle,sha,smoke,nue.digest(smoke),admission_sha=admission_sha,signature_path=signature,signature_sha=nue.digest(signature))
+                    unlock.assert_called_once_with('token');snapshot.assert_not_called()
+                    self.assertFalse((bundle/'apply-attempt.json').exists())
+
     @contextmanager
     def synthetic_current_host(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -181,7 +258,7 @@ class NueTests(unittest.TestCase):
     def proof(self):
         return {"capture": {"sourceResumed": True, "files": list(range(17)), "manifestSha256": "c" * 64}, "restore": {"status": "ALL_THREE_DATABASES_GLOBALS_AND_REQUIRED_FILES_IDENTICAL", "databases": 3, "fileTrees": 8, "probeContainerRemoved": True, "runId": "a" * 32}, "captureCleanup": {"status": "OWN_TMPFS_UNMOUNTED", "runId": "a" * 32}, "finalHealth": {"status": "ORIGINAL_SEVEN_CONTAINERS_POLICIES_DATABASE_SCOPE_AND_HTTPS_HEALTHY"}, "snapshotId": "b" * 64, "manifestSha256": "c" * 64, "at": datetime.datetime.now(datetime.timezone.utc).isoformat(), "runId": "a" * 32}
 
-    def run_apply_failure(self, tmp, recovery_fails=False, preflight_fails=False, loaded_mutation=None, smoke_fails=False):
+    def run_apply_failure(self, tmp, recovery_fails=False, preflight_fails=False, loaded_mutation=None, smoke_fails=False, receipt_failure=None, success=False, daemon_failure=None, prior_abort=False):
         sha = "a" * 64; bundle = tmp / sha; bundle.mkdir()
         compose = tmp / "compose.json"
         old = json.dumps({"services": {s: {"image": "old"} for s in nue.SERVICES}}).encode(); compose.write_bytes(old)
@@ -190,10 +267,21 @@ class NueTests(unittest.TestCase):
         binding = {"platformManifestDigest": "sha256:" + "1" * 64, "configDigest": "sha256:" + "2" * 64}
         manifest = {"schemaBinding": {}, "bases": {}, "images": {r: dict(binding) for r in ("runtime", "web")}}
         (bundle / "stage.json").write_text(json.dumps({"manifestSha256": sha, "mode": "nue-image-only", "baselineSha256": "b" * 64, "backupProofSha256": "c" * 64}))
+        if prior_abort:
+            for name in (*nue.ABORT_ARTIFACTS,"apply-attempt.json","apply-terminal.json"):
+                (bundle/name).write_bytes(("previous:"+name).encode())
+        admission = {"nonce": "d" * 32}; admission_sha = hashlib.sha256(nue.canonical(admission)).hexdigest()
+        signature = tmp / "admission.sig"; signature.write_bytes(b"synthetic-bound-signature")
         events = []
+        original_command = nue.command
         oci = nue.load_module("nue_test_oci", ROOT / "platform-infra/scripts/catering_target_oci.py")
         def run(argv, **kwargs):
             events.append(argv)
+            if daemon_failure and argv[:2] == ["docker", daemon_failure[0]]:
+                failure = daemon_failure[1]
+                effect = subprocess.TimeoutExpired(argv, 1) if failure == "timeout" else RuntimeError("NUE_INTERRUPTED:15") if failure == "signal" else None
+                with patch.object(nue.subprocess, "run", side_effect=effect, return_value=SimpleNamespace(returncode=-15 if failure == "killed" else 1, stdout=b"")):
+                    return original_command(argv, **kwargs)
             if smoke_fails and argv == [str(smoke)] and events.count(argv) == 1: raise RuntimeError("AUTHENTICATED_SMOKE_FAILED")
             if argv[:3] == ["docker", "image", "inspect"]:
                 row = {"Id": binding["configDigest"] if loaded_mutation == "config-id" else binding["platformManifestDigest"], "Os": "linux", "Architecture": "amd64"}
@@ -202,12 +290,18 @@ class NueTests(unittest.TestCase):
             if argv[:2] == ["docker", "save"]: Path(argv[3]).write_bytes(b"fixture")
             if "psql" in argv: return b"0"
             return b""
-        verify_results = [{} if smoke_fails else RuntimeError("CANDIDATE_HEALTH_FAIL"), RuntimeError("ROLLBACK_FAIL") if recovery_fails else {}]
+        verify_results = [{} if success or smoke_fails or receipt_failure in ("installed.json", "apply-terminal.json") else RuntimeError("CANDIDATE_HEALTH_FAIL"), RuntimeError("ROLLBACK_FAIL") if recovery_fails else {}]
+        original_put = nue.put
+        def put(path, value):
+            original_put(path, value)
+            if Path(path).name == receipt_failure:
+                raise RuntimeError("TERMINAL_RECEIPT_ACK_LOST")
         with ExitStack() as stack:
+            if prior_abort: stack.enter_context(patch.object(nue,"validate_aborted_attempt",return_value="e"*32))
             stack.enter_context(patch.multiple(nue, RELEASES=tmp, COMPOSE=compose))
             stack.enter_context(patch.object(nue, "host_identity"))
             stack.enter_context(patch.object(nue, "protected", side_effect=lambda p, **kw: Path(p)))
-            stack.enter_context(patch.object(nue, "require_admission"))
+            stack.enter_context(patch.object(nue, "require_admission", return_value=admission))
             stack.enter_context(patch.object(nue, "bind_admission_manifest"))
             stack.enter_context(patch.object(nue, "verify_bundle", return_value=manifest))
             stack.enter_context(patch.object(nue, "read_bound", side_effect=lambda p, sha: baseline if Path(p).name == "baseline.json" else {}))
@@ -220,14 +314,225 @@ class NueTests(unittest.TestCase):
             stack.enter_context(patch.object(nue, "load_module", side_effect=lambda name, path: oci if str(path).endswith("catering_target_oci.py") else SimpleNamespace(_inspect_archive=lambda p: binding)))
             stack.enter_context(patch.object(nue, "replace_compose", side_effect=lambda body, meta, token: compose.write_bytes(body)))
             pause = stack.enter_context(patch.object(nue, "pause_applications"))
-            up = stack.enter_context(patch.object(nue, "compose_up"))
-            stack.enter_context(patch.object(nue, "set_policies"))
+            up = stack.enter_context(patch.object(nue, "compose_up", wraps=nue.compose_up if daemon_failure else None))
+            stack.enter_context(patch.object(nue, "set_policies", wraps=nue.set_policies if daemon_failure else None))
+            stack.enter_context(patch.object(nue, "put", side_effect=put))
             stack.enter_context(patch.object(nue, "verify_runtime", side_effect=verify_results))
-            unlock = stack.enter_context(patch.object(nue, "unlock"))
-            expected_error = self.assertRaises(ValueError) if loaded_mutation else self.assertRaisesRegex(RuntimeError, "AUTHENTICATED_SMOKE_FAILED" if smoke_fails else "NUE_BASELINE_CHANGED|CANDIDATE_HEALTH_FAIL")
+            unlock = stack.enter_context(patch.object(nue, "unlock", side_effect=lambda token: self.assertTrue((bundle / "apply-terminal.json").exists())))
+            receipt_ack_lost = receipt_failure in ("apply-attempt.json", "installed.json", "apply-terminal.json")
+            expected_error = self.assertRaises((RuntimeError, subprocess.TimeoutExpired)) if daemon_failure else nullcontext() if success else self.assertRaises(ValueError) if loaded_mutation else self.assertRaisesRegex(RuntimeError, "TERMINAL_RECEIPT_ACK_LOST" if receipt_ack_lost else "AUTHENTICATED_SMOKE_FAILED" if smoke_fails else "NUE_BASELINE_CHANGED|CANDIDATE_HEALTH_FAIL")
             with expected_error:
-                nue.apply(bundle, sha, smoke, hashlib.sha256(smoke.read_bytes()).hexdigest())
+                nue.apply(bundle, sha, smoke, hashlib.sha256(smoke.read_bytes()).hexdigest(), admission_sha=admission_sha,
+                          signature_path=signature, signature_sha=nue.digest(signature))
             return bundle, old, compose.read_bytes(), pause.call_count, up.call_count, unlock.call_count
+
+    def test_uncertain_docker_mutations_never_rollback_unlock_or_claim_terminal(self):
+        for operation in ("load", "compose", "update"):
+            for failure in ("timeout", "signal", "killed", "nonzero"):
+                with self.subTest(operation=operation, failure=failure), tempfile.TemporaryDirectory() as tmp:
+                    bundle, old, after, pauses, starts, unlocks = self.run_apply_failure(Path(tmp), daemon_failure=(operation, failure))
+                    self.assertEqual((pauses, starts, unlocks), (0, 0, 0) if operation == "load" else (1, 1, 0))
+                    self.assertEqual(after == old, operation == "load")
+                    self.assertFalse((bundle / "rollback-verified.json").exists())
+                    self.assertFalse((bundle / "apply-terminal.json").exists())
+                    self.assertTrue(json.loads((bundle / "recovery-hold-token.json").read_bytes())["lockRetained"])
+
+    def test_clean_abort_probes_are_archived_before_real_second_apply_flow(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle,old,after,pauses,starts,unlocks=self.run_apply_failure(Path(tmp),success=True,prior_abort=True)
+            self.assertNotEqual(after,old);self.assertEqual((pauses,starts,unlocks),(1,1,1))
+            archive=bundle/(nue.ABORT_ARCHIVE_PREFIX+"e"*32)
+            for name in (*nue.ABORT_ARTIFACTS,"apply-attempt.json","apply-terminal.json"):
+                self.assertEqual((archive/name).read_bytes(),("previous:"+name).encode())
+            self.assertEqual(json.loads((bundle/"apply-attempt.json").read_bytes())["runId"],"d"*32)
+            self.assertEqual(json.loads((bundle/"apply-terminal.json").read_bytes())["status"],"NUE_IMAGE_ONLY_INSTALLED")
+
+    def test_uncertain_reservation_keeps_guard_without_starting_native_work(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle, old, after, pauses, starts, unlocks = self.run_apply_failure(Path(tmp), receipt_failure="apply-attempt.json")
+            self.assertEqual(after, old)
+            self.assertEqual((pauses, starts, unlocks), (0, 0, 0))
+            self.assertTrue((bundle / "apply-attempt.json").exists())
+            self.assertFalse((bundle / "runtime.loaded.tar").exists())
+            self.assertFalse((bundle / "apply-terminal.json").exists())
+            self.assertTrue(json.loads((bundle / "recovery-hold-token.json").read_bytes())["lockRetained"])
+
+    def test_uncertain_rollback_receipt_keeps_guard_without_claiming_terminal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle, old, after, pauses, starts, unlocks = self.run_apply_failure(Path(tmp), receipt_failure="rollback-verified.json")
+            self.assertEqual(after, old)
+            self.assertEqual((pauses, starts, unlocks), (2, 2, 0))
+            self.assertTrue((bundle / "rollback-verified.json").exists())
+            self.assertFalse((bundle / "apply-terminal.json").exists())
+            self.assertTrue(json.loads((bundle / "recovery-hold-token.json").read_bytes())["lockRetained"])
+
+    def test_success_records_bound_terminal_before_releasing_own_guard(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle, old, after, pauses, starts, unlocks = self.run_apply_failure(Path(tmp), success=True)
+            self.assertNotEqual(after, old)
+            self.assertEqual((pauses, starts, unlocks), (1, 1, 1))
+            attempt = json.loads((bundle / "apply-attempt.json").read_bytes())
+            terminal = json.loads((bundle / "apply-terminal.json").read_bytes())
+            self.assertEqual(attempt, {"schemaVersion": 1, "status": "NUE_APPLY_ATTEMPT_RESERVED", "runId": "d" * 32,
+                "manifestSha256": "a" * 64, "admissionSha256": hashlib.sha256(nue.canonical({"nonce": "d" * 32})).hexdigest(), "lockToken": "token",
+                "admission": {"nonce": "d" * 32}, "admissionSignature": base64.b64encode(b"synthetic-bound-signature").decode("ascii"),
+                "stageSha256": nue.digest(bundle / "stage.json"), "baselineSha256": "b" * 64,
+                "backupProofSha256": "c" * 64, "smokeSha256": nue.digest(Path(tmp) / "smoke")})
+            self.assertEqual(terminal, {"schemaVersion": 1, "runId": "d" * 32, "manifestSha256": "a" * 64,
+                "attemptSha256": nue.digest(bundle / "apply-attempt.json"), "status": "NUE_IMAGE_ONLY_INSTALLED",
+                "receipt": "installed.json", "receiptSha256": nue.digest(bundle / "installed.json")})
+            self.assertFalse((bundle / "recovery-hold-token.json").exists())
+
+    def test_installed_receipt_write_uncertainty_does_not_trigger_conflicting_rollback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle, old, after, pauses, starts, unlocks = self.run_apply_failure(Path(tmp), receipt_failure="installed.json")
+            self.assertNotEqual(after, old)
+            self.assertEqual((pauses, starts, unlocks), (1, 1, 0))
+            self.assertTrue((bundle / "installed.json").exists())
+            self.assertFalse((bundle / "rollback-verified.json").exists())
+            self.assertFalse((bundle / "apply-terminal.json").exists())
+
+    def test_terminal_write_ack_failure_retains_guard_without_rollback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle, old, after, pauses, starts, unlocks = self.run_apply_failure(Path(tmp), receipt_failure="apply-terminal.json")
+            self.assertNotEqual(after, old)
+            self.assertEqual((pauses, starts, unlocks), (1, 1, 0))
+            attempt = json.loads((bundle / "apply-attempt.json").read_bytes())
+            terminal = json.loads((bundle / "apply-terminal.json").read_bytes())
+            self.assertEqual(attempt["runId"], "d" * 32)
+            self.assertEqual(attempt["admissionSha256"], hashlib.sha256(nue.canonical({"nonce": "d" * 32})).hexdigest())
+            self.assertEqual(terminal["runId"], attempt["runId"])
+            self.assertEqual(terminal["attemptSha256"], nue.digest(bundle / "apply-attempt.json"))
+            self.assertEqual(terminal["status"], "NUE_IMAGE_ONLY_INSTALLED")
+            self.assertEqual(terminal["receiptSha256"], nue.digest(bundle / "installed.json"))
+            self.assertFalse((bundle / "rollback-verified.json").exists())
+
+    def test_existing_apply_or_terminal_record_blocks_replay_before_own_lock(self):
+        for marker in ("apply-attempt.json", "apply-terminal.json", "installed.json", "rollback-verified.json"):
+            with self.subTest(marker=marker), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp); bundle = root / ("a" * 64); bundle.mkdir(); record = bundle / marker; record.write_bytes(b"unclassified-existing-record")
+                with patch.multiple(nue, RELEASES=root), patch.object(nue, "host_identity"), patch.object(nue, "protected", side_effect=lambda p, **kw: Path(p)), patch.object(nue, "require_admission"), patch.object(nue, "verify_bundle"), patch.object(nue, "bind_admission_manifest"), patch.object(nue, "own_lock") as lock, patch.object(nue, "command") as command:
+                    with self.assertRaisesRegex(RuntimeError, "NUE_APPLY_ATTEMPT_EXISTS_HOLD"):
+                        nue.apply(bundle, "a" * 64, root / "smoke", "b" * 64)
+                    lock.assert_not_called(); command.assert_not_called()
+                self.assertEqual(record.read_bytes(), b"unclassified-existing-record")
+
+    def test_only_signed_bound_clean_abort_allows_distinct_nonce_and_preserves_probes(self):
+        with tempfile.TemporaryDirectory() as tmp, self.synthetic_issuer():
+            releases=Path(tmp); sha="a"*64; bundle=releases/sha; bundle.mkdir()
+            manifest={"productCommit":"1"*40,"operationsCommit":"2"*40,"sourceTreeSha256":"3"*64,
+                      "helpers":{"catering_target_nue_image_update.py":"4"*64}}
+            (bundle/"baseline.json").write_bytes(b"{}\n");(bundle/"backup-proof.json").write_bytes(b"{}\n")
+            stage={"manifestSha256":sha,"mode":"nue-image-only","baselineSha256":nue.digest(bundle/"baseline.json"),
+                   "backupProofSha256":nue.digest(bundle/"backup-proof.json")}
+            (bundle/"stage.json").write_bytes(nue.canonical(stage))
+            with patch.object(nue,"RELEASES",releases), patch.object(nue,"protected",side_effect=lambda p,**kw:Path(p)):
+                gate=nue.make_admission(manifest,sha,"apply",str(bundle),str(bundle/"admission.json"),
+                                        {"protectedSmoke":"/synthetic/smoke","protectedSmokeSha256":"5"*64})
+                admission=gate["admission"];nonce=admission["nonce"]
+                attempt={"schemaVersion":1,"status":"NUE_APPLY_ATTEMPT_RESERVED","runId":nonce,"manifestSha256":sha,
+                    "admissionSha256":gate["admissionSha256"],"admission":admission,
+                    "admissionSignature":base64.b64encode(gate["signatureBody"].encode()).decode(),"lockToken":"6"*32,
+                    "stageSha256":nue.digest(bundle/"stage.json"),"baselineSha256":stage["baselineSha256"],
+                    "backupProofSha256":stage["backupProofSha256"],"smokeSha256":"5"*64}
+                (bundle/"apply-attempt.json").write_bytes(nue.canonical(attempt))
+                terminal={"schemaVersion":1,"runId":nonce,"manifestSha256":sha,"attemptSha256":nue.digest(bundle/"apply-attempt.json"),
+                          "status":"NUE_APPLY_ABORTED_BEFORE_WRITER_CHANGE"}
+                (bundle/"apply-terminal.json").write_bytes(nue.canonical(terminal))
+                for name in nue.ABORT_ARTIFACTS:(bundle/name).write_bytes(name.encode())
+                with self.assertRaisesRegex(RuntimeError,"NONCE_REPLAY"):nue.require_fresh_apply(bundle,sha,manifest,nonce)
+                for bad in ("NUE_IMAGE_ONLY_INSTALLED","NUE_ORIGINAL_COMPOSE_IMAGES_AND_HEALTH_RESTORED"):
+                    (bundle/"apply-terminal.json").write_bytes(nue.canonical(dict(terminal,status=bad)))
+                    with self.assertRaises(RuntimeError):nue.require_fresh_apply(bundle,sha,manifest,"7"*32)
+                (bundle/"apply-terminal.json").write_bytes(nue.canonical(terminal))
+                for field,value in (("stageSha256","0"*64),("baselineSha256","0"*64),
+                                    ("backupProofSha256","0"*64),("smokeSha256","0"*64),
+                                    ("admissionSignature",base64.b64encode(b"forged").decode())):
+                    bad_attempt=dict(attempt,**{field:value})
+                    (bundle/"apply-attempt.json").write_bytes(nue.canonical(bad_attempt))
+                    (bundle/"apply-terminal.json").write_bytes(nue.canonical(dict(terminal,attemptSha256=nue.digest(bundle/"apply-attempt.json"))))
+                    with self.subTest(field=field),self.assertRaises(RuntimeError):nue.require_fresh_apply(bundle,sha,manifest,"7"*32)
+                (bundle/"apply-attempt.json").write_bytes(nue.canonical(attempt))
+                (bundle/"apply-terminal.json").write_bytes(nue.canonical(terminal))
+                self.assertEqual(nue.require_fresh_apply(bundle,sha,manifest,"7"*32),nonce)
+                nue.archive_aborted_attempt(bundle,nonce)
+                archive=bundle/(nue.ABORT_ARCHIVE_PREFIX+nonce)
+                self.assertEqual({p.name for p in archive.iterdir()},set(nue.ABORT_ARTIFACTS)|{"apply-attempt.json","apply-terminal.json"})
+                self.assertIsNone(nue.require_fresh_apply(bundle,sha,manifest,"7"*32))
+                with self.assertRaisesRegex(RuntimeError,"NONCE_REPLAY"):nue.require_fresh_apply(bundle,sha,manifest,nonce)
+                (bundle/"runtime.loaded.tar").write_bytes(b"unreconciled")
+                with self.assertRaisesRegex(RuntimeError,"ARTIFACT_RECONCILIATION_HOLD"):nue.require_fresh_apply(bundle,sha,manifest,"8"*32)
+
+    def test_interrupted_abort_archive_is_never_treated_as_fresh(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(nue,"protected",side_effect=lambda p,**kw:Path(p)):
+            bundle=Path(tmp);archive=bundle/(nue.ABORT_ARCHIVE_PREFIX+"a"*32);archive.mkdir()
+            (archive/"apply-attempt.json").write_bytes(b"partial")
+            with self.assertRaisesRegex(RuntimeError,"NUE_APPLY_ATTEMPT_EXISTS_HOLD"):
+                nue.require_fresh_apply(bundle,"b"*64,{},"c"*32)
+
+    def test_legacy_exemption_rejects_even_an_archived_attempt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);(root/(nue.ABORT_ARCHIVE_PREFIX+"a"*32)).mkdir()
+            with self.assertRaisesRegex(RuntimeError,"NUE_LEGACY_ATTEMPT_REQUIRES_RECONCILIATION"):
+                nue.require_no_legacy_attempt(root)
+
+    def test_uncertain_build_keeps_guard_while_ordinary_failure_releases_it(self):
+        binding={"manifestSha256":"a"*64,"helperSha256":"b"*64}
+        operator=SimpleNamespace(_oci=lambda:object())
+        for error,expected_unlock in ((nue.UncertainDockerMutation("build outcome unknown"),False),
+                                      (RuntimeError("ordinary failure"),True)):
+            with self.subTest(error=type(error).__name__), patch.object(nue,"accepted_current_bundle"), \
+                 patch.object(nue,"own_lock",return_value="token"), patch.object(nue,"owned"), \
+                 patch.object(nue,"_create_bundle",side_effect=error), patch.object(nue,"unlock") as unlock:
+                with self.assertRaises(type(error)):
+                    nue.create_bundle(operator,Path('/source'),"1"*40,"2"*40,Path('/output'),None,None,
+                                      exported=True,base_mode="local-current",accepted_current_release=binding)
+                self.assertEqual(unlock.called,expected_unlock)
+
+    def test_completed_attempt_between_checks_releases_only_newly_owned_guard(self):
+        for foreign_owner in (False, True):
+            with self.subTest(foreign_owner=foreign_owner), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp); sha = "a" * 64; bundle = root / sha; bundle.mkdir()
+                guard = root / "update.lock"; smoke = root / "smoke"
+                smoke.write_bytes(b"#!/bin/sh\nexit 0\n"); smoke.chmod(0o700)
+                signature = root / "admission.sig"; signature.write_bytes(b"synthetic-bound-signature")
+                stage = {"manifestSha256": sha, "mode": "nue-image-only", "baselineSha256": "b" * 64, "backupProofSha256": "c" * 64}
+                (bundle / "stage.json").write_bytes(nue.canonical(stage))
+                prior_records = {"apply-attempt.json": b"prior-attempt", "apply-terminal.json": b"prior-terminal"}
+                original_own_lock = nue.own_lock; issued_tokens = []
+                foreign = {"mode": "nue-image-only", "token": "foreign"}
+                def completed_then_acquire():
+                    for name, body in prior_records.items(): (bundle / name).write_bytes(body)
+                    token = original_own_lock(); issued_tokens.append(token)
+                    if foreign_owner: (guard / "owner.json").write_bytes(nue.canonical(foreign))
+                    return token
+                with ExitStack() as stack:
+                    stack.enter_context(patch.multiple(nue, RELEASES=root, LOCK=guard))
+                    stack.enter_context(patch.object(nue, "host_identity"))
+                    stack.enter_context(patch.object(nue, "protected", side_effect=lambda p, **kw: Path(p)))
+                    stack.enter_context(patch.object(nue, "require_admission", return_value={"nonce": "d" * 32}))
+                    stack.enter_context(patch.object(nue, "verify_bundle", return_value={}))
+                    stack.enter_context(patch.object(nue, "bind_admission_manifest"))
+                    stack.enter_context(patch.object(nue, "load_module"))
+                    stack.enter_context(patch.object(nue, "read_bound", return_value={}))
+                    stack.enter_context(patch.object(nue, "backup_gate"))
+                    # This fixture has no concurrent publisher; Linux no-replace is checked separately.
+                    stack.enter_context(patch.object(nue, "publish_guard_without_replace", side_effect=lambda source, target: source.rename(target)))
+                    stack.enter_context(patch.object(nue, "own_lock", side_effect=completed_then_acquire))
+                    unlock = stack.enter_context(patch.object(nue, "unlock", wraps=nue.unlock))
+                    command = stack.enter_context(patch.object(nue, "command"))
+                    snapshot = stack.enter_context(patch.object(nue, "snapshot"))
+                    with self.assertRaisesRegex(RuntimeError, "NUE_LOCK_NOT_OWNED" if foreign_owner else "NUE_APPLY_ATTEMPT_EXISTS_HOLD"):
+                        nue.apply(bundle, sha, smoke, nue.digest(smoke), admission_sha=hashlib.sha256(nue.canonical({"nonce": "d" * 32})).hexdigest(),
+                                  signature_path=signature, signature_sha=nue.digest(signature))
+                    unlock.assert_called_once_with(issued_tokens[0])
+                    command.assert_not_called(); snapshot.assert_not_called()
+                self.assertEqual({p.name for p in bundle.iterdir()}, {"stage.json", *prior_records})
+                for name, body in prior_records.items(): self.assertEqual((bundle / name).read_bytes(), body)
+                if foreign_owner:
+                    self.assertEqual((guard / "owner.json").read_bytes(), nue.canonical(foreign))
+                else:
+                    self.assertFalse(guard.exists())
 
     def test_candidate_failure_pauses_candidates_and_verifies_real_image_rollback(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -520,7 +825,8 @@ class NueTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "NUE_FULL_SOURCE_BINDING"): nue.verify_bundle(out, sha)
 
     def test_floating_bases_fail_before_any_build(self):
-        with tempfile.TemporaryDirectory() as tmp, patch.object(nue, "command") as command:
+        with tempfile.TemporaryDirectory() as tmp, patch.object(nue, "command") as command, \
+             patch.object(nue,"own_lock",return_value="token"),patch.object(nue,"owned"),patch.object(nue,"unlock"):
             with self.assertRaisesRegex(RuntimeError, "NUE_PINNED_BASE_REQUIRED"):
                 nue.create_bundle(None, Path(tmp), "1" * 40, "2" * 40, Path(tmp) / "bundle", "node:22-alpine", "caddy:2.10-alpine")
             command.assert_not_called()
@@ -701,7 +1007,7 @@ class NueTests(unittest.TestCase):
     def test_pr735_record_requires_pinned_source_helper_installed_receipt_and_runtime(self):
         from unittest.mock import Mock
         mutations = (None, "product", "operations", "bases", "manifest", "helper", "helper-pin", "M",
-                     "stage", "baseline", "installed", "receipt-manifest", "receipt-image", "compose", "bundle-verifier", "runtime-verifier")
+                     "stage", "baseline", "installed", "receipt-manifest", "receipt-image", "compose", "bundle-verifier", "runtime-verifier", "apply-attempt.json", "apply-terminal.json")
         for mutation in mutations:
             with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
                 releases = Path(temporary); root = releases / "fixture"; (root / "tools").mkdir(parents=True)
@@ -735,6 +1041,7 @@ class NueTests(unittest.TestCase):
                 if mutation == "helper": helper.write_bytes(b"changed")
                 if mutation == "baseline": (root / "baseline.json").write_bytes(b"{}")
                 if mutation == "compose": (root / "compose.candidate.json").write_bytes(candidate + b" ")
+                if mutation in ("apply-attempt.json", "apply-terminal.json"): (root / mutation).write_bytes(b"unreconciled")
                 verifier = SimpleNamespace(verify_bundle=Mock(return_value=manifest), verify_runtime=Mock())
                 if mutation == "bundle-verifier": verifier.verify_bundle.side_effect = RuntimeError("archive/source drift")
                 if mutation == "runtime-verifier": verifier.verify_runtime.side_effect = RuntimeError("current runtime drift")
@@ -750,13 +1057,14 @@ class NueTests(unittest.TestCase):
                             candidate_layout=manifest["bases"], candidate_schema=manifest["schemaBinding"])
                     else:
                         with self.assertRaises(RuntimeError): nue.accepted_pr735_bundle(object())
+                        if mutation in ("apply-attempt.json", "apply-terminal.json"): verifier.verify_runtime.assert_not_called()
                         if mutation in ("helper", "helper-pin", "manifest", "product", "operations", "bases"):
                             loader.assert_not_called()
 
     def test_3d287d8_record_requires_pinned_source_helper_installed_receipt_and_runtime(self):
         from unittest.mock import Mock
         mutations = (None, "product", "operations", "bases", "manifest", "helper", "helper-pin", "M",
-                     "stage", "baseline", "installed", "receipt-manifest", "receipt-image", "compose", "bundle-verifier", "runtime-verifier")
+                     "stage", "baseline", "installed", "receipt-manifest", "receipt-image", "compose", "bundle-verifier", "runtime-verifier", "apply-attempt.json", "apply-terminal.json")
         for mutation in mutations:
             with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
                 releases = Path(temporary); root = releases / "fixture"; (root / "tools").mkdir(parents=True)
@@ -790,6 +1098,7 @@ class NueTests(unittest.TestCase):
                 if mutation == "helper": helper.write_bytes(b"changed")
                 if mutation == "baseline": (root / "baseline.json").write_bytes(b"{}")
                 if mutation == "compose": (root / "compose.candidate.json").write_bytes(candidate + b" ")
+                if mutation in ("apply-attempt.json", "apply-terminal.json"): (root / mutation).write_bytes(b"unreconciled")
                 verifier = SimpleNamespace(verify_bundle=Mock(return_value=manifest), verify_runtime=Mock())
                 if mutation == "bundle-verifier": verifier.verify_bundle.side_effect = RuntimeError("archive/source drift")
                 if mutation == "runtime-verifier": verifier.verify_runtime.side_effect = RuntimeError("current runtime drift")
@@ -805,13 +1114,14 @@ class NueTests(unittest.TestCase):
                             candidate_layout=manifest["bases"], candidate_schema=manifest["schemaBinding"])
                     else:
                         with self.assertRaises(RuntimeError): nue.accepted_3d287d8_bundle(object())
+                        if mutation in ("apply-attempt.json", "apply-terminal.json"): verifier.verify_runtime.assert_not_called()
                         if mutation in ("helper", "helper-pin", "manifest", "product", "operations", "bases"):
                             loader.assert_not_called()
 
     def test_681213b_record_requires_pinned_source_helper_installed_receipt_and_runtime(self):
         from unittest.mock import Mock
         mutations = (None, "product", "operations", "bases", "manifest", "helper", "helper-pin", "M",
-                     "stage", "baseline", "installed", "receipt-manifest", "receipt-image", "compose", "bundle-verifier", "runtime-verifier")
+                     "stage", "baseline", "installed", "receipt-manifest", "receipt-image", "compose", "bundle-verifier", "runtime-verifier", "apply-attempt.json", "apply-terminal.json")
         for mutation in mutations:
             with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
                 releases = Path(temporary); root = releases / "fixture"; (root / "tools").mkdir(parents=True)
@@ -845,6 +1155,7 @@ class NueTests(unittest.TestCase):
                 if mutation == "helper": helper.write_bytes(b"changed")
                 if mutation == "baseline": (root / "baseline.json").write_bytes(b"{}")
                 if mutation == "compose": (root / "compose.candidate.json").write_bytes(candidate + b" ")
+                if mutation in ("apply-attempt.json", "apply-terminal.json"): (root / mutation).write_bytes(b"unreconciled")
                 verifier = SimpleNamespace(verify_bundle=Mock(return_value=manifest), verify_runtime=Mock())
                 if mutation == "bundle-verifier": verifier.verify_bundle.side_effect = RuntimeError("archive/source drift")
                 if mutation == "runtime-verifier": verifier.verify_runtime.side_effect = RuntimeError("current runtime drift")
@@ -860,6 +1171,7 @@ class NueTests(unittest.TestCase):
                             candidate_layout=manifest["bases"], candidate_schema=manifest["schemaBinding"])
                     else:
                         with self.assertRaises(RuntimeError): nue.accepted_681213b_bundle(object())
+                        if mutation in ("apply-attempt.json", "apply-terminal.json"): verifier.verify_runtime.assert_not_called()
                         if mutation in ("helper", "helper-pin", "manifest", "product", "operations", "bases"):
                             loader.assert_not_called()
 
@@ -868,7 +1180,7 @@ class NueTests(unittest.TestCase):
         mutations = (None, "target", "bases", "helper-pin", "helper", "operator", "oci", "manifest",
                      "bundle", "stage", "baseline", "installed", "receipt-manifest", "receipt-image", "compose", "runtime")
         for mutation in mutations:
-            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary, self.synthetic_issuer():
                 releases = Path(temporary); root = releases / "fixture"; tools = root / "tools"; tools.mkdir(parents=True)
                 for name in ("catering_target_nue_image_update.py", "catering-target-operator.py", "catering_target_oci.py"):
                     (tools / name).write_text(name)
@@ -877,6 +1189,7 @@ class NueTests(unittest.TestCase):
                 identities = {"runtime":"sha256:" + "a" * 64, "web":"sha256:" + "b" * 64}
                 manifest = {"mode":"nue-image-only", "repository":"AlexanderSmyslowski/catering-agents-platform",
                     "targetId":"catering-prod-02", "platform":"linux/amd64", "bases":dict(nue.CURRENT_BASE_LAYOUT),
+                    "productCommit": "1" * 40, "operationsCommit": "2" * 40, "sourceTreeSha256": "3" * 64,
                     "helpers":{p.name:nue.digest(p) for p in tools.iterdir()}, "schemaBinding":{"same":True},
                     "images":{role:{"platformManifestDigest":identity} for role,identity in identities.items()}}
                 if mutation == "target": manifest["targetId"] = "catering-prod-1"
@@ -886,17 +1199,30 @@ class NueTests(unittest.TestCase):
                 (root / "manifest.json").write_bytes(raw)
                 baseline = {"same":True}; baseline_raw = nue.canonical(baseline)
                 (root / "baseline.json").write_bytes(baseline_raw)
-                stage = {"manifestSha256":sha, "mode":"nue-image-only", "baselineSha256":hashlib.sha256(baseline_raw).hexdigest()}
+                (root / "backup-proof.json").write_bytes(b"{}\n")
+                stage = {"manifestSha256":sha, "mode":"nue-image-only", "baselineSha256":hashlib.sha256(baseline_raw).hexdigest(),
+                         "backupProofSha256": nue.digest(root / "backup-proof.json")}
                 if mutation == "stage": stage["manifestSha256"] = "d" * 64
                 (root / "stage.json").write_bytes(nue.canonical(stage))
                 images = {s:identities["web" if s == "web" else "runtime"] for s in nue.SERVICES}
                 candidate = nue.canonical({"services":images}); (root / "compose.candidate.json").write_bytes(candidate)
                 receipt = {"manifestSha256":sha, "status":"NUE_IMAGE_ONLY_INSTALLED", "images":dict(images),
-                           "composeSha256":hashlib.sha256(candidate).hexdigest()}
+                           "composeSha256":hashlib.sha256(candidate).hexdigest(), "smokeSha256": "5" * 64}
                 if mutation == "installed": receipt["status"] = "HOLD"
                 if mutation == "receipt-manifest": receipt["manifestSha256"] = "e" * 64
                 if mutation == "receipt-image": receipt["images"]["intake"] = "sha256:" + "f" * 64
                 (root / "installed.json").write_bytes(nue.canonical(receipt))
+                with patch.object(nue, "RELEASES", releases):
+                    gate = nue.make_admission(manifest, sha, "apply", str(root), str(root / "original-admission.json"),
+                        {"protectedSmoke": "/protected/smoke", "protectedSmokeSha256": receipt["smokeSha256"]})
+                attempt = {"schemaVersion": 1, "status": "NUE_APPLY_ATTEMPT_RESERVED", "runId": gate["admission"]["nonce"], "manifestSha256": sha,
+                    "admissionSha256": gate["admissionSha256"], "admission": gate["admission"], "admissionSignature": base64.b64encode(gate["signatureBody"].encode("ascii")).decode("ascii"),
+                    "lockToken": "6" * 32, "stageSha256": nue.digest(root / "stage.json"), "baselineSha256": stage["baselineSha256"],
+                    "backupProofSha256": stage["backupProofSha256"], "smokeSha256": receipt["smokeSha256"]}
+                (root / "apply-attempt.json").write_bytes(nue.canonical(attempt))
+                (root / "apply-terminal.json").write_bytes(nue.canonical({"schemaVersion": 1, "runId": attempt["runId"], "manifestSha256": sha,
+                    "attemptSha256": nue.digest(root / "apply-attempt.json"), "status": "NUE_IMAGE_ONLY_INSTALLED", "receipt": "installed.json",
+                    "receiptSha256": nue.digest(root / "installed.json")}))
                 if mutation == "manifest": (root / "manifest.json").write_bytes(raw + b" ")
                 for label, name in (("helper", "catering_target_nue_image_update.py"), ("operator", "catering-target-operator.py"), ("oci", "catering_target_oci.py")):
                     if mutation == label: (tools / name).write_bytes(b"tampered")
@@ -921,6 +1247,83 @@ class NueTests(unittest.TestCase):
                         with self.assertRaises(RuntimeError): nue.accepted_current_bundle(object(), binding)
                         if mutation in ("helper-pin", "helper", "operator", "oci", "manifest", "target", "bases"):
                             loader.assert_not_called()
+
+    def test_legacy_completion_requires_exact_accepted_pair_and_no_new_attempt(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(nue, "protected", side_effect=lambda p, **kw: Path(p)):
+            root = Path(tmp)
+            for sha, helper in nue.LEGACY_COMPLETED_RELEASES.items():
+                with self.subTest(sha=sha):
+                    manifest = {"helpers": {"catering_target_nue_image_update.py": helper}}
+                    nue.require_completed_apply(root, sha, manifest, {}, {})
+                    with self.assertRaises(FileNotFoundError):
+                        nue.require_completed_apply(root, sha, {"helpers": {"catering_target_nue_image_update.py": "0" * 64}}, {}, {})
+            pending = "037d92143a5613ab92a53db0e7ea608d1d78585b89c7f2c83a7d1256aa1102c2"
+            shared_helper = "60bfadf8c6f70cdc11c67723156845c4303df96d86df9d49e19028923bb91eee"
+            with self.assertRaises(FileNotFoundError):
+                nue.require_completed_apply(root, pending, {"helpers": {"catering_target_nue_image_update.py": shared_helper}}, {}, {})
+            (root / "apply-attempt.json").write_bytes(b"new-or-unknown-attempt")
+            sha, helper = next(iter(nue.LEGACY_COMPLETED_RELEASES.items()))
+            with self.assertRaisesRegex(RuntimeError, "NUE_LEGACY_ATTEMPT_REQUIRES_RECONCILIATION"):
+                nue.require_completed_apply(root, sha, {"helpers": {"catering_target_nue_image_update.py": helper}}, {}, {})
+
+    def test_completion_consumers_require_signed_attempt_and_terminal(self):
+        from unittest.mock import Mock
+        mutations = (None, "missing-both", "missing-attempt", "missing-terminal", "terminal-run", "terminal-status",
+                     "terminal-receipt", "attempt-stage", "attempt-baseline", "attempt-proof", "attempt-smoke",
+                     "attempt-nonce", "signature", "signed-body", "installed-bytes")
+        with self.synthetic_issuer():
+            for consumer in ("verify", "before-lock", "under-lock"):
+                for mutation in mutations:
+                    with self.subTest(consumer=consumer, mutation=mutation), tempfile.TemporaryDirectory() as tmp:
+                        releases = Path(tmp); root = releases / "fixture"; tools = root / "tools"; tools.mkdir(parents=True)
+                        for name in ("catering_target_nue_image_update.py", "catering-target-operator.py", "catering_target_oci.py"):
+                            (tools / name).write_text(name)
+                        manifest = {"schemaVersion": 1, "mode": "nue-image-only", "repository": "AlexanderSmyslowski/catering-agents-platform",
+                            "targetId": "catering-prod-02", "platform": "linux/amd64", "bases": dict(nue.CURRENT_BASE_LAYOUT),
+                            "productCommit": "1" * 40, "operationsCommit": "2" * 40, "sourceTreeSha256": "3" * 64,
+                            "helpers": {p.name: nue.digest(p) for p in tools.iterdir()}, "schemaBinding": {},
+                            "images": {role: {"platformManifestDigest": "sha256:" + "4" * 64} for role in ("runtime", "web")}}
+                        raw = nue.canonical(manifest); sha = hashlib.sha256(raw).hexdigest(); root.rename(releases / sha); root = releases / sha
+                        (root / "manifest.json").write_bytes(raw); (root / "baseline.json").write_bytes(b"{}\n"); (root / "backup-proof.json").write_bytes(b"{}\n")
+                        stage = {"mode": "nue-image-only", "manifestSha256": sha, "baselineSha256": nue.digest(root / "baseline.json"), "backupProofSha256": nue.digest(root / "backup-proof.json")}
+                        (root / "stage.json").write_bytes(nue.canonical(stage)); candidate = b"{}\n"; (root / "compose.candidate.json").write_bytes(candidate)
+                        installed = {"status": "NUE_IMAGE_ONLY_INSTALLED", "manifestSha256": sha, "composeSha256": hashlib.sha256(candidate).hexdigest(),
+                            "images": {s: "sha256:" + "4" * 64 for s in nue.SERVICES}, "smokeSha256": "5" * 64}
+                        (root / "installed.json").write_bytes(nue.canonical(installed))
+                        with patch.object(nue, "RELEASES", releases):
+                            gate = nue.make_admission(manifest, sha, "apply", str(root), str(root / "original-admission.json"),
+                                {"protectedSmoke": "/protected/smoke", "protectedSmokeSha256": installed["smokeSha256"]})
+                        # Historical signature verification must not renew execution authority.
+                        admission = dict(gate["admission"], issuedAt="2020-01-01T00:00:00+00:00")
+                        body = nue.canonical(admission); signature = nue.sign_admission(body)
+                        attempt = {"schemaVersion": 1, "status": "NUE_APPLY_ATTEMPT_RESERVED", "runId": admission["nonce"], "manifestSha256": sha,
+                            "admissionSha256": hashlib.sha256(body).hexdigest(), "admission": admission, "admissionSignature": base64.b64encode(signature).decode("ascii"),
+                            "lockToken": "6" * 32, "stageSha256": nue.digest(root / "stage.json"), "baselineSha256": stage["baselineSha256"],
+                            "backupProofSha256": stage["backupProofSha256"], "smokeSha256": installed["smokeSha256"]}
+                        for label, field in (("attempt-stage", "stageSha256"), ("attempt-baseline", "baselineSha256"), ("attempt-proof", "backupProofSha256"), ("attempt-smoke", "smokeSha256")):
+                            if mutation == label: attempt[field] = "7" * 64
+                        if mutation == "attempt-nonce": attempt["runId"] = "8" * 32
+                        if mutation == "signature": attempt["admissionSignature"] = base64.b64encode(b"unsigned").decode("ascii")
+                        if mutation == "signed-body": attempt["admission"]["productCommit"] = "9" * 40; attempt["admissionSha256"] = hashlib.sha256(nue.canonical(attempt["admission"])).hexdigest()
+                        attempt_raw = nue.canonical(attempt)
+                        terminal = {"schemaVersion": 1, "runId": attempt["runId"], "manifestSha256": sha, "attemptSha256": hashlib.sha256(attempt_raw).hexdigest(),
+                            "status": "NUE_IMAGE_ONLY_INSTALLED", "receipt": "installed.json", "receiptSha256": nue.digest(root / "installed.json")}
+                        if mutation == "terminal-run": terminal["runId"] = "0" * 32
+                        if mutation == "terminal-status": terminal["status"] = "NUE_ORIGINAL_COMPOSE_IMAGES_AND_HEALTH_RESTORED"
+                        if mutation == "terminal-receipt": terminal["receiptSha256"] = "0" * 64
+                        if mutation not in ("missing-both", "missing-attempt"): (root / "apply-attempt.json").write_bytes(attempt_raw)
+                        if mutation not in ("missing-both", "missing-terminal"): (root / "apply-terminal.json").write_bytes(nue.canonical(terminal))
+                        if mutation == "installed-bytes": (root / "installed.json").write_bytes(nue.canonical(installed) + b" ")
+                        predecessor = SimpleNamespace(verify_bundle=Mock(return_value=manifest), verify_runtime=Mock(), verify=Mock(return_value={"status": "NUE_IMAGE_ONLY_VERIFIED"}))
+                        with patch.multiple(nue, RELEASES=releases, LOCK=releases / "absent-lock"), patch.object(nue, "host_identity"), \
+                             patch.object(nue, "protected", side_effect=lambda p, **kw: Path(p)), patch.object(nue, "verify_bundle", return_value=manifest), \
+                             patch.object(nue, "load_module", return_value=predecessor), patch.object(nue, "verify_runtime") as runtime:
+                            invoke = lambda: nue.verify(root, sha) if consumer == "verify" else nue.accepted_current_bundle(object(),
+                                {"manifestSha256": sha, "helperSha256": manifest["helpers"]["catering_target_nue_image_update.py"]}, before_lock=consumer == "before-lock")
+                            if mutation is None: invoke()
+                            else:
+                                with self.assertRaises((RuntimeError, FileNotFoundError)): invoke()
+                                runtime.assert_not_called(); predecessor.verify.assert_not_called(); predecessor.verify_runtime.assert_not_called()
 
     def test_explicit_binding_is_request_bound_and_preflight_precedes_own_lock(self):
         from unittest.mock import Mock
@@ -1219,6 +1622,108 @@ class NueTests(unittest.TestCase):
         self.assertNotIn("/app/", dockerfile)
         self.assertIn("RUN npm ci", dockerfile)
         self.assertIn("find /catering-product/backoffice-ui/dist -type l", dockerfile)
+
+
+class GuardPublicationTests(unittest.TestCase):
+    def test_interruption_before_owner_never_publishes_global_guard(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            guard = Path(tmp) / "update.lock"
+            with patch.object(nue, "LOCK", guard), patch.object(nue, "protected", side_effect=lambda p, **kw: Path(p)), patch.object(nue, "put", side_effect=RuntimeError("synthetic interruption")):
+                with self.assertRaisesRegex(RuntimeError, "synthetic interruption"):
+                    nue.own_lock()
+            self.assertFalse(os.path.lexists(guard), "an unowned shared guard must not be published")
+
+
+    def test_complete_owner_exists_before_publication(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            guard = Path(tmp) / "update.lock"
+            seen = []
+            def synthetic_publish(prepared, target):
+                seen.append(json.loads((prepared / "owner.json").read_bytes()))
+                self.assertNotIn(seen[-1]["token"], prepared.name)
+                self.assertEqual(prepared.parent, target.parent)
+                self.assertFalse(os.path.lexists(target))
+                prepared.rename(target)
+            with patch.object(nue, "LOCK", guard), patch.object(nue, "protected", side_effect=lambda p, **kw: Path(p)), patch.object(nue, "publish_guard_without_replace", side_effect=synthetic_publish):
+                token = nue.own_lock()
+                nue.owned(token)
+            self.assertEqual(seen, [{"mode": "nue-image-only", "token": token}])
+
+    def test_competing_foreign_guard_is_never_replaced(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            guard = Path(tmp) / "update.lock"
+            def synthetic_competitor(prepared, target):
+                target.mkdir()
+                (target / "owner.json").write_bytes(b"foreign")
+                raise RuntimeError("NUE_FOREIGN_UPDATE_LOCK")
+            with patch.object(nue, "LOCK", guard), patch.object(nue, "protected", side_effect=lambda p, **kw: Path(p)), patch.object(nue, "publish_guard_without_replace", side_effect=synthetic_competitor):
+                with self.assertRaisesRegex(RuntimeError, "NUE_FOREIGN_UPDATE_LOCK"):
+                    nue.own_lock()
+            self.assertEqual((guard / "owner.json").read_bytes(), b"foreign")
+
+    def test_interruption_after_publication_leaves_complete_guard(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            guard = Path(tmp) / "update.lock"
+            def synthetic_interruption(prepared, target):
+                prepared.rename(target)
+                raise RuntimeError("synthetic interruption")
+            with patch.object(nue, "LOCK", guard), patch.object(nue, "protected", side_effect=lambda p, **kw: Path(p)), patch.object(nue, "publish_guard_without_replace", side_effect=synthetic_interruption):
+                with self.assertRaisesRegex(RuntimeError, "synthetic interruption"):
+                    nue.own_lock()
+            owner = json.loads((guard / "owner.json").read_bytes())
+            self.assertEqual(owner["mode"], "nue-image-only")
+            self.assertRegex(owner["token"], "^[0-9a-f]{32}$")
+
+    def test_non_linux_fails_closed_without_fallback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            guard = Path(tmp) / "update.lock"
+            with patch.object(nue, "LOCK", guard), patch.object(nue, "protected", side_effect=lambda p, **kw: Path(p)), patch.object(nue.sys, "platform", "darwin"):
+                with self.assertRaisesRegex(RuntimeError, "NUE_GUARD_RENAME_LINUX_REQUIRED"):
+                    nue.own_lock()
+            self.assertFalse(os.path.lexists(guard))
+
+    def test_release_interruption_preserves_identifiable_guard(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            guard = Path(tmp) / "update.lock"; guard.mkdir(); token = "1" * 32
+            (guard / "owner.json").write_bytes(nue.canonical({"mode": "nue-image-only", "token": token}))
+            def interrupted(source, target):
+                self.assertEqual(json.loads((source / "owner.json").read_bytes())["token"], token)
+                raise RuntimeError("before rename")
+            with patch.object(nue, "LOCK", guard), patch.object(nue, "protected", side_effect=lambda p, **kw: Path(p)), patch.object(nue, "publish_guard_without_replace", side_effect=interrupted):
+                with self.assertRaisesRegex(RuntimeError, "before rename"): nue.unlock(token)
+            self.assertEqual(json.loads((guard / "owner.json").read_bytes())["token"], token)
+
+    def test_release_sync_failure_leaves_identifiable_retired_guard(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            guard = Path(tmp) / "update.lock"; guard.mkdir(); token = "2" * 32
+            (guard / "owner.json").write_bytes(nue.canonical({"mode": "nue-image-only", "token": token}))
+            with patch.object(nue, "LOCK", guard), patch.object(nue, "protected", side_effect=lambda p, **kw: Path(p)), patch.object(nue, "publish_guard_without_replace", side_effect=lambda src, dst: src.rename(dst)), patch.object(nue, "sync_guard_directory", side_effect=OSError("sync failure")):
+                with self.assertRaisesRegex(OSError, "sync failure"): nue.unlock(token)
+            retired = Path(tmp) / (".update.lock.released-" + token)
+            self.assertFalse(guard.exists())
+            self.assertEqual(json.loads((retired / "owner.json").read_bytes())["token"], token)
+
+    @unittest.skipUnless(nue.sys.platform == "linux", "real renameat2 requires Linux")
+    def test_real_linux_complete_guard_publication_and_release(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            guard = Path(tmp) / "update.lock"
+            with patch.object(nue, "LOCK", guard), patch.object(nue, "protected", side_effect=lambda p, **kw: Path(p)):
+                token = nue.own_lock()
+                nue.owned(token)
+                nue.unlock(token)
+            self.assertFalse(os.path.lexists(guard))
+            self.assertEqual(list(Path(tmp).iterdir()), [])
+
+    @unittest.skipUnless(nue.sys.platform == "linux", "real renameat2 requires Linux")
+    def test_real_linux_publication_and_foreign_guard(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); prepared = root / "prepared"; target = root / "target"
+            prepared.mkdir(); target.mkdir()
+            with self.assertRaisesRegex(RuntimeError, "NUE_FOREIGN_UPDATE_LOCK"):
+                nue.publish_guard_without_replace(prepared, target)
+            self.assertTrue(prepared.is_dir())
+            self.assertTrue(target.is_dir())
+
 
 
 if __name__ == "__main__": unittest.main()
