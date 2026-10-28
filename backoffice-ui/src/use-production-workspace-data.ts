@@ -31,7 +31,7 @@ export function useProductionWorkspaceData(activeCaseId?: string, focusedSpecId?
   requestedIdentity.current = { activeCaseId, focusedSpecId };
 
   const refresh = useCallback(async (options?: WorkspaceRefreshOptions) => {
-    const requestedFocusedSpecId = options?.focusedSpecId ?? focusedSpecId;
+    const requestedFocusedSpecId = activeCaseId ? focusedSpecId : options?.focusedSpecId ?? focusedSpecId;
     const requestedCaseId = activeCaseId;
     if (requestedIdentity.current.activeCaseId !== requestedCaseId) {
       return;

@@ -1218,6 +1218,28 @@ describe("independent product loader boundaries", () => {
     container.remove();
   });
 
+  it("refreshes the active case after applying a spec", async () => {
+    const load = vi.spyOn(api, "loadProductionProductData")
+      .mockResolvedValueOnce(productionProductData(undefined, undefined, "case-a"))
+      .mockResolvedValueOnce(productionProductData({ planId: "plan-new" }, { purchaseListId: "list-new" }, "case-a"));
+    let latest: ReturnType<typeof useProductionWorkspaceData> | undefined;
+    function Probe() {
+      latest = useProductionWorkspaceData("case-a");
+      return createElement("output", null, String(latest.productionPlans[0]?.planId ?? "no plan"));
+    }
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    await act(async () => { root.render(createElement(Probe)); await flush(); });
+    expect(container.textContent).toBe("no plan");
+    await act(async () => { await latest?.refresh({ focusedSpecId: "spec-new" }); });
+    expect(load).toHaveBeenLastCalledWith("case-a");
+    expect(container.textContent).toBe("plan-new");
+    expect(latest?.purchaseLists[0]?.purchaseListId).toBe("list-new");
+    await act(async () => root.unmount());
+    container.remove();
+  });
+
   it("ignores a refresh retained from focused spec A after switching to focused spec B", async () => {
     let resolveA: ((value: ReturnType<typeof productionProductData>) => void) | undefined;
     let resolveB: ((value: ReturnType<typeof productionProductData>) => void) | undefined;
