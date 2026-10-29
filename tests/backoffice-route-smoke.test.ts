@@ -11,6 +11,7 @@ const routeSmokeSession = {
   access: { capabilities: ["intake", "offer", "production", "production_read"] }
 };
 type RouteSmokeDashboardFixture = {
+  editableProductionDraft?: boolean;
   intakeRequests?: Array<RouteSmokeRecord & { requestId?: string }>;
   acceptedSpecs?: Array<RouteSmokeRecord & { specId?: string }>;
   offerDrafts?: Array<RouteSmokeRecord & {
@@ -109,14 +110,14 @@ function installBackofficeEnvironmentMocks(fixture: RouteSmokeDashboardFixture =
         businessId: "local",
         draftId: `production-draft-${String(firstSpec.specId)}`,
         revision: 1,
-        status: "approved",
+        status: fixture.editableProductionDraft ? "pending_review" : "approved",
         createdAt: "2026-04-10T09:31:00.000Z",
         source: {
           kind: "manual_import",
           receivedAt: typeof firstRequestSource?.receivedAt === "string"
             ? firstRequestSource.receivedAt
             : sourceRef?.addedAt ?? "2026-04-10T09:31:00.000Z",
-          sourceRef: typeof sourceRef?.filename === "string"
+          sourceRef: !fixture.editableProductionDraft && typeof sourceRef?.filename === "string"
             ? `upload:${sourceRef.filename}`
             : `accepted-event-spec:${String(firstSpec.specId)}`,
           ...(typeof sourceRef?.sha256 === "string" ? { inputHash: `sha256:${sourceRef.sha256}` } : {})
@@ -599,6 +600,7 @@ describe("backoffice route smoke", () => {
 
   it("keeps the synthetic core corridor visible from start through offer handoff to production exports", async () => {
     installBackofficeEnvironmentMocks({
+      editableProductionDraft: true,
       intakeRequests: [
         {
           requestId: "corridor-request-1",

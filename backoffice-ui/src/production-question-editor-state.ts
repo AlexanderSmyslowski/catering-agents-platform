@@ -10,6 +10,8 @@ export type ProductionQuestionEditSuccessActions = {
 
 export type ProductionQuestionEditorStateInput = {
   canEditPurchasedQuantities?: boolean;
+  answersEditable?: boolean;
+  canResetStaleEditor?: boolean;
   editingSpecId?: string;
   editingEventType: string;
   editingEventDate: string;
@@ -25,6 +27,8 @@ export type ProductionQuestionEditorStateInput = {
 
 export function buildProductionQuestionEditorState({
   canEditPurchasedQuantities = false,
+  answersEditable = true,
+  canResetStaleEditor = false,
   editingSpecId,
   editingEventType,
   editingEventDate,
@@ -39,6 +43,8 @@ export function buildProductionQuestionEditorState({
 }: ProductionQuestionEditorStateInput): ProductionQuestionEditorState {
   return {
     canEditPurchasedQuantities,
+    answersEditable,
+    canResetStaleEditor,
     editingSpecId,
     editingEventType,
     editingEventDate,

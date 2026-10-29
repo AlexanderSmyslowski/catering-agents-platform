@@ -18,6 +18,8 @@ export { formatDocumentIngestionSummary } from "./production-intake-origin-card-
 
 export type ProductionQuestionEditorState = {
   canEditPurchasedQuantities?: boolean;
+  answersEditable?: boolean;
+  canResetStaleEditor?: boolean;
   editingSpecId?: string;
   editingEventType: string;
   editingEventDate: string;
@@ -104,6 +106,8 @@ export function ProductionQuestionPanel({
   const { openSpecForQuestions, refreshAfterDraftDecision } = questionActions;
   const {
     canEditPurchasedQuantities = false,
+    answersEditable = true,
+    canResetStaleEditor = false,
     editingSpecId,
     editingEventType,
     editingEventDate,
@@ -168,17 +172,27 @@ export function ProductionQuestionPanel({
   return (
     <article id="production-question-panel" className="panel form-panel question-panel production-step-card">
       <header>
-        <p className="eyebrow">{hasExistingPlan ? "Prüfung vor Neuberechnung" : "Prüfung vor Berechnung"}</p>
-        <h3>{productionQuestions.length > 0 ? questionCountLabel : "Erkannte Angaben prüfen"}</h3>
+        <p className="eyebrow">{!answersEditable ? "Bestehender Stand" : hasExistingPlan ? "Prüfung vor Neuberechnung" : "Prüfung vor Berechnung"}</p>
+        <h3>{!answersEditable ? "Produktionsstand prüfen" : productionQuestions.length > 0 ? questionCountLabel : "Erkannte Angaben prüfen"}</h3>
         <p className="helper-text">
-          {hasExistingPlan
+          {canResetStaleEditor
+            ? "Eine neue Prüffassung ist verfügbar. Schließe das bisherige Antwortfenster, um sie zu bearbeiten."
+            : !answersEditable
+            ? "Der bestehende Produktionsstand bleibt erhalten und kann hier nicht geändert werden. Änderungen sind nur in einer offenen Prüffassung möglich. Offene fachliche Prüfungen und Rückfragen sind weiterhin zu klären."
+            : hasExistingPlan
             ? "Ein Produktionsplan ist bereits gespeichert. Offene Rückfragen vor einer Neuberechnung klären; der bisherige Stand bleibt erhalten."
             : "Beantworte offene Punkte und prüfe die erkannten Komponenten. Erst danach entstehen belastbare Mengen, Rezepte und Einkaufslisten."}
         </p>
       </header>
+      {canResetStaleEditor ? (
+        <div className="form-panel">
+          <p>Die Prüffassung hat sich geändert. Die bisher geöffneten, ungespeicherten Antworten können nicht übernommen werden.</p>
+          <button className="secondary-button" disabled={submitting} onClick={() => resetSpecEdit()}>Antwortfenster schließen und ungespeicherte Antworten verwerfen</button>
+        </div>
+      ) : null}
       {focusedProductionSpec ? (
         <>
-          <div className="question-action-panel" aria-label="Nächste Aktion für Rückfragen">
+          {answersEditable ? <div className="question-action-panel" aria-label="Nächste Aktion für Rückfragen">
             <div>
               <strong>{productionQuestions.length > 0 ? questionCountLabel : "Keine offenen Rückfragen"}</strong>
               <p className="helper-text">
@@ -213,7 +227,7 @@ export function ProductionQuestionPanel({
                 {actionState.primaryActionLabel}
               </button>
             </div>
-          </div>
+          </div> : null}
           <div className="question-window">
             <ProductionQuestionThread
               specLabel={getSpecLabel(focusedProductionSpec)}
@@ -225,7 +239,7 @@ export function ProductionQuestionPanel({
               currentSpecPurchaseLists={currentSpecPurchaseLists}
               productionConversationProjection={productionConversationProjection}
               answerEditor={
-                actionState.isFocusedSpecEditing ? (
+                answersEditable && actionState.isFocusedSpecEditing ? (
                   <ProductionStructuredAnswerEditor
                     canEditPurchasedQuantities={canEditPurchasedQuantities}
                     focusedProductionSpec={focusedProductionSpec}
@@ -267,7 +281,7 @@ export function ProductionQuestionPanel({
               </p>
             ) : null}
             {intakeRequestDetail ? <ProductionIntakeOriginCard intakeRequestDetail={intakeRequestDetail} /> : null}
-            {sourceReviewRequired ? (
+            {answersEditable && sourceReviewRequired ? (
               <label className="component-answer-card">
                 <input
                   type="checkbox"
@@ -278,13 +292,13 @@ export function ProductionQuestionPanel({
                 Quelle und erkannte Daten geprüft
               </label>
             ) : null}
-            <ProductionClarificationDraftPanel
+            {answersEditable ? <ProductionClarificationDraftPanel
               specId={String(focusedProductionSpec.specId ?? "")}
               submitting={submitting}
               onDraftChanged={refreshAfterDraftDecision}
-            />
+            /> : null}
           </div>
-          {actionState.sourceReviewHelperText ? (
+          {answersEditable && actionState.sourceReviewHelperText ? (
             <p className="helper-text" role="status">
               {actionState.sourceReviewHelperText}
             </p>
@@ -321,7 +335,7 @@ export function ProductionQuestionPanel({
           </ul>
         </>
       ) : null}
-      {visibilityState.showDetachedEditor ? (
+      {answersEditable && visibilityState.showDetachedEditor ? (
         <>
           <div className="divider" />
           <div className="form-panel">

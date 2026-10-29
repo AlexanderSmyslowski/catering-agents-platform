@@ -68,7 +68,7 @@ import { buildProductionConversationState } from "./production-conversation-stat
 import { buildProductionArtifactSelectionAppBoundary } from "./production-artifact-selection-app-boundary.js";
 import { buildProductionFocusState } from "./production-focus-state.js";
 import { buildProductionIntakeActionsAppBoundary } from "./production-intake-actions-app-boundary.js";
-import { canEditProductionDraftQuantities, type ProductionDraftEditContext } from "./production-spec-edit-persist-action.js";
+import { canEditProductionAnswers, canEditProductionDraftQuantities, type ProductionDraftEditContext } from "./production-spec-edit-persist-action.js";
 import type { StagedProductionDocument } from "./production-document-submit-action.js";
 import { buildMiniPilotCheckReportState } from "./mini-pilot-check-report-state.js";
 import { extractAcceptedSpecId } from "./production-api-response-ids.js";
@@ -928,6 +928,21 @@ function ProductWorkspaceView({
     ]
   );
 
+  const currentAnswersEditable = canEditProductionAnswers({
+    caseId: activeProductionCaseId,
+    draftId: currentProductionDraftId,
+    draft: currentProductionDraft,
+    specId: typeof focusedProductionSpec?.specId === "string" ? focusedProductionSpec.specId : undefined
+  });
+  const answersEditable = canEditProductionAnswers({
+    caseId: activeProductionCaseId,
+    draftId: currentProductionDraftId,
+    draft: currentProductionDraft,
+    specId: typeof focusedProductionSpec?.specId === "string" ? focusedProductionSpec.specId : undefined,
+    editingSpecId,
+    editingContext: editingProductionDraftContext.current
+  });
+
   const {
     productionStatusSummary,
     productionRouteViewState
@@ -1166,8 +1181,15 @@ function ProductWorkspaceView({
     productionRouteMainLayoutState
   } = buildAppProductionRouteAppBoundary({
     canEditPurchasedQuantities: canEditProductionDraftQuantities(editingSpecId, editingProductionDraftContext.current),
+    answersEditable,
+    canResetStaleEditor: Boolean(editingSpecId && currentAnswersEditable && !answersEditable),
     activeProductionCaseId,
-    viewState: productionRouteViewState,
+    viewState: answersEditable ? productionRouteViewState : {
+      ...productionRouteViewState,
+      workbenchNextStep: currentAnswersEditable
+        ? { title: "Antwortfenster schließen", description: "Die Prüffassung hat sich geändert. Schließe das bisherige Antwortfenster, um die neue Fassung zu bearbeiten." }
+        : { title: "Produktionsstand prüfen", description: "Dieser Stand kann hier nicht geändert werden. Änderungen sind nur in einer offenen Prüffassung möglich. Offene fachliche Prüfungen und Rückfragen bleiben zu klären." }
+    },
     submitting,
     dragActive,
     intakeFile,
