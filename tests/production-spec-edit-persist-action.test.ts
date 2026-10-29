@@ -1,3 +1,4 @@
+import { canEditProductionAnswers } from "../backoffice-ui/src/production-spec-edit-persist-action.js";
 import { buildSpecEditUpdateInput } from "../backoffice-ui/src/production-spec-edit-update.js";
 import { specEditSnapshotFromSpec } from "../backoffice-ui/src/production-spec-edit-snapshot.js";
 import { describe, expect, it, vi } from "vitest";
@@ -313,5 +314,26 @@ describe("saving an imported accepted-spec snapshot", () => {
     await expect(buildProductionSpecEditPersistAction(actionInput)()).rejects.toThrow("stimmt nicht überein");
     expect(actionInput.onImportedDraft).not.toHaveBeenCalled();
     expect(actionInput.resetSpecEdit).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("production answer edit eligibility", () => {
+  const draft = { draftId: "draft-a", revision: 3, status: "pending_review" as const, createdAt: "", reviewCards: [], draftArtifacts: { eventSpec: { specId: "spec-a" } } };
+  const current = { caseId: "case-a", draftId: "draft-a", draft, specId: "spec-a" };
+  it("permits the matching pending revision and unbound legacy editing", () => {
+    expect(canEditProductionAnswers(current)).toBe(true);
+    expect(canEditProductionAnswers({ specId: "legacy" })).toBe(true);
+    expect(canEditProductionAnswers({ ...current, editingSpecId: "spec-a", editingContext: { caseId: "case-a", draft } })).toBe(true);
+  });
+  it("rejects decided, applied, missing and mismatched contexts including an already open editor", () => {
+    expect(canEditProductionAnswers({ ...current, draft: { ...draft, status: "approved", appliedAt: "now" } })).toBe(false);
+    expect(canEditProductionAnswers({ ...current, draft: { ...draft, appliedAt: "now" } })).toBe(false);
+    expect(canEditProductionAnswers({ ...current, draft: undefined })).toBe(false);
+    expect(canEditProductionAnswers({ specId: "spec-a", editingSpecId: "spec-a", editingContext: { caseId: "case-a", draft } })).toBe(false);
+    expect(canEditProductionAnswers({ ...current, draftId: "other" })).toBe(false);
+    expect(canEditProductionAnswers({ ...current, specId: "other" })).toBe(false);
+    expect(canEditProductionAnswers({ ...current, editingSpecId: "spec-a", editingContext: { caseId: "case-b", draft } })).toBe(false);
+    expect(canEditProductionAnswers({ ...current, editingSpecId: "spec-a", editingContext: { caseId: "case-a", draft: { ...draft, revision: 2 } } })).toBe(false);
   });
 });

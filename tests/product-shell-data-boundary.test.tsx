@@ -1240,6 +1240,23 @@ describe("independent product loader boundaries", () => {
     container.remove();
   });
 
+  it("hides editing and recalculation when the case draft is no longer editable", async () => {
+    const props = productionQuestionPanelProps("case-a");
+    props.questionState.productionQuestions = ["Menge klären"];
+    props.editorState = { ...props.editorState, answersEditable: false, editingSpecId: "spec-a", hasFocusedSpecEditChanges: true };
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    await act(async () => { root.render(createElement(ProductionQuestionPanel, props)); await flush(); });
+    expect(container.textContent).toContain("Der bestehende Produktionsstand bleibt erhalten");
+    expect(container.textContent).toContain("fachliche Prüfungen");
+    expect(container.querySelector('[aria-label="Nächste Aktion für Rückfragen"]')).toBeNull();
+    expect(container.textContent).not.toContain("Antworten speichern");
+    expect(container.textContent).not.toContain("Speichern und neu berechnen");
+    await act(async () => root.unmount());
+    container.remove();
+  });
+
   it("ignores a refresh retained from focused spec A after switching to focused spec B", async () => {
     let resolveA: ((value: ReturnType<typeof productionProductData>) => void) | undefined;
     let resolveB: ((value: ReturnType<typeof productionProductData>) => void) | undefined;

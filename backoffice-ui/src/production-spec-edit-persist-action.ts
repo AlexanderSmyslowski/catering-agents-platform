@@ -18,6 +18,26 @@ export function canEditProductionDraftQuantities(editingSpecId: string | undefin
     context.draft.draftArtifacts?.eventSpec?.specId === editingSpecId);
 }
 
+export function canEditProductionAnswers(input: {
+  caseId?: string;
+  draftId?: string;
+  draft?: ProductionDraft;
+  specId?: string;
+  editingSpecId?: string;
+  editingContext?: ProductionDraftEditContext;
+}): boolean {
+  if (!input.caseId) return !input.editingSpecId || !input.editingContext;
+  const draft = input.draft;
+  if (!draft || !input.draftId || draft.draftId !== input.draftId || draft.status !== "pending_review" || draft.appliedAt ||
+      !Number.isInteger(draft.revision) || draft.revision! <= 0 || !input.specId ||
+      draft.draftArtifacts?.eventSpec?.specId !== input.specId) return false;
+  if (!input.editingSpecId) return true;
+  const edit = input.editingContext;
+  return input.editingSpecId === input.specId && Boolean(edit && edit.caseId === input.caseId &&
+    edit.draft.draftId === draft.draftId && edit.draft.revision === draft.revision &&
+    edit.draft.status === "pending_review" && edit.draft.draftArtifacts?.eventSpec?.specId === input.specId);
+}
+
 export function assertCurrentProductionDraftContext(
   expected: ProductionDraftEditContext,
   readCurrent: (() => ProductionDraftEditContext | undefined) | undefined,
