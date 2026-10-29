@@ -91,6 +91,8 @@ describe("production question editor state", () => {
 
     expect(state).toEqual({
       canEditPurchasedQuantities: false,
+      answersEditable: true,
+      canResetStaleEditor: false,
       editingSpecId: "spec-1",
       editingEventType: "Lunch",
       editingEventDate: "2026-06-01",

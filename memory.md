@@ -3332,3 +3332,10 @@ Der normale bestehende Angebotsweg ermöglicht eine neue Prüffassung desselben 
 Automatischer Review fand zwei belegte Lücken im ursprünglichen Gating: Ein bereits offener Editor blockierte nach Wechsel auf eine neue gültige Prüffassung den Rückweg; ein abgetrennter alter Editor blieb beim Wechsel auf einen entschiedenen Fall sichtbar. Aktuelle Fassungsberechtigung und bestehende Editorbindung werden nun getrennt geprüft. Bei veralteter Bindung gibt es eine explizite Aktion zum Schließen und Verwerfen ungespeicherter Antworten; kein automatischer Verlust. Der abgetrennte Editor erscheint nur bei zulässiger Bindung. Persistenz-/Backendschutz unverändert.
 
 Drei gezielte Panelregressionen und Build bestanden; unabhängiger Terra-6.1-Review ACCEPT für genau diese Korrektur. Tests simulieren Panelzustände, kein vollständiger App-Lebenszyklus behauptet. Pflicht-CI wird mit diesem Commit neu ausgelöst. Noch kein Merge oder Rollout; Nürnberg weiterd1116f1. Führender Gesamtfortschritt in primärem Repository und Handoff.
+
+
+## PR766: Smoke-Fixtures an echte Bearbeitungszustände angepasst — Version 5.660 / 29.10.2026
+
+Die Pflicht-CI40891468984 meldete vier Abweichungen in drei Testdateien;442Dateien bestanden. Drei Smokeprüfungen erwarteten Bearbeiten trotz ausdrücklich approved gesetztem Mockdraft. Nur diese Bearbeitungsszenarien wählen nun einen vollständig gebundenen pending_review-Draft; der Corridor verwendet dessen passenden accepted-event-spec-Quellbezug und behält die getrennte Case-Provenienz. Die ursprünglichen fachlichen Assertions bleiben unverändert. Der direkte Zustandstest erwartet zusätzlich die beiden tatsächlichen neuen Standardfelder.
+
+Alle drei vollständigen betroffenen Dateien lokal48/48Tests bestanden, diffcheckgrün. Kein Produktcode geändert, kein Build oder vollständige Suite manuell wiederholt. Der unabhängige Terra-Review für die unveränderten Produktkorrekturen bleibt gültig; keine zusätzliche Pflichtreview für diese begrenzte Fixturekorrektur. Neue automatische Pflicht-CI bleibt vor Merge erforderlich. Noch kein Rollout.

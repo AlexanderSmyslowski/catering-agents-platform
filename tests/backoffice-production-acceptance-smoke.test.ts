@@ -12,6 +12,7 @@ import {
 
 function installProductionAcceptanceMocks(
   options: {
+    editableDraft?: boolean;
     stalePlanOnly?: boolean;
     withCurrentPurchaseList?: boolean;
     withEmptyCurrentPurchaseList?: boolean;
@@ -695,7 +696,7 @@ function installProductionAcceptanceMocks(
                   businessId: "demo-business",
                   draftId: `draft-${requestedCaseId}`,
                   revision: 1,
-                  status: "approved",
+                  status: options.editableDraft ? "pending_review" : "approved",
                   createdAt: requestedCaseId === searchCaseId
                     ? "2026-05-26T08:30:00.000Z"
                     : "2026-05-21T08:02:00.000Z",
@@ -1182,7 +1183,7 @@ describe("backoffice production acceptance smoke", () => {
   });
 
   it("shows a blocking fallback plan and the linked intake request on the production route", async () => {
-    installProductionAcceptanceMocks();
+    installProductionAcceptanceMocks({ editableDraft: true });
 
     const rendered = await renderProductionRouteMarkup();
     const content = rendered.text;
@@ -1643,7 +1644,7 @@ describe("backoffice production acceptance smoke", () => {
   });
 
   it("keeps the answer editor closed until the operator opens it", async () => {
-    installProductionAcceptanceMocks();
+    installProductionAcceptanceMocks({ editableDraft: true });
 
     const route = await renderProductionRouteMarkup();
 
