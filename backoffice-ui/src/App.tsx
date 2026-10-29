@@ -928,6 +928,12 @@ function ProductWorkspaceView({
     ]
   );
 
+  const currentAnswersEditable = canEditProductionAnswers({
+    caseId: activeProductionCaseId,
+    draftId: currentProductionDraftId,
+    draft: currentProductionDraft,
+    specId: typeof focusedProductionSpec?.specId === "string" ? focusedProductionSpec.specId : undefined
+  });
   const answersEditable = canEditProductionAnswers({
     caseId: activeProductionCaseId,
     draftId: currentProductionDraftId,
@@ -1176,10 +1182,13 @@ function ProductWorkspaceView({
   } = buildAppProductionRouteAppBoundary({
     canEditPurchasedQuantities: canEditProductionDraftQuantities(editingSpecId, editingProductionDraftContext.current),
     answersEditable,
+    canResetStaleEditor: Boolean(editingSpecId && currentAnswersEditable && !answersEditable),
     activeProductionCaseId,
     viewState: answersEditable ? productionRouteViewState : {
       ...productionRouteViewState,
-      workbenchNextStep: { title: "Produktionsstand prüfen", description: "Dieser Stand kann hier nicht geändert werden. Änderungen sind nur in einer offenen Prüffassung möglich. Offene fachliche Prüfungen und Rückfragen bleiben zu klären." }
+      workbenchNextStep: currentAnswersEditable
+        ? { title: "Antwortfenster schließen", description: "Die Prüffassung hat sich geändert. Schließe das bisherige Antwortfenster, um die neue Fassung zu bearbeiten." }
+        : { title: "Produktionsstand prüfen", description: "Dieser Stand kann hier nicht geändert werden. Änderungen sind nur in einer offenen Prüffassung möglich. Offene fachliche Prüfungen und Rückfragen bleiben zu klären." }
     },
     submitting,
     dragActive,

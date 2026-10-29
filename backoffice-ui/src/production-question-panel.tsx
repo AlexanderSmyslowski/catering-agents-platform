@@ -19,6 +19,7 @@ export { formatDocumentIngestionSummary } from "./production-intake-origin-card-
 export type ProductionQuestionEditorState = {
   canEditPurchasedQuantities?: boolean;
   answersEditable?: boolean;
+  canResetStaleEditor?: boolean;
   editingSpecId?: string;
   editingEventType: string;
   editingEventDate: string;
@@ -106,6 +107,7 @@ export function ProductionQuestionPanel({
   const {
     canEditPurchasedQuantities = false,
     answersEditable = true,
+    canResetStaleEditor = false,
     editingSpecId,
     editingEventType,
     editingEventDate,
@@ -173,13 +175,21 @@ export function ProductionQuestionPanel({
         <p className="eyebrow">{!answersEditable ? "Bestehender Stand" : hasExistingPlan ? "Prüfung vor Neuberechnung" : "Prüfung vor Berechnung"}</p>
         <h3>{!answersEditable ? "Produktionsstand prüfen" : productionQuestions.length > 0 ? questionCountLabel : "Erkannte Angaben prüfen"}</h3>
         <p className="helper-text">
-          {!answersEditable
+          {canResetStaleEditor
+            ? "Eine neue Prüffassung ist verfügbar. Schließe das bisherige Antwortfenster, um sie zu bearbeiten."
+            : !answersEditable
             ? "Der bestehende Produktionsstand bleibt erhalten und kann hier nicht geändert werden. Änderungen sind nur in einer offenen Prüffassung möglich. Offene fachliche Prüfungen und Rückfragen sind weiterhin zu klären."
             : hasExistingPlan
             ? "Ein Produktionsplan ist bereits gespeichert. Offene Rückfragen vor einer Neuberechnung klären; der bisherige Stand bleibt erhalten."
             : "Beantworte offene Punkte und prüfe die erkannten Komponenten. Erst danach entstehen belastbare Mengen, Rezepte und Einkaufslisten."}
         </p>
       </header>
+      {canResetStaleEditor ? (
+        <div className="form-panel">
+          <p>Die Prüffassung hat sich geändert. Die bisher geöffneten, ungespeicherten Antworten können nicht übernommen werden.</p>
+          <button className="secondary-button" disabled={submitting} onClick={() => resetSpecEdit()}>Antwortfenster schließen und ungespeicherte Antworten verwerfen</button>
+        </div>
+      ) : null}
       {focusedProductionSpec ? (
         <>
           {answersEditable ? <div className="question-action-panel" aria-label="Nächste Aktion für Rückfragen">
@@ -325,7 +335,7 @@ export function ProductionQuestionPanel({
           </ul>
         </>
       ) : null}
-      {visibilityState.showDetachedEditor ? (
+      {answersEditable && visibilityState.showDetachedEditor ? (
         <>
           <div className="divider" />
           <div className="form-panel">

@@ -1257,6 +1257,42 @@ describe("independent product loader boundaries", () => {
     container.remove();
   });
 
+  it("lets the user close stale answers and open the new pending revision", async () => {
+    const props = productionQuestionPanelProps("case-a");
+    props.questionState.productionQuestions = ["Menge klären"];
+    props.editorState = { ...props.editorState, answersEditable: false, canResetStaleEditor: true, editingSpecId: "spec-a", hasFocusedSpecEditChanges: true };
+    const reset = vi.fn();
+    props.editorActions.resetSpecEdit = reset;
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    await act(async () => { root.render(createElement(ProductionQuestionPanel, props)); await flush(); });
+    expect(container.textContent).toContain("ungespeicherten Antworten");
+    expect(container.textContent).not.toContain("Antworten speichern");
+    const close = [...container.querySelectorAll("button")].find(button => button.textContent === "Antwortfenster schließen und ungespeicherte Antworten verwerfen");
+    expect(close).toBeDefined();
+    await act(async () => { close?.click(); });
+    expect(reset).toHaveBeenCalledOnce();
+    props.editorState = { ...props.editorState, answersEditable: true, canResetStaleEditor: false, editingSpecId: undefined };
+    await act(async () => { root.render(createElement(ProductionQuestionPanel, props)); await flush(); });
+    expect(container.textContent).toContain("Rückfragen beantworten");
+    await act(async () => root.unmount());
+    container.remove();
+  });
+
+  it("does not expose a detached stale editor for a decided case", async () => {
+    const props = productionQuestionPanelProps("case-b");
+    props.editorState = { ...props.editorState, answersEditable: false, editingSpecId: "spec-a" };
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    await act(async () => { root.render(createElement(ProductionQuestionPanel, props)); await flush(); });
+    expect(container.textContent).not.toContain("Antworten speichern");
+    expect(container.querySelector('input[placeholder^="Veranstaltungstyp"]')).toBeNull();
+    await act(async () => root.unmount());
+    container.remove();
+  });
+
   it("ignores a refresh retained from focused spec A after switching to focused spec B", async () => {
     let resolveA: ((value: ReturnType<typeof productionProductData>) => void) | undefined;
     let resolveB: ((value: ReturnType<typeof productionProductData>) => void) | undefined;
