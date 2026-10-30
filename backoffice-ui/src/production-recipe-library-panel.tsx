@@ -1,4 +1,5 @@
-import type { ChangeEvent } from "react";
+import { useState, type ChangeEvent } from "react";
+import type { RecipeNumberFormat } from "../../shared-core/src/recipe-library.js";
 import type { RecipeReviewCounts } from "./production-recipe-review-state.js";
 
 export type { RecipeReviewCounts } from "./production-recipe-review-state.js";
@@ -22,7 +23,7 @@ export type ProductionRecipeLibraryState = {
 export type ProductionRecipeActions = {
   setRecipeName: (value: string) => void;
   setRecipeFile: (file: File | null) => void;
-  uploadRecipe: (target: "offer" | "production") => Promise<void>;
+  uploadRecipe: (target: "offer" | "production", numberFormat?: RecipeNumberFormat) => Promise<void>;
   reviewRecipe: (
     target: "offer" | "production",
     recipeId: string,
@@ -67,6 +68,7 @@ export function ProductionRecipeLibraryPanel({
 }: ProductionRecipeLibraryPanelProps) {
   const { recipeReviewStatusLabel, recipeUsageStatusLabel, recipeReviewCounts, recipeCount } = statusState;
   const { recipeName, recipeFile } = uploadState;
+  const [numberFormat, setNumberFormat] = useState<RecipeNumberFormat | "">("");
   const { filteredRecipes } = libraryState;
   const { setRecipeName, setRecipeFile, uploadRecipe, reviewRecipe } = recipeActions;
 
@@ -106,13 +108,22 @@ export function ProductionRecipeLibraryPanel({
             className="file-input"
             type="file"
             accept=".pdf,.txt,.md,text/plain,application/pdf"
-            onChange={(event: ChangeEvent<HTMLInputElement>) => setRecipeFile(event.target.files?.[0] ?? null)}
+            onChange={(event: ChangeEvent<HTMLInputElement>) => { setRecipeFile(event.target.files?.[0] ?? null); setNumberFormat(""); }}
           />
+          <label className="field-block">
+            <span>Zahlenformat der Rezeptdatei</span>
+            <select value={numberFormat} disabled={submitting || !recipeFile} onChange={event => setNumberFormat(event.target.value as RecipeNumberFormat | "")}>
+              <option value="">Nicht festgelegt</option>
+              <option value="de">Deutsch · 1.234,5</option>
+              <option value="en">Englisch · 1,234.5</option>
+            </select>
+            <span className="helper-text">Wähle das Format aus deiner Datei. Ohne Auswahl werden mehrdeutige Mengen nicht übernommen.</span>
+          </label>
           <div className="action-row">
-            <button disabled={submitting} onClick={() => void uploadRecipe("offer")}>
+            <button disabled={submitting} onClick={() => void uploadRecipe("offer", numberFormat || undefined)}>
               Über Angebotsagent speichern
             </button>
-            <button disabled={submitting} onClick={() => void uploadRecipe("production")}>
+            <button disabled={submitting} onClick={() => void uploadRecipe("production", numberFormat || undefined)}>
               Über Produktionsagent speichern
             </button>
           </div>

@@ -19,6 +19,7 @@ interface RecipeTextImportBody {
   recipeName?: string;
   sourceRef?: string;
   sourceMetadata?: ReturnType<typeof createUploadSourceMetadata>;
+  numberFormat?: "de" | "en";
 }
 
 interface RecipeReviewBody {
@@ -101,6 +102,7 @@ async function recipeImportFromMultipart(
     text,
     filename: file.filename,
     recipeName: multipartFieldValue(file.fields, "recipeName"),
+    numberFormat: multipartFieldValue(file.fields, "numberFormat") as "de" | "en" | undefined,
     sourceRef: multipartFieldValue(file.fields, "sourceRef"),
     sourceMetadata: createUploadSourceMetadata({
       filename: file.filename,

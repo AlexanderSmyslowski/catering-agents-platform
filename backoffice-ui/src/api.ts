@@ -1,3 +1,4 @@
+import type { RecipeNumberFormat } from "../../shared-core/src/recipe-library.js";
 import type { PurchasedQuantity } from "../../shared-core/src/purchased-quantities.js";
 import type {
   ApprovedOffer,
@@ -1188,13 +1189,15 @@ export async function createProductionClarificationFollowup(draftId: string, inp
 export async function uploadRecipeFile(
   target: RecipeUploadTarget,
   file: File,
-  recipeName?: string
+  recipeName?: string,
+  numberFormat?: RecipeNumberFormat
 ) {
   const formData = new FormData();
-  formData.append("file", file);
+  if (numberFormat) formData.append("numberFormat", numberFormat);
   if (recipeName?.trim()) {
     formData.append("recipeName", recipeName.trim());
   }
+  formData.append("file", file);
 
   const endpoint =
     target === "offer"

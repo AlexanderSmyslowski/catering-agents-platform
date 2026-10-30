@@ -609,10 +609,10 @@ export function ProductionInputPanel({
               <datalist id={`${suggestionId}-service-forms`}>{Object.entries(serviceFormLabels).map(([key, label]) => <option key={key} value={label} />)}</datalist>
               <label className="field-block">
                 <span>Menüpunkte</span>
-                <input
+                <textarea
                   value={manualInput.menuItems}
                   onChange={(event) => manualInputActions.setMenuItems(event.target.value)}
-                  placeholder="Menüpunkte, durch Komma getrennt"
+                  placeholder={"Ein Gericht pro Zeile, z. B.:\nApfelcreme – 50 Portionen"}
                 />
               </label>
               <label className="field-block">

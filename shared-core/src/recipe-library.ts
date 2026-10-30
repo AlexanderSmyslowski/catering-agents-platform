@@ -334,20 +334,37 @@ function normalizeUnit(unit?: string): string {
   return unitNormalization[unit.toLowerCase()] ?? unit.toLowerCase();
 }
 
-function parseAmount(token?: string): number {
-  if (!token) {
-    return 1;
-  }
+export type RecipeNumberFormat = "de" | "en";
 
-  if (token.includes("/")) {
-    const [left, right] = token.split("/", 2).map((part) => Number(part.replace(",", ".")));
-    if (Number.isFinite(left) && Number.isFinite(right) && right !== 0) {
-      return Number((left / right).toFixed(2));
-    }
-  }
+function recipeInputError(message: string): Error & { statusCode: number } {
+  return Object.assign(new Error(message), { statusCode: 422 });
+}
 
-  const parsed = Number(token.replace(",", "."));
-  return Number.isFinite(parsed) ? parsed : 1;
+function parseAmount(token?: string, numberFormat?: RecipeNumberFormat): number {
+  if (!token) return 1;
+  let value = token.trim();
+  const invalid = () => recipeInputError(`Menge „${value}“ ist nicht eindeutig. Bitte das Zahlenformat wählen oder die Menge ohne Tausendertrennzeichen schreiben.`);
+  if (/\s/u.test(value)) {
+    if (!/^[1-9]\d{0,2}(?:[ \u00a0\u202f]\d{3})+(?:[.,]\d+)?$/u.test(value)) throw invalid();
+    value = value.replace(/[ \u00a0\u202f]/gu, "");
+  }
+  let amount: number;
+  if (/^\d+\/\d+$/.test(value)) {
+    const [left, right] = value.split("/").map(Number);
+    amount = left! / right!;
+  } else if (numberFormat === "de") {
+    if (!/^(?:\d+|[1-9]\d{0,2}(?:\.\d{3})+)(?:,\d+)?$/.test(value)) throw invalid();
+    amount = Number(value.replaceAll(".", "").replace(",", "."));
+  } else if (numberFormat === "en") {
+    if (!/^(?:\d+|[1-9]\d{0,2}(?:,\d{3})+)(?:\.\d+)?$/.test(value)) throw invalid();
+    amount = Number(value.replaceAll(",", ""));
+  } else {
+    // A single three-digit suffix can be either a decimal or a thousands group.
+    if (!/^\d+(?:[.,]\d+)?$/.test(value) || /^[1-9]\d*[.,]\d{3}$/.test(value)) throw invalid();
+    amount = Number(value.replace(",", "."));
+  }
+  if (!Number.isFinite(amount) || amount <= 0) throw invalid();
+  return amount;
 }
 
 function purchaseUnitFor(unit: string): string {
@@ -370,7 +387,8 @@ function ingredientGroupFor(name: string): string {
   return match?.[1] ?? "misc";
 }
 
-function parseIngredientLine(line: string, index: number) {
+function parseIngredientLine(line: string, index: number, numberFormat?: RecipeNumberFormat) {
+  if (/^\s*[-+−]\d/.test(line)) throw recipeInputError("Zutatenmengen müssen positiv sein. Bitte die Menge prüfen.");
   const cleaned = line
     .trim()
     .replace(/^[•*-\s]+/, "")
@@ -381,10 +399,11 @@ function parseIngredientLine(line: string, index: number) {
   }
 
   const match = cleaned.match(
-    /^([\d.,/]+)?\s*(kg|g|ml|l|pcs|stück|stueck|el|tl)?\s+(.+)$/i
+    /^([\d.,/]+(?:[ \u00a0\u202f]+[\d.,/]+)*)?\s*(kg|g|ml|l|pcs|stück|stueck|el|tl)?\s+(.+)$/i
   );
 
   if (!match) {
+    if (/\d/u.test(cleaned)) throw recipeInputError(`Menge in „${cleaned}“ ist nicht eindeutig. Bitte jede Zutat mit einer festen Planmenge in einer eigenen Zeile angeben.`);
     return {
       ingredientId: `${slugify(cleaned)}-${index + 1}`,
       name: cleaned,
@@ -398,9 +417,12 @@ function parseIngredientLine(line: string, index: number) {
     };
   }
 
-  const amount = parseAmount(match[1]);
+  const amount = parseAmount(match[1], numberFormat);
   const unit = normalizeUnit(match[2]);
   const name = match[3].trim();
+  if (/^(?:[–—−\-/x]|bis|oder)\s*\d/iu.test(name) || /\d+\s*(?:kg|g|ml|l|el|tl|pcs|stück|stueck)\b/iu.test(name)) {
+    throw recipeInputError("Mehrere Zutatenmengen in einer Zeile. Bitte jede Zutat mit ihrer Menge in einer eigenen Zeile angeben.");
+  }
 
   return {
     ingredientId: `${slugify(name)}-${index + 1}`,
@@ -554,7 +576,17 @@ function servingsFromText(text: string): number {
     `(?:${wholeYieldLabel}|${compactNumberBeforeLabelHint}|${compactLabelBeforeNumberHint}|${spacedNumberBeforeLabelHint})`,
     "iu"
   );
-  const hintLines = text.split(/\r?\n/).filter((line) => yieldHintLine.test(line));
+  const lines = text.split(/\r?\n/);
+  const stepStart = lines.findIndex(isStepSectionHeading);
+  const head = stepStart < 0 ? lines : lines.slice(0, stepStart);
+  const preparation = stepStart < 0 ? [] : lines.slice(stepStart + 1);
+  const declarations = preparation.filter(line =>
+    /^\s*(?:portionen?|portions?|servings?|personen|gaeste|gäste|people|pax|yield)\s*:/iu.test(line)
+    || /^\s*[-+−\d \t.,–—/]+(?:portionen?|portions?|servings?|personen|gaeste|gäste|people|pax|yield)\s*\.?\s*$/iu.test(line));
+  const hintLines = [...head, ...declarations].filter(line => yieldHintLine.test(line));
+  if (!hintLines.length && preparation.some(line => yieldHintLine.test(line))) {
+    throw recipeInputError("Ertrag fehlt im Rezeptkopf. Bitte die Anzahl der Portionen ausdrücklich angeben.");
+  }
   const numberBeforeLabel = new RegExp(
     `^\\s*(\\d{1,4})[ \\t]+${wholeYieldLabel}[ \\t]*$`,
     "iu"
@@ -577,7 +609,7 @@ function servingsFromText(text: string): number {
       .filter((match): match is RegExpExecArray => match !== null)
       .map((match) => Number(match[1]));
     if ((line.match(/\d{1,4}/g) ?? []).length !== 1 || lineCandidates.length !== 1) {
-      throw new Error("Die Ertragsangabe des Rezepts ist nicht eindeutig auswertbar.");
+      throw recipeInputError("Die Ertragsangabe des Rezepts ist nicht eindeutig auswertbar. Bitte im Rezeptkopf z. B. „50 Portionen“ angeben.");
     }
     candidates.push(lineCandidates[0]!);
   }
@@ -588,12 +620,12 @@ function servingsFromText(text: string): number {
   }
 
   if (candidates.length === 0 || candidates.some((candidate) => !Number.isSafeInteger(candidate) || candidate <= 0)) {
-    throw new Error("Die Ertragsangabe des Rezepts ist nicht eindeutig auswertbar.");
+    throw recipeInputError("Die Ertragsangabe des Rezepts ist nicht eindeutig auswertbar. Bitte im Rezeptkopf z. B. „50 Portionen“ angeben.");
   }
 
   const distinctCandidates = new Set(candidates);
   if (distinctCandidates.size !== 1) {
-    throw new Error("Das Rezept enthält widersprüchliche Ertragsangaben.");
+    throw recipeInputError("Das Rezept enthält widersprüchliche Ertragsangaben. Bitte die Portionszahl im Rezeptkopf prüfen.");
   }
 
   return candidates[0];
@@ -656,11 +688,15 @@ export function parseUploadedRecipeText(input: {
   recipeName?: string;
   sourceRef?: string;
   sourceMetadata?: UploadSourceMetadata;
+  numberFormat?: RecipeNumberFormat;
 }): Recipe {
-  const text = input.text.trim();
-  if (!text) {
-    throw new Error("Der hochgeladene Rezepttext ist leer.");
+  if (typeof input?.text !== "string" || !input.text.trim()) {
+    throw recipeInputError("Rezepttext fehlt. Bitte eine Datei mit Zutaten, Mengen und Zubereitung auswählen.");
   }
+  if (input.numberFormat !== undefined && input.numberFormat !== "de" && input.numberFormat !== "en") {
+    throw recipeInputError("Zahlenformat ist ungültig. Bitte Deutsch oder Englisch wählen.");
+  }
+  const text = input.text.trim();
 
   const sections = splitSections(text);
   const name = recipeNameFromText(text, input.filename, input.recipeName);
@@ -668,7 +704,7 @@ export function parseUploadedRecipeText(input: {
   const ingredientsSource =
     sections.ingredients.length > 0 ? sections.ingredients : sections.notes.filter(isIngredientLine);
   const ingredients = ingredientsSource
-    .map((line, index) => parseIngredientLine(line, index))
+    .map((line, index) => parseIngredientLine(line, index, input.numberFormat))
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
 
   const stepsSource =
@@ -688,7 +724,7 @@ export function parseUploadedRecipeText(input: {
   );
 
   if (ingredients.length === 0) {
-    throw new Error("Aus dem hochgeladenen Rezept konnten keine Zutatenzeilen extrahiert werden.");
+    throw recipeInputError("Keine Zutaten mit Mengen erkannt. Bitte die Zutaten im Rezept prüfen.");
   }
 
   const coverageScore = Number(
@@ -703,7 +739,7 @@ export function parseUploadedRecipeText(input: {
 
   return validateRecipe({
     schemaVersion: SCHEMA_VERSION,
-    recipeId: `upload-${slugify(name)}-${createHash("sha1").update(`${input.filename ?? ""}:${text}`).digest("hex").slice(0, 10)}`,
+    recipeId: `upload-${slugify(name)}-${createHash("sha1").update(`${input.filename ?? ""}:${input.numberFormat ? input.numberFormat + ":" : ""}${text}`).digest("hex").slice(0, 10)}`,
     name,
     source: {
       tier: "internal_approved",
@@ -715,7 +751,7 @@ export function parseUploadedRecipeText(input: {
       fitScore: 1,
       extractionCompleteness: coverageScore,
       licenseNote:
-        "Menschlich hochgeladene interne Rezeptquelle. Automatisch extrahierte Zutaten, Allergene und Diet-Tags erfordern Review vor operativer Nutzung.",
+        "Menschlich hochgeladene interne Rezeptquelle. Automatisch extrahierte Zutaten, Allergene und Diet-Tags erfordern Review vor operativer Nutzung." + (input.numberFormat ? ` Gewähltes Zahlenformat: ${input.numberFormat}.` : ""),
       ...(input.sourceMetadata ? { sourceMetadata: input.sourceMetadata } : {})
     },
     baseYield: {

@@ -259,6 +259,35 @@ function extractQuantifiedMenuItems(text: string): InferredMenuItem[] {
   return [...prefixed, ...suffixed].sort((left, right) => left.index - right.index).map(({ item }) => item);
 }
 
+function inferManualMenuItem(label: string): InferredMenuItem {
+  label = label.replace(/[^\S\r\n]+/gu, " ");
+  if ([...label.matchAll(/\d+\s*(?:Portionen?|Stück(?:e)?|Personen)\b/giu)].length > 1) {
+    throw Object.assign(new Error("Mehrere Mengen in einer Menüzeile erkannt. Bitte jedes Gericht mit seiner Menge in einer eigenen Zeile angeben."), { statusCode: 422 });
+  }
+  if (/\d[ \t]*[–—-][ \t]*\d+[ \t]+(?:Portionen?|Stück(?:e)?|Personen)\b/iu.test(label)) {
+    throw Object.assign(new Error("Mengenbereich erkannt. Bitte für jedes Gericht eine feste Portions- oder Stückzahl angeben."), { statusCode: 422 });
+  }
+  const colon = parseCountedDishLine(label);
+  if (colon && !colon.isHeading) {
+    const item = extractQuantifiedMenuItems(label)[0];
+    if (item) return item;
+  }
+  const prefix = /^(\d{1,5})[ \t]+Portion(?:en)?[ \t]+(.+)$/iu.exec(label);
+  if (prefix && Number(prefix[1]) > 0 && !/\d.*\bPortion/iu.test(prefix[2]!)) {
+    const heading = parseCountedDishLine(`${prefix[2]}: ${prefix[1]} Portionen`);
+    if (heading && !heading.isHeading) return { ...inferMenuItemFromLabel(prefix[2]!.trim()), servings: Number(prefix[1]) };
+  }
+  const suffix = /^(.*?)\s+[–—-]\s*(\d{1,5})\s+(?:Portionen?|Stück(?:e)?)(?:\s+insgesamt)?\s*$/iu.exec(label);
+  if (suffix && Number(suffix[2]) > 0) {
+    const heading = parseCountedDishLine(`${suffix[1]}: ${suffix[2]} Portionen`);
+    if (heading && !heading.isHeading) return { ...inferMenuItemFromLabel(suffix[1]!.trim()), servings: Number(suffix[2]) };
+  }
+  if (/(?:\d.*(?:Portionen?|Stück(?:e)?|Personen)\b|\bPortionen?\s*:)/iu.test(label)) {
+    throw Object.assign(new Error(`Menge für „${label}“ ist nicht eindeutig. Bitte ein Gericht je Zeile mit einer festen Menge angeben, z. B. „Salat – 50 Portionen“.`), { statusCode: 422 });
+  }
+  return inferMenuItemFromLabel(label);
+}
+
 function extractMenuItems(text: string, fallbackKeywords: string[]): InferredMenuItem[] {
   const quantified = extractQuantifiedMenuItems(text);
   if (quantified.length > 0) return quantified;
@@ -382,11 +411,10 @@ export function normalizeEventRequestToSpec(
   const eventDate = request.event?.date ?? signals.eventDate ?? parseDate(rawText);
   const menuItems: InferredMenuItem[] =
     request.source.channel === "manual_form" && (request.desiredCatering?.length ?? 0) > 0
-      ? request.desiredCatering!.map((item) => ({
-          label: item.label,
-          menuCategory: inferMenuCategoryFromText(item.label),
-          dietaryTags: item.dietaryTags ?? dietaryTagsForCategory(inferMenuCategoryFromText(item.label))
-        }))
+      ? request.desiredCatering!.map(item => {
+          const inferred = inferManualMenuItem(item.label);
+          return { ...inferred, dietaryTags: item.dietaryTags ?? inferred.dietaryTags };
+        })
       : extractMenuItems(
           rawText,
           request.desiredCatering?.map((item) => item.label) ?? defaults.defaultMenuKeywords
