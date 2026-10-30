@@ -27,13 +27,13 @@ describe("app route shell state", () => {
       className: undefined
     });
     expect(buildAppRouteShellState(buildInput("offer")).shell).toEqual({
-      title: "Angebotsagent",
+      title: "CateringOS · Angebote",
       subtitle: "Kundenanfrage verstehen, Leistungen strukturieren und daraus belastbare Angebotsentwürfe erzeugen.",
       hideKicker: true,
       className: "app-shell--offer-route"
     });
     expect(buildAppRouteShellState(buildInput("production")).shell).toEqual({
-      title: "Produktionsagent",
+      title: "CateringOS · Produktion",
       subtitle: "Ruhige Arbeitsfläche für Rezepte, Produktionspläne und Einkaufslisten.",
       hideKicker: true,
       className: "app-shell--production-route"

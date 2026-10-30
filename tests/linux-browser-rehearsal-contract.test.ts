@@ -1592,7 +1592,7 @@ describe("Linux browser rehearsal governance", () => {
 
   it("binds the empty offer marker to a fresh zero-count state", () => {
     const requiredText = [
-      "Angebotsagent",
+      "CateringOS · Angebote",
       "Kundenanfrage einfügen",
       "Die App erstellt einen prüfbaren Angebotsentwurf.",
       "Bestehenden Auftrag öffnen",
@@ -1624,7 +1624,7 @@ describe("Linux browser rehearsal governance", () => {
   it("accepts the actual fresh production empty state with zero orders", () => {
     const buildMarkerCheck = (orderCount: string) => {
       const freshProductionText = [
-      "Produktionsagent",
+      "CateringOS · Produktion",
       "Angebot hochladen oder Auftrag beschreiben",
       "Nächster Schritt",
       "Bestehenden Auftrag öffnen",
@@ -1649,7 +1649,7 @@ describe("Linux browser rehearsal governance", () => {
   });
 
   it("binds the fresh production handoff marker to the generated case list before explicit opening", () => {
-    expect(productionHandoffMarkers).toContain("Produktionsagent");
+    expect(productionHandoffMarkers).toContain("CateringOS · Produktion");
     expect(productionHandoffMarkers).toContain("Angebot hochladen oder Auftrag beschreiben");
     expect(productionHandoffMarkers).toContain("Bestehenden Auftrag öffnen · 1 Auftrag");
     expect(productionHandoffMarkers).toContain("veralteter Demo-Produktionsfall");
@@ -1660,7 +1660,7 @@ describe("Linux browser rehearsal governance", () => {
     const document = {
       body: {
         innerText: [
-          "Produktionsagent",
+          "CateringOS · Produktion",
           "Angebot hochladen oder Auftrag beschreiben",
           "Nächster Schritt",
           "Bestehenden Auftrag öffnen · 1 Auftrag",
@@ -1678,7 +1678,7 @@ describe("Linux browser rehearsal governance", () => {
   });
 
   it("accepts the same fresh handoff when the application has already opened its case", async () => {
-    const document = { body: { innerText: ["Produktionsagent", "Auftragsstand Küche", "Nächster Schritt", "Anderen Auftrag öffnen · 1 Auftrag"].join("\n") }, querySelectorAll: () => [] };
+    const document = { body: { innerText: ["CateringOS · Produktion", "Auftragsstand Küche", "Nächster Schritt", "Anderen Auftrag öffnen · 1 Auftrag"].join("\n") }, querySelectorAll: () => [] };
     const check = new Function("document", "location", `return (${productionHandoffMarkers});`)(document, { pathname: "/produktion" });
     await expect(check()).resolves.toEqual({ route: "/produktion", markers: "production-handoff-ok" });
     document.body.innerText += "\nPlan-Kontext: aktueller Produktionsplan";

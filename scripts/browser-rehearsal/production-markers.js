@@ -1,7 +1,7 @@
 async () => {
   const text = document.body.innerText;
   const missing = [
-    "Produktionsagent",
+    "CateringOS · Produktion",
     "Auftragsstand Küche",
     "Nächster Schritt",
     "Auftragsstand Küche",

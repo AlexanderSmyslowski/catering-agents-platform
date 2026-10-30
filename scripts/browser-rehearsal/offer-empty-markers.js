@@ -1,7 +1,7 @@
 () => {
   const text = document.body.innerText;
   const missing = [
-    "Angebotsagent",
+    "CateringOS · Angebote",
     "Kundenanfrage einfügen",
     "Die App erstellt einen prüfbaren Angebotsentwurf.",
     "Bestehenden Auftrag öffnen"

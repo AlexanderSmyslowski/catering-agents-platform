@@ -1,7 +1,7 @@
 async () => {
   const text = document.body.innerText;
   const missing = [
-    "Produktionsagent",
+    "CateringOS · Produktion",
     "Nächster Schritt"
   ].filter((marker) => !text.includes(marker));
   // A handoff can already be focused when the route is entered; neither state has a plan yet.

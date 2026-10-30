@@ -1188,7 +1188,7 @@ describe("backoffice production acceptance smoke", () => {
     const rendered = await renderProductionRouteMarkup();
     const content = rendered.text;
 
-    expect(content).toContain("Produktionsagent");
+    expect(content).toContain("CateringOS · Produktion");
     expect(content).toContain("Auftragsstand Küche");
     expect(content).toContain("Weitere Unterlage zu diesem Produktionsauftrag");
     expect(content).toContain("Nächster Schritt");

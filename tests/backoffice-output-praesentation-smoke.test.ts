@@ -585,7 +585,7 @@ describe("backoffice production presentation smoke", () => {
 
     const content = await renderOfferRoute();
 
-    expect(content).toContain("Angebotsagent");
+    expect(content).toContain("CateringOS · Angebote");
     expect(content).toContain("Weitere Unterlage zu diesem Auftrag");
     expect(content).not.toContain("Catering-Betriebssystem");
     expect(content).not.toContain("Demo-Daten laden");
@@ -612,7 +612,7 @@ describe("backoffice production presentation smoke", () => {
 
     const content = await renderProductionRoute();
 
-    expect(content).toContain("Produktionsagent");
+    expect(content).toContain("CateringOS · Produktion");
     expect(content).toContain("Auftragsstand Küche");
     expect(content).toContain("Angebot als KI-Entwurf prüfen");
     expect(content).toContain("Unterstützt PDF, E-Mail und Textdateien bis 25 MB");

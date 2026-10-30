@@ -368,31 +368,48 @@ export function ProductionQuestionPanel({
               <p className="eyebrow">Antwortfenster</p>
               <h3>{editingSpecId}</h3>
             </header>
-            <input
-              value={editingEventType}
-              onChange={(event) => setEditingEventType(event.target.value)}
-              placeholder="Veranstaltungstyp, z. B. Konferenz"
-            />
-            <input
-              value={editingEventDate}
-              onChange={(event) => setEditingEventDate(event.target.value)}
-              placeholder="Datum, z. B. 2026-06-18"
-            />
-            <input
-              value={editingAttendeeCount}
-              onChange={(event) => setEditingAttendeeCount(event.target.value)}
-              placeholder="Teilnehmerzahl"
-            />
-            <input
-              value={editingServiceForm}
-              onChange={(event) => setEditingServiceForm(event.target.value)}
-              placeholder="Serviceform, z. B. Buffet"
-            />
-            <textarea
-              value={editingMenuItems}
-              onChange={(event) => setEditingMenuItems(event.target.value)}
-              placeholder="Menüpunkte, durch Komma getrennt"
-            />
+            <label className="field-block">
+              <span>Veranstaltungstyp</span>
+              <input
+                value={editingEventType}
+                onChange={(event) => setEditingEventType(event.target.value)}
+                placeholder="Veranstaltungstyp, z. B. Konferenz"
+              />
+            </label>
+            <label className="field-block">
+              <span>Veranstaltungsdatum</span>
+              <small>Format: JJJJ-MM-TT, zum Beispiel 2026-11-13.</small>
+              <input
+                value={editingEventDate}
+                onChange={(event) => setEditingEventDate(event.target.value)}
+                placeholder="Datum, z. B. 2026-06-18"
+              />
+            </label>
+            <label className="field-block">
+              <span>Gäste</span>
+              <input
+                value={editingAttendeeCount}
+                inputMode="numeric"
+                onChange={(event) => setEditingAttendeeCount(event.target.value)}
+                placeholder="Anzahl der Gäste"
+              />
+            </label>
+            <label className="field-block">
+              <span>Serviceform</span>
+              <input
+                value={editingServiceForm}
+                onChange={(event) => setEditingServiceForm(event.target.value)}
+                placeholder="Serviceform, z. B. Buffet"
+              />
+            </label>
+            <label className="field-block">
+              <span>Menüpunkte</span>
+              <textarea
+                value={editingMenuItems}
+                onChange={(event) => setEditingMenuItems(event.target.value)}
+                placeholder="Menüpunkte, durch Komma getrennt"
+              />
+            </label>
             <div className="action-row">
               <button disabled={submitting} onClick={() => void saveSpecEdit()}>
                 Antworten speichern

@@ -12,7 +12,7 @@ async () => {
     const text = document.body.innerText;
     const html = document.body.innerHTML;
     if (
-      text.includes("Produktionsagent") &&
+      text.includes("CateringOS · Produktion") &&
       text.includes("Angebot hochladen oder Auftrag beschreiben") &&
       !/\/api\/exports\/v1\/exports\/(?:production-plans|purchase-lists)\//.test(html)
     ) {

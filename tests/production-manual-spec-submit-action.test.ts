@@ -97,9 +97,29 @@ describe("production manual spec submit action", () => {
       "setActiveProductionCaseSpecId:spec-manual-1",
       "setFocusedProductionSpecId:spec-manual-1",
       "resetManualSpecDraft",
-      "setNotice:Manuelle Spezifikation wurde angelegt.",
+      "setNotice:Auftrag angelegt. Bitte Angaben und Planung prüfen.",
       "setSubmitting:false"
     ]);
+  });
+
+  it("uses server-confirmed metadata rather than unsaved form values for the new case", async () => {
+    const actions = input({ createAcceptedSpecFromManualForm: vi.fn(async () => ({ acceptedEventSpec: {
+      specId: "spec-confirmed", customer: { name: "Synthetischer Kunde" }, event: { type: "trade_fair", date: "2026-11-13" }, servicePlan: { eventType: "trade_fair" }, attendees: { expected: 35 }
+    } })) });
+    await buildProductionManualSpecSubmitAction(actions)();
+    expect(actions.createProductionCase).toHaveBeenCalledWith({ customerName: "Synthetischer Kunde", eventTypeLabel: "Messe", eventDate: "2026-11-13", attendeeCount: 35 });
+    expect(actions.createProductionDraftFromAcceptedEventSpec).toHaveBeenCalledWith("case-manual-1", { specId: "spec-confirmed" });
+  });
+  it("preserves partial and absent confirmed metadata without inventing fields", async () => {
+    const actions = input({ createAcceptedSpecFromManualForm: vi.fn(async () => ({ acceptedEventSpec: { specId: "spec-partial", event: { type: "Eigene Veranstaltung" }, attendees: { expected: 0 } } })) });
+    await buildProductionManualSpecSubmitAction(actions)();
+    expect(actions.createProductionCase).toHaveBeenCalledWith({ eventTypeLabel: "Eigene Veranstaltung" });
+  });
+
+  it.each([["2024-02-29", true], ["2026-02-29", false], ["2026-02-30", false], ["2026-99-99", false], ["1996-02-29", true], ["0096-02-29", true]])("uses only valid calendar dates from the confirmed spec: %s", async (eventDate, valid) => {
+    const actions = input({ createAcceptedSpecFromManualForm: vi.fn(async () => ({ acceptedEventSpec: { specId: "spec-date", event: { date: eventDate } } })) });
+    await buildProductionManualSpecSubmitAction(actions)();
+    expect(actions.createProductionCase).toHaveBeenCalledWith(valid ? { eventDate } : {});
   });
 
   it("fails closed when the response has no spec id", async () => {

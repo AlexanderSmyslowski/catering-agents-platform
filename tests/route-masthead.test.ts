@@ -27,8 +27,12 @@ describe("route masthead", () => {
     const markup = renderMasthead("home");
 
     expect(markup).toContain("Start");
-    expect(markup).toContain("Angebotsagent öffnen");
-    expect(markup).toContain("Produktionsagent öffnen");
+    expect(markup).toContain("Angebote öffnen");
+    expect(markup).toContain("Produktion öffnen");
+    expect(markup).toContain('href="/angebot">');
+    expect(markup).toContain('href="/produktion">');
+    expect(markup).not.toContain("Angebotsagent");
+    expect(markup).not.toContain("Produktionsagent");
     expect(markup).toContain("Interner Arbeitsstand");
     expect(markup).toContain("Arbeitsweg:");
     expect(markup).toContain("Start → Angebot → Produktion → Rückfragen → Exporte.");
