@@ -13,7 +13,7 @@ import {
   type ProductionDraftReviewDecision
 } from "./api.js";
 import { ProductionDraftFrozenContent } from "./production-draft-frozen-content.js";
-import { productionDraftEntryId } from "./production-entry-focus.js";
+import { productionDraftEntryId, productionDraftEntryUrl } from "./production-entry-focus.js";
 
 const productionDraftReviewEvent = "catering:production-draft-review";
 const productionDraftRefreshEvent = "catering:production-draft-refresh";
@@ -359,6 +359,10 @@ export function ProductionDraftReviewPanel({
   const [changeEditor, setChangeEditor] = useState<{ draftId: string; cardId: string }>();
   const [changeRequest, setChangeRequest] = useState("");
   const [discardTarget, setDiscardTarget] = useState<{ draftId: string; generation: number }>();
+  // A lost response may follow a committed decision. Only reopening the case
+  // obtains a new authoritative view before another action can be offered.
+  const [unconfirmedAction, setUnconfirmedAction] = useState<{ draftId: string; generation: number }>();
+  const unconfirmedActionRef = useRef<HTMLDivElement>(null);
   const discardCancelRef = useRef<HTMLButtonElement>(null);
   const approvalHintPrefix = useId();
   const [approvedSpecIds, setApprovedSpecIds] = useState<Record<string, string>>({});
@@ -370,6 +374,7 @@ export function ProductionDraftReviewPanel({
   if (caseGeneration.current.caseId !== caseId) {
     caseGeneration.current = { caseId, version: caseGeneration.current.version + 1 };
   }
+  const awaitingDecisionReload = unconfirmedAction?.generation === caseGeneration.current.version;
   const [focusedDraftId, setFocusedDraftId] = useState<string | undefined>(() =>
     typeof window === "undefined"
       ? undefined
@@ -385,14 +390,15 @@ export function ProductionDraftReviewPanel({
       setAppliedDraftIds([]);
       setHasLoaded(true);
       setLoading(false);
-      return;
+      return false;
     }
 
     setLoading(true);
     setLoadError(undefined);
     try {
       const response = await loadProductionDrafts(activeCaseId);
-      if (version !== reloadVersion.current) return;
+      if (version !== reloadVersion.current) return false;
+      if (!Array.isArray(response.items)) throw new Error("Production draft response is incomplete");
       setDrafts(response.items);
       setApprovedSpecIds(approvedSpecIdsFromProjection(response.approvedProductionSpecs));
       // Only a server-confirmed application of this exact immutable revision
@@ -404,9 +410,11 @@ export function ProductionDraftReviewPanel({
       if (options?.clearMessage !== false) {
         setMessage(undefined);
       }
+      return true;
     } catch (error) {
-      if (version !== reloadVersion.current) return;
-      setLoadError(error instanceof Error ? error.message : "Unbekannter Ladefehler.");
+      if (version !== reloadVersion.current) return false;
+      setLoadError("Der aktuelle Stand konnte nicht geladen werden. Bitte den Auftrag erneut laden und prüfen.");
+      return false;
     } finally {
       if (version === reloadVersion.current) {
         setHasLoaded(true);
@@ -417,6 +425,7 @@ export function ProductionDraftReviewPanel({
 
   useEffect(() => {
     setDiscardTarget(undefined);
+    setUnconfirmedAction(undefined);
     setDrafts([]);
     setApprovedSpecIds({});
     setAppliedDraftIds([]);
@@ -458,6 +467,12 @@ export function ProductionDraftReviewPanel({
   useEffect(() => {
     if (discardTarget) discardCancelRef.current?.focus();
   }, [discardTarget]);
+
+  useEffect(() => {
+    if (!awaitingDecisionReload) return;
+    unconfirmedActionRef.current?.focus({ preventScroll: true });
+    unconfirmedActionRef.current?.scrollIntoView?.({ block: "center", inline: "nearest", behavior: "auto" });
+  }, [awaitingDecisionReload, unconfirmedAction]);
 
   async function decideCard(
     draftId: string,
@@ -519,11 +534,13 @@ export function ProductionDraftReviewPanel({
   }
 
   async function decideDraft(draftId: string, decision: "approved" | "rejected") {
+    if (awaitingDecisionReload) return;
     const version = caseGeneration.current.version;
     setLoading(true);
     try {
       const response = await decideProductionDraft(draftId, decision);
       if (!isCurrentCase(version)) return;
+      if (response.approval?.decision !== decision) throw new Error("Production decision response is incomplete");
       const approvedProductionSpecId = response.approvedProductionSpec?.approvedProductionSpecId;
       if (approvedProductionSpecId) {
         setApprovedSpecIds((current) => ({ ...current, [draftId]: approvedProductionSpecId }));
@@ -532,23 +549,28 @@ export function ProductionDraftReviewPanel({
       setMessage(decision === "approved" ? "Produktionsentwurf freigegeben." : "Produktionsentwurf verworfen.");
       await onDraftChanged?.();
       if (!isCurrentCase(version)) return;
-      await reloadDrafts({ clearMessage: false });
+      if (!await reloadDrafts({ clearMessage: false })) throw new Error("Production decision refresh is unconfirmed");
       if (isCurrentCase(version)) announceProductionDraftRefresh();
-    } catch (error) {
-      if (isCurrentCase(version)) setMessage(error instanceof Error ? error.message : "Produktionsentwurf konnte nicht entschieden werden.");
+    } catch {
+      if (isCurrentCase(version)) {
+        setMessage(undefined);
+        setUnconfirmedAction({ draftId, generation: version });
+      }
     } finally {
       if (isCurrentCase(version)) setLoading(false);
     }
   }
 
   async function applyDraft(draftId: string, approvedProductionSpecId: string) {
+    if (awaitingDecisionReload) return;
     const version = caseGeneration.current.version;
     setLoading(true);
     try {
       const response = await applyApprovedProductionSpec(approvedProductionSpecId);
       if (!isCurrentCase(version)) return;
+      const specId = response.eventSpec?.specId;
+      if (typeof specId !== "string" || !specId.trim()) throw new Error("Production application response is incomplete");
       setMessage("Produktionsentwurf übernommen.");
-      const specId = typeof response.eventSpec.specId === "string" ? response.eventSpec.specId : undefined;
       await onDraftChanged?.(specId);
       if (!isCurrentCase(version)) return;
       setApprovedSpecIds((current) => {
@@ -556,10 +578,13 @@ export function ProductionDraftReviewPanel({
         delete next[draftId];
         return next;
       });
-      await reloadDrafts({ clearMessage: false });
+      if (!await reloadDrafts({ clearMessage: false })) throw new Error("Production application refresh is unconfirmed");
       if (isCurrentCase(version)) announceProductionDraftRefresh();
-    } catch (error) {
-      if (isCurrentCase(version)) setMessage(error instanceof Error ? error.message : "Produktionsentwurf konnte nicht übernommen werden.");
+    } catch {
+      if (isCurrentCase(version)) {
+        setMessage(undefined);
+        setUnconfirmedAction({ draftId, generation: version });
+      }
     } finally {
       if (isCurrentCase(version)) setLoading(false);
     }
@@ -598,7 +623,12 @@ export function ProductionDraftReviewPanel({
       aria-label="Produktionsentwurf-Prüfung"
       tabIndex={-1}
     >
-      {resumeMode && displayedDrafts.length > 0 ? (
+      {awaitingDecisionReload ? (
+        <header className="upload-result-summary__header">
+          <h3>Auftragsstand prüfen</h3>
+          <p className="helper-text">Die Angaben unten zeigen den zuletzt geladenen Stand.</p>
+        </header>
+      ) : resumeMode && displayedDrafts.length > 0 ? (
         <header className="upload-result-summary__header">
           <p className="eyebrow">{hasApprovedDraft ? "Freigegebener Entwurf" : "Offener Entwurf"}</p>
           <h3>{hasApprovedDraft ? "Freigegebenen Produktionsentwurf übernehmen" : "Offenen KI-Entwurf weiter prüfen"}</h3>
@@ -615,6 +645,13 @@ export function ProductionDraftReviewPanel({
           <p className="helper-text">Produktionsentwürfe werden erst nach Prüfung für eine spätere Übernahme vorbereitet.</p>
         </header>
       ) : null}
+      {awaitingDecisionReload && unconfirmedAction ? (
+        <div ref={unconfirmedActionRef} tabIndex={-1} className="production-draft-state" role="alert">
+          <strong>Der aktuelle Stand konnte nicht sicher bestätigt werden.</strong>
+          <p>Die Aktion kann bereits gespeichert sein. Bitte den Auftrag erneut laden und den Stand prüfen, bevor du weiterarbeitest.</p>
+          <a href={productionDraftEntryUrl(unconfirmedAction.draftId, caseId)}>Auftrag erneut laden</a>
+        </div>
+      ) : null}
       {message ? (
         <p className="helper-text" role="status">
           {message}
@@ -627,7 +664,7 @@ export function ProductionDraftReviewPanel({
           <button
             type="button"
             className="secondary-button"
-            disabled={submitting || loading}
+            disabled={submitting || loading || awaitingDecisionReload}
             onClick={() => void reloadDrafts()}
           >
             Erneut versuchen
@@ -642,7 +679,7 @@ export function ProductionDraftReviewPanel({
         <div className="production-draft-state" role="status">
           <strong>Für diesen Auftrag ist bereits ein Produktionsstand übernommen.</strong>
           <p>Der angeforderte Entwurf ist eine frühere Fassung. Öffne den übernommenen Stand, um die aktuelle Prüfung zu sehen. Fachliche Rückfragen und Freigabegrenzen bleiben separat sichtbar.</p>
-          <button type="button" className="secondary-button" disabled={submitting || loading} onClick={() => {
+          <button type="button" className="secondary-button" disabled={submitting || loading || awaitingDecisionReload} onClick={() => {
             const url = new URL(window.location.href);
             url.searchParams.set("productionDraftId", appliedSuccessor);
             url.hash = productionDraftEntryId(appliedSuccessor);
@@ -656,7 +693,7 @@ export function ProductionDraftReviewPanel({
           <p>Er wurde möglicherweise bereits übernommen, verworfen oder ersetzt.</p>
           {visibleDrafts.length > 0 ? <>
             <p>Für diesen Auftrag liegt eine prüfbare Fassung vor. Es wird nichts automatisch übernommen.</p>
-            <button type="button" className="secondary-button" disabled={submitting || loading} onClick={() => {
+            <button type="button" className="secondary-button" disabled={submitting || loading || awaitingDecisionReload} onClick={() => {
               const draftId = visibleDrafts[0]!.draftId;
               const url = new URL(window.location.href);
               url.searchParams.set("productionDraftId", draftId);
@@ -719,7 +756,7 @@ export function ProductionDraftReviewPanel({
                         </p>
                         <div className="action-row">
                           <button
-                            disabled={submitting || loading || changeRequest.trim().length === 0}
+                            disabled={submitting || loading || awaitingDecisionReload || changeRequest.trim().length === 0}
                             onClick={() => void decideCard(
                               draft.draftId,
                               card.cardId,
@@ -731,7 +768,7 @@ export function ProductionDraftReviewPanel({
                           </button>
                           <button
                             className="secondary-button"
-                            disabled={submitting || loading}
+                            disabled={submitting || loading || awaitingDecisionReload}
                             onClick={() => {
                               setChangeEditor(undefined);
                               setChangeRequest("");
@@ -747,7 +784,7 @@ export function ProductionDraftReviewPanel({
                           <button
                             key={action.decision}
                             className="secondary-button"
-                            disabled={submitting || loading}
+                            disabled={submitting || loading || awaitingDecisionReload}
                             onClick={() => {
                               if (action.decision === "change_requested") {
                                 openChangeEditor(draft, card);
@@ -778,7 +815,7 @@ export function ProductionDraftReviewPanel({
                     </p>
                   </div>
                   <button
-                    disabled={submitting || loading}
+                    disabled={submitting || loading || awaitingDecisionReload}
                     onClick={() => void reviseDraft(draft.draftId)}
                   >
                     Änderungen von KI einarbeiten
@@ -788,7 +825,7 @@ export function ProductionDraftReviewPanel({
               <div className="action-row">
                 {canPrepareProductionDraft(draft) ? (
                   <button
-                    disabled={submitting || loading}
+                    disabled={submitting || loading || awaitingDecisionReload}
                     onClick={() => void prepareDraft(draft.draftId)}
                   >
                     Entwurf vorbereiten
@@ -798,7 +835,7 @@ export function ProductionDraftReviewPanel({
                   <>
                     <button
                       aria-describedby={`${approvalHintPrefix}-${draft.draftId}`}
-                      disabled={submitting || loading || !canApproveProductionDraft(draft)}
+                      disabled={submitting || loading || awaitingDecisionReload || !canApproveProductionDraft(draft)}
                       onClick={() => void decideDraft(draft.draftId, "approved")}
                     >
                       Entwurf freigeben
@@ -808,7 +845,7 @@ export function ProductionDraftReviewPanel({
                     </div>
                     <button
                       className="secondary-button"
-                      disabled={submitting || loading}
+                      disabled={submitting || loading || awaitingDecisionReload}
                       onClick={() => setDiscardTarget({ draftId: draft.draftId, generation: caseGeneration.current.version })}
                     >
                       Entwurf verwerfen
@@ -817,7 +854,7 @@ export function ProductionDraftReviewPanel({
                 ) : null}
                 {approvedSpecIds[draft.draftId] ? (
                   <button
-                    disabled={submitting || loading}
+                    disabled={submitting || loading || awaitingDecisionReload}
                     onClick={() => void applyDraft(draft.draftId, approvedSpecIds[draft.draftId]!)}
                   >
                     Entwurf übernehmen
@@ -829,8 +866,8 @@ export function ProductionDraftReviewPanel({
                   <strong>Diesen Entwurf verwerfen?</strong>
                   <p>Diese Prüffassung kann danach nicht mehr freigegeben werden. Der zuletzt übernommene Stand bleibt erhalten.</p>
                   <div className="action-row">
-                    <button ref={discardCancelRef} className="secondary-button" disabled={submitting || loading} onClick={() => setDiscardTarget(undefined)}>Entwurf behalten</button>
-                    <button className="destructive-button" disabled={submitting || loading} onClick={() => {
+                    <button ref={discardCancelRef} className="secondary-button" disabled={submitting || loading || awaitingDecisionReload} onClick={() => setDiscardTarget(undefined)}>Entwurf behalten</button>
+                    <button className="destructive-button" disabled={submitting || loading || awaitingDecisionReload} onClick={() => {
                       if (isCurrentCase(discardTarget.generation)) void decideDraft(draft.draftId, "rejected");
                     }}>Diesen Entwurf endgültig verwerfen</button>
                   </div>

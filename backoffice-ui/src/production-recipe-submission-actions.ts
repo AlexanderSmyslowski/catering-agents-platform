@@ -1,3 +1,4 @@
+import type { RecipeNumberFormat } from "../../shared-core/src/recipe-library.js";
 import type {
   RecipeReviewDecision,
   RecipeUploadTarget
@@ -5,7 +6,7 @@ import type {
 import { formatSubmitErrorMessage } from "./submit-error-message.js";
 
 export type ProductionRecipeSubmissionActionServices = {
-  uploadRecipeFile: (target: RecipeUploadTarget, file: File, recipeName?: string) => Promise<unknown>;
+  uploadRecipeFile: (target: RecipeUploadTarget, file: File, recipeName?: string, numberFormat?: RecipeNumberFormat) => Promise<unknown>;
   reviewRecipe: (
     target: RecipeUploadTarget,
     recipeId: string,
@@ -33,7 +34,7 @@ export type ProductionRecipeSubmissionActionsInput =
   ProductionRecipeSubmissionActionCallbacks;
 
 export type ProductionRecipeSubmissionActions = {
-  handleRecipeUpload: (target: RecipeUploadTarget) => Promise<void>;
+  handleRecipeUpload: (target: RecipeUploadTarget, numberFormat?: RecipeNumberFormat) => Promise<void>;
   handleRecipeReview: (
     target: RecipeUploadTarget,
     recipeId: string,
@@ -54,7 +55,7 @@ export function buildProductionRecipeSubmissionActions({
   setError
 }: ProductionRecipeSubmissionActionsInput): ProductionRecipeSubmissionActions {
   return {
-    handleRecipeUpload: async (target) => {
+    handleRecipeUpload: async (target, numberFormat) => {
       if (!recipeFile) {
         setError("Bitte wähle zuerst eine Rezeptdatei aus.");
         return;
@@ -63,7 +64,8 @@ export function buildProductionRecipeSubmissionActions({
       setSubmitting(true);
       clearMessages();
       try {
-        await uploadRecipeFile(target, recipeFile, recipeName);
+        if (numberFormat) await uploadRecipeFile(target, recipeFile, recipeName, numberFormat);
+        else await uploadRecipeFile(target, recipeFile, recipeName);
         clearRecipeUploadDraft();
         await refreshDashboard();
         setNotice("Rezeptdatei wurde in die gemeinsame Bibliothek übernommen.");

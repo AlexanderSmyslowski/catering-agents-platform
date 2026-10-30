@@ -129,6 +129,9 @@ export function uploadErrorResponse(error: unknown, kind?: UploadKind): { status
   }
 
   const maybeError = error as { code?: string; message?: string; statusCode?: number };
+  if (maybeError?.statusCode === 422) {
+    return { statusCode: 422, message: maybeError.message ?? "Rezeptangaben müssen geprüft werden." };
+  }
   if (maybeError?.code === "FST_REQ_FILE_TOO_LARGE" || maybeError?.statusCode === 413) {
     return {
       statusCode: 413,

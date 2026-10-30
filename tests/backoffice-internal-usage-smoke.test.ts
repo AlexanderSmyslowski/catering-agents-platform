@@ -669,7 +669,8 @@ describe("backoffice internal usage smoke", () => {
     expect(manualEventDate).not.toBeNull();
     const manualAttendeeCount = findInputByPlaceholder<HTMLInputElement>("Anzahl der Gäste");
     const manualServiceForm = findInputByPlaceholder<HTMLInputElement>("Serviceform, z. B. Buffet");
-    const manualMenuItems = findInputByPlaceholder<HTMLInputElement>("Menüpunkte, durch Komma getrennt");
+    const manualMenuItems = document.querySelector<HTMLTextAreaElement>('textarea[placeholder^="Ein Gericht pro Zeile"]');
+    expect(manualMenuItems).not.toBeNull();
     const manualNotes = findInputByPlaceholder<HTMLTextAreaElement>("Interne Notizen oder Einschränkungen");
 
     await act(async () => {
@@ -677,7 +678,7 @@ describe("backoffice internal usage smoke", () => {
       setNativeValue(manualEventDate!, "2026-07-12");
       setNativeValue(manualAttendeeCount, "24");
       setNativeValue(manualServiceForm, "buffet");
-      setNativeValue(manualMenuItems, "Vegetarische Tomatensuppe");
+      setNativeValue(manualMenuItems!, "Vegetarische Tomatensuppe");
       setNativeValue(manualNotes, "Bitte vegetarisch");
       findButtonByText("Manuellen Auftrag anlegen").click();
       await flush(6);

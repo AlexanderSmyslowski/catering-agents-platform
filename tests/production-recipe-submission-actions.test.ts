@@ -21,6 +21,12 @@ function input(overrides: Partial<ProductionRecipeSubmissionActionsInput> = {}):
 }
 
 describe("production recipe submission actions", () => {
+  it("passes the explicitly chosen number format with the selected file", async () => {
+    const state = input();
+    await buildProductionRecipeSubmissionActions(state).handleRecipeUpload("production", "de");
+    expect(state.uploadRecipeFile).toHaveBeenCalledWith("production", state.recipeFile, state.recipeName, "de");
+  });
+
   it("keeps recipe upload inert when no file is selected", async () => {
     const actionsInput = input({ recipeFile: null });
     const actions = buildProductionRecipeSubmissionActions(actionsInput);

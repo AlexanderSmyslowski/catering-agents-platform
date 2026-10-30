@@ -137,6 +137,79 @@ afterEach(() => {
 });
 
 describe("ProductionDraftReviewPanel", () => {
+  it.each([
+    ["decision", "reply-lost"], ["decision", "reload-failed"],
+    ["apply", "reply-lost"], ["apply", "reload-failed"],
+    ["decision", "malformed-response"], ["apply", "malformed-response"],
+    ["decision", "workspace-refresh-failed"], ["apply", "workspace-refresh-failed"],
+    ["reject", "reply-lost"]
+  ] as const)("requires an authoritative page reload after an unconfirmed %s %s", async (operation, failure) => {
+    const draft: ProductionDraft = { ...draftFixture(), revision: 1,
+      status: operation === "apply" ? "approved" : "pending_review",
+      reviewCards: draftFixture().reviewCards.map(card => ({ ...card, decision: "fits" })) };
+    let committed = false;
+    const projection = (applied: boolean) => [{ approvedProductionSpecId: "approved-uncertain",
+      sourceDraft: { draftId: draft.draftId, revision: 1 }, applied }];
+    const initial = { items: [draft], approvedProductionSpecs: operation === "apply" ? projection(false) : [] };
+    const load = vi.spyOn(api, "loadProductionDrafts").mockImplementation(async () => {
+      if (committed) throw new Error("RAW_REFRESH_FAILURE");
+      return initial;
+    });
+    const mutation = async () => {
+      committed = true;
+      if (failure === "reply-lost") throw new TypeError("RAW_FETCH_FAILURE");
+      if (failure === "malformed-response") return operation === "apply" ? { eventSpec: {} } : { approval: {} };
+      return operation === "apply" ? { eventSpec: { specId: "spec-committed" } } : {
+        approval: { decision: "approved" }, approvedProductionSpec: { approvedProductionSpecId: "approved-uncertain" }
+      };
+    };
+    const write = operation === "apply"
+      ? vi.spyOn(api, "applyApprovedProductionSpec").mockImplementation(mutation as never)
+      : vi.spyOn(api, "decideProductionDraft").mockImplementation(mutation as never);
+    const container = document.createElement("div"); document.body.appendChild(container);
+    let root = createRoot(container);
+    const render = async () => { await act(async () => {
+      root.render(createElement(ProductionDraftReviewPanel, { submitting: false, caseId: activeCaseId, resumeMode: true,
+        onDraftChanged: failure === "workspace-refresh-failed" ? async () => { throw new Error("RAW_WORKSPACE_FAILURE"); } : undefined
+      }));
+      await flushPromises();
+    }); };
+    await render();
+    const label = operation === "apply" ? "Entwurf übernehmen" : operation === "reject" ? "Entwurf verwerfen" : "Entwurf freigeben";
+    await act(async () => {
+      [...container.querySelectorAll("button")].find(button => button.textContent === label)!.click();
+      await flushPromises();
+    });
+    if (operation === "reject") await act(async () => {
+      [...container.querySelectorAll("button")].find(button => button.textContent === "Diesen Entwurf endgültig verwerfen")!.click();
+      await flushPromises();
+    });
+    expect(committed).toBe(true);
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("nicht sicher bestätigt");
+    expect(document.activeElement).toBe(container.querySelector('[role="alert"]'));
+    const retry = [...container.querySelectorAll("button")].find(button => button.textContent === label);
+    expect(retry === undefined || retry.disabled).toBe(true);
+    expect([...container.querySelectorAll("button")].every(button => button.disabled)).toBe(true);
+    if (retry) await act(async () => { retry.click(); await flushPromises(); });
+    expect(write).toHaveBeenCalledTimes(1);
+    expect(container.textContent).not.toMatch(/RAW_|nicht gespeichert/);
+    expect(container.textContent).toContain("zuletzt geladenen Stand");
+    expect(container.textContent).not.toContain("Die Übernahme in Produktionsplan und Einkauf steht noch aus");
+    expect(container.textContent).not.toContain("Noch nichts wurde freigegeben");
+    const link = [...container.querySelectorAll("a")].find(item => item.textContent === "Auftrag erneut laden")!;
+    expect(new URL(link.href).searchParams.get("productionCaseId")).toBe(activeCaseId);
+    expect(new URL(link.href).searchParams.get("productionDraftId")).toBe(draft.draftId);
+    await act(async () => root.unmount());
+    load.mockResolvedValue({ items: [{ ...draft, status: operation === "reject" ? "rejected" : "approved" }], approvedProductionSpecs: operation === "reject" ? [] : projection(operation === "apply") });
+    root = createRoot(container);
+    await render();
+    expect(container.textContent).not.toContain("nicht sicher bestätigt");
+    expect(container.textContent).not.toContain("Entwurf freigeben");
+    if (operation !== "decision") expect(container.textContent).not.toContain("Entwurf übernehmen");
+    else expect([...container.querySelectorAll("button")].find(button => button.textContent === "Entwurf übernehmen")?.disabled).toBe(false);
+    await act(async () => root.unmount());
+  });
+
   it("requires a clear confirmation before discarding a draft and permits cancellation", async () => {
     vi.spyOn(api, "loadProductionDrafts").mockResolvedValue({ items: [draftFixture()], approvedProductionSpecs: [] });
     const decide = vi.spyOn(api, "decideProductionDraft").mockResolvedValue({ approval: { decision: "rejected" } } as never);

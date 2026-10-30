@@ -17,7 +17,7 @@ import { InMemoryIntakeRecordsPort } from "./support/in-memory-intake-records-po
 import {
   createApprovedProductionSpec,
   createApprovalRequestRecord,
-  createEventRequestFromText,
+  createEventRequestFromManualForm,
   AuditLogStore,
   auditIdFor,
   approvalRequestIdForTarget,
@@ -188,10 +188,13 @@ async function completeDraft(
   status: ProductionDraft["status"] = "pending_review",
   reviewDecision: ProductionDraft["reviewCards"][number]["decision"] = "fits"
 ): Promise<ProductionDraft> {
-  const baseEventSpec = normalizeEventRequestToSpec(createEventRequestFromText({
+  const baseEventSpec = normalizeEventRequestToSpec(createEventRequestFromManualForm({
     requestId: `request-${draftId}`,
-    channel: "text",
-    rawText: "Synthetisches Buffet fuer 20 Personen am 18.09.2026."
+    eventType: "meeting",
+    eventDate: "2026-09-18",
+    attendeeCount: 20,
+    serviceForm: "buffet",
+    menuItems: ["Synthetisches Testgericht"]
   }));
   const eventSpec = {
     ...baseEventSpec,
@@ -384,7 +387,7 @@ function revisionAdapter(): LlmReadinessProviderAdapter {
           customerName: null,
           venueName: null,
           components: [{
-            label: "Synthetisches Buffet fuer 20 Personen am 18.09.2026.",
+            label: "Synthetisches Testgericht",
             course: "main",
             category: "classic",
             categoryEvidence: null,
@@ -1287,7 +1290,7 @@ describe("ApprovedProductionSpec decision boundary", () => {
         app.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/prepare`, headers }),
         app.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/revise`, headers })
       ]);
-      expect(blockedMutations.map((response) => response.statusCode)).toEqual([409, 409, 409]);
+      expect(blockedMutations.map((response) => response.statusCode), blockedMutations.map(response => response.body).join("\n")).toEqual([409, 409, 409]);
 
       const originalGetProductionDraft = store.getProductionDraft.bind(store);
       store.getProductionDraft = async () => {

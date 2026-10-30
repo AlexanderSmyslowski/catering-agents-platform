@@ -1671,6 +1671,8 @@ button:disabled {
   color: rgba(15, 23, 34, 0.58);
   font-size: 0.82rem;
   font-weight: 700;
+  overflow-wrap: anywhere;
+  hyphens: auto;
 }
 
 .production-calm-summary__facts strong {
@@ -2219,6 +2221,14 @@ button:disabled {
 
 .production-draft-review--resume {
   margin-bottom: 0.35rem;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.production-draft-review--resume .production-draft-state {
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+  overflow-wrap: anywhere;
 }
 
 .production-draft-state {

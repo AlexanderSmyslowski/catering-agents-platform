@@ -21,8 +21,11 @@ export type ManualSpecInput = {
 };
 
 function splitCommaList(value: string): string[] {
+  if (/\r?\n/.test(value) && value.split(/\r?\n/).some(line => line.includes(",") && !/\d.*\b(?:Portionen?|Stück(?:e)?)\b/i.test(line))) {
+    throw new Error("Bitte pro Zeile ein Gericht angeben. Bei Kommas im Gerichtsnamen eine feste Menge ergänzen, z. B. „Creme mit Apfel, Birne – 50 Portionen“.");
+  }
   return value
-    .split(",")
+    .split(/\r?\n|\d.*\b(?:Portionen?|Stück(?:e)?)\b/i.test(value) ? /\r?\n/ : ",")
     .map((item) => item.trim())
     .filter(Boolean);
 }
