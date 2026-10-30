@@ -647,10 +647,10 @@ describe("backoffice internal usage smoke", () => {
 
     const offerRoute = await renderAppRoute(offerStartLink.getAttribute("href") ?? "/angebot");
 
-    expect(document.body.textContent ?? "").toContain("Angebotsagent");
+    expect(document.body.textContent ?? "").toContain("CateringOS · Angebote");
     expect(document.body.textContent ?? "").toContain("Kundenanfrage einfügen");
-    expect(document.body.textContent ?? "").toContain("Produktionsagent");
-    const productionHandoffLink = findAnchorByText("Produktionsagent");
+    expect(document.body.textContent ?? "").toContain("Produktion");
+    const productionHandoffLink = findAnchorByText("Produktion");
     expect(productionHandoffLink.getAttribute("href")).toBe("/produktion");
 
     await act(async () => {
@@ -665,15 +665,16 @@ describe("backoffice internal usage smoke", () => {
     expect(document.body.textContent ?? "").toContain("Angebot als KI-Entwurf prüfen");
 
     const manualEventType = findInputByPlaceholder<HTMLInputElement>("Veranstaltungstyp, z. B. Konferenz");
-    const manualEventDate = findInputByPlaceholder<HTMLInputElement>("Datum, z. B. 2026-10-10");
-    const manualAttendeeCount = findInputByPlaceholder<HTMLInputElement>("Teilnehmerzahl");
+    const manualEventDate = document.querySelector<HTMLInputElement>('label input[type="date"]');
+    expect(manualEventDate).not.toBeNull();
+    const manualAttendeeCount = findInputByPlaceholder<HTMLInputElement>("Anzahl der Gäste");
     const manualServiceForm = findInputByPlaceholder<HTMLInputElement>("Serviceform, z. B. Buffet");
     const manualMenuItems = findInputByPlaceholder<HTMLInputElement>("Menüpunkte, durch Komma getrennt");
     const manualNotes = findInputByPlaceholder<HTMLTextAreaElement>("Interne Notizen oder Einschränkungen");
 
     await act(async () => {
       setNativeValue(manualEventType, "conference");
-      setNativeValue(manualEventDate, "2026-07-12");
+      setNativeValue(manualEventDate!, "2026-07-12");
       setNativeValue(manualAttendeeCount, "24");
       setNativeValue(manualServiceForm, "buffet");
       setNativeValue(manualMenuItems, "Vegetarische Tomatensuppe");

@@ -119,6 +119,52 @@ describe("production input panel upload transition", () => {
       expect(container.textContent).not.toContain("Küchenfreigabe erteilt");
     } finally { await act(async () => root.unmount()); }
   });
+  it("keeps visible associated labels on filled manual fields and preserves date input", async () => {
+    const node = document.body.appendChild(document.createElement("div")); const root = createRoot(node);
+    const initial = panel(new File(["test"], "synthetic.txt"), "idle", false).props;
+    const dateChanged = vi.fn();
+    await act(async () => root.render(createElement(ProductionInputPanel, { ...initial,
+      manualInput: { ...initial.manualInput, eventDate: "2026-11-13", attendeeCount: "60", notes: "Synthetisch" },
+      manualInputActions: { ...initial.manualInputActions, setEventDate: dateChanged } })));
+    for (const name of ["Anfrage oder Korrektur", "Veranstaltungstyp", "Veranstaltungsdatum", "Gäste", "Serviceform", "Menüpunkte", "Kundenname", "Veranstaltungsort", "Interne Notizen oder Einschränkungen"]) {
+      const label = [...node.querySelectorAll("label")].find(item => item.textContent?.includes(name));
+      expect(label?.querySelector("input, textarea"), name).toBeTruthy();
+    }
+    const date = [...node.querySelectorAll("label")].find(item => item.textContent?.includes("Veranstaltungsdatum"))!.querySelector("input")!;
+    expect(date.type).toBe("date"); expect(date.value).toBe("2026-11-13");
+    await act(async () => root.render(createElement(ProductionInputPanel, { ...initial,
+      manualInput: { ...initial.manualInput, eventDate: "", attendeeCount: "60" },
+      manualInputActions: { ...initial.manualInputActions, setEventDate: dateChanged } })));
+    expect(date.value).toBe("");
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    await act(async () => { setter.call(date, "2026-11-14"); date.dispatchEvent(new Event("input", { bubbles: true })); });
+    expect(dateChanged).toHaveBeenCalledWith("2026-11-14");
+    await act(async () => root.unmount());
+  });
+
+  it("shows readable manual suggestions while retaining canonical and free values", async () => {
+    const node = document.body.appendChild(document.createElement("div")); const root = createRoot(node);
+    const initial = panel(new File(["test"], "synthetic.txt"), "idle", false).props;
+    const eventChanged = vi.fn(), serviceChanged = vi.fn();
+    await act(async () => root.render(createElement(ProductionInputPanel, { ...initial,
+      manualInput: { ...initial.manualInput, eventType: "conference", serviceForm: "buffet" },
+      manualInputActions: { ...initial.manualInputActions, setEventType: eventChanged, setServiceForm: serviceChanged } })));
+    const input = (name: string) => [...node.querySelectorAll("label")].find(label => label.textContent?.includes(name))!.querySelector("input")!;
+    const event = input("Veranstaltungstyp"), service = input("Serviceform");
+    expect(event.value).toBe("Konferenz"); expect(service.value).toBe("Buffet");
+    expect(document.getElementById(event.getAttribute("list")!)?.querySelector('option[value="Konferenz"]')).toBeTruthy();
+    expect(document.getElementById(service.getAttribute("list")!)?.querySelector('option[value="Buffet"]')).toBeTruthy();
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    for (const [target, value, expected, spy] of [[event, "Messe", "trade_fair", eventChanged], [service, "Kaffeepause", "coffee_break", serviceChanged], [event, "Freie Veranstaltung", "Freie Veranstaltung", eventChanged], [service, "Eigener Service", "Eigener Service", serviceChanged], [event, "", "", eventChanged], [service, "", "", serviceChanged]] as const) {
+      await act(async () => { setter.call(target, value); target.dispatchEvent(new Event("input", { bubbles: true })); });
+      expect(spy).toHaveBeenLastCalledWith(expected);
+    }
+    await act(async () => root.render(createElement(ProductionInputPanel, { ...initial,
+      manualInput: { ...initial.manualInput, eventType: "Freie Veranstaltung", serviceForm: "Eigener Service" }, manualInputActions: initial.manualInputActions })));
+    expect(event.value).toBe("Freie Veranstaltung"); expect(service.value).toBe("Eigener Service");
+    await act(async () => root.unmount());
+  });
+
   it("preserves the input DOM and user value when a production context arrives", async () => {
     const container = document.body.appendChild(document.createElement("div"));
     const root = createRoot(container);

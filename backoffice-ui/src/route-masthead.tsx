@@ -24,16 +24,16 @@ export function RouteMasthead({
   const routeCards = [
     {
       href: "/angebot",
-      eyebrow: "Angebotsagent",
+      eyebrow: "Angebote",
       title: "Kundenanfrage zu einem belastbaren Angebot verdichten",
       body: "Erfasst Rahmenbedingungen, schlägt Leistungsbausteine vor und bereitet die gewählte Variante für die Produktion vor.",
       linkLabel: `${baseUrl}/angebot`
     },
     {
       href: "/produktion",
-      eyebrow: "Produktionsagent",
+      eyebrow: "Produktion",
       title: "Küchenvorbereitung mit Rezepten und Einkaufslisten steuern",
-      body: "Übernimmt operative Daten auch ohne Angebotsagent, recherchiert fehlende Rezepte, skaliert Mengen und liefert Küchen- sowie Beschaffungsunterlagen.",
+      body: "Übernimmt operative Daten auch ohne Angebot, recherchiert fehlende Rezepte, skaliert Mengen und liefert Küchen- sowie Beschaffungsunterlagen.",
       linkLabel: `${baseUrl}/produktion`
     }
   ];
@@ -41,13 +41,13 @@ export function RouteMasthead({
   const agentShortcutButtons = [
     {
       href: "/angebot",
-      title: "Angebotsagent öffnen",
+      title: "Angebote öffnen",
       description: "Anfragen strukturieren und Angebote erstellen",
       active: route === "offer"
     },
     {
       href: "/produktion",
-      title: "Produktionsagent öffnen",
+      title: "Produktion öffnen",
       description: "Rezepte, Küchenplanung und Einkaufslisten",
       active: route === "production"
     }
@@ -61,10 +61,10 @@ export function RouteMasthead({
             Start
           </a>
           <a className={route === "offer" ? "nav-link active-nav-link" : "nav-link"} href="/angebot">
-            Angebotsagent
+            Angebote
           </a>
           <a className={route === "production" ? "nav-link active-nav-link" : "nav-link"} href="/produktion">
-            Produktionsagent
+            Produktion
           </a>
         </nav>
         {cateringSession || route === "home" ? (
@@ -92,7 +92,7 @@ export function RouteMasthead({
       </div>
       {route === "home" ? (
         <>
-          <div className="agent-shortcuts" aria-label="Direkteinstieg Agenten">
+          <div className="agent-shortcuts" aria-label="Direkteinstieg Bereiche">
             {agentShortcutButtons.map((button) => (
               <a
                 key={button.href}

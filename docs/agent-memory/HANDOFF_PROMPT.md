@@ -1,3 +1,9 @@
+## Aktueller Einstieg — Version 5.676 / 30.10.2026
+
+Produktarbeit unabhängig vom Nürnberger Zeitgate fortgesetzt: E=catering-open-extras, codex/production-form-clarity auf6e004b5. Klare Labels/nativer manueller Datepicker/deutsche Vorschläge und CateringOS-Navigation lokal fertig. Reale manuelle Case-Namens-/URL-Neuladefehler behoben, unabhängigeTerraannahme nach gezieltemKalenderfix; echter lokalerHTTP-UI-Speicher-/ReloadtestPASS35synthetischeGäste. Desktop/390pxPASS, aktuelleChecks/BuildPASS. Details/Belege/Grenzen memory5.676; keine neueOpus-Gesamt-/Nürnberg100Gäste-/Pilotabnahme. Zusatzpaket noch nicht integriert/ausgeliefert. Eigene lokalePreviewprozesse45255/51814 beendet, Prüftab geschlossen und Mobilviewport zurückgesetzt; keineProduktivkontenaktivierung.
+
+UrsprünglicheNürnbergerAusführungunverändert: PR767/Main6e004b5/Paket09570887 bereitsstaged, AppweiterPR766. EigenerKoordinator79647 undjetzt5eigeneR/Q/W/OPS/E-Runs imR/tmp/pr767-release-20261030-79647/owned-runs.private.json; bestehendeRunbindungenfortführen/validieren, nichtsneu/nestedoderfremdübernehmen. Q/Nunverändertlassen; keineneueMainintegrationvorAbschlussdieserAusführung. NächsterNormalbackup15UTC/16CET, erstnachechtemPASSfrischeGates/Auth/Apply/Cleanup; danachneuerGenerationrestorevor100Gäste-Nachtest. KeinmanuellerBackup/Ping/Timeränderung, keineADH-/DNS-/IP-/Helsinkiaktion. KeinepersönlicheEingabeoffen. Zielbleibtaktiv.
+
 ## Aktueller Einstieg — Version 5.670 / 30.10.2026
 
 Führend ist memory5.670. Tatsächlicher Opus-5.5-Ausgangsreview und anschließender Nachreview durchgeführt. Drei neue Bedienbefunde gezielt korrigiert, unabhängig mit Terra6.1 angenommen und lokal im echten Browser bedient. Kein erfundenes Opus-Gesamt-ACCEPT/Pilot-GO. Offenentscheidung überlebt Reload; vier Antworten führen zur aktuellen Entwurfsprüfung, sechs weitere Gates bleiben. 390px passt. Prüfgrenzen im fortgeschriebenen OPUS_UX_UI_REVIEW_20261030.md; lokale Browser/Server geschlossen.

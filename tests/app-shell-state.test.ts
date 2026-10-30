@@ -16,8 +16,8 @@ describe("app shell state helpers", () => {
     expect(detectRoute("/angebot")).toBe("offer");
     expect(detectRoute("/produktion")).toBe("production");
     expect(detectRoute("/")).toBe("home");
-    expect(getRouteTitle("offer")).toBe("Angebotsagent");
-    expect(getRouteTitle("production")).toBe("Produktionsagent");
+    expect(getRouteTitle("offer")).toBe("CateringOS · Angebote");
+    expect(getRouteTitle("production")).toBe("CateringOS · Produktion");
     expect(getRouteTitle("home")).toBe("CateringOS");
     expect(getRouteSubtitle("home")).toBe(
       "Zwei spezialisierte Arbeitsflächen mit gemeinsamem Regelkern und klar getrennten Zuständigkeiten."

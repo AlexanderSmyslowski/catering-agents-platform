@@ -499,7 +499,7 @@ describe("UI critical path rehearsal", () => {
         await flush();
       });
       const offerText = document.body.textContent ?? "";
-      expect(offerText).toContain("Angebotsagent");
+      expect(offerText).toContain("CateringOS · Angebote");
       expect(offerText).toContain("UI Critical Path Lunch");
       expect(offerText).toContain(offerDraft.draftId);
       expect(offerText).toContain("42 Personen");

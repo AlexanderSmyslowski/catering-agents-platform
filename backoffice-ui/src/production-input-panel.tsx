@@ -3,9 +3,11 @@ import {
   type ChangeEvent,
   type DragEvent,
   useEffect,
+  useId,
   useRef,
   useState
 } from "react";
+import { eventTypeLabels, formatEventTypeLabel, formatServiceFormLabel, serviceFormLabels } from "../../shared-core/src/taxonomies/labels.js";
 import type { IntakeDocumentChannel, ProductionSourceDetail } from "./api.js";
 import { PRODUCTION_DOCUMENT_UPLOAD_LIMIT_LABEL } from "./production-document-upload-limit.js";
 import { ProductionDraftReviewPanel } from "./production-draft-review-panel.js";
@@ -149,6 +151,7 @@ export function ProductionInputPanel({
   intakeRequestDetail,
   onDraftChanged
 }: ProductionInputPanelProps) {
+  const suggestionId = useId();
   const panelState = buildProductionInputPanelState({
     submitting,
     sourceInput,
@@ -510,11 +513,14 @@ export function ProductionInputPanel({
                 : "Nutze diesen Weg, wenn keine Datei vorliegt. Für PDFs bleibt der Datei-Upload der normale Start."}
             </p>
           </header>
-          <textarea
-            value={sourceInput.intakeText}
-            onChange={(event) => sourceInputActions.setIntakeText(event.target.value)}
-            placeholder="Beispiel: Bitte 120 statt 100 Gäste berücksichtigen; Dessert entfällt."
-          />
+          <label className="field-block">
+            <span>Anfrage oder Korrektur</span>
+            <textarea
+              value={sourceInput.intakeText}
+              onChange={(event) => sourceInputActions.setIntakeText(event.target.value)}
+              placeholder="Beispiel: Bitte 120 statt 100 Gäste berücksichtigen; Dessert entfällt."
+            />
+          </label>
           <div className="action-row">
             <button disabled={panelState.submitTextDisabled} onClick={() => void sourceInputActions.submitText()}>
               {compactInputMode ? "Korrektur auswerten" : "Text auswerten"}
@@ -564,46 +570,75 @@ export function ProductionInputPanel({
               <strong>Auftrag manuell erfassen</strong>
             </summary>
             <div className="manual-entry-details__body">
-              <input
-                value={manualInput.eventType}
-                onChange={(event) => manualInputActions.setEventType(event.target.value)}
-                placeholder="Veranstaltungstyp, z. B. Konferenz"
-              />
-              <input
-                value={manualInput.eventDate}
-                onChange={(event) => manualInputActions.setEventDate(event.target.value)}
-                placeholder="Datum, z. B. 2026-10-10"
-              />
-              <input
-                value={manualInput.attendeeCount}
-                onChange={(event) => manualInputActions.setAttendeeCount(event.target.value)}
-                placeholder="Teilnehmerzahl"
-              />
-              <input
-                value={manualInput.serviceForm}
-                onChange={(event) => manualInputActions.setServiceForm(event.target.value)}
-                placeholder="Serviceform, z. B. Buffet"
-              />
-              <input
-                value={manualInput.menuItems}
-                onChange={(event) => manualInputActions.setMenuItems(event.target.value)}
-                placeholder="Menüpunkte, durch Komma getrennt"
-              />
-              <input
-                value={manualInput.customerName}
-                onChange={(event) => manualInputActions.setCustomerName(event.target.value)}
-                placeholder="Kundenname"
-              />
-              <input
-                value={manualInput.venueName}
-                onChange={(event) => manualInputActions.setVenueName(event.target.value)}
-                placeholder="Ort oder Veranstaltungsort"
-              />
-              <textarea
-                value={manualInput.notes}
-                onChange={(event) => manualInputActions.setNotes(event.target.value)}
-                placeholder="Interne Notizen oder Einschränkungen"
-              />
+              <label className="field-block">
+                <span>Veranstaltungstyp</span>
+                <input
+                  value={formatEventTypeLabel(manualInput.eventType) ?? ""}
+                  list={`${suggestionId}-event-types`}
+                  onChange={(event) => manualInputActions.setEventType(Object.entries(eventTypeLabels).find(([, label]) => label === event.target.value)?.[0] ?? event.target.value)}
+                  placeholder="Veranstaltungstyp, z. B. Konferenz"
+                />
+              </label>
+              <datalist id={`${suggestionId}-event-types`}>{Object.entries(eventTypeLabels).map(([key, label]) => <option key={key} value={label} />)}</datalist>
+              <label className="field-block">
+                <span>Veranstaltungsdatum</span>
+                <input
+                  type="date"
+                  value={manualInput.eventDate}
+                  onChange={(event) => manualInputActions.setEventDate(event.target.value)}
+                />
+              </label>
+              <label className="field-block">
+                <span>Gäste</span>
+                <input
+                  value={manualInput.attendeeCount}
+                  inputMode="numeric"
+                  onChange={(event) => manualInputActions.setAttendeeCount(event.target.value)}
+                  placeholder="Anzahl der Gäste"
+                />
+              </label>
+              <label className="field-block">
+                <span>Serviceform</span>
+                <input
+                  value={formatServiceFormLabel(manualInput.serviceForm) ?? ""}
+                  list={`${suggestionId}-service-forms`}
+                  onChange={(event) => manualInputActions.setServiceForm(Object.entries(serviceFormLabels).find(([, label]) => label === event.target.value)?.[0] ?? event.target.value)}
+                  placeholder="Serviceform, z. B. Buffet"
+                />
+              </label>
+              <datalist id={`${suggestionId}-service-forms`}>{Object.entries(serviceFormLabels).map(([key, label]) => <option key={key} value={label} />)}</datalist>
+              <label className="field-block">
+                <span>Menüpunkte</span>
+                <input
+                  value={manualInput.menuItems}
+                  onChange={(event) => manualInputActions.setMenuItems(event.target.value)}
+                  placeholder="Menüpunkte, durch Komma getrennt"
+                />
+              </label>
+              <label className="field-block">
+                <span>Kundenname</span>
+                <input
+                  value={manualInput.customerName}
+                  onChange={(event) => manualInputActions.setCustomerName(event.target.value)}
+                  placeholder="Kundenname"
+                />
+              </label>
+              <label className="field-block">
+                <span>Veranstaltungsort</span>
+                <input
+                  value={manualInput.venueName}
+                  onChange={(event) => manualInputActions.setVenueName(event.target.value)}
+                  placeholder="Ort oder Veranstaltungsort"
+                />
+              </label>
+              <label className="field-block">
+                <span>Interne Notizen oder Einschränkungen</span>
+                <textarea
+                  value={manualInput.notes}
+                  onChange={(event) => manualInputActions.setNotes(event.target.value)}
+                  placeholder="Interne Notizen oder Einschränkungen"
+                />
+              </label>
               <button disabled={submitting} onClick={() => void manualInputActions.submitManualSpec()}>
                 Manuellen Auftrag anlegen
               </button>

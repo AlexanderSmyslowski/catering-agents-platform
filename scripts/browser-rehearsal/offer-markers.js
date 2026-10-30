@@ -1,7 +1,7 @@
 () => {
   const text = document.body.innerText;
   const missing = [
-    "Angebotsagent",
+    "CateringOS · Angebote",
     "Auftragsstand",
     "Besprechung für 35 Teilnehmer als Kaffeepause.",
     "Keine automatische Preis-, Margen- oder Produktionsfreigabe.",

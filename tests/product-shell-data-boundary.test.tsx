@@ -1288,6 +1288,25 @@ describe("independent product loader boundaries", () => {
     container.remove();
   });
 
+  it("labels the detached answer fields even after they contain values", async () => {
+    const props = productionQuestionPanelProps("case-a");
+    props.editorState = { ...props.editorState, editingSpecId: "other-spec", editingEventDate: "2026-11-13", editingAttendeeCount: "60" };
+    const dateChanged = vi.fn(); props.editorActions.setEditingEventDate = dateChanged;
+    const node = document.body.appendChild(document.createElement("div")); const root = createRoot(node);
+    await act(async () => { root.render(createElement(ProductionQuestionPanel, props)); await flush(); });
+    const editor = [...node.querySelectorAll(".form-panel")].find(item => item.textContent?.includes("Antwortfenster"))!;
+    for (const name of ["Veranstaltungstyp", "Veranstaltungsdatum", "Gäste", "Serviceform", "Menüpunkte"]) {
+      const label = [...editor.querySelectorAll("label")].find(item => item.textContent?.includes(name));
+      expect(label?.querySelector("input, textarea"), name).toBeTruthy();
+    }
+    expect(editor.textContent).toContain("JJJJ-MM-TT");
+    const date = [...editor.querySelectorAll("input")].find(input => input.value === "2026-11-13")!;
+    expect(date).toBeTruthy();
+    await act(async () => { setNativeValue(date, "2026-11-14"); });
+    expect(dateChanged).toHaveBeenCalledWith("2026-11-14");
+    await act(async () => root.unmount()); node.remove();
+  });
+
   it("hides editing and recalculation when the case draft is no longer editable", async () => {
     const props = productionQuestionPanelProps("case-a");
     props.questionState.productionQuestions = ["Menge klären"];

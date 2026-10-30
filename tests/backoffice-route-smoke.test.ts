@@ -531,7 +531,7 @@ describe("backoffice route smoke", () => {
     expect(home).not.toContain("Anfrage, Angebot, Produktion, Einkauf und Export gemeinsam prüfen.");
 
     const offer = await renderRoute("/angebot");
-    expect(offer.text).toContain("Angebotsagent");
+    expect(offer.text).toContain("CateringOS · Angebote");
     expect(offer.text).toContain("Kundenanfrage einfügen");
     expect(offer.text).not.toContain("Catering-Betriebssystem");
     expect(offer.html).not.toContain("Bearbeitername");
@@ -540,7 +540,7 @@ describe("backoffice route smoke", () => {
     expect(offer.text).not.toContain("Ruhige Workbench für Kundenanfragen und Angebotsentwürfe.");
 
     const production = await renderRoute("/produktion");
-    expect(production.text).toContain("Produktionsagent");
+    expect(production.text).toContain("CateringOS · Produktion");
     expect(production.text).toContain("Angebot hochladen oder Auftrag beschreiben");
     expect(production.text).toContain("Angebot hochladen oder Auftrag beschreiben");
     expect(production.text).toContain("Bestehenden Auftrag öffnen");
@@ -587,11 +587,11 @@ describe("backoffice route smoke", () => {
     expect(historyNav.getAttribute("href")).toBe("/angebot#history");
 
     const offer = (await renderRoute(offerNav.getAttribute("href") ?? "")).text;
-    expect(offer).toContain("Angebotsagent");
+    expect(offer).toContain("CateringOS · Angebote");
     expect(offer).toContain("Kundenanfrage einfügen");
 
     const production = (await renderRoute("/produktion")).text;
-    expect(production).toContain("Produktionsagent");
+    expect(production).toContain("CateringOS · Produktion");
     expect(production).toContain("Angebot hochladen oder Auftrag beschreiben");
     expect(production).toContain("Bestehenden Auftrag öffnen");
     expect(production).not.toContain("Bestandsdaten im Hintergrund");

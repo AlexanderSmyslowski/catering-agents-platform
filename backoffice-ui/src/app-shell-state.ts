@@ -208,10 +208,10 @@ export function formatLatestAuditOverviewLabel(event: Record<string, unknown>): 
 
 export function getRouteTitle(route: AppRoute): string {
   if (route === "offer") {
-    return "Angebotsagent";
+    return "CateringOS · Angebote";
   }
   if (route === "production") {
-    return "Produktionsagent";
+    return "CateringOS · Produktion";
   }
   return "CateringOS";
 }

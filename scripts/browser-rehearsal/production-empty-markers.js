@@ -1,7 +1,7 @@
 () => {
   const text = document.body.innerText;
   const missing = [
-    "Produktionsagent",
+    "CateringOS · Produktion",
     "Angebot hochladen oder Auftrag beschreiben",
     "Nächster Schritt",
     "Bestehenden Auftrag öffnen"
