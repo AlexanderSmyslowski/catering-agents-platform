@@ -3,6 +3,37 @@
 ## Zweck
 Diese Datei richtet die Arbeit fuer ChatGPT, Hermes Agent, Codex 5.4 mini und aehnliche Agenten auf einen konsistenten Repo-Workflow aus.
 
+## Verbindliche Arbeitsweise — Operatorentscheidung vom 30.10.2026
+
+Alexander verlangt eine deutlich kürzere, möglichst autonome Lieferung bis zum
+nutzbaren Cateringauftrag. Diese Entscheidung gilt auch für spätere Sitzungen.
+
+- Zusammenhängende Korrekturen vor Push und Auslieferung bündeln. Einzelfixes
+  nicht ohne konkreten Grund durch wiederholte vollständige Releasezyklen schicken.
+- Gültige Tests und unabhängige Reviews unveränderter Teile wiederverwenden.
+  Lokal die betroffenen Abläufe prüfen; vollständige Pflicht-CI bleibt verbindlich.
+  Zusätzliche Vollprüfungen brauchen einen konkreten neuen Befund oder ein
+  tatsächlich verändertes Risiko.
+- Den installierten Stand für seinen begonnenen End-to-End-Nachweis stabil halten.
+  Weitere fertige Verbesserungen bis dessen Abschluss sammeln und anschließend
+  gemeinsam ausliefern, statt den Generationsnachweis immer neu zu verschieben.
+- UI-, Fach-/Daten- und Infrastrukturänderungen ausdrücklich unterscheiden.
+  Aufwendige Migrationsnachweise nicht ungeprüft zur allgemeinen Arbeitsweise
+  für jede Produktkorrektur machen. Bestehende technische Gates gelten, bis eine
+  konkrete Vereinfachung begründet, gezielt geprüft und bei relevanten Risiken
+  unabhängig angenommen ist.
+- Bei einer Warteabhängigkeit sichere unabhängige Produktarbeit fortsetzen.
+  Nur tatsächlich erledigte Schritte, den konkreten offenen Grund und die nächste
+  ausführbare Aktion berichten. Keine neuen Nebenprojekte, Dauerbeobachter,
+  Prüfplattformen oder unbegrenzten Reviewrunden eröffnen.
+- Sicherheits-, Datenintegritäts-, Zugangs-, Schreiblock-, Backup- und
+  Rückfallanforderungen erhalten. Frühere Generationsnachweise nicht umdeuten,
+  Schutztests nicht für grüne Ergebnisse schwächen und fremde Locks nicht übernehmen.
+
+Das führende Produktziel und der aktuelle Ausführungsstand bleiben in den
+bestehenden Projektdateien; keine zweite Planungs- oder Gedächtnisstruktur anlegen.
+
+
 ## Strategische Leitentscheidung STR-001 (2026-09-19)
 
 Vor Priorisierung, weiterer Servertrennung oder neuer Härtung die [kanonische STR-001-Fassung in AgenturOS](https://github.com/AlexanderSmyslowski/agenturos/blob/main/docs/strategy/STR-001-agenturos-delivery-and-infrastructure.md) zusätzlich lesen. Diese Referenz ergänzt die folgende Lesereihenfolge; sie ersetzt weder `memory.md` als Betriebs-/Projektstand noch eingefrorene Verträge und Freigabegrenzen.

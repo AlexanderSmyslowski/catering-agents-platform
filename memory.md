@@ -3395,3 +3395,83 @@ Tatsächliche gebündelte Desktop-/390px-Sichtprüfung abgeschlossen: alle8manue
 Erfolgreicher manueller UI→Intake→Produktion-Nachtest mit35synthetischenGästen am13.11.2026: servergespeichert trade_fair/coffee_break, korrekter Kunde/Ort/Gäste; neuer offenerFall mit verständlichem dauerhaftemNamen. NeueURL exakt Case931922d0/Draftc4570950; vollständigerReload hält denselben Auftragskopf und offenenPrüfstand,3Fragen/keineFreigabe/keinPlan. VorherigerLunch-Fall und ersterTestfall erhalten. Belege R/tmp/production-form-clarity-79647/{desktop-checks.json,mobile-checks.json,http-save-reload-proof.json,manual-save-after.txt,manual-reload-after.txt}, Screenshots daneben. Das ist ein lokalerManuellerfassungstest, kein neuerNürnberger100Gäste-/Küchen-/Laien-/Pilotpass. NormaleRelease-CI/Integration/Zielauslieferung dieses Zusatzpakets noch offen; aktuelleNürnbergerPR767-Ausführung nicht durch neuenMain oder neueArtefakte verdrängen.
 
 Eigene lokalePreviewprozesse45255/51814 tatsächlich beendet, eigenerBrowserprüftabgeschlossen und Mobilviewport zurückgesetzt. Synthetische Daten/Belege erhalten; keine behaupteteProduktivanmeldung oder neueNürnbergerKontoaktivierung.
+
+
+## Gestraffte Lieferung und sicherer Rückweg bei unklarem Ergebnis — Version 5.679 / 30.10.2026
+
+Alexander hat ausdrücklich eine dauerhaft gestraffte Arbeitsweise angeordnet.
+Der Beschluss steht in AGENTS.md (Operatorentscheidung 30.10.2026): Korrekturen
+bündeln, gültige unveränderte Nachweise wiederverwenden, lokal gezielt prüfen,
+die laufende Zielabnahme vor einer weiteren Installation abschließen und keine
+neue Prüfplattform oder unbegrenzte Reviewrunde eröffnen. Bestehende Sicherheits-
+und Ausführungsgates bleiben bis einer geprüften konkreten Vereinfachung gültig.
+Der Block wurde im führenden Hauptcheckout additiv zu dessen vorhandenen
+ADH-Retirement-Änderungen und im Produktcheckout E ergänzt; fremde Änderungen
+wurden nicht überschrieben.
+
+PR769/Main69fb043123abb32df601ab7e6522a91ccb8929b3 ist jetzt auch auf der exakten
+Main-CI41082702590 vollständig SUCCESS. Der Build/Test-Job dauerte30:37, davon
+npm test30:09 (454 Dateien/3893 Fälle bestanden,1 Datei/21 Fälle übersprungen).
+Build12s, Operatorgates6s; Browserrehearsal parallel4:15. Die bestehende reduzierte
+Scopeauswahl gilt nur für explizit gelistete Operator-Pythondateien; das UI-Paket
+fällt auf die Vollsuite zurück. Die gezielte lesende Terra-Prüfung belegt keine
+bereits sichere Abkürzung mit unveränderter Abdeckung. Keine Tests ausgeschaltet,
+keinen erneuten Lauf gestartet. Eigener CI-Watcher72641 terminal exit0.
+
+Der zweite lesende Terra-Befund lokalisiert die7200s-Reserve in den bestehenden
+Release-/Browsercallern. Sie soll Kollisionen mit dem3h-Backup sowie Auth/Apply/
+Rückfall/Cleanup verhindern; eine Herleitung gerade von7200 wurde nicht gefunden.
+Der Updater kann nach dem begrenzten Startpfad noch unbegrenzt auf Rückfall warten;
+die Zahl ist also keine bewiesene maximale Gesamtdauer. Der generationsgebundene
+Vollrestore belegt tatsächlich neue Container-/Snapshot-/Sicherungsbindung und
+wird durch einen alten Restore nicht ersetzt. Auch Browseropen aktiviert ein
+Datenbankkonto; der100Gäste-Test schreibt. Keine unbewiesene UI-only-Einstufung:
+PR767 enthält Backendverhalten. Eine reine Lese-Sichtprüfung über bestehenden
+autorisierten Zugang kann separat beurteilt werden; daraus folgt kein neuer
+schreibender Schnellpfad. Heute keine Timer-/Guard-/Proof-/Policylockerung und
+kein neues Operationsprojekt.
+
+Konkrete weitere Produktarbeit blieb lokal gesammelt: Branch
+codex/production-decision-feedback in E=catering-open-extras auf69fb043.
+Im Produktionsprüfpanel konnten Freigabe/Verwerfen/Übernahme nach verlorener
+Antwort erneut angeboten werden, obwohl die Aktion bereits gespeichert war.
+Neue fall-/Generations-/Draftbindung verlangt nach unbestätigter Antwort,
+unvollständiger Bestätigung oder fehlgeschlagenem Workspace-/Draftrefresh einen
+vollständigen fallgebundenen Seitenreload. Panelaktionen bleiben gesperrt;
+kein falsches „nicht gespeichert“, kein automatischer Wiederholungsversuch.
+Der Kopf kennzeichnet den zuletzt geladenen Stand, der Hinweis erhält Fokus
+und wird sichtbar gescrollt. Bestehende Backend-/API-/Persistenzregeln unverändert.
+Andere Mutationspfade wurden nicht pauschal umgebaut.
+
+Vier neue Reproduktionen zunächst FAIL, nach Fix bestanden betroffene Panel-/
+Ernährungsaktionsprüfungen und TypeScript. Anschließend neun gezielte Fälle für
+verlorene Antwort, unvollständige Nutzdaten, beide Refreshfehler sowie Verwerfen
+einschließlich Wiederholungssperre und autoritativer Neuöffnung bestanden.
+Vorhandene A→B→A-Nachweise im betroffenen Lauf weiterhin bestanden. Finaler
+TypeScript/Vitebuild und Diffcheck bestanden, bekannte Chunkwarnung unverändert.
+Unabhängige Terra-Prüfung /root/terra_question_path_review ACCEPT für den
+konsequenten Sperr-/Bindungsweg. Nachfolgende Darstellungsänderungen betreffen
+Fokus, ehrlichen Statuskopf und den im Browser gefundenen mobilen Rasterüberlauf;
+dieselben Sperrpfadtests erneut grün, keine neue unabhängige Gesamtrunde.
+
+Echter lokaler HTTP-/Chrome-Nachtest mit vorhandener rein synthetischer35Gäste-
+Fixture: normaler Server speichert die Übernahme erfolgreich, nur die Antwort
+wird absichtlich zu503. Sichtbare Warnung, sämtliche Panelbuttons gesperrt,
+genau ein Apply. Der normale Link „Auftrag erneut laden“ zeigt anschließend den
+tatsächlich gespeicherten Plan und Einkauf (4Positionen). Bei390px passen
+Warnung und Rückweg vollständig (Panel301,20px); langer Statuslabeltext überlagert
+keine Werte mehr. Kein Nürnberger100Gäste- oder echter Küchen-/Laiennachweis.
+Belege E/tmp/production-decision-feedback-79647; eigene lokale Previewprozesse
+74517/75426/76068 terminal, Prüftab geschlossen, Mobilviewport zurückgesetzt.
+
+Normaler Chrome-Zugang aus aktuellem Heimnetz92.208.68.223 wurde zusätzlich
+rein lesend bis zur leeren Catering-Anmeldeseite geprüft; kein technischer Dialog/
+Browserblocker, keine PIN oder Kontoaktivierung. Beleg
+R/tmp/pr767-release-20261030-79647/technical-landing.private.png.
+Keine weitere Installation oder neue Automation: Nürnberg bleibt PR767 mit
+Manifest09570887/Configb16e149b/Generationb43d6f03. Erst tatsächlichen normalen
+18UTC/19CET-Restore/Compare/Cleanup prüfen, dann denselben100Gäste-Nachtest unter
+frischen bestehenden Gates. PR769 und das neue lokale Paket bleiben dafür
+zurückgestellt. Eigener79647-Koordinator/fünfOwnruns weiterhin lebend, vor
+Änderungen exakt validieren; alter Providerbeleg ist abgelaufen. Keine persönliche
+Eingabe wartet, Produktziel aktiv, echte fachliche Freigaben weiterhin offen.

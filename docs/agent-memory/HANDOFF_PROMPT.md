@@ -1,3 +1,30 @@
+## Aktueller Einstieg — Version 5.679 / 30.10.2026
+
+Dauerhafter Operatorbeschluss zur gestrafften Lieferung steht jetzt in AGENTS.md:
+Korrekturen bündeln, relevante Nachweise wiederverwenden, gezielte lokale Prüfungen,
+kein neuer Rollout vor Abschluss des begonnenen Nürnberger100Gäste-Nachtests.
+Sicherheits-/Schreiblock-/Daten-/Backup-/Rückfallgates unverändert; keine neue
+Prüfplattform oder pauschale Lockerung. Konkrete Zeitursachen und Grenzen in
+memory5.679 (Vollsuite30:09;7200s ohne gefundene konkrete Herleitung).
+
+PR769/Main69fb043, exakte Main-CI41082702590 jetzt vollständig SUCCESS. Noch NICHT
+auf Nürnberg installieren: dort PR767/6e004b5 unverändert bis neuem echten
+Normalrestore18UTC/19CET und dessen100Gäste-Nachtest. Vor Remoteaktion tatsächliche
+neue Provider/IP/Key/Hostkey/Own-/Zeitgates; alter Providerbeleg abgelaufen.
+Lebender eigener79647-Koordinator mit fünfOwnruns im bestehenden kanonischen
+Receipt. Keine persönliche Eingabe oder neue Automation.
+
+Zusätzlicher Fehlerpfadfix lokal in E=catering-open-extras auf
+codex/production-decision-feedback, Basis69fb043: unbestätigte Freigabe/Verwerfen/
+Übernahme sperrt Panel bis zum normalen fallgebundenen Seitenreload. Funktional
+unabhängig Terra-angenommen, neun gezielte Fehlerpfadfälle/Build bestanden.
+Lokaler echter HTTP-/Chrome-Nachtest mit35synthetischenGästen beweist Commit vor
+503, genau ein Apply, sichtbare Warnung, Neuladen zeigt gespeicherten Plan/Einkauf;
+390px-Raster/Fokus korrigiert. Keine neue Nürnberger Abnahme und kein Pilot-GO.
+Eigene lokalen Prüfdienste/Tab beendet, Viewport zurückgesetzt. Details/Belege
+memory5.679, E/tmp/production-decision-feedback-79647. Das Paket gesammelt lassen;
+Q/N-PR767-Ausführung und ihren angenommenen BrowserRun2a87fc81 nicht verdrängen.
+
 ## Aktueller Einstieg — Version 5.676 / 30.10.2026
 
 Produktarbeit unabhängig vom Nürnberger Zeitgate fortgesetzt: E=catering-open-extras, codex/production-form-clarity auf6e004b5. Klare Labels/nativer manueller Datepicker/deutsche Vorschläge und CateringOS-Navigation lokal fertig. Reale manuelle Case-Namens-/URL-Neuladefehler behoben, unabhängigeTerraannahme nach gezieltemKalenderfix; echter lokalerHTTP-UI-Speicher-/ReloadtestPASS35synthetischeGäste. Desktop/390pxPASS, aktuelleChecks/BuildPASS. Details/Belege/Grenzen memory5.676; keine neueOpus-Gesamt-/Nürnberg100Gäste-/Pilotabnahme. Zusatzpaket noch nicht integriert/ausgeliefert. Eigene lokalePreviewprozesse45255/51814 beendet, Prüftab geschlossen und Mobilviewport zurückgesetzt; keineProduktivkontenaktivierung.
