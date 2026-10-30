@@ -678,7 +678,7 @@ export function ProductionDraftReviewPanel({
                 Enthält: {formatProductionDraftArtifactSummary(draft)}.
               </p>
               {draft.dietaryQuestionReviews?.length ? <div className="production-dietary-review-summary">
-                <p>Ernährungsfragen: {draft.dietaryQuestionReviews.filter(review => review.status === "confirmed").length} von {draft.dietaryQuestionReviews.length} beantwortet. Offene Fragen verhindern die Freigabe.</p>
+                <p>Ernährungsfragen: {draft.dietaryQuestionReviews.filter(review => review.status === "confirmed").length} von {draft.dietaryQuestionReviews.length} beantwortet. {draft.dietaryQuestionReviews.some(review => review.status !== "confirmed") ? "Offene Fragen verhindern die Freigabe." : "Freigabe und Übernahme bleiben eigene Schritte."}</p>
                 <button className="secondary-button" onClick={() => {
                   const panel = document.getElementById("production-question-panel");
                   for (let parent = panel?.parentElement; parent; parent = parent.parentElement) if (parent instanceof HTMLDetailsElement) parent.open = true;

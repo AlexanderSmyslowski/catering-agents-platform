@@ -39,6 +39,17 @@ describe("dietary question actions", () => {
     expect(button("Bleibt offen")?.className).toBe("secondary-button");
     expect(request).toHaveBeenCalledWith("draft-A", "dietary-question-abc", "unclear");
   });
+  it("shows the persisted unclear decision after refresh and reload, never optimistically", async () => {
+    vi.spyOn(api, "decideProductionDraftReviewCard").mockResolvedValue({ draft: draft(), reviewCard: draft().reviewCards[0]! });
+    let refreshed = draft(); refreshed.reviewCards[0]!.decision = "unclear";
+    await render();
+    await act(async () => button("Bleibt offen")!.click());
+    expect(container.textContent).not.toContain("Als offen markiert");
+    await render(refreshed);
+    expect(container.querySelector('[role="status"]')?.textContent).toContain("Als offen markiert");
+    await render(); await render(refreshed);
+    expect(container.querySelector('[role="status"]')?.textContent).toContain("Angaben oder Kennzeichnung ändern");
+  });
   it("announces exactly once before the refresh replaces the projection", async () => {
     vi.spyOn(api, "decideProductionDraftReviewCard").mockResolvedValue({ draft: draft(), reviewCard: draft().reviewCards[0]! });
     const announced = vi.spyOn(refresh, "announceProductionDraftRefresh");
@@ -51,6 +62,11 @@ describe("dietary question actions", () => {
     expect(announced).toHaveBeenCalledTimes(1);
     expect(onChanged).toHaveBeenCalledTimes(1);
     expect(container.querySelector("button")).toBeNull();
+  });
+  it("reports confirmation only from the refreshed projection", async () => {
+    const confirmed = draft(); confirmed.dietaryQuestionReviews![0] = { question, cardId: "dietary-question-abc", status: "confirmed", answer: "Vegan" };
+    await render(); expect(container.querySelector('[role="status"]')).toBeNull();
+    await render(confirmed); expect(container.querySelector('[role="status"]')?.textContent).toContain("Vegan bestätigt");
   });
   it("does not offer writes for decided, missing, or ambiguous mappings", async () => {
     await render({ ...draft(), status: "approved" }); expect(container.querySelector("button")).toBeNull();

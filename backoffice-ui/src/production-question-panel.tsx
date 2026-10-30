@@ -1,3 +1,4 @@
+import { productionDraftEntryId } from "./production-entry-focus.js";
 import { ProductionDietaryQuestionActions } from "./production-dietary-question-actions.js";
 import type { ProductionDraft } from "./api.js";
 import { useEffect, useState } from "react";
@@ -172,6 +173,9 @@ export function ProductionQuestionPanel({
   const hasDietaryReview = Boolean(questionState.currentDraft?.draftArtifacts?.productionPlan &&
     questionState.currentDraft.draftArtifacts.purchaseList && questionState.currentDraft.dietaryQuestionReviews?.length);
 
+  const allDietaryAnswered = hasDietaryReview && productionQuestions.length === 0 &&
+    questionState.currentDraft!.dietaryQuestionReviews!.every(review => review.status === "confirmed");
+
   const questionCountLabel =
     productionQuestions.length === 1 ? "1 Rückfrage beantworten" : `${productionQuestions.length} Rückfragen beantworten`;
 
@@ -185,7 +189,9 @@ export function ProductionQuestionPanel({
             : !answersEditable
             ? "Der bestehende Produktionsstand bleibt erhalten und kann hier nicht geändert werden. Änderungen sind nur in einer offenen Prüffassung möglich. Offene fachliche Prüfungen und Rückfragen sind weiterhin zu klären."
             : hasDietaryReview
-            ? "Beantworte die Rückfragen einzeln und prüfe den vorbereiteten Produktionsstand. Die interne Freigabe und die Übernahme bleiben eigene Schritte."
+            ? allDietaryAnswered
+              ? "Alle Ernährungsfragen sind beantwortet. Prüfe als Nächstes die übrigen Prüfpunkte im Entwurf; Freigabe und Übernahme bleiben eigene Schritte."
+              : "Beantworte die Rückfragen einzeln und prüfe den vorbereiteten Produktionsstand. Die interne Freigabe und die Übernahme bleiben eigene Schritte."
             : hasExistingPlan
             ? "Ein Produktionsplan ist bereits gespeichert. Offene Rückfragen vor einer Neuberechnung klären; der bisherige Stand bleibt erhalten."
             : "Beantworte offene Punkte und prüfe die erkannten Komponenten. Erst danach entstehen belastbare Mengen, Rezepte und Einkaufslisten."}
@@ -235,6 +241,12 @@ export function ProductionQuestionPanel({
               </button>
             </div>
           </div> : null}
+          {answersEditable && allDietaryAnswered && questionState.currentDraft?.draftId ? <button type="button" className="secondary-button" onClick={() => {
+            const entry = document.getElementById(productionDraftEntryId(questionState.currentDraft!.draftId));
+            for (let parent = entry?.parentElement; parent; parent = parent.parentElement) if (parent instanceof HTMLDetailsElement) parent.open = true;
+            entry?.focus({ preventScroll: true });
+            entry?.scrollIntoView?.({ block: "start", inline: "nearest", behavior: "auto" });
+          }}>Zu den Prüfpunkten</button> : null}
           {answersEditable && hasDietaryReview ? <div className="production-question-guidance">
             <button className="secondary-button" disabled={submitting || actionState.editAnswersDisabled} onClick={() => beginSpecEdit(focusedProductionSpec)}>Angaben oder Kennzeichnung ändern</button>
           </div> : null}

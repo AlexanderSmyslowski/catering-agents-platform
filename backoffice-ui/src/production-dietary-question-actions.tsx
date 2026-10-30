@@ -62,6 +62,8 @@ export function ProductionDietaryQuestionActions({ caseId, draft, question, busy
   if (!question.startsWith("Welche Ernährungskennzeichnung gilt nach Rezeptprüfung für ") || !question.endsWith("?") || draft.status !== "pending_review") return null;
   return <div>
     <p>Nur Ernährungskennzeichnung. Allergene und Küchenfreigabe separat prüfen.</p>
+    {valid && review?.status === "confirmed" && review.answer ? <p role="status">Gespeichert: {review.answer} bestätigt.</p> : null}
+    {valid && review?.status === "pending" && card?.decision === "unclear" ? <p role="status">Als offen markiert. Über „Angaben oder Kennzeichnung ändern“ korrigieren oder später bestätigen.</p> : null}
     {!valid ? <p>Kennzeichnung noch klären</p> : review?.status === "pending" ? <div>
       <button type="button" disabled={busy || working === generation.current.value || feedback?.generation === generation.current.value} onClick={() => void decide("fits")}>{categoryLabel} bestätigen</button>
       <button type="button" className="secondary-button" disabled={busy || working === generation.current.value || feedback?.generation === generation.current.value} onClick={() => void decide("unclear")}>Bleibt offen</button>

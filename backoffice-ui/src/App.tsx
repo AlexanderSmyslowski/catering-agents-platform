@@ -1409,8 +1409,9 @@ function ProductWorkspaceView({
       element?.scrollIntoView?.({ block: "start", inline: "nearest", behavior: "auto" });
     };
 
-    if (route === "production" && productionQuestions.length > 0 && (currentProductionApprovalApplied || currentProductionDraft?.dietaryQuestionReviews?.some(review => review.status === "pending"))) {
-      focus("#production-question-panel");
+    if (route === "production" && productionQuestions.length > 0 && (currentProductionApprovalApplied || currentProductionDraft?.dietaryQuestionReviews?.some(review => review.status === "pending") || document.getElementById("production-clarification-continuation"))) {
+      focus(document.getElementById("production-clarification-continuation")
+        ? "#production-clarification-continuation" : "#production-question-panel");
       return;
     }
 

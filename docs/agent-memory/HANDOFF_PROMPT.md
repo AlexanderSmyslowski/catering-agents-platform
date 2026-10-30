@@ -1,3 +1,11 @@
+## Aktueller Einstieg — Version 5.670 / 30.10.2026
+
+Führend ist memory5.670. Tatsächlicher Opus-5.5-Ausgangsreview und anschließender Nachreview durchgeführt. Drei neue Bedienbefunde gezielt korrigiert, unabhängig mit Terra6.1 angenommen und lokal im echten Browser bedient. Kein erfundenes Opus-Gesamt-ACCEPT/Pilot-GO. Offenentscheidung überlebt Reload; vier Antworten führen zur aktuellen Entwurfsprüfung, sechs weitere Gates bleiben. 390px passt. Prüfgrenzen im fortgeschriebenen OPUS_UX_UI_REVIEW_20261030.md; lokale Browser/Server geschlossen.
+
+Erste CI41045662952 mit sieben Fehlern beendet. Echter Eingaberemount/Fokusverlust und zusätzlicher Reload behoben, übrige Fixture-/Projektion-/Headingkorrekturen ohne Schutzlockerung; betroffene Tests und Build bestanden. Korkgeld-Drucklücke ebenfalls mit sechs tatsächlichen HTTP-Exporttests und Terra-Annahme geschlossen. E-Commit in Q gebündelt, PR768 geschlossen/CI cancelled, E-Lock freigegeben. PR767 benötigt neue erfolgreiche Pflicht-CI und exakte Main-CI vor Auslieferung. Noch kein Merge/Zielupdate; Nürnberg unverändert PR766/5.667.
+
+Q=/Users/alexandersmyslowski/.codex/worktrees/catering-offer-loading/catering-agents-platform. W/ui767-dietary-20261030 ist weiterhin nur HOLD-Vorbereitung; tatsächliche MainCI/Prepare/Execution und frische Provider-/Hostkey-/Zeitgates fehlen. Eigener Koordinator7046 und vier aktive R/Q/W/OPS-Runs in R/tmp/product-usability-20261030-7046/owned-runs.private.json; closed_runs enthält den geschlossenen E-Run, niemals wiederverwenden. Keine persönliche Eingabe oder Automatik offen. Keine Migration, manuelle Sicherung, Timer-/DNS-/IP-/ADH-Aktion.
+
 ## Aktueller Produktstand — Version 5.668 / 30.10.2026
 
 Die sichere Fortsetzung übernommener Produktionsstände und die einzeln bestätigbaren Ernährungsfragen sind lokal umgesetzt und unabhängig geprüft. Führender neuer Abschnitt in memory.md, Opus-Ausgangsreview in docs/product/OPUS_UX_UI_REVIEW_20261030.md. Bestehende Komponenten und Freigaben bleiben erhalten; historische Unterlagen sind separat verifiziert. Keine neue Architektur.

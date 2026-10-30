@@ -83,12 +83,12 @@ export function ProductionClarificationContinuation({ caseId, draft, applied, op
     !draft.draftArtifacts.productionPlan && !draft.draftArtifacts.purchaseList);
   const historyQuery = caseId ? `?snapshotCaseId=${encodeURIComponent(caseId)}` : "";
   return <>
-    {canContinue ? <section className="production-continuation" aria-label="Rückfragen in einer neuen Prüffassung klären">
+    {canContinue ? <section id="production-clarification-continuation" tabIndex={-1} className="production-continuation" aria-label="Rückfragen in einer neuen Prüffassung klären">
       <h3>Offene Rückfragen klären</h3>
       <p>Der übernommene Stand bleibt unverändert. Antworten werden in einer neuen Prüffassung gespeichert und anschließend erneut geprüft und freigegeben.</p>
       <button disabled={busy || saving || refreshRequired} onClick={() => void createFollowup()}>{saving ? "Prüffassung wird angelegt …" : "Rückfragen in neuer Prüffassung beantworten"}</button>
     </section> : null}
-    {canPrepare ? <section className="production-continuation" aria-label="Neue Prüffassung vorbereiten">
+    {canPrepare ? <section id="production-clarification-continuation" tabIndex={-1} className="production-continuation" aria-label="Neue Prüffassung vorbereiten">
       <h3>Prüffassung vorbereiten</h3>
       <p>Prüfe zuerst Rezeptgrundlage und Mengen für diese Fassung. Danach werden Plan, Einkauf und die einzeln beantwortbaren Rückfragen zur Prüfung vorbereitet.</p>
       <div className="action-row">
