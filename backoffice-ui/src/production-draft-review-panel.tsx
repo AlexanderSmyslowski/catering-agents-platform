@@ -1,6 +1,6 @@
 import { isExtractedSpecialDietQuestion } from "../../shared-core/src/special-diet-response.js";
 import type { Uncertainty } from "@catering/shared-core";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   applyApprovedProductionSpec,
   decideProductionDraft,
@@ -184,6 +184,17 @@ export function canApproveProductionDraft(draft: ProductionDraft): boolean {
       .every((card) => card.decision === "fits");
 }
 
+function productionApprovalBlockers(draft: ProductionDraft): string[] {
+  const reasons: string[] = [];
+  if (!hasCompleteProductionSnapshot(draft)) reasons.push("Entwurf zuerst vorbereiten: Produktionsplan, Einkaufsliste und Rezeptkarten müssen vollständig vorliegen.");
+  if ((draft.draftArtifacts?.eventSpec?.uncertainties as Uncertainty[] | undefined)?.some(isExtractedSpecialDietQuestion)) {
+    reasons.push("Sonderkost-Rückfrage zuerst beantworten. Die neue Fassung muss anschließend fachlich geprüft werden.");
+  }
+  const count = draft.reviewCards.filter(card => (card.requiredApproval === true || card.riskLevel === "blocking") && card.decision !== "fits").length;
+  if (count > 0) reasons.push(count === 1 ? "1 erforderlicher Prüfpunkt ist noch offen." : `${count} erforderliche Prüfpunkte sind noch offen.`);
+  return reasons;
+}
+
 function canPrepareProductionDraft(draft: ProductionDraft): boolean {
   return draft.status === "pending_review" &&
     Boolean(draft.draftArtifacts?.eventSpec) &&
@@ -347,6 +358,9 @@ export function ProductionDraftReviewPanel({
   const [message, setMessage] = useState<string>();
   const [changeEditor, setChangeEditor] = useState<{ draftId: string; cardId: string }>();
   const [changeRequest, setChangeRequest] = useState("");
+  const [discardTarget, setDiscardTarget] = useState<{ draftId: string; generation: number }>();
+  const discardCancelRef = useRef<HTMLButtonElement>(null);
+  const approvalHintPrefix = useId();
   const [approvedSpecIds, setApprovedSpecIds] = useState<Record<string, string>>({});
   const [appliedDraftIds, setAppliedDraftIds] = useState<string[]>([]);
   const panelRef = useRef<HTMLElement>(null);
@@ -402,6 +416,7 @@ export function ProductionDraftReviewPanel({
   }
 
   useEffect(() => {
+    setDiscardTarget(undefined);
     setDrafts([]);
     setApprovedSpecIds({});
     setAppliedDraftIds([]);
@@ -439,6 +454,10 @@ export function ProductionDraftReviewPanel({
     entry?.focus({ preventScroll: true });
     entry?.scrollIntoView?.({ block: "start", inline: "nearest", behavior: "auto" });
   }, [drafts, focusedDraftId]);
+
+  useEffect(() => {
+    if (discardTarget) discardCancelRef.current?.focus();
+  }, [discardTarget]);
 
   async function decideCard(
     draftId: string,
@@ -509,6 +528,7 @@ export function ProductionDraftReviewPanel({
       if (approvedProductionSpecId) {
         setApprovedSpecIds((current) => ({ ...current, [draftId]: approvedProductionSpecId }));
       }
+      setDiscardTarget(undefined);
       setMessage(decision === "approved" ? "Produktionsentwurf freigegeben." : "Produktionsentwurf verworfen.");
       await onDraftChanged?.();
       if (!isCurrentCase(version)) return;
@@ -657,8 +677,16 @@ export function ProductionDraftReviewPanel({
               <p className="helper-text">
                 Enthält: {formatProductionDraftArtifactSummary(draft)}.
               </p>
+              {draft.dietaryQuestionReviews?.length ? <div className="production-dietary-review-summary">
+                <p>Ernährungsfragen: {draft.dietaryQuestionReviews.filter(review => review.status === "confirmed").length} von {draft.dietaryQuestionReviews.length} beantwortet. Offene Fragen verhindern die Freigabe.</p>
+                <button className="secondary-button" onClick={() => {
+                  const panel = document.getElementById("production-question-panel");
+                  for (let parent = panel?.parentElement; parent; parent = parent.parentElement) if (parent instanceof HTMLDetailsElement) parent.open = true;
+                  panel?.focus({ preventScroll: true }); panel?.scrollIntoView?.({ block: "start", behavior: "auto" });
+                }}>Ernährungsfragen öffnen</button>
+              </div> : null}
               <ul className="item-list compact">
-                {draft.reviewCards.map((card) => (
+                {draft.reviewCards.filter(card => !draft.dietaryQuestionReviews?.some(review => review.cardId === card.cardId)).map((card) => (
                   <li key={card.cardId}>
                     <strong>{card.title}</strong>
                     <p className="helper-text">{card.summary}</p>
@@ -760,7 +788,6 @@ export function ProductionDraftReviewPanel({
               <div className="action-row">
                 {canPrepareProductionDraft(draft) ? (
                   <button
-                    className="secondary-button"
                     disabled={submitting || loading}
                     onClick={() => void prepareDraft(draft.draftId)}
                   >
@@ -770,17 +797,19 @@ export function ProductionDraftReviewPanel({
                 {draft.status === "pending_review" ? (
                   <>
                     <button
-                      className="secondary-button"
+                      aria-describedby={`${approvalHintPrefix}-${draft.draftId}`}
                       disabled={submitting || loading || !canApproveProductionDraft(draft)}
                       onClick={() => void decideDraft(draft.draftId, "approved")}
                     >
                       Entwurf freigeben
                     </button>
-                    {(draft.draftArtifacts?.eventSpec?.uncertainties as Uncertainty[] | undefined)?.some(isExtractedSpecialDietQuestion) ? <p role="status">Sonderkost-Rückfrage zuerst beantworten. Die neue Fassung muss anschließend fachlich geprüft werden.</p> : null}
+                    <div id={`${approvalHintPrefix}-${draft.draftId}`} className="production-approval-hints">
+                      {productionApprovalBlockers(draft).map(reason => <p className="helper-text" key={reason}>{reason}</p>)}
+                    </div>
                     <button
                       className="secondary-button"
                       disabled={submitting || loading}
-                      onClick={() => void decideDraft(draft.draftId, "rejected")}
+                      onClick={() => setDiscardTarget({ draftId: draft.draftId, generation: caseGeneration.current.version })}
                     >
                       Entwurf verwerfen
                     </button>
@@ -788,7 +817,6 @@ export function ProductionDraftReviewPanel({
                 ) : null}
                 {approvedSpecIds[draft.draftId] ? (
                   <button
-                    className="secondary-button"
                     disabled={submitting || loading}
                     onClick={() => void applyDraft(draft.draftId, approvedSpecIds[draft.draftId]!)}
                   >
@@ -796,6 +824,18 @@ export function ProductionDraftReviewPanel({
                   </button>
                 ) : null}
               </div>
+              {discardTarget?.draftId === draft.draftId && draft.status === "pending_review" ? (
+                <div className="production-discard-confirmation" role="group" aria-label="Entwurf verwerfen bestätigen">
+                  <strong>Diesen Entwurf verwerfen?</strong>
+                  <p>Diese Prüffassung kann danach nicht mehr freigegeben werden. Der zuletzt übernommene Stand bleibt erhalten.</p>
+                  <div className="action-row">
+                    <button ref={discardCancelRef} className="secondary-button" disabled={submitting || loading} onClick={() => setDiscardTarget(undefined)}>Entwurf behalten</button>
+                    <button className="destructive-button" disabled={submitting || loading} onClick={() => {
+                      if (isCurrentCase(discardTarget.generation)) void decideDraft(draft.draftId, "rejected");
+                    }}>Diesen Entwurf endgültig verwerfen</button>
+                  </div>
+                </div>
+              ) : null}
             </li>
           ))}
         </ul>

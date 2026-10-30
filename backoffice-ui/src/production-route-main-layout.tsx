@@ -1,3 +1,5 @@
+import type { LastAppliedProductionSnapshot, ProductionDraft } from "./api.js";
+import { ProductionClarificationContinuation } from "./production-clarification-continuation.js";
 import type { MiniPilotCheckReportState } from "./mini-pilot-check-report-state.js";
 import { shouldShowMiniPilotPanel } from "./mini-pilot-panel-gate.js";
 import { buildProductionMiniPilotActionState } from "./production-mini-pilot-action-state.js";
@@ -45,6 +47,9 @@ import {
 } from "./production-workbench.js";
 
 export type ProductionRouteMainLayoutProps = {
+  currentDraft?: ProductionDraft;
+  currentApplied?: boolean;
+  lastApplied?: LastAppliedProductionSnapshot;
   activeProductionCaseId?: string;
   workbenchSummary: ProductionWorkbenchSummary;
   workbenchNextStep: ProductionWorkbenchNextStep;
@@ -73,6 +78,7 @@ export type ProductionRouteMainLayoutProps = {
 };
 
 export function ProductionRouteMainLayout({
+  currentDraft, currentApplied, lastApplied,
   activeProductionCaseId,
   workbenchSummary,
   workbenchNextStep,
@@ -147,6 +153,9 @@ export function ProductionRouteMainLayout({
         ),
         questionsSlot: (
           <div className="production-column production-column--questions">
+            <ProductionClarificationContinuation caseId={activeProductionCaseId} draft={currentDraft} applied={currentApplied}
+              openQuestionCount={questionState.productionQuestions.length} lastApplied={lastApplied} busy={submitting}
+              onChanged={questionActions.refreshAfterDraftDecision} />
             <ProductionQuestionPanel
               activeCaseId={activeProductionCaseId}
               questionState={questionState}

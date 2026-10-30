@@ -45,7 +45,8 @@ export function buildProductionWorkbenchSummaryState({
     readinessLabel: focusedSpecReadinessLabel,
     planStatusLabel: productionPlanStatusLabel,
     purchaseStatusLabel: purchaseZoneStatusLabel,
-    questionCount: productionQuestions.length,
+    // productionQuestions already contains only unanswered questions.
+    questionCount: productionQuestions.length + clarificationStatusCounts.answered,
     answeredQuestionCount: clarificationStatusCounts.answered,
     unansweredQuestionCount: clarificationStatusCounts.unanswered,
     productionObjectCount: currentSpecPlans.length,

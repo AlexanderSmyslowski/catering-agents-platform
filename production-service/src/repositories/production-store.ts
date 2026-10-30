@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
   createBusinessScopedPersistentCollection,
+  createProductionApplyManifest,
   areJsonValuesEqual,
   approvalRequestIdForTarget,
   initialCaseEventForCase,
@@ -1575,6 +1576,102 @@ export class ProductionStore {
   async getCase(context: BusinessContext, caseId: string): Promise<ProductionCase | undefined> {
     assertBusinessContext(context);
     return this.cases.get(context, caseId);
+  }
+
+  /** Publish one pending continuation without changing its already applied parent.
+   * File storage can stop after each insert. Only an exact prefix of this command
+   * may be finished on retry; another draft or downstream decision is a conflict.
+   */
+  async commitAppliedDraftContinuation(
+    context: BusinessContext,
+    input: {
+      caseId: string;
+      expectedCase: ProductionCase;
+      parent: ProductionDraft;
+      approvedSpec: ApprovedProductionSpec;
+      manifest: ProductionApplyManifest;
+      child: ProductionDraft;
+    }
+  ): Promise<ProductionDraft | undefined> {
+    const { parent, approvedSpec, manifest } = input;
+    const child = validateProductionDraft(input.child);
+    if (parent.businessId !== context.businessId || approvedSpec.businessId !== context.businessId ||
+      manifest.businessId !== context.businessId || child.businessId !== context.businessId ||
+      parent.status !== "approved" || child.status !== "pending_review" ||
+      child.revision !== parent.revision + 1 || child.supersedesDraftId !== parent.draftId ||
+      child.approvalRequestId || child.approvedAt || child.approvedBy ||
+      !areJsonValuesEqual(child.source, parent.source) || !areJsonValuesEqual(child.guardrails, parent.guardrails) ||
+      !areJsonValuesEqual(child.draftArtifacts.eventSpec, parent.draftArtifacts.eventSpec) ||
+      child.draftArtifacts.productionPlan || child.draftArtifacts.purchaseList || child.draftArtifacts.recipes ||
+      child.reviewCards.some(card => card.decision !== "pending" || card.decidedAt || card.decidedBy) ||
+      approvedSpec.sourceDraft.draftId !== parent.draftId || approvedSpec.sourceDraft.revision !== parent.revision ||
+      !areJsonValuesEqual(approvedSpec.artifacts, { eventSpec: parent.draftArtifacts.eventSpec, productionPlan: parent.draftArtifacts.productionPlan, purchaseList: parent.draftArtifacts.purchaseList, recipes: parent.draftArtifacts.recipes })) return undefined;
+    const expectedManifest = createProductionApplyManifest({
+      approvedProductionSpec: approvedSpec,
+      actor: { businessId: context.businessId, ...manifest.appliedBy },
+      appliedAt: new Date(manifest.appliedAt)
+    });
+    if (!areJsonValuesEqual(manifest, expectedManifest)) return undefined;
+    return this.withCaseApplyCriticalSection(context, input.caseId, async (current, scope, transaction) => {
+      const options = transaction ? { ...this.storageOptions, pgPool: transaction } : this.storageOptions;
+      const decisions = createProductionDecisionCollections(options);
+      const cases = createProductionCaseCollections(options);
+      const [currentParent, aggregate, currentManifest, events, drafts] = await Promise.all([
+        scope.getDraft(parent.draftId), scope.getDecisionAggregate(approvedSpec.approvalRequestId),
+        scope.getApplyManifest(approvedSpec.approvedProductionSpecId), scope.listEvents(input.caseId), scope.listDrafts()
+      ]);
+      if (!areJsonValuesEqual(current, input.expectedCase) || !areJsonValuesEqual(currentParent, parent) ||
+        !aggregate || aggregate.approval.decision !== "approved" ||
+        !areJsonValuesEqual(aggregate.decidedDraft, parent) || !areJsonValuesEqual(aggregate.approvedProductionSpec, approvedSpec) ||
+        !areJsonValuesEqual(currentManifest, manifest) || current.status === "archived" ||
+        !current.productionHandoffId || parent.source.sourceRef !== `offer-handoff:${current.productionHandoffId}` ||
+        current.sourceSpecId !== parent.draftArtifacts.eventSpec?.specId) return undefined;
+      const allEvents = await cases.events.list(context);
+      const parentCaseIds = new Set(allEvents.filter(event => event.artifactId === parent.draftId || event.revisionRef?.artifactId === parent.draftId).map(event => event.caseId));
+      if (parentCaseIds.size !== 1 || !parentCaseIds.has(input.caseId)) return undefined;
+      const resultEvents = events.filter(event => event.kind === "result");
+      const result = resultEvents.at(-1);
+      const approval = events.filter(event => event.kind === "approval").at(-1);
+      if (!result || result.artifactId !== manifest.planId || result.at !== manifest.appliedAt ||
+        resultEvents.filter(event => event.artifactId === manifest.planId).length !== 1 ||
+        approval?.artifactId !== approvedSpec.approvedProductionSpecId || approval.sequence >= result.sequence) return undefined;
+      const draftEvents = events.filter(event => event.kind === "draft_created" || event.kind === "revision_created");
+      const latest = draftEvents.at(-1);
+      const parentEvents = draftEvents.filter(event => event.artifactId === parent.draftId && event.revisionRef?.artifactId === parent.draftId && event.revisionRef.revision === parent.revision && event.revisionRef.createdAt === parent.createdAt);
+      if (parentEvents.length !== 1 || !latest ||
+        (latest.artifactId !== parent.draftId && latest.artifactId !== child.draftId) ||
+        drafts.some(draft => draft.supersedesDraftId === parent.draftId && draft.draftId !== child.draftId)) return undefined;
+      const existing = await scope.getDraft(child.draftId);
+      const candidate = existing ? { ...child, createdAt: existing.createdAt } : child;
+      if (existing && !areJsonValuesEqual(existing, candidate)) return undefined;
+      const continuationEvents = draftEvents.filter(event => event.artifactId === child.draftId);
+      if (continuationEvents.length > 1 || (!existing && continuationEvents.length > 0)) return undefined;
+      const continuation = continuationEvents[0];
+      if (continuation && (continuation.kind !== "revision_created" || continuation.at !== candidate.createdAt ||
+        continuation.revisionRef?.artifactType !== "ProductionDraft" || continuation.revisionRef.artifactId !== candidate.draftId ||
+        continuation.revisionRef.revision !== candidate.revision || continuation.revisionRef.createdAt !== candidate.createdAt ||
+        continuation.revisionRef.supersedesArtifactId !== parent.draftId || continuation.sequence <= result.sequence)) return undefined;
+      const stillApplied = current.approvedProductionSpecId === approvedSpec.approvedProductionSpecId &&
+        current.currentPlanId === manifest.planId && current.currentPurchaseListId === manifest.purchaseListId;
+      const alreadyReopened = Boolean(continuation) && current.status === "open" && !current.approvedProductionSpecId && !current.currentPlanId && !current.currentPurchaseListId;
+      if (!stillApplied && !alreadyReopened) return undefined;
+      if (!existing && await decisions.drafts.insert(context, candidate) !== "created") throw new Error("Die Prüffassung konnte nicht eindeutig angelegt werden.");
+      await scope.appendCaseEvent(input.caseId, {
+        at: candidate.createdAt, role: "assistant", kind: "revision_created",
+        text: "Neue Prüffassung für offene Rückfragen erstellt. Der übernommene Stand bleibt erhalten.",
+        artifactId: candidate.draftId,
+        revisionRef: { artifactType: "ProductionDraft", artifactId: candidate.draftId, revision: candidate.revision,
+          createdAt: candidate.createdAt, supersedesArtifactId: parent.draftId }
+      }, `revision:${candidate.draftId}`);
+      if (await reopenCaseForDraftContinuationInCollections(cases, context, input.caseId, candidate.draftId) === "missing") {
+        throw new Error("Der Produktionsauftrag ist nicht mehr verfügbar.");
+      }
+      return candidate;
+    }, parent, [
+      { kind: "production_approved_spec", artifactId: approvedSpec.approvedProductionSpecId, revision: 0 },
+      { kind: "production_plan", artifactId: manifest.planId, revision: 0 },
+      { kind: "production_purchase_list", artifactId: manifest.purchaseListId, revision: 0 }
+    ]);
   }
 
   async withCaseApplyCriticalSection<T>(

@@ -36,7 +36,7 @@ import {
   recipeSourceReferenceLabel,
 } from "@catering/shared-core";
 import { renderProductionFolderHtml } from "./production-folder.js";
-import { resolveAppliedProductionSnapshot, type AppliedProductionSnapshot } from "./applied-production-snapshot.js";
+import { resolveAppliedProductionSnapshot, resolveHistoricalProductionSnapshot, type AppliedProductionSnapshot } from "./applied-production-snapshot.js";
 import { renderAppliedProductionContext, renderAppliedPurchaseQuantities, renderProductionKitchenSheets, renderProductionOrderContext } from "./production-snapshot-html.js";
 
 export { renderProductionFolderHtml } from "./production-folder.js";
@@ -537,7 +537,7 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
     }
   );
 
-  app.get<{ Params: { planId: string } }>(
+  app.get<{ Params: { planId: string }; Querystring: { snapshotCaseId?: string } }>(
     "/v1/exports/production-plans/:planId/html",
     async (request, reply) => {
       const forbidden = requireProductionOperator(request, reply, trustedActorSecret, allowDevActorHeader);
@@ -546,12 +546,13 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
       }
 
       const actor = actorForRequest(request);
-      const plan = await productionStore.getPlan(actor, request.params.planId);
+      const historical = request.query.snapshotCaseId !== undefined ? await resolveHistoricalProductionSnapshot(productionStore, actor, request.query.snapshotCaseId, { planId: request.params.planId }) : undefined;
+      const plan = historical?.approvedSpec.artifacts.productionPlan ?? await productionStore.getPlan(actor, request.params.planId);
       if (!plan) {
         return reply.code(404).send({ message: "ProductionPlan nicht gefunden." });
       }
 
-      const appliedSnapshot = await resolveAppliedProductionSnapshot(productionStore, actor, { planId: plan.planId, eventSpecId: plan.eventSpecId });
+      const appliedSnapshot = historical ?? await resolveAppliedProductionSnapshot(productionStore, actor, { planId: plan.planId, eventSpecId: plan.eventSpecId });
       const spec = appliedSnapshot?.approvedSpec.artifacts.eventSpec ?? await intakeStore.getSpec(actor, plan.eventSpecId);
 
       reply.header(
@@ -568,7 +569,7 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
     }
   );
 
-  app.get<{ Params: { planId: string } }>(
+  app.get<{ Params: { planId: string }; Querystring: { snapshotCaseId?: string } }>(
     "/v1/exports/production-folders/:planId/html",
     async (request, reply) => {
       const forbidden = requireProductionOperator(request, reply, trustedActorSecret, allowDevActorHeader);
@@ -577,12 +578,13 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
       }
 
       const actor = actorForRequest(request);
-      const plan = await productionStore.getPlan(actor, request.params.planId);
+      const historical = request.query.snapshotCaseId !== undefined ? await resolveHistoricalProductionSnapshot(productionStore, actor, request.query.snapshotCaseId, { planId: request.params.planId }) : undefined;
+      const plan = historical?.approvedSpec.artifacts.productionPlan ?? await productionStore.getPlan(actor, request.params.planId);
       if (!plan) {
         return reply.code(404).send({ message: "ProductionPlan nicht gefunden." });
       }
 
-      const appliedSnapshot = await resolveAppliedProductionSnapshot(productionStore, actor, { planId: plan.planId, eventSpecId: plan.eventSpecId });
+      const appliedSnapshot = historical ?? await resolveAppliedProductionSnapshot(productionStore, actor, { planId: plan.planId, eventSpecId: plan.eventSpecId });
       const spec = appliedSnapshot?.approvedSpec.artifacts.eventSpec ?? await intakeStore.getSpec(actor, plan.eventSpecId);
       if (!spec) {
         return reply.code(404).send({ message: "AcceptedEventSpec zum ProductionPlan nicht gefunden." });
@@ -613,12 +615,13 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
           purchaseLists: purchaseLists.filter((list) => list.eventSpecId === spec.specId),
           recipes: linkedRecipes,
           appliedSnapshot,
+          verifiedDietaryQuestionReviews: appliedSnapshot?.dietaryQuestionReviews,
           clarificationAnswers: clarificationAnswers.filter((answer) => answer.context.specId === spec.specId)
         }));
     }
   );
 
-  app.get<{ Params: { purchaseListId: string }; Querystring: { format?: string } }>(
+  app.get<{ Params: { purchaseListId: string }; Querystring: { format?: string; snapshotCaseId?: string } }>(
     "/v1/exports/purchase-lists/:purchaseListId/csv",
     async (request, reply) => {
       const forbidden = requireProductionOperator(request, reply, trustedActorSecret, allowDevActorHeader);
@@ -631,11 +634,12 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
         return reply.code(400).send({ message: "Unbekanntes Einkaufslistenformat." });
       }
       const actor = actorForRequest(request);
-      const list = await productionStore.getPurchaseList(actor, request.params.purchaseListId);
+      const historical = request.query.snapshotCaseId !== undefined ? await resolveHistoricalProductionSnapshot(productionStore, actor, request.query.snapshotCaseId, { purchaseListId: request.params.purchaseListId }) : undefined;
+      const list = historical?.approvedSpec.artifacts.purchaseList ?? await productionStore.getPurchaseList(actor, request.params.purchaseListId);
       if (!list) {
         return reply.code(404).send({ message: "PurchaseList nicht gefunden." });
       }
-      const appliedSnapshot = await resolveAppliedProductionSnapshot(productionStore, actor, { purchaseListId: list.purchaseListId, eventSpecId: list.eventSpecId });
+      const appliedSnapshot = historical ?? await resolveAppliedProductionSnapshot(productionStore, actor, { purchaseListId: list.purchaseListId, eventSpecId: list.eventSpecId });
 
       reply.header(
         "content-disposition",

@@ -61,6 +61,15 @@ export interface OfferWorkspaceState {
   handoff?: ProductionHandoff;
 }
 
+export interface LastAppliedProductionSnapshot {
+  approvedProductionSpecId: string;
+  draftId: string;
+  draftRevision: number;
+  eventSpec: AcceptedEventSpec;
+  productionPlan: ProductionPlan;
+  purchaseList: PurchaseList;
+}
+
 export interface ProductionWorkspaceState {
   cases: CaseSummary[];
   activeCase?: ProductionCase;
@@ -71,6 +80,7 @@ export interface ProductionWorkspaceState {
   currentPlan?: ProductionPlan;
   currentPurchaseList?: PurchaseList;
   referencedRecipes: Recipe[];
+  lastApplied?: LastAppliedProductionSnapshot;
 }
 
 const emptyOfferWorkspaceState: OfferWorkspaceState = {
@@ -180,6 +190,7 @@ export interface ProductionDraft {
     modelId?: string;
   };
   reviewCards: ProductionDraftReviewCard[];
+  dietaryQuestionReviews?: Array<{ question: string; cardId: string; status: "pending" | "confirmed"; answer?: string }>;
   draftArtifacts?: {
     eventSpec?: Record<string, unknown>;
     productionPlan?: Record<string, unknown>;
@@ -494,12 +505,21 @@ export async function loadProductionWorkspaceState(activeCaseId?: string): Promi
   const base: ProductionWorkspaceState = { cases, activeEvents: [], activeSources: [], referencedRecipes: [] };
   if (!activeCaseId) return base;
 
-  const detail = await fetchJson<{ case: ProductionCase; events: CaseEvent[] }>(
+  const detail = await fetchJson<{ case: ProductionCase; events: CaseEvent[]; lastApplied?: LastAppliedProductionSnapshot }>(
     `/api/production/v1/production/cases/${encodeURIComponent(activeCaseId)}`,
     undefined
   );
   if (detail.case.caseId !== activeCaseId || detail.case.product !== "production") {
     return { ...emptyProductionWorkspaceState, cases };
+  }
+  const lastApplied = detail.lastApplied;
+  if (lastApplied && (!lastApplied.approvedProductionSpecId || !lastApplied.draftId ||
+    !Number.isSafeInteger(lastApplied.draftRevision) || lastApplied.draftRevision < 1 ||
+    lastApplied.eventSpec.specId !== detail.case.sourceSpecId ||
+    lastApplied.productionPlan.eventSpecId !== lastApplied.eventSpec.specId ||
+    lastApplied.purchaseList.eventSpecId !== lastApplied.eventSpec.specId ||
+    !detail.events.some(event => event.caseId === activeCaseId && event.businessId === detail.case.businessId && event.kind === "result" && event.artifactId === lastApplied.productionPlan.planId))) {
+    throw productionSnapshotError("der letzte übernommene Stand passt nicht zum Produktionsauftrag");
   }
   const activeEvents = detail.events.filter((event) => event.caseId === activeCaseId);
   const draftReference = productionDraftRevisionFromCaseEvents(activeEvents);
@@ -598,7 +618,8 @@ export async function loadProductionWorkspaceState(activeCaseId?: string): Promi
     ...(currentDraft ? { currentDraft } : {}),
     ...(approvedProductionSpec ? { approvedProductionSpec } : {}),
     ...(currentPlan ? { currentPlan } : {}),
-    ...(currentPurchaseList ? { currentPurchaseList } : {})
+    ...(currentPurchaseList ? { currentPurchaseList } : {}),
+    ...(lastApplied ? { lastApplied } : {})
   };
 }
 
@@ -1154,6 +1175,13 @@ export async function prepareProductionDraft(draftId: string) {
   return fetchJson<{ draft: ProductionDraft }>(
     `/api/production/v1/production/drafts/${encodeURIComponent(draftId)}/prepare`,
     { method: "POST", body: "{}" }
+  );
+}
+
+export async function createProductionClarificationFollowup(draftId: string, input: { caseId: string; expectedRevision: number }) {
+  return fetchJson<{ draft: ProductionDraft }>(
+    `/api/production/v1/production/drafts/${encodeURIComponent(draftId)}/revise`,
+    { method: "POST", body: JSON.stringify({ kind: "clarification_followup", caseId: input.caseId, expectedRevision: input.expectedRevision }) }
   );
 }
 

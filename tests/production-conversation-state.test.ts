@@ -6,6 +6,20 @@ import {
 } from "@catering/shared-core";
 
 describe("production conversation state", () => {
+  it("counts only the matching verified dietary review as answered", () => {
+    const question = "Welche Ernährungskennzeichnung gilt nach Rezeptprüfung für Gericht?";
+    const spec = { specId: "dietary-spec", menuPlan: [], uncertainties: [{ field: "menuPlan", severity: "medium", message: "Ernährung offen", suggestedQuestion: question }] };
+    const build = (dietaryQuestionReviews: Array<{ question: string; cardId: string; status: "pending" | "confirmed"; answer?: string }>) => buildProductionConversationState({ focusedProductionSpec: spec, currentSpecPlans: [], currentSpecPurchaseLists: [], dietaryQuestionReviews });
+    expect(build([]).productionQuestions).toContain(question);
+    const confirmed = build([{ question, cardId: "card", status: "confirmed", answer: "Vegan" }]);
+    expect(confirmed.productionQuestions).not.toContain(question);
+    expect(confirmed.productionConversationProjection.messages.find(message => message.text === question)?.clarificationAnswerStatus).toBe("answered");
+    expect(confirmed.productionConversationProjection.messages.find(message => message.text === question)?.reviewedAnswerText).toBe("Vegan");
+    expect(build([{ question, cardId: "card", status: "pending", answer: "Vegan" }]).productionConversationProjection.messages.find(message => message.text === question)?.reviewedAnswerText).toBeUndefined();
+    expect(build([{ question, cardId: "card", status: "confirmed", answer: "Vegan" }, { question, cardId: "other", status: "confirmed", answer: "Klassisch" }]).productionConversationProjection.messages.find(message => message.text === question)?.reviewedAnswerText).toBeUndefined();
+    expect(build([{ question, cardId: "card", status: "confirmed" }, { question, cardId: "other", status: "confirmed" }]).productionQuestions).toContain(question);
+    expect(build([{ question: `${question} `, cardId: "card", status: "confirmed" }]).productionQuestions).toContain(question);
+  });
   const focusedProductionSpec = {
     specId: "spec-conversation",
     readiness: { status: "partial" },

@@ -2597,3 +2597,65 @@ button:disabled {
 .offer-pricing__cost-input summary { cursor: pointer; font-weight: 600; }
 .offer-pricing__cost-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem 1rem; align-items: start; }
 @media (max-width: 700px) { .offer-pricing__cost-fields { grid-template-columns: minmax(0, 1fr); } }
+
+/* Questions are office tasks. Provenance stays available without competing with the answer. */
+.question-window {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.production-question-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.production-question {
+  padding: 1.25rem 0;
+  border-bottom: 1px solid var(--color-border, #d2d2d7);
+}
+.production-question:first-child { padding-top: 0.5rem; }
+.production-question__heading {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  align-items: center;
+  justify-content: space-between;
+}
+.production-question__heading h4 { margin: 0; font-size: 0.95rem; }
+.production-question p { margin: 0.65rem 0 0; overflow-wrap: anywhere; }
+.production-question__answer { margin-top: 1rem; padding-left: 1rem; border-left: 1px solid #d2d2d7; }
+.production-question__answer strong { font-size: 0.85rem; }
+.production-question-warnings { padding: 1rem; border: 1px solid #b86500; background: #fff8ed; }
+.production-question-warnings h4 { margin: 0; }
+.production-question-warnings p { margin: 0.5rem 0 0; }
+.production-question-provenance { overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .production-question__heading { align-items: flex-start; flex-direction: column; }
+}
+
+.production-approval-hints { flex-basis: 100%; }
+.production-discard-confirmation { margin-top: 1rem; padding: 1rem; border: 1px solid #b93b32; border-radius: 8px; background: #fff; }
+.production-discard-confirmation p { margin: 0.5rem 0 1rem; }
+.app-shell--production-route button.secondary-button { border-color: #8e8e93; }
+
+.production-continuation { margin-bottom: 1.5rem; }
+.production-continuation h3 { margin: 0; }
+.production-continuation p, .production-last-applied p { max-width: 65ch; line-height: 1.5; }
+.production-last-applied { margin-bottom: 1.25rem; padding: 1rem 0; border-bottom: 1px solid #d2d2d7; }
+.production-history-links { display: grid; gap: 0.75rem; padding-left: 1.25rem; }
+
+/* Reading and keyboard order follow the task: questions, review, then documents. */
+.production-conversation-layout--active-context .production-progressive-zone { order: 1; }
+.production-conversation-layout--active-context .production-composer { order: 2; }
+.production-conversation-layout--active-context .production-planning-zone { order: 5; min-width: 0; }
+.production-conversation-layout--active-context .production-lower-zones { order: 6; }
+
+.app-shell--production-route .question-panel.production-step-card {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.production-question-guidance { margin: 0.5rem 0 1rem; }

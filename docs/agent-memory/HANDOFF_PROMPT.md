@@ -1,3 +1,9 @@
+## Aktueller Produktstand — Version 5.668 / 30.10.2026
+
+Die sichere Fortsetzung übernommener Produktionsstände und die einzeln bestätigbaren Ernährungsfragen sind lokal umgesetzt und unabhängig geprüft. Führender neuer Abschnitt in memory.md, Opus-Ausgangsreview in docs/product/OPUS_UX_UI_REVIEW_20261030.md. Bestehende Komponenten und Freigaben bleiben erhalten; historische Unterlagen sind separat verifiziert. Keine neue Architektur.
+
+Gezielte API-/UI-/Exporttests und Build bestanden; tatsächlicher lokaler Chrome-Nachtest an synthetischer35-Gäste-Fixture: vier Antworten gespeichert, Reload0offen/4beantwortet,390pxohneÜberbreite. Das ist kein neuer Nürnberger100-Gäste-Nachweis. Reguläre CI/Integration/Zielnachtest sind noch offen. Aktueller Betriebsstand steht im primären Projekt-memory/Handoff; Nürnberg zunächst unverändertPR766. Keine alte Migration und keine historischen Kommandos ausführen.
+
 ## Aktueller Einstieg — Version 5.516 / 22.10.2026
 
 Führend ist der neue5.516-Abschnitt in memory.md; historische Migrationsbefehle

@@ -514,3 +514,8 @@ Bei tieferer Pruefung sind insbesondere diese Dokumente heranzuziehen:
 ## Merksatz
 
 Dieses Projekt soll zuerst eine ruhige, intern kontrolliert nutzbare Catering-Arbeitsplattform fuer Anfrage, Angebot, Produktion, Rueckfragen, Exporte und Audit werden — nicht vorschnell eine externe SaaS-Plattform, nicht vorschnell ein Produktionssystem fuer echte Daten und nicht ein unkontrolliertes Feature-Sammelbecken.
+
+
+### Fortschreibung5.668 /30.10.2026: Ernährungsfragen und sichere Prüffassung
+
+Der vorab verlangte tatsächliche Opus-5.5-UX/UI-Review ist durchgeführt, die daraus abgeleitete sichere Fortsetzung und Einzelantworten sind lokal umgesetzt und unabhängig geprüft. Details und Nachweisgrenzen in memory5.668 und docs/product/OPUS_UX_UI_REVIEW_20261030.md. Neue Produktfassung noch ohne reguläre CI/Integration/Nürnberger100-Gäste-Abnahme. Keine neue Roadmap oder Architektur.

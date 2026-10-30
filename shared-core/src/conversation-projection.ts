@@ -29,6 +29,7 @@ export interface ProductionConversationMessage {
   sourceAnchors?: ProductionConversationSourceAnchor[];
   clarificationQuestion?: ProductionClarificationQuestion;
   clarificationAnswerStatus?: ProductionClarificationAnswerStatusAnchor;
+  reviewedAnswerText?: string;
   clarificationAnswer?: ProductionClarificationAnswer;
 }
 

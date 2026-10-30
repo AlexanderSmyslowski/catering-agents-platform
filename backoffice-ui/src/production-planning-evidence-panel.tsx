@@ -78,7 +78,7 @@ function CaseEvidencePanel({ caseId, userId, submitting, onChanged }: Props & { 
   const components = Array.isArray(spec?.menuPlan) ? spec.menuPlan.filter(component =>
     component.productionDecision?.mode === "scratch" || component.productionDecision?.mode === "hybrid") : [];
   if (!error && (!draft || !spec || !draft.source?.sourceRef?.startsWith("offer-handoff:"))) return null;
-  return <section className="panel" aria-label="Rezept und Mengenplanung">
+  return <section id="production-planning-evidence" tabIndex={-1} className="panel" aria-label="Rezept und Mengenplanung">
     <h3>Rezeptgrundlage, Menge und Eventprüfung</h3>
     <p>Bibliotheksfreigabe, Allergenverifizierung und endgültige Produktionsfreigabe bleiben eigenständige Prüfungen.</p>
     <p>Nach einem Rezeptupload „Planungsstand neu laden“ wählen, um die neue Bibliotheksgrundlage auszuwählen.</p>

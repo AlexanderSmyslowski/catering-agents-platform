@@ -3,85 +3,92 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { newDb } from "pg-mem";
-import { buildProductionApp, InMemoryRecipeRepository, ProductionStore, RecipeDiscoveryService, productionDecisionRepositoryFor } from "@catering/production-service";
+import { buildProductionApp, InMemoryRecipeRepository, ProductionStore, RecipeDiscoveryService, productionDecisionRepositoryFor, resolveLastAppliedSnapshot } from "@catering/production-service";
 import { buildPrintExportApp } from "@catering/print-export";
 import { AuditLogStore, createEventRequestFromText, normalizeEventRequestToSpec, type AcceptedEventSpec, type CollectionStorageOptions, type ProductionDraft, type ProductionHandoff, type Recipe } from "@catering/shared-core";
 import { InMemoryIntakeRecordsPort } from "./support/in-memory-intake-records-port.js";
 
-const context = { businessId: "local" };
-const secret = "synthetic-applied-snapshot-test";
-const headers = { "x-catering-actor-name": "Produktions-Mitarbeiter", "x-catering-trusted-secret": secret };
-
-async function approvedDescendant(pgPool?: CollectionStorageOptions["pgPool"], existing?: { rootDir: string; suffix: string }) {
-  const rootDir = existing?.rootDir ?? mkdtempSync(path.join(tmpdir(), "catering-applied-snapshot-"));
-  const store = new ProductionStore({ rootDir, pgPool });
-  const repository = new InMemoryRecipeRepository({ rootDir, pgPool });
-  const intakeRecords = new InMemoryIntakeRecordsPort();
-  const normalized = normalizeEventRequestToSpec(createEventRequestFromText({ requestId: "synthetic-applied-source", channel: "text", rawText: "Lunch am 2026-09-22 für 35 Personen." }));
-  const spec: AcceptedEventSpec = {
-    ...normalized, specId: "spec-applied-snapshot", lifecycle: { commercialState: "accepted" },
-    attendees: { expected: 35 },
-    event: { ...normalized.event, date: "2026-09-22", schedule: [] },
-    menuPlan: ["soup", "salad", "purchased"].map(componentId => ({ componentId, label: componentId, servings: 35, serviceStyle: "buffet" })),
-    budgetContext: { pricingSummary: { subtotal: { amount: 9876, currency: "EUR" } } },
-    uncertainties: [{ field: "event.schedule", severity: "low", message: 'Zeitangabe in "Lunch" ist nicht als vollständiger Termin belastbar.', suggestedQuestion: "Wie lautet das verbindliche Zeitfenster?" }]
-  };
-  const handoff: ProductionHandoff = {
-    schemaVersion: "1.0", businessId: "local", handoffId: `handoff-applied-snapshot${existing?.suffix ?? ""}`, approvedOfferId: `offer-applied-snapshot${existing?.suffix ?? ""}`, approvalRequestId: `offer-approval-applied-snapshot${existing?.suffix ?? ""}`,
-    createdAt: "2026-09-19T10:00:00.000Z", eventSpecSnapshot: structuredClone(spec), pricingSnapshot: spec.budgetContext!.pricingSummary!,
-    source: { draftId: "offer-draft-applied-snapshot", revision: 1, selectedVariantId: "variant-applied-snapshot" }
-  };
-  const recipes: Recipe[] = ["soup", "salad"].map(name => ({
-    schemaVersion: "1.0", recipeId: `recipe-applied-${name}`, name: `Approved ${name}`,
-    source: { tier: "digitized_cookbook", originType: "cookbook", reference: `synthetic:approved-${name}`, retrievedAt: handoff.createdAt, approvalState: "review_required", qualityScore: 1, fitScore: 1, extractionCompleteness: 1 },
-    baseYield: { servings: 10, unit: "servings" }, ingredients: [{ ingredientId: name, name: `${name} ingredient`, quantity: { amount: 1, unit: "kg" }, group: "produce" }],
-    steps: [{ index: 1, instruction: `Prepare approved ${name}.` }], scalingRules: { defaultLossFactor: 1, batchSize: 10 }, allergens: [], dietTags: ["vegetarian"]
-  }));
-  for (const recipe of recipes) await repository.save(context, recipe);
-  await intakeRecords.insertSpec(context, spec);
-  const app = buildProductionApp({ dataRoot: rootDir, pgPool, store, repository, intakeRecords,
-    discoveryService: new RecipeDiscoveryService(repository, { searchRecipes: async () => [] }),
-    trustedActorSecret: secret, env: { CATERING_DEV_AUTH: "1" }, handoffReader: { get: async (actor, id) => actor.businessId === "local" && id === handoff.handoffId ? handoff : undefined } });
-  const createdCase = await app.inject({ method: "POST", url: `/v1/production/cases/from-handoff/${handoff.handoffId}`, headers, payload: {} });
-  expect(createdCase.statusCode, createdCase.body).toBe(201);
-  const caseId = createdCase.json().case.caseId as string;
-  const createdDraft = await app.inject({ method: "POST", url: `/v1/production/drafts/from-handoff/${handoff.handoffId}`, headers, payload: { caseId } });
-  expect(createdDraft.statusCode, createdDraft.body).toBe(201);
-  const rootDraft = createdDraft.json().draft as ProductionDraft;
-  const revisedResponse = await app.inject({ method: "POST", url: `/v1/production/drafts/${rootDraft.draftId}/revise`, headers, payload: {
-    caseId, expectedRevision: rootDraft.revision,
-    componentClassifications: spec.menuPlan.map(component => ({ componentId: component.componentId, menuCategory: "vegetarian" })),
-    componentUpdates: [
-      ...recipes.map((recipe, index) => ({ componentId: spec.menuPlan[index]!.componentId, productionMode: "scratch", recipeOverrideId: recipe.recipeId, notes: "Explicit reviewed preparation" })),
-      { componentId: "purchased", productionMode: "convenience_purchase", purchasedElements: ["Croissants", "Wasser"], purchasedQuantities: [{ element: "Croissants", amountPerPerson: 1, unit: "Stück" }, { element: "Wasser", amountPerPerson: 0.5, unit: "l" }], notes: "Explicit purchased quantities" }
-    ], eventSchedule: [{ label: "Service", start: "12:00", end: "14:00" }]
-  } });
-  expect(revisedResponse.statusCode, revisedResponse.body).toBe(201);
-  const revision = revisedResponse.json().draft as ProductionDraft;
-  for (const [index, recipe] of recipes.entries()) {
-    const componentId = spec.menuPlan[index]!.componentId;
-    const evidence = await app.inject({ method: "POST", url: `/v1/production/cases/${caseId}/planning-evidence`, headers, payload: {
-      draftId: revision.draftId, draftRevision: revision.revision, componentId, recipeId: recipe.recipeId,
-      quantityDecision: { decisionId: `quantity-${componentId}`, eventSpecId: spec.specId, componentId, guestCount: 35, serviceFormat: "buffet", dishRole: "other", basis: "servings_per_person", perUnitAmount: 1, perUnitUnit: "servings", targetAmount: 35, targetUnit: "servings", rationale: "Explicit synthetic portions", evidence: { kind: "operator_instruction", reference: "synthetic-operator" }, reviewStatus: "approved" },
-      recipeEventUseReview: { eventSpecId: spec.specId, recipeId: recipe.recipeId, reviewedBy: "Produktions-Mitarbeiter", reviewedAt: "2026-09-19T11:00:00.000Z", decision: "accepted_for_event", confirmations: { quantitiesAndYield: true, methodAndEquipment: true, allergensAndDiet: true, holdingAndRegeneration: true } }
-    } });
-    expect(evidence.statusCode, evidence.body).toBe(201);
-  }
-  const preparedResponse = await app.inject({ method: "POST", url: `/v1/production/drafts/${revision.draftId}/prepare`, headers, payload: {} });
-  expect(preparedResponse.statusCode, preparedResponse.body).toBe(201);
-  const prepared = preparedResponse.json().draft as ProductionDraft;
-  for (const card of prepared.reviewCards) {
-    const review = await app.inject({ method: "PATCH", url: `/v1/production/drafts/${prepared.draftId}/review-cards/${card.cardId}`, headers, payload: { decision: "fits" } });
-    expect(review.statusCode, review.body).toBe(200);
-  }
-  const approval = await app.inject({ method: "POST", url: `/v1/production/drafts/${prepared.draftId}/decision`, headers, payload: { decision: "approved" } });
-  expect(approval.statusCode, approval.body).toBe(201);
-  const approvedId = approval.json().approvedProductionSpec.approvedProductionSpecId as string;
-  return { app, store, repository, intakeRecords, handoff, rootDir, caseId, rootDraft, revision, prepared, approvedId,
-    apply: () => app.inject({ method: "POST", url: `/v1/production/approved-specs/${approvedId}/apply`, headers }) };
-}
+import { approvedDescendant, context, headers, secret } from "./support/approved-production-descendant.js";
 
 describe("applied canonical snapshots", () => {
+  it("preserves archived and legacy reads and fails closed for broken current pointers or a mixed response", async () => {
+    const fixture = await approvedDescendant();
+    let spy: ReturnType<typeof vi.spyOn> | undefined;
+    try {
+      expect((await fixture.apply()).statusCode).toBe(200);
+      const original = (await fixture.store.getCase(context, fixture.caseId))!;
+      const get = () => fixture.app.inject({ method: "GET", url: `/v1/production/cases/${fixture.caseId}`, headers });
+      for (const patch of [{ status: "archived" as const }]) {
+        const before = (await fixture.store.getCase(context, fixture.caseId))!;
+        await fixture.store.updateCase(context, fixture.caseId, before.version, { ...before, ...patch, version: before.version + 1 });
+        const response = await get();
+        expect(response.statusCode, response.body).toBe(200);
+        expect(response.json().lastApplied).toBeUndefined();
+        const changed = (await fixture.store.getCase(context, fixture.caseId))!;
+        await fixture.store.updateCase(context, fixture.caseId, changed.version, { ...original, version: changed.version + 1 });
+      }
+      const getCase = fixture.store.getCase.bind(fixture.store);
+      spy = vi.spyOn(fixture.store, "getCase").mockImplementation(async (...args) => {
+        const item = await getCase(...args);
+        return item ? { ...item, productionHandoffId: undefined } : item;
+      });
+      const legacy = await get();
+      expect(legacy.statusCode, legacy.body).toBe(200);
+      expect(legacy.json().lastApplied).toBeUndefined();
+      spy.mockRestore(); spy = undefined;
+      for (const patch of [
+        { currentPlanId: original.currentPlanId, currentPurchaseListId: undefined },
+        { currentPlanId: undefined, currentPurchaseListId: original.currentPurchaseListId },
+        { currentPlanId: original.currentPlanId, currentPurchaseListId: original.currentPurchaseListId }
+      ]) {
+        const before = (await fixture.store.getCase(context, fixture.caseId))!;
+        await fixture.store.updateCase(context, fixture.caseId, before.version, { ...before, ...patch, version: before.version + 1 });
+        const originalEvents = fixture.store.listEvents.bind(fixture.store);
+        spy = vi.spyOn(fixture.store, "listEvents").mockImplementation(async (...args) => (await originalEvents(...args)).filter(event => event.kind !== "result"));
+        expect((await get()).statusCode).toBe(409);
+        spy.mockRestore(); spy = undefined;
+      }
+      const before = (await fixture.store.getCase(context, fixture.caseId))!;
+      await fixture.store.updateCase(context, fixture.caseId, before.version, { ...original, approvedProductionSpecId: "wrong-approved", version: before.version + 1 });
+      expect((await get()).statusCode).toBe(409);
+      const changed = (await fixture.store.getCase(context, fixture.caseId))!;
+      await fixture.store.updateCase(context, fixture.caseId, changed.version, { ...original, version: changed.version + 1 });
+      const originalEvents = fixture.store.listEvents.bind(fixture.store);
+      let reads = 0;
+      spy = vi.spyOn(fixture.store, "listEvents").mockImplementation(async (...args) => {
+        const events = await originalEvents(...args);
+        if (++reads === 4) return [...events, { ...events[0]!, eventId: "synthetic-raced-event", sequence: 99999 }];
+        return events;
+      });
+      expect((await get()).statusCode).toBe(409);
+    } finally { spy?.mockRestore(); await fixture.app.close(); }
+  });
+
+  it("serves an explicit frozen snapshot after current pointers clear and rejects missing or ambiguous anchors", async () => {
+    const fixture = await approvedDescendant();
+    const exports = buildPrintExportApp({ rootDir: fixture.rootDir, trustedActorSecret: secret, env: { CATERING_DEV_AUTH: "1" } });
+    let spy: ReturnType<typeof vi.spyOn> | undefined;
+    try {
+      expect((await fixture.apply()).statusCode).toBe(200);
+      const approved = (await fixture.store.getApprovedProductionSpec(context, fixture.approvedId))!;
+      const current = (await fixture.store.getCase(context, fixture.caseId))!;
+      await fixture.store.updateCase(context, fixture.caseId, current.version, { ...current, currentPlanId: undefined, currentPurchaseListId: undefined, approvedProductionSpecId: undefined, version: current.version + 1 });
+      await expect(resolveLastAppliedSnapshot(fixture.store, { businessId: "foreign" }, fixture.caseId)).rejects.toMatchObject({ statusCode: 409 });
+      const response = await fixture.app.inject({ method: "GET", url: `/v1/production/cases/${fixture.caseId}`, headers });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json().lastApplied).toMatchObject({ approvedProductionSpecId: fixture.approvedId, draftId: approved.sourceDraft.draftId, draftRevision: approved.sourceDraft.revision, productionPlan: approved.artifacts.productionPlan, purchaseList: approved.artifacts.purchaseList });
+      const url = `/v1/exports/production-folders/${approved.artifacts.productionPlan.planId}/html?snapshotCaseId=${fixture.caseId}`;
+      expect((await exports.inject({ method: "GET", url, headers })).statusCode).toBe(200);
+      expect((await exports.inject({ method: "GET", url: `/v1/exports/production-folders/${approved.artifacts.productionPlan.planId}/html?snapshotCaseId=`, headers })).statusCode).toBe(409);
+      expect((await exports.inject({ method: "GET", url: `/v1/exports/production-folders/missing/html?snapshotCaseId=${fixture.caseId}`, headers })).statusCode).toBe(409);
+      expect((await exports.inject({ method: "GET", url: `/v1/exports/production-folders/${approved.artifacts.productionPlan.planId}/html?snapshotCaseId=foreign-case`, headers })).statusCode).toBe(409);
+      const original = ProductionStore.prototype.listApplyManifests;
+      spy = vi.spyOn(ProductionStore.prototype, "listApplyManifests").mockImplementation(async function (this: ProductionStore, actor) { const rows = await original.call(this, actor); return [...rows, ...rows]; });
+      expect((await exports.inject({ method: "GET", url, headers })).statusCode).toBe(409);
+      expect((await fixture.app.inject({ method: "GET", url: `/v1/production/cases/${fixture.caseId}`, headers })).statusCode).toBe(409);
+    } finally { spy?.mockRestore(); await exports.close(); await fixture.app.close(); }
+  });
+
   it("keeps the first frozen publication exportable while a second same-spec handoff is approved and applied", async () => {
     const first = await approvedDescendant();
     const exports = buildPrintExportApp({ rootDir: first.rootDir, trustedActorSecret: secret, env: { CATERING_DEV_AUTH: "1" } });
