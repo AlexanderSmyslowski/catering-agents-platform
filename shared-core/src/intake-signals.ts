@@ -304,6 +304,17 @@ export function analyzeIntakeText(text: string): IntakeSignals {
       segments.splice(index - 1, 2, segments[index - 1] + " " + segments[index]);
     } else index += 1;
   }
+  // A quoted unit price is not a priced line; even a stated bottle count
+  // may describe a limit or availability rather than the billable quantity.
+  const corkage = eventText.match(/\bKorkgeld\b[^\n;]{0,80}?(\d+(?:[.,]\d{1,2})?)\s*(?:€|EUR|Euro)\s*(?:pro|je|\/)\s*Flasche\b/i);
+  if (corkage) {
+    const negated = /\b(?:kein|keine|keinen|ohne)\s*$/i.test(eventText.slice(Math.max(0, corkage.index! - 20), corkage.index));
+    addUniqueUncertainty(uncertainties, {
+      field: "offer.extra", severity: "medium",
+      message: "Die Angabe zum Korkgeld ist für das Angebot gesondert zu klären.",
+      suggestedQuestion: `Wie werden die Angabe ${negated ? "kein Korkgeld bei gleichzeitig genanntem Preis" : "Korkgeld"} ${corkage[1]} € pro Flasche und die abrechenbare Menge im Angebot berücksichtigt?`
+    });
+  }
   const dates = [...new Set(segments.flatMap(extractDates))];
   const selectedDate = dates.length === 1 && isValidEventDate(dates[0]) ? dates[0] : undefined;
   if (dates.length && !selectedDate) {
