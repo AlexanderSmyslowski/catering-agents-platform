@@ -137,6 +137,37 @@ afterEach(() => {
 });
 
 describe("ProductionDraftReviewPanel", () => {
+  it("requires a clear confirmation before discarding a draft and permits cancellation", async () => {
+    vi.spyOn(api, "loadProductionDrafts").mockResolvedValue({ items: [draftFixture()], approvedProductionSpecs: [] });
+    const decide = vi.spyOn(api, "decideProductionDraft").mockResolvedValue({ approval: { decision: "rejected" } } as never);
+    const container = document.createElement("div"); document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => { root.render(createElement(ProductionDraftReviewPanel, { submitting: false, caseId: activeCaseId })); await flushPromises(); });
+    const button = (text: string) => [...container.querySelectorAll("button")].find(item => item.textContent === text)!;
+    await act(async () => { button("Entwurf verwerfen").click(); await flushPromises(); });
+    expect(decide).not.toHaveBeenCalled();
+    expect(container.querySelector('[role="group"][aria-label="Entwurf verwerfen bestätigen"]')?.textContent).toContain("Der zuletzt übernommene Stand bleibt erhalten");
+    await act(async () => { button("Entwurf behalten").click(); await flushPromises(); });
+    expect(decide).not.toHaveBeenCalled();
+    expect(container.querySelector('[aria-label="Entwurf verwerfen bestätigen"]')).toBeNull();
+    await act(async () => { button("Entwurf verwerfen").click(); await flushPromises(); });
+    await act(async () => { button("Diesen Entwurf endgültig verwerfen").click(); await flushPromises(); });
+    expect(decide).toHaveBeenCalledExactlyOnceWith(draftFixture().draftId, "rejected");
+    await act(async () => root.unmount());
+  });
+
+  it("shows the outstanding approval checks next to the disabled release action", async () => {
+    vi.spyOn(api, "loadProductionDrafts").mockResolvedValue({ items: [draftFixture()], approvedProductionSpecs: [] });
+    const container = document.createElement("div"); document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => { root.render(createElement(ProductionDraftReviewPanel, { submitting: false, caseId: activeCaseId })); await flushPromises(); });
+    const approve = [...container.querySelectorAll("button")].find(item => item.textContent === "Entwurf freigeben")!;
+    expect(approve.disabled).toBe(true);
+    expect(approve.getAttribute("aria-describedby")).toBeTruthy();
+    expect(document.getElementById(approve.getAttribute("aria-describedby")!)?.textContent).toContain("5 erforderliche Prüfpunkte sind noch offen");
+    await act(async () => root.unmount());
+  });
+
   it("keeps raw source, status and decision values out of operator-facing labels", () => {
     const draft = draftFixture();
 

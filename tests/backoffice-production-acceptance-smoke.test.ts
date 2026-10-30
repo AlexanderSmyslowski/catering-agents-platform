@@ -1224,18 +1224,19 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).not.toContain("Workbench-Projektion");
     expect(content).not.toContain("Arbeitsverlauf");
     expect(content).not.toContain("production-session-");
-    expect(content).toContain("Session-Grundlage");
+    expect(content).toContain("Herkunft und technische Hinweise");
+    expect(content).not.toContain("Session-Grundlage");
     expect(content).toContain("Strukturierte Veranstaltungsdaten bleiben führend");
-    expect(content).toContain("Quellenanker");
     expect(content).toContain(
       "produktion-angebot.pdf · application/pdf · sha256:fedcba987654 · production · 2026-05-21T08:01:00.000Z"
     );
-    expect(content).toContain("Produktionsoutput / Downloadanker");
+    expect(content).not.toContain("Produktionsoutput / Downloadanker");
     expect(content).toContain("Vorhandene Produktionspläne, Einkaufslisten und Exportanker bleiben prüfbare Ergebnisobjekte.");
     expect(content).toContain("Klärbereich");
     expect(content).toContain("1 offene Rückfrage");
-    expect(content).toContain("Prüfung vor Neuberechnung");
-    expect(content).toContain("Agent fragt");
+    expect(content).toContain("Offene Rückfragen vor einer Neuberechnung klären");
+    expect(content).toContain("Frage 1 von 1");
+    expect(content).not.toContain("Agent fragt");
     expect(content).toContain("Rückfrage offen");
     expect(content).toContain("Rückfragen beantworten");
     expect(content).not.toContain("Deine strukturierte Antwort im Chatfluss");
@@ -1907,7 +1908,7 @@ describe("backoffice production acceptance smoke", () => {
 
     expect(content).toContain("Rückfragen: offen 0 · beantwortet 1");
     expect(content).toContain("Rückfrage beantwortet");
-    expect(content).toContain("Antwort auf Rückfrage");
+    expect(content).toContain("Gespeicherte Antwort");
     expect(content).toContain("Glutenfreies Baguette wird separat ersetzt.");
     expect(content).not.toContain("Rückfragen: offen 1 · beantwortet 0");
   });

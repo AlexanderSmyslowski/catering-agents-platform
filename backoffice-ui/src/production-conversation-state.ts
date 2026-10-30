@@ -3,7 +3,7 @@ import {
   type ProductionConversationProjection,
   type ProductionConversationSourceInput
 } from "../../shared-core/src/conversation-projection.js";
-import type { ProductionSourceDetail } from "./api.js";
+import type { ProductionDraft, ProductionSourceDetail } from "./api.js";
 import {
   buildProductionAssumptions,
   buildProductionQuestions
@@ -87,6 +87,7 @@ export function buildProductionConversationState(input: {
   intakeRequestDetail?: ProductionSourceDetail | null;
   currentSpecPlans: Array<Record<string, unknown>>;
   currentSpecPurchaseLists: Array<Record<string, unknown>>;
+  dietaryQuestionReviews?: ProductionDraft["dietaryQuestionReviews"];
 }): ProductionConversationState {
   const localProductionQuestions = input.focusedProductionSpec
     ? buildProductionQuestions(input.focusedProductionSpec)
@@ -107,6 +108,18 @@ export function buildProductionConversationState(input: {
     productionPlans: input.currentSpecPlans,
     purchaseLists: input.currentSpecPurchaseLists
   });
+  const dietaryIndexes = new Set<number>();
+  for (const message of productionConversationProjection.messages) {
+    if (message.type !== "structured_agent_question" || !message.text.startsWith("Welche Ernährungskennzeichnung gilt nach Rezeptprüfung für ") || !message.text.endsWith("?")) continue;
+    if (message.questionIndex !== undefined) dietaryIndexes.add(message.questionIndex);
+    const matches = (input.dietaryQuestionReviews ?? []).filter(review => review.question === message.text);
+    message.clarificationAnswerStatus = matches.length === 1 && matches[0]?.status === "confirmed" ? "answered" : "unanswered";
+    if (matches.length === 1 && matches[0]?.status === "confirmed" && matches[0].answer) {
+      message.reviewedAnswerText = matches[0].answer;
+    }
+  }
+  productionConversationProjection.messages = productionConversationProjection.messages.filter(message =>
+    message.type !== "user_structured_answer" || message.questionIndex === undefined || !dietaryIndexes.has(message.questionIndex));
   const partialSourceAnchor = partialProductionSourceAnchorText(input.intakeRequestDetail);
   if (
     partialSourceAnchor &&

@@ -15,6 +15,7 @@ import {
   type ProductionCase,
   type TrustedActor
 } from "@catering/shared-core";
+import { resolveLastAppliedSnapshot } from "../last-applied-snapshot.js";
 import type { ProductionHandoffReader } from "../ports/production-handoff-reader.js";
 import { InMemoryRecipeRepository } from "../repositories/in-memory-recipe-repository.js";
 import {
@@ -24,7 +25,8 @@ import {
 } from "../repositories/production-store.js";
 import {
   canReadProductionCommercials,
-  projectProductionCaseEvent
+  projectProductionCaseEvent,
+  projectProductionEventSpec
 } from "./production-response-projection.js";
 
 interface ProductionCaseCreateBody {
@@ -275,10 +277,21 @@ export function registerProductionCaseRoutes(
     const trustedActor = actor(request);
     const productionCase = await store.getCase(trustedActor, request.params.caseId);
     if (!productionCase) return reply.code(404).send({ message: "Produktionsauftrag nicht gefunden." });
+    const events = await store.listEvents(trustedActor, productionCase.caseId);
+    // Archived and pre-handoff cases retain their established read contract.
+    const last = productionCase.status !== "archived" && productionCase.productionHandoffId
+      ? await resolveLastAppliedSnapshot(store, trustedActor, productionCase.caseId) : undefined;
+    const [confirmedCase, confirmedEvents] = await Promise.all([
+      store.getCase(trustedActor, productionCase.caseId), store.listEvents(trustedActor, productionCase.caseId)
+    ]);
+    if (!confirmedCase || !areJsonValuesEqual(confirmedCase, productionCase) ||
+        !areJsonValuesEqual(confirmedEvents, events) || (last && !areJsonValuesEqual(last.productionCase, productionCase))) {
+      return reply.code(409).send({ message: "Der Produktionsauftrag wurde zwischenzeitlich geändert. Bitte erneut laden." });
+    }
     return reply.send({
       case: productionCase,
-      events: (await store.listEvents(trustedActor, productionCase.caseId))
-        .map((event) => projectProductionCaseEvent(trustedActor, event))
+      ...(last ? { lastApplied: { approvedProductionSpecId: last.approvedSpec.approvedProductionSpecId, draftId: last.approvedSpec.sourceDraft.draftId, draftRevision: last.approvedSpec.sourceDraft.revision, eventSpec: projectProductionEventSpec(trustedActor, last.approvedSpec.artifacts.eventSpec), productionPlan: last.approvedSpec.artifacts.productionPlan, purchaseList: last.approvedSpec.artifacts.purchaseList } } : {}),
+      events: events.map((event) => projectProductionCaseEvent(trustedActor, event))
     });
   });
 

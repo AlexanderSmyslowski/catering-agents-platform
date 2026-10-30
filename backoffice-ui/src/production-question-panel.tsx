@@ -1,3 +1,6 @@
+import { productionDraftEntryId } from "./production-entry-focus.js";
+import { ProductionDietaryQuestionActions } from "./production-dietary-question-actions.js";
+import type { ProductionDraft } from "./api.js";
 import { useEffect, useState } from "react";
 import type { ProductionConversationProjection } from "../../shared-core/src/conversation-projection.js";
 import type { ProductionSourceDetail } from "./api.js";
@@ -49,6 +52,7 @@ export type ProductionQuestionEditorActions = {
 };
 
 export type ProductionQuestionPanelState = {
+  currentDraft?: ProductionDraft;
   focusedProductionSpec?: Record<string, unknown>;
   focusedSpecReadinessLabel: string;
   selectedPlan?: Record<string, unknown>;
@@ -166,19 +170,28 @@ export function ProductionQuestionPanel({
     setSourceReviewConfirmed(false);
   }, [focusedSpecId, requestId]);
 
+  const hasDietaryReview = Boolean(questionState.currentDraft?.draftArtifacts?.productionPlan &&
+    questionState.currentDraft.draftArtifacts.purchaseList && questionState.currentDraft.dietaryQuestionReviews?.length);
+
+  const allDietaryAnswered = hasDietaryReview && productionQuestions.length === 0 &&
+    questionState.currentDraft!.dietaryQuestionReviews!.every(review => review.status === "confirmed");
+
   const questionCountLabel =
     productionQuestions.length === 1 ? "1 Rückfrage beantworten" : `${productionQuestions.length} Rückfragen beantworten`;
 
   return (
-    <article id="production-question-panel" className="panel form-panel question-panel production-step-card">
+    <article tabIndex={-1} id="production-question-panel" className="panel form-panel question-panel production-step-card">
       <header>
-        <p className="eyebrow">{!answersEditable ? "Bestehender Stand" : hasExistingPlan ? "Prüfung vor Neuberechnung" : "Prüfung vor Berechnung"}</p>
         <h3>{!answersEditable ? "Produktionsstand prüfen" : productionQuestions.length > 0 ? questionCountLabel : "Erkannte Angaben prüfen"}</h3>
         <p className="helper-text">
           {canResetStaleEditor
             ? "Eine neue Prüffassung ist verfügbar. Schließe das bisherige Antwortfenster, um sie zu bearbeiten."
             : !answersEditable
             ? "Der bestehende Produktionsstand bleibt erhalten und kann hier nicht geändert werden. Änderungen sind nur in einer offenen Prüffassung möglich. Offene fachliche Prüfungen und Rückfragen sind weiterhin zu klären."
+            : hasDietaryReview
+            ? allDietaryAnswered
+              ? "Alle Ernährungsfragen sind beantwortet. Prüfe als Nächstes die übrigen Prüfpunkte im Entwurf; Freigabe und Übernahme bleiben eigene Schritte."
+              : "Beantworte die Rückfragen einzeln und prüfe den vorbereiteten Produktionsstand. Die interne Freigabe und die Übernahme bleiben eigene Schritte."
             : hasExistingPlan
             ? "Ein Produktionsplan ist bereits gespeichert. Offene Rückfragen vor einer Neuberechnung klären; der bisherige Stand bleibt erhalten."
             : "Beantworte offene Punkte und prüfe die erkannten Komponenten. Erst danach entstehen belastbare Mengen, Rezepte und Einkaufslisten."}
@@ -192,7 +205,7 @@ export function ProductionQuestionPanel({
       ) : null}
       {focusedProductionSpec ? (
         <>
-          {answersEditable ? <div className="question-action-panel" aria-label="Nächste Aktion für Rückfragen">
+          {answersEditable && !hasDietaryReview ? <div className="question-action-panel" aria-label="Nächste Aktion für Rückfragen">
             <div>
               <strong>{productionQuestions.length > 0 ? questionCountLabel : "Keine offenen Rückfragen"}</strong>
               <p className="helper-text">
@@ -228,6 +241,15 @@ export function ProductionQuestionPanel({
               </button>
             </div>
           </div> : null}
+          {answersEditable && allDietaryAnswered && questionState.currentDraft?.draftId ? <button type="button" className="secondary-button" onClick={() => {
+            const entry = document.getElementById(productionDraftEntryId(questionState.currentDraft!.draftId));
+            for (let parent = entry?.parentElement; parent; parent = parent.parentElement) if (parent instanceof HTMLDetailsElement) parent.open = true;
+            entry?.focus({ preventScroll: true });
+            entry?.scrollIntoView?.({ block: "start", inline: "nearest", behavior: "auto" });
+          }}>Zu den Prüfpunkten</button> : null}
+          {answersEditable && hasDietaryReview ? <div className="production-question-guidance">
+            <button className="secondary-button" disabled={submitting || actionState.editAnswersDisabled} onClick={() => beginSpecEdit(focusedProductionSpec)}>Angaben oder Kennzeichnung ändern</button>
+          </div> : null}
           <div className="question-window">
             <ProductionQuestionThread
               specLabel={getSpecLabel(focusedProductionSpec)}
@@ -238,6 +260,9 @@ export function ProductionQuestionPanel({
               selectedPlanReadinessLabel={selectedPlanReadinessLabel}
               currentSpecPurchaseLists={currentSpecPurchaseLists}
               productionConversationProjection={productionConversationProjection}
+              renderQuestionActions={activeCaseId && questionState.currentDraft ? question => <ProductionDietaryQuestionActions
+                caseId={activeCaseId} draft={questionState.currentDraft!} question={question} busy={submitting}
+                onChanged={refreshAfterDraftDecision} /> : undefined}
               answerEditor={
                 answersEditable && actionState.isFocusedSpecEditing ? (
                   <ProductionStructuredAnswerEditor
@@ -298,7 +323,7 @@ export function ProductionQuestionPanel({
               onDraftChanged={refreshAfterDraftDecision}
             /> : null}
           </div>
-          {answersEditable && actionState.sourceReviewHelperText ? (
+          {answersEditable && !hasDietaryReview && actionState.sourceReviewHelperText ? (
             <p className="helper-text" role="status">
               {actionState.sourceReviewHelperText}
             </p>

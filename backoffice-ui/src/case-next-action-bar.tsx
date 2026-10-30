@@ -10,6 +10,7 @@ export type CaseNextActionBarProps = {
   busy?: boolean;
   error?: string;
   children?: ReactNode;
+  guidanceOverride?: { label: string; hint: string };
 };
 
 const phaseLabels = ["Quelle", "KI-Entwurf", "Prüfung", "Plan"] as const;
@@ -41,7 +42,8 @@ export function CaseNextActionBar({
   disabledReason,
   busy = false,
   error,
-  children
+  children,
+  guidanceOverride
 }: CaseNextActionBarProps) {
   const terminal = action.kind === "complete";
   const activePhase = phaseForAction(action);
@@ -64,7 +66,7 @@ export function CaseNextActionBar({
 
   return (
     <aside className="case-next-action-bar" aria-label="Nächster Schritt" data-testid="case-next-action-bar">
-      {product ? <div className="case-next-action-bar__guidance"><h2>Nächster Schritt</h2><p>{disabled ? disabledReason ?? "Änderungen zuerst speichern oder abbrechen." : hints[action.kind]}</p></div> : null}
+      {product ? <div className="case-next-action-bar__guidance"><h2>Nächster Schritt</h2><p>{disabled ? disabledReason ?? "Änderungen zuerst speichern oder abbrechen." : guidanceOverride?.hint ?? hints[action.kind]}</p></div> : null}
       {product && !terminal ? <p className="case-next-action-bar__mobile-phase">{`Schritt ${activePhase + 1} von 4 · ${labels[activePhase]}`}</p> : null}
       <ol className="case-next-action-bar__phases" aria-label="Arbeitsstand">
         {labels.map((label, index) => (
@@ -85,7 +87,7 @@ export function CaseNextActionBar({
             disabled={disabled || busy}
             onClick={() => void onAction(action)}
           >
-            {busy ? "Wird ausgeführt …" : taskLabel}
+            {busy ? "Wird ausgeführt …" : guidanceOverride?.label ?? taskLabel}
           </button>
         )}
         {children}

@@ -182,6 +182,7 @@ type ProductWorkspaceProps = {
   currentApprovedProductionSpecId?: string;
   currentProductionApprovalApplied?: boolean;
   currentProductionResultArtifactId?: string;
+  lastAppliedProduction?: import("./api.js").LastAppliedProductionSnapshot;
 };
 
 function offerDraftNextState(draft?: OfferDraft): CaseNextDraftState | undefined {
@@ -440,7 +441,8 @@ function ProductWorkspaceView({
   productionSourceDetail,
   currentApprovedProductionSpecId,
   currentProductionApprovalApplied,
-  currentProductionResultArtifactId
+  currentProductionResultArtifactId,
+  lastAppliedProduction
 }: ProductWorkspaceProps) {
   const [submitting, setSubmitting] = useState(false);
   const [offerMenuEditing, setOfferMenuEditing] = useState(false);
@@ -917,14 +919,16 @@ function ProductWorkspaceView({
          : undefined,
         intakeRequestDetail,
         currentSpecPlans,
-        currentSpecPurchaseLists
+        currentSpecPurchaseLists,
+        dietaryQuestionReviews: currentProductionDraft?.dietaryQuestionReviews
       }),
     [
       currentSpecPlans,
       currentSpecPurchaseLists,
       focusedProductionSpec,
       focusedProductionSpecRecord,
-      intakeRequestDetail
+      intakeRequestDetail,
+      currentProductionDraft?.dietaryQuestionReviews
     ]
   );
 
@@ -1405,6 +1409,12 @@ function ProductWorkspaceView({
       element?.scrollIntoView?.({ block: "start", inline: "nearest", behavior: "auto" });
     };
 
+    if (route === "production" && productionQuestions.length > 0 && (currentProductionApprovalApplied || currentProductionDraft?.dietaryQuestionReviews?.some(review => review.status === "pending") || document.getElementById("production-clarification-continuation"))) {
+      focus(document.getElementById("production-clarification-continuation")
+        ? "#production-clarification-continuation" : "#production-question-panel");
+      return;
+    }
+
     const mutating = action.kind === "inspect_handoff" ||
       action.kind === "approve_offer" ||
       action.kind === "send_handoff" ||
@@ -1496,6 +1506,8 @@ function ProductWorkspaceView({
       {offerCaseNotReady ? (error ? <p className="form-error" role="alert">{error}</p> : null) : (
         <CaseNextActionBar
           product={route}
+          guidanceOverride={route === "production" && productionQuestions.length > 0 && (currentProductionApprovalApplied || currentProductionDraft?.dietaryQuestionReviews?.some(review => review.status === "pending"))
+            ? { label: "Offene Rückfragen klären", hint: currentProductionApprovalApplied ? "Öffne die Rückfragen und lege dafür eine neue Prüffassung an. Der übernommene Stand bleibt erhalten." : "Beantworte die Rückfragen einzeln. Anschließend den vorbereiteten Produktionsstand prüfen und freigeben." } : undefined}
           action={nextAction}
           onAction={(action) => void runNextAction(action).catch((cause) => setError(cause instanceof Error ? cause.message : "Nächster Schritt konnte nicht ausgeführt werden."))}
           busy={submitting}
@@ -1507,6 +1519,8 @@ function ProductWorkspaceView({
 
       {route === "offer" ? <OfferConversationalWorkbench {...offerWorkbenchState} refreshRequired={offerCaseNotReady || offerCaseNeedsRefresh} /> : null}
       {route === "production" ? <ProductionRouteMainLayout {...productionRouteMainLayoutState}
+        currentDraft={currentProductionDraft} currentApplied={currentProductionApprovalApplied} lastApplied={lastAppliedProduction}
+        questionState={{ ...productionRouteMainLayoutState.questionState, currentDraft: currentProductionDraft }}
         workbenchSummary={{
           ...productionRouteMainLayoutState.workbenchSummary,
           approvalState: currentApprovedProductionSpecId
@@ -1622,6 +1636,7 @@ function ProductRouteController({ route, shell, masthead }: ProductRouteControll
           availableCases={product.data.cases}
           currentProductionDraftId={product.data.currentDraft?.draftId}
           currentProductionDraft={product.data.currentDraft}
+          lastAppliedProduction={product.data.lastApplied}
           productionSourceDetail={buildProductionSnapshotSourceDetail(product.data)}
           currentApprovedProductionSpecId={product.data.approvedProductionSpec?.approvedProductionSpecId}
           currentProductionApprovalApplied={product.data.approvedProductionSpec?.applied}

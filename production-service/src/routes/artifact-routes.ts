@@ -1,3 +1,4 @@
+import { resolveLastAppliedSnapshot } from "../last-applied-snapshot.js";
 import { recordSpecialDietResponse } from "../../../shared-core/src/special-diet-response.js";
 import { validPurchasedQuantities, type PurchasedQuantity } from "@catering/shared-core";
 import type { FastifyInstance } from "fastify";
@@ -51,6 +52,7 @@ import {
 } from "../repositories/production-store.js";
 import type { ProductionDecisionTargetScope } from "../repositories/production-decision-repository.js";
 import { buildProductionArtifacts } from "../rules/planning.js";
+import { buildDietaryQuestionReviewCards, dietaryCardCanFit, projectDietaryQuestionReviews } from "../rules/dietary-question-review.js";
 import {
   canReadProductionCommercials,
   projectProductionDraft,
@@ -299,11 +301,17 @@ function isGeneratedPreparationCard(card: ProductionDraftReviewCard): boolean {
   );
 }
 
-function independentDraftReviewCards(draft: ProductionDraft): ProductionDraftReviewCard[] | undefined {
+function independentDraftReviewCards(draft: ProductionDraft, caseId?: string): ProductionDraftReviewCard[] | undefined {
   const questions = independentDraftQuestions(draft);
+  const generatedDietaryCards = caseId && draft.draftArtifacts.eventSpec
+    ? buildDietaryQuestionReviewCards({ businessId: draft.businessId, caseId, draftId: draft.draftId, revision: draft.revision, spec: draft.draftArtifacts.eventSpec })
+    : [];
   const cards: ProductionDraftReviewCard[] = [];
   for (const card of draft.reviewCards) {
     if (isGeneratedPreparationCard(card)) continue;
+    const generated = generatedDietaryCards.find(item => item.cardId === card.cardId);
+    if (generated && generated.kind === card.kind && generated.title === card.title && generated.summary === card.summary &&
+      generated.targetPath === card.targetPath && generated.targetId === card.targetId && generated.riskLevel === card.riskLevel && generated.requiredApproval === card.requiredApproval) continue;
     // Only known generated checks can be replaced. An independent obligation
     // with a removed artifact target cannot silently become an unrelated check.
     if (/^\$\.draftArtifacts\.(productionPlan|purchaseList|recipes)(?:[.\[]|$)/.test(card.targetPath ?? "")) return undefined;
@@ -1992,8 +2000,12 @@ export function registerProductionArtifactRoutes(
       const recipe = await repository.get(actor, recipeId);
       return recipe ? { recipe, recipeSnapshotHash: `sha256:${createHash("sha256").update(stableJson(recipe)).digest("hex")}` } : undefined;
     }))).filter(item => item !== undefined);
+    const caseEvents = requestedCaseId === undefined || items.length === 0 ? [] : await store.listEvents(actor, requestedCaseId);
     return reply.send({
-      items: items.map((item) => projectProductionDraft(actor, item)),
+      items: items.map((item) => ({
+        ...projectProductionDraft(actor, item),
+        dietaryQuestionReviews: requestedCaseId === undefined ? [] : projectDietaryQuestionReviews(actor.businessId, requestedCaseId, item, caseEvents)
+      })),
       planningEvidence,
       planningRecipes,
       approvedProductionSpecs: approvedProductionSpecs
@@ -2350,11 +2362,15 @@ export function registerProductionArtifactRoutes(
         !recipes.some((recipe) => recipe.recipeId === recipeId)
       );
       const planningBlockingIssues = [...new Set(artifacts.productionPlan.blockingIssues ?? [])];
-      const sourceReviewCards = canonicalOfferHandoff ? independentDraftReviewCards(draft) : [];
+      const sourceReviewCards = canonicalOfferHandoff ? independentDraftReviewCards(draft, linkedCaseId) : [];
       if (!sourceReviewCards) {
         return reply.code(422).send({ message: "Ein unabhängiger Prüfpunkt verweist auf ein zu ersetzendes Artefakt und muss zuerst geklärt werden." });
       }
       const sourceQuestions = canonicalOfferHandoff ? independentDraftQuestions(draft) : [];
+      const dietaryCards = linkedCaseId ? buildDietaryQuestionReviewCards({ businessId: actor.businessId, caseId: linkedCaseId, draftId: preparedDraftId, revision: draft.revision + 1, spec: eventSpec }) : [];
+      if (sourceReviewCards.length + dietaryCards.length + 3 + recipes.length + missingRecipeIds.length + planningBlockingIssues.length > 200) {
+        return reply.code(422).send({ message: "Zu viele Prüfpunkte für eine vorbereitete Fassung." });
+      }
       const prepared = validateProductionDraft({
         ...draft,
         draftId: preparedDraftId,
@@ -2367,6 +2383,7 @@ export function registerProductionArtifactRoutes(
         approvedAt: undefined,
         reviewCards: [
           ...sourceReviewCards,
+          ...dietaryCards,
           {
             cardId: "card-prepared-event-spec",
             kind: "event_data",
@@ -2640,6 +2657,7 @@ export function registerProductionArtifactRoutes(
           const cardIndex = current.reviewCards.findIndex((card) => card.cardId === request.params.cardId);
           if (cardIndex < 0) return { kind: "not_found" as const };
           const currentCard = current.reviewCards[cardIndex];
+          if (decision === "fits" && currentCard.cardId.startsWith("dietary-question-") && !dietaryCardCanFit(actor.businessId, reviewCaseId, current, currentCard)) return { kind: "blocking" as const };
           const effectiveOperatorComment = operatorComment ?? currentCard.operatorComment;
           const isIdempotentRetry = currentCard.decision === decision &&
             currentCard.operatorComment === effectiveOperatorComment &&
@@ -2714,6 +2732,7 @@ export function registerProductionArtifactRoutes(
         if (cardIndex < 0) return { kind: "not_found" as const };
 
         const currentCard = current.reviewCards[cardIndex];
+        if (decision === "fits" && currentCard.cardId.startsWith("dietary-question-") && !dietaryCardCanFit(actor.businessId, reviewCaseId, current, currentCard)) return { kind: "blocking" as const };
         const effectiveOperatorComment = operatorComment ?? currentCard.operatorComment;
         if (
           currentCard.decision === decision &&
@@ -2750,6 +2769,9 @@ export function registerProductionArtifactRoutes(
         }, reviewCaseId);
       if (reviewResult.kind === "not_found") {
         return reply.code(404).send({ message: "Review-Karte nicht gefunden." });
+      }
+      if (reviewResult.kind === "blocking") {
+        return reply.code(422).send({ message: "Gericht oder Ernährungskennzeichnung ist nicht eindeutig; dieser Prüfpunkt kann nicht bestätigt werden." });
       }
       if (reviewResult.kind === "conflict") {
         return reply.code(409).send({ message: "ProductionDraft wurde gleichzeitig verändert oder entschieden." });
@@ -2818,6 +2840,40 @@ export function registerProductionArtifactRoutes(
       }
       if (command && typeof command === "object" && Object.keys(command).length > 0) {
         const input = command as Record<string, unknown>;
+        if (input.kind === "clarification_followup") {
+          if (Object.keys(input).some(key => !["kind", "caseId", "expectedRevision"].includes(key)) ||
+            typeof input.caseId !== "string" || !input.caseId.trim() || input.expectedRevision !== draft.revision || draft.status !== "approved") {
+            return reply.code(409).send({ message: "Die übernommene Fassung oder Fallbindung hat sich geändert." });
+          }
+          const caseId = input.caseId.trim();
+          const snapshot = await resolveLastAppliedSnapshot(store, actor, caseId);
+          if (!snapshot || snapshot.approvedSpec.sourceDraft.draftId !== draft.draftId ||
+            snapshot.approvedSpec.sourceDraft.revision !== draft.revision) {
+            return reply.code(409).send({ message: "Nur der nachgewiesene zuletzt übernommene Stand kann eine neue Prüffassung erhalten." });
+          }
+          const cards = independentDraftReviewCards(draft, caseId);
+          if (!cards) return reply.code(422).send({ message: "Ein unabhängiger Prüfpunkt benötigt zuerst eine fachliche Klärung." });
+          const { approvalRequestId: _approval, approvedBy: _by, approvedAt: _at, ...unapproved } = draft;
+          const child = validateProductionDraft({
+            ...unapproved,
+            draftId: productionDraftRevisionCommandIdentity(actor.businessId, draft, hashText(stableJson({ caseId, kind: "clarification_followup" }))).draftId,
+            revision: draft.revision + 1, supersedesDraftId: draft.draftId, createdAt: new Date().toISOString(), status: "pending_review",
+            draftArtifacts: { eventSpec: draft.draftArtifacts.eventSpec,
+              ...(draft.draftArtifacts.notes ? { notes: draft.draftArtifacts.notes } : {}),
+              ...(draft.draftArtifacts.openQuestions ? { openQuestions: independentDraftQuestions(draft) } : {}) },
+            reviewCards: [...cards, { cardId: "card-classification-event-spec", kind: "event_data", title: "Angaben für die neue Prüffassung prüfen",
+              summary: "Offene Rückfragen einzeln klären. Der übernommene Stand bleibt unverändert; Vorbereitung, Prüfung und Freigabe sind erneut erforderlich.",
+              decision: "pending", requiredApproval: true, targetPath: "$.draftArtifacts.eventSpec" }]
+          });
+          const committed = await store.commitAppliedDraftContinuation(actor, { caseId, expectedCase: snapshot.productionCase,
+            parent: draft, approvedSpec: snapshot.approvedSpec, manifest: snapshot.manifest, child });
+          if (!committed) return reply.code(409).send({ message: "Der Auftrag hat sich geändert. Bitte den aktuellen Stand neu laden; es wurde keine andere Fassung überschrieben." });
+          await auditLog.logFor(actor, { action: "production.clarification_followup_created", entityType: "ProductionDraft", entityId: committed.draftId,
+            actor, at: committed.createdAt, idempotencyKey: `clarification-followup:${committed.draftId}`,
+            summary: "Neue offene Prüffassung aus unverändertem übernommenem Stand erstellt.",
+            details: compactAuditDetails({ draftId: committed.draftId, supersedesDraftId: draft.draftId, humanApprovalRequired: true, writesProductObject: false }) });
+          return reply.code(201).send({ draft: projectProductionDraft(actor, committed) });
+        }
         const classifications = input.componentClassifications ?? [];
         const componentUpdates = input.componentUpdates ?? [];
         const schedule = input.eventSchedule;
@@ -2893,7 +2949,7 @@ export function registerProductionArtifactRoutes(
         if (caseIds.some((id) => id !== caseId)) {
           return reply.code(409).send({ message: "ProductionDraft ist nicht eindeutig an den angegebenen Produktionsauftrag gebunden." });
         }
-        const sourceReviewCards = independentDraftReviewCards(draft);
+        const sourceReviewCards = independentDraftReviewCards(draft, caseId);
         if (!sourceReviewCards) {
           return reply.code(422).send({ message: "Ein unabhängiger Prüfpunkt verweist auf ein zu ersetzendes Artefakt und muss zuerst geklärt werden." });
         }

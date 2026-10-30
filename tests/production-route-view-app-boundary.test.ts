@@ -62,7 +62,7 @@ describe("production route view app boundary", () => {
         selectedPlanSpec: focusedSpec,
         currentSpecPlans: [selectedPlan],
         currentSpecPurchaseLists: [currentPurchaseList],
-        productionQuestions: ["Teilnehmerzahl bestätigen"],
+        productionQuestions: [],
         clarificationStatusCounts: { answered: 1, unanswered: 0 },
         filteredAuditEvents: [
           {
@@ -118,7 +118,7 @@ describe("production route view app boundary", () => {
       answeredQuestionCount: 1,
       unansweredQuestionCount: 0
     });
-    expect(boundary.productionRouteViewState.workbenchNextStep.title).toBe("Rückfragen beantworten");
+    expect(boundary.productionRouteViewState.workbenchNextStep.title).toBe("Produktionsarbeit prüfen");
     expect(boundary.productionRouteViewState.handoffState.contextLabel).toBe(
       boundary.productionStatusSummary.productionHandoffContextLabel
     );

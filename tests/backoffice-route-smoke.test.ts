@@ -1275,7 +1275,7 @@ describe("backoffice route smoke", () => {
     expect(production.text).toContain("Spezifikation im Fokus");
     expect(production.text).not.toContain("specId: c4-spec-handoff");
     expect(production.text).not.toContain("requestId: c4-request-handoff");
-    expect(production.text).toContain("Quellenanker");
+    expect(production.text).toContain("Herkunft und technische Hinweise");
     expect(production.text).toContain(
       "Quellenmetadaten (gekürzt): c4-angebot.pdf · application/pdf · sha256:abcdef123456 · production · 2026-05-22T11:29:00.000Z"
     );

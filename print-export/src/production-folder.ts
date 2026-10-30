@@ -29,6 +29,7 @@ export interface RenderProductionFolderInput {
   recipes?: Recipe[];
   clarificationAnswers?: ProductionClarificationAnswer[];
   appliedSnapshot?: AppliedProductionSnapshot;
+  verifiedDietaryQuestionReviews?: AppliedProductionSnapshot["dietaryQuestionReviews"];
 }
 
 function escapeHtml(value: string | number | undefined): string {
@@ -211,9 +212,15 @@ function renderSection3(input: RenderProductionFolderInput): string {
     spec: input.spec as unknown as Record<string, unknown>
   });
   const questionById = new Map(questions.map((question) => [question.questionId, question.prompt]));
-  const uncertaintyRows = (input.spec.uncertainties ?? []).map((uncertainty) =>
-    `Offen: ${uncertainty.suggestedQuestion ?? uncertainty.message}`
-  );
+  const uncertaintyRows = (input.spec.uncertainties ?? []).map((uncertainty) => {
+    const question = uncertainty.suggestedQuestion ?? uncertainty.message;
+    const matches = (input.verifiedDietaryQuestionReviews ?? []).filter(review => review.question === question);
+    const uniqueQuestion = (input.spec.uncertainties ?? []).filter(item => (item.suggestedQuestion ?? item.message) === question).length === 1;
+    const review = matches.length === 1 && uniqueQuestion ? matches[0] : undefined;
+    return review?.status === "confirmed" && review.answer
+      ? `Beantwortet: ${question} · Kategorie: ${review.answer}. Keine Allergen- oder Küchenfreigabe.`
+      : `Offen: ${question}`;
+  });
   const answerRows = (input.clarificationAnswers ?? [])
     .filter((answer) => answer.context.specId === input.spec.specId && answer.status === "submitted")
     .map((answer) => {

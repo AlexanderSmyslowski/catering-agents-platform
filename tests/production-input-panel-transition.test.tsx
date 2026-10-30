@@ -135,10 +135,31 @@ describe("production input panel upload transition", () => {
     await act(async () => root.render(render(false)));
     const input = container.querySelector<HTMLInputElement>('input[aria-label="Begonnene Eingabe"]')!;
     input.value = "Eingabe erhalten";
+    input.focus();
     await act(async () => root.render(render(true)));
     expect(container.querySelector('input[aria-label="Begonnene Eingabe"]')).toBe(input);
     expect(input.value).toBe("Eingabe erhalten");
+    expect(document.activeElement).toBe(input);
     await act(async () => root.unmount());
+  });
+
+  it("places question controls before the input in the active DOM", async () => {
+    const container = document.body.appendChild(document.createElement("div"));
+    const root = createRoot(container);
+    try {
+      await act(async () => root.render(createElement(ProductionConversationalWorkbench, {
+        summary: { activeSpecLabel: "Test", readinessLabel: "offen", planStatusLabel: "offen", purchaseStatusLabel: "offen",
+          hasActiveContext: true, questionCount: 1, answeredQuestionCount: 0, unansweredQuestionCount: 1,
+          productionObjectCount: 0, productionObjectStatusLabel: "offen", purchaseListCount: 0 },
+        nextStep: { title: "Prüfen", description: "Prüfen" }, miniPilotRawResult: "", setMiniPilotRawResult: noop,
+        miniPilotReportState: { status: "empty", summary: "" } as never,
+        slots: { questionsSlot: createElement("button", { type: "button", "aria-label": "Frage beantworten" }, "Antwort"),
+          inputSlot: createElement("input", { "aria-label": "Auftragseingabe" }), productionObjectsSlot: null, purchaseListSlot: null, lowerSlots: null }
+      })));
+      const question = container.querySelector('[aria-label="Frage beantworten"]')!;
+      const input = container.querySelector('[aria-label="Auftragseingabe"]')!;
+      expect(question.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    } finally { await act(async () => root.unmount()); }
   });
 
   it("collapses an empty source when the selected case context resolves asynchronously", async () => {

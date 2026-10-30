@@ -6,3 +6,5 @@ export * from "./repositories/in-memory-recipe-repository.js";
 export * from "./repositories/production-store.js";
 export * from "./routes/approval-routes.js";
 export * from "./rules/planning.js";
+export * from "./last-applied-snapshot.js";
+export * from "./rules/dietary-question-review.js";

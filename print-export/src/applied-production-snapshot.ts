@@ -1,10 +1,11 @@
-import { ProductionStore, productionDecisionRepositoryFor } from "@catering/production-service";
+import { ProductionStore, productionDecisionRepositoryFor, resolveLastAppliedSnapshot, projectDietaryQuestionReviews } from "@catering/production-service";
 import { areJsonValuesEqual, createProductionApplyManifest, type ApprovedProductionSpec, type BusinessContext, type CriticalSectionTarget, type ProductionApplyManifest, type ProductionCase } from "@catering/shared-core";
 
 export interface AppliedProductionSnapshot {
   productionCase: ProductionCase;
   approvedSpec: ApprovedProductionSpec;
   manifest: ProductionApplyManifest;
+  dietaryQuestionReviews: ReturnType<typeof projectDietaryQuestionReviews>;
 }
 
 function conflict(): never {
@@ -103,6 +104,9 @@ async function readAppliedProductionSnapshot(
   if (!plan || !list || !aggregate?.approvedProductionSpec ||
     !areJsonValuesEqual(plan, productionPlan) || !areJsonValuesEqual(list, purchaseList) ||
     !areJsonValuesEqual(aggregate.approvedProductionSpec, approvedSpec) ||
+    aggregate.sourceDraft.businessId !== context.businessId || aggregate.sourceDraft.draftId !== approvedSpec.sourceDraft.draftId ||
+    aggregate.sourceDraft.revision !== approvedSpec.sourceDraft.revision ||
+    !areJsonValuesEqual(aggregate.sourceDraft.draftArtifacts.eventSpec, eventSpec) ||
     !events.some(event => event.kind === "approval" && event.artifactId === approvedSpec.approvedProductionSpecId) ||
     !events.some(event => event.kind === "result" && event.artifactId === productionPlan.planId && event.at === manifest.appliedAt) ||
     [...productionPlan.productionBatches, ...productionPlan.kitchenSheets, ...productionPlan.recipeSelections]
@@ -111,5 +115,15 @@ async function readAppliedProductionSnapshot(
   // validation also uses the transaction-local reader for PostgreSQL.
   const currentCase = await store.getCase(context, productionCase.caseId);
   if (!currentCase || !areJsonValuesEqual(currentCase, productionCase)) conflict();
-  return { productionCase, approvedSpec, manifest };
+  return { productionCase, approvedSpec, manifest, dietaryQuestionReviews: projectDietaryQuestionReviews(context.businessId, productionCase.caseId, aggregate.sourceDraft, events) };
+}
+
+// Explicit historical requests never fall back to mutable artifact stores.
+export async function resolveHistoricalProductionSnapshot(store: ProductionStore, context: BusinessContext, caseId: string, target: { planId: string } | { purchaseListId: string }): Promise<AppliedProductionSnapshot> {
+  const manifests = await store.listApplyManifests(context);
+  const matches = manifests.filter(item => "planId" in target ? item.planId === target.planId : item.purchaseListId === target.purchaseListId);
+  if (matches.length !== 1) conflict();
+  const snapshot = await resolveLastAppliedSnapshot(store, context, caseId, matches[0]!.planId);
+  if (!snapshot || snapshot.manifest.approvedProductionSpecId !== matches[0]!.approvedProductionSpecId) conflict();
+  return snapshot;
 }

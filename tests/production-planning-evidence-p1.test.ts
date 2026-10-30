@@ -4416,7 +4416,10 @@ describe("explicit handoff classification revisions", () => {
       expect(prepared.draftArtifacts.productionPlan!.blockingIssues!.length).toBeGreaterThan(0);
       expect(prepared.reviewCards.every(card => card.decision === "pending")).toBe(true);
       const reopened = await app.inject({ method: "GET", url: `/v1/production/drafts?caseId=${caseId}`, headers: actorHeaders });
-      expect(reopened.json<{ items: ProductionDraft[] }>().items.find(item => item.draftId === prepared.draftId)).toEqual(prepared);
+      const projected = reopened.json<{ items: Array<ProductionDraft & { dietaryQuestionReviews: unknown[] }> }>().items.find(item => item.draftId === prepared.draftId)!;
+      const { dietaryQuestionReviews, ...persistedDraft } = projected;
+      expect(dietaryQuestionReviews).toEqual([]);
+      expect(persistedDraft).toEqual(prepared);
       expect(await store.findCaseIdForArtifact({ businessId: "local" }, prepared.draftId)).toBe(caseId);
     } finally { await app.close(); }
   });
@@ -4684,7 +4687,10 @@ describe("explicit handoff classification revisions", () => {
       expect(prepared.reviewCards.every(card => card.decision === "pending")).toBe(true);
       expect((prepared.draftArtifacts.openQuestions ?? []).some(q => /productionDecision.mode|event.schedule/.test(q.field))).toBe(false);
       const reopened = await app.inject({ method: "GET", url: `/v1/production/drafts?caseId=${caseId}`, headers: actorHeaders });
-      expect(reopened.json<{ items: ProductionDraft[] }>().items.find(item => item.draftId === prepared.draftId)).toEqual(prepared);
+      const projected = reopened.json<{ items: Array<ProductionDraft & { dietaryQuestionReviews: unknown[] }> }>().items.find(item => item.draftId === prepared.draftId)!;
+      const { dietaryQuestionReviews, ...persistedDraft } = projected;
+      expect(dietaryQuestionReviews).toEqual([]);
+      expect(persistedDraft).toEqual(prepared);
       expect((await store.getProductionDraft({ businessId: "local" }, draft.draftId))!.draftArtifacts.eventSpec).toEqual(original.draftArtifacts.eventSpec);
     } finally { await app.close(); }
   });

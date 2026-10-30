@@ -378,6 +378,54 @@ describe("independent product loader boundaries", () => {
     expect(facts?.textContent).toContain(label);
   });
 
+  it("focuses the actionable applied continuation from the real next-action control", async () => {
+    const data = productionProductData(productionPlan("plan-a", "spec-a"), { purchaseListId: "purchase-a", eventSpecId: "spec-a", items: [] }, "case-a");
+    const spec = acceptedSpecSentinel("spec-a", "Synthetischer Auftrag");
+    spec.uncertainties = [{ field: "menuPlan", severity: "medium", message: "Synthetische Frage", suggestedQuestion: "Welche Ernährungskennzeichnung gilt nach Rezeptprüfung für Gericht?" }];
+    const draft = { ...projectedProductionDraft("draft-a", 2, "spec-a"), status: "approved" as const, draftArtifacts: { eventSpec: spec as unknown as Record<string, unknown> } };
+    data.acceptedSpecs = [spec]; data.workspace.currentDraft = draft;
+    data.workspace.approvedProductionSpec = { approvedProductionSpecId: "approved-current", sourceDraft: { draftId: "draft-a", revision: 2 }, applied: true };
+    data.workspace.lastApplied = { approvedProductionSpecId: "approved-current", draftId: "draft-a", draftRevision: 2, eventSpec: spec, productionPlan: productionPlan("plan-a", "spec-a"), purchaseList: { purchaseListId: "purchase-a", eventSpecId: "spec-a", items: [] } } as never;
+    vi.spyOn(api, "loadProductionProductData").mockResolvedValue(data);
+    vi.spyOn(api, "loadProductionDrafts").mockResolvedValue({ items: [draft], approvedProductionSpecs: [] });
+    const { container } = await renderAt("/produktion?productionCaseId=case-a");
+    const action = [...container.querySelectorAll("button")].find(item => item.textContent?.includes("Offene Rückfragen klären"));
+    expect(action).toBeDefined();
+    await act(async () => { action!.click(); await flush(); });
+    const target = container.querySelector('#production-clarification-continuation');
+    expect(target?.getAttribute("aria-label")).toBe("Rückfragen in einer neuen Prüffassung klären");
+    expect(document.activeElement).toBe(target);
+  });
+
+  it.each(["prepare", "editable"])("focuses the appropriate real next action for a %s revision", async mode => {
+    const data = productionProductData(undefined, undefined, "case-a");
+    const spec = acceptedSpecSentinel("spec-a", "Synthetischer Auftrag");
+    spec.uncertainties = [{ field: "menuPlan", severity: "medium", message: "Synthetisch", suggestedQuestion: "Welche Ernährungskennzeichnung gilt nach Rezeptprüfung für Gericht?" }];
+    const draft = { ...projectedProductionDraft("draft-a", 4, "spec-a"), status: "pending_review" as const, draftArtifacts: { eventSpec: spec as unknown as Record<string, unknown>, ...(mode === "editable" ? { productionPlan: productionPlan("p", "spec-a"), purchaseList: { purchaseListId: "l", eventSpecId: "spec-a", items: [] } } : {}) }, ...(mode === "editable" ? { dietaryQuestionReviews: [{ question: spec.uncertainties[0]!.suggestedQuestion!, cardId: "card", status: "pending" as const }] } : {}) };
+    data.acceptedSpecs = [spec]; data.workspace.currentDraft = draft;
+    data.workspace.approvedProductionSpec = { approvedProductionSpecId: "old", sourceDraft: { draftId: "old-draft", revision: 3 }, applied: true };
+    data.workspace.lastApplied = { approvedProductionSpecId: "old", draftId: "old-draft", draftRevision: 3, eventSpec: spec, productionPlan: productionPlan("old-plan", "spec-a"), purchaseList: { purchaseListId: "old-list", eventSpecId: "spec-a", items: [] } } as never;
+    vi.spyOn(api, "loadProductionProductData").mockResolvedValue(data);
+    vi.spyOn(api, "loadProductionDrafts").mockResolvedValue({ items: [draft], approvedProductionSpecs: [] });
+    const { container } = await renderAt("/produktion?productionCaseId=case-a");
+    const action = container.querySelector('[aria-label="Nächster Schritt"] button') ?? [...container.querySelectorAll("button")].find(item => item.textContent?.includes("Offene Rückfragen klären"));
+    expect(action).toBeDefined(); await act(async () => { (action as HTMLButtonElement).click(); await flush(); });
+    const target = container.querySelector(mode === "prepare" ? "#production-clarification-continuation" : "#production-question-panel");
+    expect(target).not.toBeNull(); expect(document.activeElement).toBe(target);
+  });
+
+  it("moves from completed questions to the existing review entry", async () => {
+    const props = productionQuestionPanelProps("case-a");
+    props.questionState.currentDraft = { ...productionDraftSentinel("draft-a", "Fall A"), status: "pending_review", dietaryQuestionReviews: [{ question: "synthetisch", cardId: "card", status: "confirmed", answer: "Vegan" }], draftArtifacts: { eventSpec: { specId: "spec-a" }, productionPlan: { planId: "p" }, purchaseList: { purchaseListId: "l" } } } as never;
+    const container = document.createElement("div"); document.body.append(container);
+    const entry = document.createElement("div"); entry.id = "production-draft-draft-a"; entry.tabIndex = -1; container.append(entry);
+    const target = document.createElement("div"); container.append(target); const root = createRoot(target); roots.push(root);
+    await act(async () => { root.render(createElement(ProductionQuestionPanel, props)); await flush(); });
+    expect(container.textContent).toContain("Alle Ernährungsfragen sind beantwortet");
+    const button = [...container.querySelectorAll("button")].find(item => item.textContent === "Zu den Prüfpunkten");
+    expect(button).toBeDefined(); await act(async () => button!.click()); expect(document.activeElement).toBe(entry);
+  });
+
   it("does not project unbound production artifacts into the real app route", async () => {
     const loadProduct = vi.spyOn(api, "loadProductionProductData").mockResolvedValue(
       productionProductData(

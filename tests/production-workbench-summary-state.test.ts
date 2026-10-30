@@ -21,7 +21,7 @@ describe("production workbench summary state", () => {
       readinessLabel: "teilweise vollständig",
       planStatusLabel: "1 aktueller Plan",
       purchaseStatusLabel: "1 aktuelle Liste",
-      questionCount: 2,
+      questionCount: 3,
       answeredQuestionCount: 1,
       unansweredQuestionCount: 2,
       productionObjectCount: 2,
@@ -29,6 +29,16 @@ describe("production workbench summary state", () => {
       purchaseListCount: 1,
       purchaseItemCount: 3
     });
+  });
+
+  it("counts remaining questions and confirmed answers once each", () => {
+    const summary = buildProductionWorkbenchSummaryState({
+      activeProductionContextLabel: "Synthetischer Auftrag", focusedSpecReadinessLabel: "Prüfung nötig", productionPlanStatusLabel: "offen",
+      purchaseZoneStatusLabel: "noch keine Liste", productionQuestions: ["Frage 2", "Frage 3", "Frage 4"],
+      clarificationStatusCounts: { answered: 1, unanswered: 3 }, currentSpecPlans: [], productionObjectStatusLabel: "noch kein Plan", currentSpecPurchaseLists: []
+    });
+    expect(summary.questionCount).toBe(4);
+    expect(summary.questionCount - summary.answeredQuestionCount).toBe(3);
   });
 
   it("keeps empty production artifacts and question counters explicit", () => {
