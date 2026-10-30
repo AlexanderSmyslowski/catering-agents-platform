@@ -269,9 +269,7 @@ export function ProductionConversationalWorkbench({
           </aside>
         </>
       ) : null}
-      {!hasActiveContext ? inputPanel : null}
       {hasActiveContext ? (
-        <>
           <div className="production-progressive-zone">
         <details className="progressive-panel" open={questionCount > 0}>
           <summary>
@@ -281,8 +279,10 @@ export function ProductionConversationalWorkbench({
           <div className="progressive-panel__body">{slots.questionsSlot}</div>
         </details>
           </div>
-          {inputPanel}
-
+      ) : null}
+      {inputPanel}
+      {hasActiveContext ? (
+        <>
           <div className="production-objects-zone">
         <article
           id={productionOutputAnchorId}

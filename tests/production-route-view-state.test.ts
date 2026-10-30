@@ -15,7 +15,7 @@ describe("production route view state", () => {
       focusedSpecReadinessLabel: "vollständig",
       productionPlanStatusLabel: "Plan bereit",
       purchaseZoneStatusLabel: "1 Liste",
-      productionQuestions: ["Pax bestätigen?"],
+      productionQuestions: [],
       clarificationStatusCounts: { answered: 1, unanswered: 0 },
       currentSpecPlans: [currentPlan],
       productionObjectStatusLabel: "1 Plan",
