@@ -1123,6 +1123,8 @@ export type ProductionDraftClassificationUpdate = {
   componentSplits?: Array<{ parentComponentId: string; reason: string; children: Array<{ label: string; servings: number; recipeId: string }> }>;
   componentUpdates?: Array<{
     componentId: string;
+    label?: string;
+    servings?: number;
     productionMode?: "scratch" | "hybrid" | "convenience_purchase" | "external_finished";
     purchasedElements?: string[];
     purchasedQuantities?: PurchasedQuantity[];

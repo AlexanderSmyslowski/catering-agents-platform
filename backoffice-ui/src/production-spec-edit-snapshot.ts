@@ -18,6 +18,7 @@ export function componentEditStateFromMenuItem(item: Record<string, unknown>): C
       : undefined;
 
   return {
+    ...(item.productionSource && typeof item.productionSource === "object" ? { correctionLabel: String(item.label ?? ""), correctionServings: String(item.servings ?? "") } : {}),
     menuCategory: String(item.menuCategory ?? ""),
     productionMode: String(productionDecision?.mode ?? ""),
     purchasedElements: Array.isArray(productionDecision?.purchasedElements)
@@ -82,6 +83,7 @@ export function normalizedSpecEditSnapshot(snapshot: SpecEditSnapshot): string {
         componentId,
         {
           ...(state.split ? { split: state.split } : {}),
+          ...(state.correctionLabel !== undefined ? { correctionLabel: state.correctionLabel.trim(), correctionServings: state.correctionServings?.trim() } : {}),
           menuCategory: state.menuCategory.trim(),
           productionMode: state.productionMode.trim(),
           ...(state.productionStation !== undefined ? { productionStation: state.productionStation } : {}),
