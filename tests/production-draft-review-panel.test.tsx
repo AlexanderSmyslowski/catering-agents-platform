@@ -229,6 +229,29 @@ describe("ProductionDraftReviewPanel", () => {
     await act(async () => root.unmount());
   });
 
+  it("renders an existing followup review card without claiming open questions", async () => {
+    const draft = draftFixture();
+    draft.reviewCards[0] = { ...draft.reviewCards[0]!, cardId: "card-classification-event-spec", summary: "Offene Rückfragen einzeln klären. Der übernommene Stand bleibt unverändert; Vorbereitung, Prüfung und Freigabe sind erneut erforderlich." };
+    vi.spyOn(api, "loadProductionDrafts").mockResolvedValue({ items: [draft], approvedProductionSpecs: [] });
+    const container = document.createElement("div"); document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => { root.render(createElement(ProductionDraftReviewPanel, { submitting: false, caseId: activeCaseId })); await flushPromises(); });
+    expect(container.textContent).toContain("Angaben und gegebenenfalls offene Punkte prüfen");
+    expect(container.textContent).not.toContain("Offene Rückfragen einzeln klären");
+    expect(draft.reviewCards[0]!.summary).toContain("Offene Rückfragen einzeln klären");
+    await act(async () => root.unmount());
+  });
+
+  it("hides the redundant prepare action in an explicitly managed continuation", async () => {
+    const draft = { ...draftFixture(), draftArtifacts: { eventSpec: { specId: "spec-1" } } };
+    vi.spyOn(api, "loadProductionDrafts").mockResolvedValue({ items: [draft], approvedProductionSpecs: [] });
+    const container = document.createElement("div"); document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => { root.render(createElement(ProductionDraftReviewPanel, { submitting: false, caseId: activeCaseId, hidePrepareAction: true })); await flushPromises(); });
+    expect([...container.querySelectorAll("button")].some(button => button.textContent === "Entwurf vorbereiten")).toBe(false);
+    await act(async () => root.unmount());
+  });
+
   it("shows the outstanding approval checks next to the disabled release action", async () => {
     vi.spyOn(api, "loadProductionDrafts").mockResolvedValue({ items: [draftFixture()], approvedProductionSpecs: [] });
     const container = document.createElement("div"); document.body.appendChild(container);

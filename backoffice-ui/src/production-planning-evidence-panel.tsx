@@ -71,7 +71,8 @@ function CaseEvidencePanel({ caseId, userId, submitting, onChanged }: Props & { 
     const refresh = () => { void reload().catch(() => undefined); };
     refresh();
     window.addEventListener("catering:production-draft-refresh", refresh);
-    return () => { generation.current++; window.removeEventListener("catering:production-draft-refresh", refresh); };
+    window.addEventListener("catering:production-draft-review", refresh);
+    return () => { generation.current++; window.removeEventListener("catering:production-draft-refresh", refresh); window.removeEventListener("catering:production-draft-review", refresh); };
   }, [caseId]);
   const draft = data && currentDraft(data);
   const spec = draft?.draftArtifacts?.eventSpec as Spec | undefined;

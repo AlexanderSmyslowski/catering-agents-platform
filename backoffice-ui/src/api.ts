@@ -441,7 +441,9 @@ function auditEntriesFromCaseEvents(events: CaseEvent[]): AuditEntry[] {
       name: event.role,
       source: "case-event"
     },
-    summary: event.text.trim() || `Fallereignis: ${event.kind}`
+    summary: event.kind === "revision_created" && event.text === "Neue Prüffassung für offene Rückfragen erstellt. Der übernommene Stand bleibt erhalten."
+      ? "Neue Prüffassung erstellt. Der übernommene Stand bleibt erhalten."
+      : event.text.trim() || `Fallereignis: ${event.kind}`
   }));
 }
 

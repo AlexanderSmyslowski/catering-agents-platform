@@ -98,6 +98,7 @@ function installCanonicalFetch(options: {
   approvalRevision?: number;
   planSpecId?: string;
   purchaseSpecId?: string;
+  eventText?: string;
 } = {}) {
   const calls: string[] = [];
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
@@ -107,7 +108,9 @@ function installCanonicalFetch(options: {
       return Response.json({ items: [{ caseId: "case-a", product: "production", displayName: "Produktion A", status: "open", createdAt: "", updatedAt: "" }] });
     }
     if (url.endsWith("/api/production/v1/production/cases/case-a")) {
-      return Response.json(productionCaseDetail());
+      const detail = productionCaseDetail();
+      if (options.eventText !== undefined) detail.events[0]!.text = options.eventText;
+      return Response.json(detail);
     }
     if (url.endsWith("/api/production/v1/production/drafts?caseId=case-a")) {
       return Response.json({
@@ -154,6 +157,14 @@ afterEach(() => {
 });
 
 describe("Gate B production UI snapshot confidentiality", () => {
+  it("renders the historical continuation event without inventing an open question", async () => {
+    const source = "Neue Prüffassung für offene Rückfragen erstellt. Der übernommene Stand bleibt erhalten.";
+    installCanonicalFetch({ eventText: source });
+    const result = await loadProductionProductData("case-a");
+    expect(result.workspace.activeEvents[0]!.text).toBe(source);
+    expect(result.auditEvents[0]!.summary).toBe("Neue Prüffassung erstellt. Der übernommene Stand bleibt erhalten.");
+  });
+
   it("loads the operational recipe library before a recipe has been assigned to a plan", async () => {
     const calls = installCanonicalFetch();
     const result = await loadProductionProductData("case-a");

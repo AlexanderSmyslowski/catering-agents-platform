@@ -105,6 +105,9 @@ export function ProductionRouteMainLayout({
   miniPilotReportState,
   miniPilotStorageHintLabel
 }: ProductionRouteMainLayoutProps) {
+  const zeroQuestionContinuation = Boolean(questionState.productionQuestions.length === 0 && currentDraft?.status === "pending_review" &&
+    lastApplied && lastApplied.draftId !== currentDraft.draftId && currentDraft.draftArtifacts?.eventSpec &&
+    !currentDraft.draftArtifacts.productionPlan && !currentDraft.draftArtifacts.purchaseList);
   const showMiniPilotPanel = shouldShowMiniPilotPanel();
   const miniPilotActionState = showMiniPilotPanel
     ? buildProductionMiniPilotActionState(
@@ -122,7 +125,7 @@ export function ProductionRouteMainLayout({
 
   return (
     <ProductionConversationalWorkbench
-      summary={workbenchSummary}
+      summary={{ ...workbenchSummary, hasHistoricalApplied: zeroQuestionContinuation }}
       nextStep={workbenchNextStep}
       miniPilotRawResult={miniPilotRawResult}
       setMiniPilotRawResult={setMiniPilotRawResult}
@@ -131,6 +134,14 @@ export function ProductionRouteMainLayout({
       slots={{
         inputSlot: (
           <div className="production-column production-column--input">
+            {questionState.productionQuestions.length === 0 ? <ProductionClarificationContinuation
+              caseId={activeProductionCaseId} draft={currentDraft} applied={currentApplied} openQuestionCount={0}
+              lastApplied={lastApplied} busy={submitting} onChanged={questionActions.refreshAfterDraftDecision} /> : null}
+            {zeroQuestionContinuation ? <details className="progressive-panel">
+              <summary>Angaben und Produktionskomponenten bearbeiten</summary>
+              <ProductionQuestionPanel continuationEditorOnly activeCaseId={activeProductionCaseId} questionState={questionState} questionActions={questionActions}
+                submitting={submitting} editorState={editorState} editorActions={editorActions} />
+            </details> : null}
             <ProductionInputPanel
               submitting={submitting}
               activeCaseId={activeProductionCaseId}
@@ -144,6 +155,7 @@ export function ProductionRouteMainLayout({
               productionAssumptions={questionState.productionAssumptions}
               intakeRequestDetail={questionState.intakeRequestDetail}
               onDraftChanged={questionActions.refreshAfterDraftDecision}
+              hidePrepareAction={zeroQuestionContinuation}
             />
           </div>
         ),
@@ -153,17 +165,18 @@ export function ProductionRouteMainLayout({
         ),
         questionsSlot: (
           <div className="production-column production-column--questions">
-            <ProductionClarificationContinuation caseId={activeProductionCaseId} draft={currentDraft} applied={currentApplied}
+            {questionState.productionQuestions.length > 0 ? <ProductionClarificationContinuation
+              caseId={activeProductionCaseId} draft={currentDraft} applied={currentApplied}
               openQuestionCount={questionState.productionQuestions.length} lastApplied={lastApplied} busy={submitting}
-              onChanged={questionActions.refreshAfterDraftDecision} />
-            <ProductionQuestionPanel
+              onChanged={questionActions.refreshAfterDraftDecision} /> : null}
+            {!zeroQuestionContinuation ? <ProductionQuestionPanel
               activeCaseId={activeProductionCaseId}
               questionState={questionState}
               questionActions={questionActions}
               submitting={submitting}
               editorState={editorState}
               editorActions={editorActions}
-            />
+            /> : null}
           </div>
         ),
         productionObjectsSlot: (

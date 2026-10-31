@@ -77,6 +77,7 @@ export type ProductionQuestionPanelActions = {
 };
 
 export type ProductionQuestionPanelProps = {
+  continuationEditorOnly?: boolean;
   activeCaseId?: string;
   questionState: ProductionQuestionPanelState;
   questionActions: ProductionQuestionPanelActions;
@@ -86,6 +87,7 @@ export type ProductionQuestionPanelProps = {
 };
 
 export function ProductionQuestionPanel({
+  continuationEditorOnly = false,
   activeCaseId,
   questionState,
   questionActions,
@@ -216,7 +218,7 @@ export function ProductionQuestionPanel({
                   ? hasExistingPlan
                     ? "Öffne die Antwortfelder und ergänze fehlende Angaben vor einer Neuberechnung."
                     : "Öffne die Antwortfelder, ergänze fehlende Angaben und starte danach die Berechnung."
-                  : "Prüfe Herstellungsart, Rezeptbezug und Quelle; die Berechnung bleibt eine bewusste Aktion."}
+                  : continuationEditorOnly ? "Ändere bei Bedarf die Angaben und speichere sie. Prüfe anschließend Rezeptgrundlagen und Mengen." : "Prüfe Herstellungsart, Rezeptbezug und Quelle; die Berechnung bleibt eine bewusste Aktion."}
               </p>
             </div>
             <div className="action-row">
@@ -236,12 +238,12 @@ export function ProductionQuestionPanel({
                   Antworten speichern
                 </button>
               ) : null}
-              <button
+              {!continuationEditorOnly ? <button
                 disabled={actionState.primaryActionDisabled}
                 onClick={() => void createPlan(focusedProductionSpec, { sourceReviewConfirmed })}
               >
                 {actionState.primaryActionLabel}
-              </button>
+              </button> : null}
             </div>
           </div> : null}
           {answersEditable && allDietaryAnswered && questionState.currentDraft?.draftId ? <button type="button" className="secondary-button" onClick={() => {
