@@ -185,14 +185,29 @@ describe("offer workbench approval binding", () => {
 
   it("offers no customer export while the offer needs a successful refresh", () => {
     const normal = renderToStaticMarkup(createElement(OfferConversationalWorkbench, props()));
-    expect(normal).toContain("Angebot exportieren");
+    expect(normal).toContain("Interne Prüfunterlage öffnen");
     const blocked = renderToStaticMarkup(createElement(OfferConversationalWorkbench, { ...props(), refreshRequired: true }));
-    expect(blocked).not.toContain("Angebot exportieren");
+    expect(blocked).not.toContain("Interne Prüfunterlage öffnen");
     expect(blocked).toContain("Zum Export den Auftrag zuerst erneut laden.");
     const doc = new DOMParser().parseFromString(blocked, "text/html");
     const approval = [...doc.querySelectorAll("button")].find(button => button.textContent === "Variante freigeben: Klassisch");
     expect(approval).toBeDefined();
     expect(approval!.disabled).toBe(true);
+  });
+
+  it("separates internal material from the unapproved customer preview", () => {
+    const priced = { ...draft("draft-a", "Synthetisch"), pricingSummary: { calculation: { lines: [] } } };
+    const doc = new DOMParser().parseFromString(renderToStaticMarkup(createElement(OfferConversationalWorkbench, props({ activeDraft: priced, selectedDraft: priced }))), "text/html");
+    const links = [...doc.querySelectorAll("a")];
+    expect(links.find(link => link.textContent === "Interne Prüfunterlage öffnen")?.getAttribute("href")).toBe("/api/exports/v1/exports/offers/draft-a/html");
+    expect(links.find(link => link.textContent?.trim() === "Kundenentwurf ansehen")?.getAttribute("href")).toBe("/api/exports/v1/exports/offers/draft-a/html?ansicht=kundenentwurf");
+    expect(doc.body.textContent).toContain("Entwurf – noch nicht zum Versand freigegeben.");
+    const blocked = renderToStaticMarkup(createElement(OfferConversationalWorkbench, props({ activeDraft: priced, selectedDraft: priced, refreshRequired: true })));
+    expect(blocked).not.toContain("kundenentwurf");
+    const missingTax = { ...priced, pricingSummary: { calculation: { lines: [], missingTaxLineIds: ["food"] } } };
+    const pendingTax = renderToStaticMarkup(createElement(OfferConversationalWorkbench, props({ activeDraft: missingTax, selectedDraft: missingTax })));
+    expect(pendingTax).toContain("Interne Prüfunterlage und Kundenentwurf; Steuer offen");
+    expect(pendingTax).toContain("Kundenentwurf ansehen");
   });
 
   it("does not expose stale offer text while the case needs a refresh", () => {

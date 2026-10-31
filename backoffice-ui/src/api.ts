@@ -1320,8 +1320,8 @@ export async function seedDemoData() {
   };
 }
 
-export function offerExportUrl(draftId: string): string {
-  return `/api/exports/v1/exports/offers/${draftId}/html`;
+export function offerExportUrl(draftId: string, view?: "kundenentwurf"): string {
+  return `/api/exports/v1/exports/offers/${draftId}/html${view ? `?ansicht=${view}` : ""}`;
 }
 
 export function productionExportUrl(planId: string): string {

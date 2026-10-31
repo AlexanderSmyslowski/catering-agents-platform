@@ -47,6 +47,8 @@ describe("price calculation in print", () => {
     const customer = renderOfferPricingHtml(summary, false);
     for (const secret of ["INTERNAL-COST", "1.850,00", "3.950,00", "Deckungsbeitrag", "2026-09-12", "Schätzstand", "2026-10-25"]) expect(customer).not.toContain(secret);
     expect(customer).toContain("5.800,00");
+    expect(internal).toContain("Berechnung: Netto je Zeile");
+    expect(customer).not.toContain("Berechnung: Netto je Zeile");
   });
   it("does not print a zero cost or complete margin for an older calculation without costs", () => {
     const summary = calculateOfferPricing({ lines: [{ id: "food", label: "Speisen", category: "food", quantity: "100", unit: "guest", unitNetCents: 5800,
@@ -64,5 +66,12 @@ describe("price calculation in print", () => {
     const html = renderOfferPricingHtml(summary);
     expect(html).toContain("Brutto gesamt: offen");
     expect(html).toContain("Freigabe gesperrt");
+  });
+  it("keeps free-form zero-price and tax explanations internal", () => {
+    const summary = calculateOfferPricing({ lines: [{ id: "food", label: "Speisen", category: "food", quantity: "100", unit: "guest", unitNetCents: 0,
+      zeroPriceReason: "INTERNAL-KULANZ", taxRateBps: 1900, taxReason: "INTERNAL-TAX", sourceKind: "operator", sourceReference: "INTERNAL-SOURCE" }] }, 100);
+    expect(renderOfferPricingHtml(summary)).toContain("INTERNAL-KULANZ");
+    expect(renderOfferPricingHtml(summary)).toContain("INTERNAL-TAX");
+    expect(renderOfferPricingHtml(summary, false)).not.toContain("INTERNAL-");
   });
 });

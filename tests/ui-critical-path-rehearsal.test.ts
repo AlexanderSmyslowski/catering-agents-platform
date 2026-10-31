@@ -503,11 +503,11 @@ describe("UI critical path rehearsal", () => {
       expect(offerText).toContain("UI Critical Path Lunch");
       expect(offerText).toContain(offerDraft.draftId);
       expect(offerText).toContain("42 Personen");
-      expect(offerText).toContain("Export als Entwurf; Kalkulation unvollständig");
+      expect(offerText).toContain("Interne Prüfunterlage; Kalkulation unvollständig");
       expect(offerText).toContain("Veranstaltungsdaten");
       expect(offerText).toContain("manual_input");
       expect(offerText).toContain("Nur interne Demo- oder Testdaten");
-      expect(findAnchorByText("Angebot exportieren").getAttribute("href")).toBe(
+      expect(findAnchorByText("Interne Prüfunterlage öffnen").getAttribute("href")).toBe(
         `/api/exports/v1/exports/offers/${offerDraft.draftId}/html`
       );
 

@@ -702,7 +702,7 @@ describe("backoffice route smoke", () => {
 
     const offerDocument = new DOMParser().parseFromString(offer.html, "text/html");
     const offerExportLink = Array.from(offerDocument.querySelectorAll("a")).find((anchor) =>
-      (anchor.textContent ?? "").includes("Angebot exportieren")
+      (anchor.textContent ?? "").includes("Interne Prüfunterlage öffnen")
     ) as HTMLAnchorElement | undefined;
     const productionHandoffLink = Array.from(offerDocument.querySelectorAll("a")).find((anchor) =>
       (anchor.textContent ?? "").includes("Zur Produktion")
@@ -809,7 +809,7 @@ describe("backoffice route smoke", () => {
     expect(offer).not.toContain("Zusammenfassung");
     expect(offer).not.toContain("Angebotsentwurf prüfen");
     expect(offer).not.toContain("Variante übernehmen: Basis");
-    expect(offer).not.toContain("Angebot exportieren");
+    expect(offer).not.toContain("Interne Prüfunterlage öffnen");
     expect(offer).not.toContain("offer-draft-buffet-spec");
   });
 
@@ -833,7 +833,7 @@ describe("backoffice route smoke", () => {
     expect(offer.text).not.toContain("Status: noch kein Ergebnis");
     expect(offer.text).not.toContain("Grenze: nur interne Demo- oder Testdaten");
     expect(offer.text).not.toContain("Angebots-HTML für");
-    expect(offer.text).not.toContain("Angebot exportieren");
+    expect(offer.text).not.toContain("Interne Prüfunterlage öffnen");
     expect(offer.text).not.toContain("Produktionsfreigabe erteilt");
     expect(offer.text).not.toContain("Compliance-Freigabe erteilt");
     expect(offer.text).not.toContain("externe Freigabe erteilt");
@@ -1083,7 +1083,7 @@ describe("backoffice route smoke", () => {
 
     const text = document.body.textContent ?? "";
     const createdExport = Array.from(document.querySelectorAll("a")).find((anchor) =>
-      (anchor.textContent ?? "").includes("Angebot exportieren")
+      (anchor.textContent ?? "").includes("Interne Prüfunterlage öffnen")
     ) as HTMLAnchorElement | undefined;
 
     expect(postedBodies).toEqual([

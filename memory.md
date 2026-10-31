@@ -3475,3 +3475,69 @@ frischen bestehenden Gates. PR769 und das neue lokale Paket bleiben dafür
 zurückgestellt. Eigener79647-Koordinator/fünfOwnruns weiterhin lebend, vor
 Änderungen exakt validieren; alter Providerbeleg ist abgelaufen. Keine persönliche
 Eingabe wartet, Produktziel aktiv, echte fachliche Freigaben weiterhin offen.
+
+
+## Kundenentwurf lokal geprüft; historischer Mehrrezeptfall konkret eingegrenzt — Version5.689 /31.10.2026
+
+Nürnberg bleibt der abgeschlossene PR770/fcfb360-Stand mit echtem100Gäste-UI-PASS
+und regulärem neuem3DB/Globals/8Dateibäume-Restore/Compare/Cleanup aus5.688.
+Keine neue Installation, Sicherung, Konto-/Netzänderung oder Erinnerung.
+
+Neues lokales Paket in E=catering-open-extras, codex/customer-offer-preview:
+Der irreführende Link „Angebot exportieren“ heißt ausdrücklich „Interne Prüfunterlage
+öffnen“. Separater „Kundenentwurf ansehen“-Link nutzt denselben authentifizierten
+Exportpfad mit ansicht=kundenentwurf. Nur aktuelle eindeutig fallgebundene Fassung
+mit Preisaufstellung; alte/unverknüpfte, fremde Betriebs- und unberechtigte Zugriffe
+bleiben gesperrt, no-store bleibt. Kundenlayout übernimmt ausschließlich Eventkopf,
+Menü und explizite Verkaufspreise/Summen. Interne Kosten/Quellen, Steuer-/Nullpreis-
+Freitextgründe, freie Erzähltexte, offene interne Fragen und automatische Leistungs-
+vorschläge werden nicht ausgegeben. HTML maskiert; Preis-/Mengenberechnung unverändert.
+Synthetische Kennzeichnung/offene Steuer und Brutto bleiben ehrlich.
+
+Kundenentwurf ist sichtbar NICHT zum Versand freigegeben; keine Änderung an
+publishApproved oder ApprovalRequestRecord. Variantenfreigabe wird nicht still zur
+Versandfreigabe umgedeutet. Der endgültige fachliche Publikationsweg bleibt offen.
+Desktop und390px im tatsächlichen lokalenChrome bedient,8Menüzeilen, keine internen
+Marker und kein äußerer Überlauf; UI-Link und gespeicherter Auftrag nach Reload
+bestätigt. Keine neue PDF-/physischeDruck- oder Zielserverabnahme daraus.
+
+Gezielte tatsächliche Export-/Mehrtab-/Preise-/Tenant-/Rechte-/UI-Tests bestanden,
+TypeScript und ViteBuild bestanden. Ein verbleibender alter UI-Erwartungstext nach
+der Umbenennung gezielt korrigiert und sein Test erneutPASS; keine Schutzassertion
+abgeschwächt. LinuxCI benötigt keinen macOS-Papierkorb und bekommt keine destruktive
+Cleanupalternative. ImpeccableDetektor meldete[]; AgenturOSGestaltungsleitlinie
+angewendet. Unabhängiger tatsächlicher Opus5.5/firstParty-Review Session
+abec3a44-7c9c-4991-9f1a-52fd8be3481f ACCEPT für begrenzte neue Logik/UX/UI und reale
+Desktop-/Mobilbilder, kein eigener Browser-/Testlauf durch Reviewer. Seine kleinen
+Hinweise zu Benennung, offenem Steuerstatus, Summenhierarchie und internem
+Berechnungstext anschließend gebündelt als reine Darstellung präzisiert. Kein
+generisches OpusGesamtprodukt-/Kunden-/Küchen-/Pilot-GO.
+
+Historischer vollständiger8PositionenFall jetzt tatsächlich isoliert über normale
+HTTP-Anwendungsschnittstellen bis zu Preisaufstellung/Kundenentwurf, interner
+Variantenfreigabe und kanonischem Produktions-Handoff erfasst. Alle8×50erhalten;
+ausschließlich ausdrücklich synthetischer Pauschalpreis, KEINE historischen
+Verkaufspreise/Steuern als bestätigt übernommen. Alle11unveränderten synthetisch
+transkribierten Rezepte weiter review_required. Produktionsentwurf bleibt offen;
+kein unvollständiger Plan freigegeben oder übernommen.
+
+Konkreter HOLD: eine Angebotsposition braucht mehrere Rezepte (Hauptgericht und
+Beilage je50; Kuchenbar50Ausgabe mit3×18Produktion=54/4Reserve). Vorhandener
+strukturierter UI-Revisionpfad erlaubt nur eine RezeptID pro vorhandener Komponente;
+tatsächliche Listenangabe wird422abgewiesen. Terra6.1bestätigt zusätzlich: allein
+Revise/Schema/UI zu ändern genügt nicht, Apply prüft autorisierte Amendments mit
+identischer Anzahl/IDs und unabhängige Reviewkarten besitzen Index-/Targetbindungen.
+Deshalb KEIN isolierter Split-Patch oder Schutzlockerung. Der eigens angelegte
+Terra-Worktree catering-production-split ist sauber, ohne Codeänderung/Commit.
+Nächster fachlicher Baustein ist eine explizite revisionsgebundene Aufteilung mit
+Quellposition/Ausgabemenge, eigenen Produktionsmengen, gemeinsamer Prüfung in
+Revise UND Apply, erhaltener unabhängiger Prüfevidenz und sichtbarer Herkunft in
+Küchenunterlagen. Bestehende Mengen-/Freigabe-/Applywege wiederverwenden; keine
+neue Prüfplattform oder LLM-Abkürzung. Vollständiger8→11→Einkauf-PASS bleibt offen.
+
+Lokale tatsächliche Belege: E/tmp/customer-offer-28042, insbesondere
+historical-result.private.json, reference-responses.private.json, Opus-Ergebnis
+und finale Desktop-/Mobilbilder. Keine privaten Rohangebote/Rechnungen imGit oder
+Reviewmaterial. Preis-/Lieferanten-/Allergen-/Hygiene-/Ausbeute-/Realpilotfreigaben
+bleiben getrennt. Führender Betriebsnachweis weiter5.688, neue Produktänderung
+noch nicht integriert oder aufNürnberg.

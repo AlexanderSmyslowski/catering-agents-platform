@@ -597,7 +597,7 @@ describe("backoffice production presentation smoke", () => {
     expect(content).toContain("Erfasste Daten: 1 vollständig · 0 teilweise");
     expect(content).toContain("presentation-draft-success");
     expect(content).toContain("presentation-spec-success");
-    expect(content).toContain("Angebot exportieren");
+    expect(content).toContain("Interne Prüfunterlage öffnen");
     expect(content).not.toContain("Entwurf lokal gegen den Mini-Pilot-Rahmen prüfen");
     expect(content).not.toContain("Ready oder blocked direkt im Arbeitsfluss lesen");
     expect(content).not.toContain("Status: noch kein Ergebnis");

@@ -1,3 +1,20 @@
+## Aktueller Produktstand — Version5.689 /31.10.2026
+
+Nürnberg PR770 bleibt technisch/synthetisch nach5.688 abgeschlossen. Neues lokales
+Paket codex/customer-offer-preview trennt interne Prüfunterlage vom expliziten
+Kundenentwurf ohne interne Kosten/Quellen/Freitextgründe. Aktuelle Fassungs-,
+Tenant-, Rechte-/no-store-Gates und fehlende Versandfreigabe unverändert.
+GezielteTests,Build,echterDesktop/390px/Reload und tatsächlicher engerOpus5.5-
+ReviewACCEPT; Details memory5.689, Belege E/tmp/customer-offer-28042. Nochkein
+Merge/Deployment oder Kundenversand-/PilotGO.
+
+Historischer8×50Fall bis kanonischemHandoff tatsächlich geprüft;11Rezeptproduktion
+bleibtHOLD: normaleUI kann eine Angebotsposition noch nicht in mehrereRezepte
+mit eigenenMengen aufteilen. IsolierterRevisePatch wäre unzureichend wegen
+Apply-Amendment und unabhängigenReview-Targets. Terra hat bewusst keinen
+unvollständigenCode/Sicherheitsbypass geliefert. Kleinster vollständigerFolgeumfang
+steht in memory5.689; keine neue Architektur. KeinProduktions-Apply durchgeführt.
+
 ## Aktueller Einstieg — Version 5.516 / 22.10.2026
 
 Führend ist der neue5.516-Abschnitt in memory.md; historische Migrationsbefehle

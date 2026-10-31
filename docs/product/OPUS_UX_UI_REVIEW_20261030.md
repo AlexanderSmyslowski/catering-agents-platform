@@ -226,3 +226,22 @@ Grenzen: synthetische35Gäste-Fixture; offene Folgefassung und frische Planungsn
 ## Unabhängige Produktarbeit während des Ziel-Zeitgates (5.676)
 
 Die zuvor offenen Formular-/Sprachbefunde sind lokal weiter behandelt: dauerhafte Labels, nativer manueller Datepicker, deutsche Vorschläge bei erhaltenen Schlüsseln und freie Eingaben, CateringOS/Fachbereichsnamen. Gebündelte echte Desktop-/390px-Prüfung und tatsächlicher lokaler35Gäste-HTTP-Speicherweg. Dabei belegte manuelle Namens-/Neuladefehler gezielt mit vorhandenen Case-/URLkomponenten korrigiert; nach unabhängigemTerra-Kalenderbefund eng nachgeprüft. Nach vollständigemReload bleibt genau der neue offeneFall mit Kunde/Veranstaltungsdatum/Gästen. Dies ist Codex/Terra-Umsetzungsevidenz, kein nachträglich behauptetes Opus-Gesamturteil und kein neuer Nürnberg100Gäste-/Laien-/Pilotpass. Details/Grenzenmemory5.676.
+
+
+## 31.10.2026 — begrenzter Kundenentwurf-Inkrementreview
+
+Tatsächlicher Opus5.5/firstParty-Aufruf, Sessionabec3a44-7c9c-4991-9f1a-52fd8be3481f,
+subtype success, canonicalModelclaude-opus-5-5: **ACCEPT** für neue Kundenentwurf-
+Vorschau, Fassungs-/Zugriffs-/Kostenfilter und Verständlichkeit. Bereinigte neue
+Quellen/Diff und echte lokaleDesktop-/390pxScreenshots gelesen; kein eigener
+Livebrowser-/Testlauf, kein gesamtes Produkt-/Laien-/Küchen-/PilotGO.
+
+Kleine Hinweise gebündelt präzisiert: Benennung Kundenentwurf, ehrlicher Status bei
+offenerSteuer, Berechnungsdetails nurintern, klareBruttosumme. Bestehende
+Varianten-/Preisbindung wurde an vorhandener Preisrevision und ihren gültigen Tests
+bestätigt. Kein destruktiver Cleanupvorschlag übernommen; macOS-Papierkorb bleibt
+lokal, LinuxCI räumt seinen temporärenWorkspace regulär selbst auf.
+
+HistorischerMehrrezeptfall separatHOLD:8Angebotspositionen sind noch nicht sicher
+11Produktionsrezepten zugeordnet. Kein Apply und kein Review dieses nichtimplementierten
+Splits behauptet. Quellen/Originalurteil E/tmp/customer-offer-28042.
