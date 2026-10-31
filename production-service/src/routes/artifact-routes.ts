@@ -1,3 +1,4 @@
+import { buildComponentSplit, validateComponentSplitTransition, type ComponentSplit } from "../rules/production-component-splits.js";
 import { resolveLastAppliedSnapshot } from "../last-applied-snapshot.js";
 import { recordSpecialDietResponse } from "../../../shared-core/src/special-diet-response.js";
 import { validPurchasedQuantities, type PurchasedQuantity } from "@catering/shared-core";
@@ -2876,18 +2877,22 @@ export function registerProductionArtifactRoutes(
         }
         const classifications = input.componentClassifications ?? [];
         const componentUpdates = input.componentUpdates ?? [];
+        const splits = input.componentSplits ?? [];
         const schedule = input.eventSchedule;
         const specialDietResponse = input.specialDietResponse;
         const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === "object" && !Array.isArray(value));
         const has = (value: object, key: string) => Object.prototype.hasOwnProperty.call(value, key);
         const modes = ["scratch", "hybrid", "convenience_purchase", "external_finished"];
         if (
-          Object.keys(input).some((key) => !["caseId", "expectedRevision", "componentClassifications", "componentUpdates", "eventSchedule", "specialDietResponse"].includes(key)) ||
+          Object.keys(input).some((key) => !["caseId", "expectedRevision", "componentClassifications", "componentUpdates", "componentSplits", "eventSchedule", "specialDietResponse"].includes(key)) ||
           typeof input.caseId !== "string" || !input.caseId.trim() || !Number.isInteger(input.expectedRevision) ||
           (has(input, "componentClassifications") && !Array.isArray(input.componentClassifications)) ||
           (has(input, "componentUpdates") && !Array.isArray(input.componentUpdates)) ||
-          !Array.isArray(classifications) || !Array.isArray(componentUpdates) ||
-          (classifications.length === 0 && componentUpdates.length === 0 && schedule === undefined && specialDietResponse === undefined) ||
+          !Array.isArray(classifications) || !Array.isArray(componentUpdates) || !Array.isArray(splits) ||
+          (classifications.length === 0 && componentUpdates.length === 0 && splits.length === 0 && schedule === undefined && specialDietResponse === undefined) ||
+          (splits.length > 0 && (classifications.length > 0 || componentUpdates.length > 0 || schedule !== undefined || specialDietResponse !== undefined ||
+            splits.some(item => !isRecord(item) || Object.keys(item).some(key => !["parentComponentId", "reason", "children"].includes(key)) ||
+              typeof item.parentComponentId !== "string" || !item.parentComponentId.trim() || !Array.isArray(item.children)))) ||
           classifications.some((item) => !isRecord(item) ||
             Object.keys(item).some((key) => !["componentId", "menuCategory"].includes(key)) ||
             typeof item.componentId !== "string" || (typeof item.menuCategory !== "string" || !["classic", "vegetarian", "vegan"].includes(item.menuCategory))) ||
@@ -2949,9 +2954,49 @@ export function registerProductionArtifactRoutes(
         if (caseIds.some((id) => id !== caseId)) {
           return reply.code(409).send({ message: "ProductionDraft ist nicht eindeutig an den angegebenen Produktionsauftrag gebunden." });
         }
+        let splitMenuPlan = eventSpec.menuPlan;
+        let splitIndexMap: Map<number, number> | undefined;
+        if (splits.length) {
+          if (draft.status !== "pending_review" || draft.draftArtifacts.productionPlan || draft.draftArtifacts.purchaseList || draft.draftArtifacts.recipes) {
+            return reply.code(422).send({ message: "Aufteilungen sind nur in einer offenen, noch nicht vorbereiteten Fassung möglich." });
+          }
+          const byParent = new Map<string, ComponentSplit>();
+          for (const item of splits as ComponentSplit[]) {
+            if (byParent.has(item.parentComponentId)) return reply.code(422).send({ message: "Jede Quellposition darf nur einmal aufgeteilt werden." });
+            const parent = eventSpec.menuPlan.filter(component => component.componentId === item.parentComponentId);
+            const children = parent.length === 1 ? buildComponentSplit(parent[0]!, item) : undefined;
+            if (!children) return reply.code(422).send({ message: "Aufteilung benötigt eine eindeutige Quelle, Begründung und 2 bis 10 eindeutige Komponenten mit positiven ganzen Portionen und Rezepten." });
+            for (const child of item.children) if (!await repository.get(actor, child.recipeId)) {
+              return reply.code(422).send({ message: "Das ausgewählte Rezept ist in der Rezeptbibliothek dieses Betriebs nicht vorhanden." });
+            }
+            byParent.set(item.parentComponentId, item);
+          }
+          splitMenuPlan = eventSpec.menuPlan.flatMap(parent => byParent.has(parent.componentId) ? buildComponentSplit(parent, byParent.get(parent.componentId)!)! : [parent]);
+          const transition = validateComponentSplitTransition(eventSpec, { ...eventSpec, menuPlan: splitMenuPlan });
+          if (!transition) return reply.code(422).send({ message: "Die Aufteilung ist nicht eindeutig an den aktuellen Entwurf gebunden." });
+          splitIndexMap = transition.indexMap;
+        }
         const sourceReviewCards = independentDraftReviewCards(draft, caseId);
         if (!sourceReviewCards) {
           return reply.code(422).send({ message: "Ein unabhängiger Prüfpunkt verweist auf ein zu ersetzendes Artefakt und muss zuerst geklärt werden." });
+        }
+        if (splitIndexMap) {
+          for (const card of sourceReviewCards) {
+            const target = card.targetPath?.match(/^\$\.draftArtifacts\.eventSpec\.menuPlan\[(\d+)\](.*)$/);
+            if (target) {
+              const oldIndex = Number(target[1]);
+              const component = eventSpec.menuPlan[oldIndex];
+              const newIndex = splitIndexMap.get(oldIndex);
+              if (!component || newIndex === undefined || (card.targetId && card.targetId !== component.componentId)) {
+                return reply.code(422).send({ message: "Eine unabhängige Prüfpflicht zur aufzuteilenden Position muss zuerst geklärt werden." });
+              }
+              card.targetPath = `$.draftArtifacts.eventSpec.menuPlan[${newIndex}]${target[2]}`;
+            } else if (card.targetPath?.startsWith("$.draftArtifacts.eventSpec.menuPlan")) {
+              return reply.code(422).send({ message: "Ein unabhängiges Prüfziel kann nach der Aufteilung nicht eindeutig zugeordnet werden." });
+            } else if (card.targetId && splits.some(item => item.parentComponentId === card.targetId)) {
+              return reply.code(422).send({ message: "Eine unabhängige Prüfpflicht zur aufzuteilenden Position muss zuerst geklärt werden." });
+            }
+          }
         }
         const revisedSchedule = schedule as AcceptedEventSpec["event"]["schedule"];
         const scheduleChanged = revisedSchedule !== undefined && !areJsonValuesEqual(eventSpec.event.schedule ?? [], revisedSchedule);
@@ -2993,7 +3038,7 @@ export function registerProductionArtifactRoutes(
           ...answeredSpec,
           ...(revisedSchedule ? { event: { ...eventSpec.event, schedule: revisedSchedule } } : {}),
           ...(remainingUncertainties ? { uncertainties: remainingUncertainties } : {}),
-          menuPlan: eventSpec.menuPlan.map((component) => {
+          menuPlan: splitMenuPlan.map((component) => {
             const patch = patches.get(component.componentId);
             const decisionChanged = patch && ["productionMode", "purchasedElements", "purchasedQuantities", "notes"].some(key => has(patch, key));
             return {
@@ -3013,11 +3058,12 @@ export function registerProductionArtifactRoutes(
         });
         // Keep the existing category-only command identity stable for interrupted retries.
         const commandHash = hashText(stableJson({ caseId, classifications: [...categories].sort(([left], [right]) => left.localeCompare(right)),
+          ...(splits.length ? { componentSplits: splits } : {}),
           ...(patches.size ? { componentUpdates: [...patches.values()].sort((left, right) => left.componentId.localeCompare(right.componentId)) } : {}),
           ...(schedule ? { eventSchedule: schedule } : {}),
           ...(specialDietResponse !== undefined ? { specialDietResponse } : {})
         }));
-        const planningChange = patches.size > 0 || Boolean(schedule) || specialDietResponse !== undefined;
+        const planningChange = splits.length > 0 || patches.size > 0 || Boolean(schedule) || specialDietResponse !== undefined;
         const revision = validateProductionDraft({
           ...draft,
           draftId: productionDraftRevisionCommandIdentity(actor.businessId, draft, commandHash).draftId,
@@ -3034,8 +3080,8 @@ export function registerProductionArtifactRoutes(
           },
           reviewCards: [...sourceReviewCards, {
             cardId: "card-classification-event-spec", kind: "event_data",
-            title: planningChange ? "Eventdaten und Herstellungsangaben prüfen" : "Eventdaten und Klassifikationen prüfen",
-            summary: planningChange ? "Herstellung, Zeitfenster oder Sonderkost-Antwort geändert. Antwort ist keine Allergen- oder Küchenfreigabe. Produktionsentwurf erneut vorbereiten und prüfen." : "Explizite Komponentenkategorien ergänzt. Produktionsentwurf erneut vorbereiten und prüfen.",
+            title: splits.length ? "Aufteilung der Produktionskomponenten prüfen" : planningChange ? "Eventdaten und Herstellungsangaben prüfen" : "Eventdaten und Klassifikationen prüfen",
+            summary: splits.length ? "Aufteilung, Produktionsmengen und Rezepte ausdrücklich prüfen. Ausgabeportionen bleiben bei der Angebotsquelle; Produktionsentwurf erneut vorbereiten und prüfen." : planningChange ? "Herstellung, Zeitfenster oder Sonderkost-Antwort geändert. Antwort ist keine Allergen- oder Küchenfreigabe. Produktionsentwurf erneut vorbereiten und prüfen." : "Explizite Komponentenkategorien ergänzt. Produktionsentwurf erneut vorbereiten und prüfen.",
             decision: "pending", requiredApproval: true,
             targetPath: "$.draftArtifacts.eventSpec"
           }]
@@ -3060,11 +3106,11 @@ export function registerProductionArtifactRoutes(
               } else if (!areJsonValuesEqual(currentSource, { ...draft, status: "superseded" })) {
                 return undefined;
               }
-              await scope.appendRevisionEvent(draft, existing, planningChange ? "Herstellungsangaben oder Zeitfenster geändert; neue Produktionsrevision zur Prüfung erstellt." : "Komponentenkategorien ergänzt; neue Produktionsrevision zur Prüfung erstellt.");
+              await scope.appendRevisionEvent(draft, existing, splits.length ? "Produktionskomponenten aufgeteilt; neue Produktionsrevision zur Prüfung erstellt." : planningChange ? "Herstellungsangaben oder Zeitfenster geändert; neue Produktionsrevision zur Prüfung erstellt." : "Komponentenkategorien ergänzt; neue Produktionsrevision zur Prüfung erstellt.");
               return existing;
             }
             if (!await scope.commitPreparedDraft(draft, revision)) return undefined;
-            await scope.appendRevisionEvent(draft, revision, planningChange ? "Herstellungsangaben oder Zeitfenster geändert; neue Produktionsrevision zur Prüfung erstellt." : "Komponentenkategorien ergänzt; neue Produktionsrevision zur Prüfung erstellt.");
+            await scope.appendRevisionEvent(draft, revision, splits.length ? "Produktionskomponenten aufgeteilt; neue Produktionsrevision zur Prüfung erstellt." : planningChange ? "Herstellungsangaben oder Zeitfenster geändert; neue Produktionsrevision zur Prüfung erstellt." : "Komponentenkategorien ergänzt; neue Produktionsrevision zur Prüfung erstellt.");
             return revision;
           }
         );
@@ -3075,7 +3121,7 @@ export function registerProductionArtifactRoutes(
           action: "production.production_draft_revision_created", entityType: "ProductionDraft",
           entityId: committed.draftId, actor, at: committed.createdAt,
           idempotencyKey: `production-draft-revision:${committed.draftId}`,
-          summary: planningChange ? "Explizite Herstellungsangaben oder Zeitfenster in neuer ProductionDraft-Revision gespeichert." : "Explizite Komponentenkategorien in neuer ProductionDraft-Revision gespeichert.",
+          summary: splits.length ? "Explizite Aufteilung in neuer ProductionDraft-Revision gespeichert." : planningChange ? "Explizite Herstellungsangaben oder Zeitfenster in neuer ProductionDraft-Revision gespeichert." : "Explizite Komponentenkategorien in neuer ProductionDraft-Revision gespeichert.",
           details: compactAuditDetails({ draftId: committed.draftId, supersedesDraftId: draft.draftId,
             classificationCount: categories.size, changeRequestHash: commandHash,
             ...(planningChange ? { componentUpdateCount: patches.size, scheduleChanged } : {}),

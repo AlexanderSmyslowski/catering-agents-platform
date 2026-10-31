@@ -6,6 +6,7 @@ import { ProductionEventAnswerFields } from "./production-event-answer-fields.js
 
 type ProductionStructuredAnswerEditorProps = {
   canEditPurchasedQuantities?: boolean;
+  canSplitComponents?: boolean;
   focusedProductionSpec: Record<string, unknown>;
   editingEventType: string;
   editingEventDate: string;
@@ -28,6 +29,7 @@ type ProductionStructuredAnswerEditorProps = {
 
 export function ProductionStructuredAnswerEditor({
   canEditPurchasedQuantities = false,
+  canSplitComponents = false,
   focusedProductionSpec,
   editingEventType,
   editingEventDate,
@@ -82,6 +84,7 @@ export function ProductionStructuredAnswerEditor({
         </section> : null}
         <ProductionComponentAnswerList
           canEditPurchasedQuantities={canEditPurchasedQuantities}
+          canSplitComponents={canSplitComponents}
           attendeeCount={Number(editingAttendeeCount)}
           menuPlan={focusedProductionSpec.menuPlan}
           editingComponentStates={editingComponentStates}

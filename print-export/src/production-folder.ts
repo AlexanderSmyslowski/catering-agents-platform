@@ -201,7 +201,9 @@ function renderSection2(input: RenderProductionFolderInput, recipeById: Map<stri
     const selection = input.plan.recipeSelections.find((candidate) => candidate.componentId === component.componentId);
     const portions = component.servings ?? input.spec.attendees.expected;
 
-    return `<tr><td>${escapeHtml(component.label)}</td><td>${escapeHtml(linkedRecipeLabel(recipeById, selection?.recipeId))}</td><td>${escapeHtml(portions ? String(portions) : "offen")}</td></tr>`;
+    const source = component.productionSource;
+    const provenance = source ? `<br><small>Aus Angebotsposition ${escapeHtml(source.parentLabel)}: ${escapeHtml(String(source.parentServings))} Ausgabeportionen. Begründung: ${escapeHtml(source.reason)}</small>` : "";
+    return `<tr><td>${escapeHtml(component.label)}${provenance}</td><td>${escapeHtml(linkedRecipeLabel(recipeById, selection?.recipeId))}</td><td>${escapeHtml(portions ? String(portions) : "offen")}</td></tr>`;
   });
 
   return `<section><h2>2. Verständnis des Angebots</h2><table><thead><tr><th>Menükomponente</th><th>zugeordnetes Rezept</th><th>Portionen</th></tr></thead><tbody>${rows.join("")}</tbody></table></section>`;

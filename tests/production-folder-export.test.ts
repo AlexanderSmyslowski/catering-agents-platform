@@ -313,6 +313,16 @@ describe("production folder export", () => {
     }
   });
 
+  it("prints source servings and escaped reason separately from production servings", () => {
+    const input = fixture();
+    input.spec.menuPlan[0]!.servings = 18;
+    input.spec.menuPlan[0]!.productionSource = { parentComponentId: "source", parentLabel: "Kuchenbar", parentServings: 50, reason: "Reserve <4>", childIndex: 0, childCount: 3 };
+    const html = renderProductionFolderHtml({ plan: input.plan, spec: input.spec, recipes: [input.recipe] });
+    expect(html).toContain("Kuchenbar: 50 Ausgabeportionen");
+    expect(html).toContain("Reserve &lt;4&gt;");
+    expect(html).toContain(">18</td>");
+  });
+
   it("repeats complete, escaped order context on every recipe and kitchen card without granting approval", () => {
     const input = fixture();
     input.spec.productionConstraints = ["4 Gäste glutenfrei; separat klären", "Hinweis <script>nicht ausführen</script>", "Langer Hinweis " + "vollständig ".repeat(300)];

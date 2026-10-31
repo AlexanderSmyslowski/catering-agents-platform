@@ -233,6 +233,7 @@ export const commonSchema = {
         serviceStyle: { type: "string" },
         recipeOverrideId: { type: "string" },
         productionStation: { enum: ["hot-kitchen", "cold-kitchen", "beverage-station", "pastry"] },
+        productionSource: { type: "object", additionalProperties: false, required: ["parentComponentId", "parentLabel", "parentServings", "reason", "childIndex", "childCount"], properties: { parentComponentId: { type: "string", minLength: 1 }, parentLabel: { type: "string", minLength: 1 }, parentServings: { type: "integer", minimum: 1 }, reason: { type: "string", minLength: 1 }, childIndex: { type: "integer", minimum: 0 }, childCount: { type: "integer", minimum: 2, maximum: 10 } } },
         desiredRecipeTags: {
           type: "array",
           items: { type: "string" }

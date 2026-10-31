@@ -3,6 +3,7 @@ import { ProductionComponentAnswerCard } from "./production-component-answer-car
 
 type ProductionComponentAnswerListProps = {
   canEditPurchasedQuantities?: boolean;
+  canSplitComponents?: boolean;
   attendeeCount?: number;
   menuPlan: unknown;
   editingComponentStates: Record<string, ComponentEditState>;
@@ -12,6 +13,7 @@ type ProductionComponentAnswerListProps = {
 
 export function ProductionComponentAnswerList({
   canEditPurchasedQuantities = false,
+  canSplitComponents = false,
   attendeeCount,
   menuPlan,
   editingComponentStates,
@@ -49,6 +51,9 @@ export function ProductionComponentAnswerList({
               attendeeCount={attendeeCount}
               componentId={componentId}
               componentLabel={componentLabel}
+              productionSource={component.productionSource as { parentLabel: string; parentServings: number; reason: string } | undefined}
+              sourceServings={typeof component.servings === "number" ? component.servings : undefined}
+              canSplit={canSplitComponents && !component.productionSource}
               recipes={recipes}
               state={state}
               updateEditingComponentState={updateEditingComponentState}

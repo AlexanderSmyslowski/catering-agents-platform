@@ -1,3 +1,4 @@
+import { validateComponentSplitTransition } from "../rules/production-component-splits.js";
 import { isExtractedSpecialDietQuestion, replaySpecialDietResponse } from "../../../shared-core/src/special-diet-response.js";
 import { createHash } from "node:crypto";
 import type { FastifyInstance } from "fastify";
@@ -199,7 +200,8 @@ function acceptedEventSpecConsistencyError(
   approvedCandidate: AcceptedEventSpec,
   sourceRequest?: EventRequest,
   selectedOfferVariantId?: string,
-  sourceAcceptedEventSpecSnapshot?: AcceptedEventSpec
+  sourceAcceptedEventSpecSnapshot?: AcceptedEventSpec,
+  verifiedSplitLineage = false
 ): string | undefined {
   if (!canonical) return `AcceptedEventSpec ${candidate.specId} fehlt im autoritativen Intake.`;
   if (canonical.specId !== candidate.specId) {
@@ -215,7 +217,7 @@ function acceptedEventSpecConsistencyError(
     if (!areJsonValuesEqual(canonical, sourceAcceptedEventSpecSnapshot)) {
       return `AcceptedEventSpec ${candidate.specId} weicht vom unveränderlichen Intake-Ursprung ab.`;
     }
-    return areJsonValuesEqual(approvedCandidate, candidate) ||
+    return verifiedSplitLineage || areJsonValuesEqual(approvedCandidate, candidate) ||
       isAuthorizedProductionAmendment(candidate, approvedCandidate)
       ? undefined
       : `AcceptedEventSpec ${candidate.specId} enthält keine autorisierte Produktionsänderung.`;
@@ -264,12 +266,13 @@ function acceptedEventSpecConsistencyError(
     : undefined;
   const categoryTags = (category: AcceptedEventSpec["menuPlan"][number]["menuCategory"]) =>
     category === "vegetarian" ? ["vegetarian"] : category === "vegan" ? ["vegan"] : [];
+  const reconstructionCandidate = verifiedSplitLineage ? candidate : approvedCandidate;
   const reconstructedCanonical = sourceBaseline &&
     sourceBaseline.specId === canonical.specId &&
-    sourceBaseline.menuPlan.length === approvedCandidate.menuPlan.length
+    sourceBaseline.menuPlan.length === reconstructionCandidate.menuPlan.length
     ? {
         ...sourceBaseline,
-        menuPlan: approvedCandidate.menuPlan.map((reviewed, index) => {
+        menuPlan: reconstructionCandidate.menuPlan.map((reviewed, index) => {
           const baseline = sourceBaseline.menuPlan[index]!;
           const category = reviewed.menuCategory;
           return {
@@ -300,7 +303,7 @@ function acceptedEventSpecConsistencyError(
 }
 
 function isAuthorizedProductionAmendment(previous: AcceptedEventSpec, next: AcceptedEventSpec): boolean {
-  if (previous.menuPlan.length !== next.menuPlan.length) return false;
+  if (previous.menuPlan.length !== next.menuPlan.length) return Boolean(validateComponentSplitTransition(previous, next));
   let expected = structuredClone(previous);
   if (!areJsonValuesEqual({ constraints: previous.productionConstraints }, { constraints: next.productionConstraints })) {
     const answered = replaySpecialDietResponse(previous, next);
@@ -720,6 +723,7 @@ async function validateHandoffSnapshot(
     rootSpec: AcceptedEventSpec;
     selectedOfferVariantId: string;
     sourceAcceptedEventSpecSnapshot?: AcceptedEventSpec;
+    verifiedSplitLineage: boolean;
   }
 > {
   const getDraft = (draftId: string) => scope ? scope.getDraft(draftId) : store.getProductionDraft(actor, draftId);
@@ -764,6 +768,7 @@ async function validateHandoffSnapshot(
     return { conflict: "Freigegebener Produktionssnapshot besitzt keine gültige Offer-/Handoff-Evidenz." };
   }
   const lineage: ProductionDraft[] = [];
+  let verifiedSplitLineage = false;
   let draft = sourceDraft;
   while (draft) {
     if (lineage.length >= 100 || lineage.some(item => item.draftId === draft!.draftId) ||
@@ -780,6 +785,7 @@ async function validateHandoffSnapshot(
       !isAuthorizedProductionAmendment(predecessor.draftArtifacts.eventSpec, draft.draftArtifacts.eventSpec)) {
       return { conflict: "ProductionDraft-Lineage enthält eine nicht autorisierte Änderung am Handoff-Snapshot." };
     }
+    if (predecessor.draftArtifacts.eventSpec.menuPlan.length !== draft.draftArtifacts.eventSpec.menuPlan.length) verifiedSplitLineage = true;
     draft = predecessor;
   }
   const root = lineage.at(-1);
@@ -795,6 +801,7 @@ async function validateHandoffSnapshot(
   return {
     rootSpec: structuredClone(handoff.eventSpecSnapshot),
     selectedOfferVariantId: handoff.source.selectedVariantId,
+    verifiedSplitLineage,
     ...(handoff.sourceAcceptedEventSpecSnapshot
       ? { sourceAcceptedEventSpecSnapshot: structuredClone(handoff.sourceAcceptedEventSpecSnapshot) }
       : {})
@@ -1824,7 +1831,8 @@ export function registerProductionApprovalRoutes(
             eventSpec,
             sourceRequest,
             lockedHandoffValidation.selectedOfferVariantId,
-            lockedHandoffValidation.sourceAcceptedEventSpecSnapshot
+            lockedHandoffValidation.sourceAcceptedEventSpecSnapshot,
+            lockedHandoffValidation.verifiedSplitLineage // Every predecessor transition was checked inside the locked handoff validation.
           );
           if (eventSpecConflict) conflicts.push(eventSpecConflict);
 

@@ -267,6 +267,7 @@ export function ProductionQuestionPanel({
                 answersEditable && actionState.isFocusedSpecEditing ? (
                   <ProductionStructuredAnswerEditor
                     canEditPurchasedQuantities={canEditPurchasedQuantities}
+                    canSplitComponents={Boolean(canEditPurchasedQuantities && questionState.currentDraft && !questionState.currentDraft.draftArtifacts?.productionPlan && !questionState.currentDraft.draftArtifacts?.purchaseList && !questionState.currentDraft.draftArtifacts?.recipes)}
                     focusedProductionSpec={focusedProductionSpec}
                     editingEventType={editingEventType}
                     editingEventDate={editingEventDate}

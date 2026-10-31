@@ -1118,6 +1118,7 @@ export type ProductionDraftClassificationUpdate = {
   caseId: string;
   expectedRevision: number;
   componentClassifications: Array<{ componentId: string; menuCategory: "classic" | "vegetarian" | "vegan" }>;
+  componentSplits?: Array<{ parentComponentId: string; reason: string; children: Array<{ label: string; servings: number; recipeId: string }> }>;
   componentUpdates?: Array<{
     componentId: string;
     productionMode?: "scratch" | "hybrid" | "convenience_purchase" | "external_finished";
