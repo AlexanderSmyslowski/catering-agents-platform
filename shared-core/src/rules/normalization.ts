@@ -243,7 +243,9 @@ function extractQuantifiedMenuItems(text: string): InferredMenuItem[] {
     return parsed ? [{ index: match.index!, length: match[0].length, ...parsed }] : [];
   });
   const namedLines = countedLines.filter(line => !line.isHeading && !isMenuNoise(line.label));
-  const prefixed = [...text.matchAll(/\b(\d{1,5})[ \t]+Portion(?:en)?[ \t]+(.+?)(?=,\s*\d+\s+Portion|[;.\r\n]|$)/gi)]
+  // A following "und/sowie N Portionen …" starts another dish with its own
+  // count; ordinary "mit … und …" dish names contain no second count.
+  const prefixed = [...text.matchAll(/\b(\d{1,5})[ \t]+Portion(?:en)?[ \t]+(.+?)(?=,?[ \t]*(?:,|\bund\b|\bsowie\b)[ \t]*\d{1,5}[ \t]+Portion|[;.\r\n]|$)/gi)]
     .filter((match) => Number(match[1]) > 0)
     .filter(match => !countedLines.some(line => match.index! >= line.index && match.index! < line.index + line.length))
     .map(match => ({ index: match.index!, item: { ...inferMenuItemFromLabel(sanitizeMenuLine(match[2]!)), servings: Number(match[1]) } }));

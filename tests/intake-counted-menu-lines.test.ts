@@ -86,6 +86,42 @@ describe("counted dish lines from the Nürnberg browser test", () => {
     expect(spec.uncertainties?.some(item => item.message.includes("Hähnchenragout: vegan"))).toBe(true);
   });
 
+  it("separates free-text dishes joined by „und/sowie N Portionen“ with their own counts and local categories", () => {
+    const reviewInput = "Wissenschaftliche Abendveranstaltung am 13.11.2026 für 100 Gäste. Empfang 18:00–19:00, Abendbuffet 19:00–21:00. 100 Portionen vegane Gurken-Canapés und 100 Portionen Tomaten-Mozzarella-Canapés. Hauptspeisen: 55 Portionen Hähnchenragout, 25 Portionen vegetarische Gemüsebratlinge und 20 Portionen veganes Linsenragout. Beilagen: 100 Portionen Rosmarinkartoffeln und 100 Portionen Ofengemüse. Dessert: 80 Portionen Quarkcreme und 20 Portionen veganes Fruchtkompott. 4 Gäste benötigen glutenfreie Sonderkost; 3 Gäste vermeiden Schalenfrüchte. Angaben nur für einen synthetischen Oberflächenreview.";
+    const spec = normalize(reviewInput);
+    expect(spec.menuPlan.map(({ label, servings }) => [label, servings])).toEqual([
+      ["vegane Gurken-Canapés", 100], ["Tomaten-Mozzarella-Canapés", 100], ["Hähnchenragout", 55],
+      ["vegetarische Gemüsebratlinge", 25], ["veganes Linsenragout", 20], ["Rosmarinkartoffeln", 100],
+      ["Ofengemüse", 100], ["Quarkcreme", 80], ["veganes Fruchtkompott", 20]
+    ]);
+    expect(spec.menuPlan.map(item => item.menuCategory)).toEqual(["vegan", undefined, undefined, "vegetarian", "vegan", undefined, undefined, undefined, "vegan"]);
+    // A mixed line never stamps its dietary word onto a neighbouring dish.
+    for (const label of ["Tomaten-Mozzarella-Canapés", "Quarkcreme", "Hähnchenragout"]) {
+      expect(spec.menuPlan.find(item => item.label === label)?.dietaryTags ?? []).toEqual([]);
+    }
+    expect(spec.productionConstraints ?? []).not.toContain("vegan");
+    expect(spec.productionConstraints ?? []).not.toContain("vegetarian");
+    expect(spec.productionConstraints ?? []).not.toContain("gluten_free");
+    expect(spec.productionConstraints ?? []).not.toContain("nut_free");
+    const constraints = (spec.productionConstraints ?? []).join("\n");
+    expect(constraints).toContain("Sonderkost angefragt; separat klären: 4 Gäste benötigen glutenfreie Sonderkost");
+    expect(constraints).toContain("Sonderkost angefragt; separat klären: 3 Gäste vermeiden Schalenfrüchte");
+    // Parsed clock times remain unverified source hints, not a confirmed schedule.
+    expect(spec.event.schedule ?? []).toEqual([]);
+    expect(constraints).toContain("Zeit-/Logistikangabe aus Anfrage (ungeprüft): Empfang 18:00–19:00");
+    expect(constraints).toContain("Zeit-/Logistikangabe aus Anfrage (ungeprüft): Abendbuffet 19:00–21:00.");
+    expect(constraints).not.toMatch(/ungeprüft\): Abendbuffet[^\n]*Portionen/);
+  });
+
+  it.each([
+    ["50 Portionen Beef-Bällchen mit Drillingen und Raukepesto.", [["Beef-Bällchen mit Drillingen und Raukepesto", 50]]],
+    ["40 Portionen Salat sowie 30 Portionen Suppe.", [["Salat", 40], ["Suppe", 30]]],
+    ["30 Portionen Linsensuppe mit Kräutern und Brot, und 70 Portionen Tomatensuppe.", [["Linsensuppe mit Kräutern und Brot", 30], ["Tomatensuppe", 70]]]
+  ] as const)("keeps one dish phrase together unless a second count follows: %s", (sentence, expected) => {
+    const spec = normalize(`Buffet am 13.11.2026 für 100 Gäste. ${sentence}`);
+    expect(spec.menuPlan.map(({ label, servings }) => [label, servings])).toEqual(expected);
+  });
+
   it.each(["Vegetarier: 25 Portionen", "Veganer: 20 Portionen, vegan", "Gesamt: 280 Portionen", "Summe: 280 Portionen", "Vegan: 20 Portionen", "Vegetarisch: 25 Portionen", "Klassisch: 55 Portionen", "Vorspeisen: 100 Portionen", "Desserts: 100 Portionen", "Beilagen: 100 Portionen", "Hauptgänge: 100 Portionen"])("does not let an excluded heading consume the next line: %s", heading => {
     const spec = normalize(`100 Gäste am 13.11.2026.\n55 Portionen Hähnchenragout, 25 Portionen vegetarische Bratlinge, 20 Portionen veganes Linsenragout.\n${heading}\nSonderkost: 4 Gäste benötigen glutenfreie Sonderkost.\nService: 24 Personenstunden.`);
     expect(spec.menuPlan.map(item => item.servings)).toEqual([55, 25, 20]);

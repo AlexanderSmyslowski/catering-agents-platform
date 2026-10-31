@@ -633,7 +633,7 @@ export function ProductionDraftReviewPanel({
       ) : resumeMode && displayedDrafts.length > 0 ? (
         <header className="upload-result-summary__header">
           <p className="eyebrow">{hasApprovedDraft ? "Freigegebener Entwurf" : "Offener Entwurf"}</p>
-          <h3>{hasApprovedDraft ? "Freigegebenen Produktionsentwurf übernehmen" : "Offenen KI-Entwurf weiter prüfen"}</h3>
+          <h3>{hasApprovedDraft ? "Freigegebenen Produktionsentwurf übernehmen" : "Offenen Produktionsentwurf weiter prüfen"}</h3>
           <p className="helper-text">
             {hasApprovedDraft
               ? "Dieser Entwurf ist intern freigegeben. Die Übernahme in Produktionsplan und Einkauf steht noch aus."

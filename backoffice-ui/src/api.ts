@@ -58,9 +58,13 @@ export interface OfferWorkspaceState {
   activeSources: CaseSourceRef[];
   caseEventsInScope?: boolean;
   currentDraft?: OfferDraft;
-  approvedOffer?: ApprovedOffer;
+  approvedOffer?: OfferApprovalSummary;
   handoff?: ProductionHandoff;
 }
+
+/** Binding identity of the persisted internal offer approval for a case. */
+export type OfferApprovalSummary = Pick<ApprovedOffer, "approvedOfferId" | "sourceDraft"> &
+  Partial<Pick<ApprovedOffer, "selectedVariantId" | "approvedAt">>;
 
 export interface LastAppliedProductionSnapshot {
   approvedProductionSpecId: string;
@@ -461,7 +465,7 @@ export async function loadOfferWorkspaceState(activeCaseId?: string): Promise<Of
     case: OfferCase;
     events: CaseEvent[];
     currentDraft?: OfferDraft;
-    approvedOffer?: ApprovedOffer;
+    approvedOffer?: OfferApprovalSummary;
     handoff?: ProductionHandoff;
   }>(
     `/api/offers/v1/offers/cases/${encodeURIComponent(activeCaseId)}`,
@@ -497,7 +501,11 @@ export async function loadOfferWorkspaceState(activeCaseId?: string): Promise<Of
     activeSources: sourcesFromCaseEvents(activeEvents),
     caseEventsInScope,
     ...(currentDraft ? { currentDraft } : {}),
-    ...(detail.approvedOffer ? { approvedOffer: detail.approvedOffer } : {}),
+    // Only the approval the case itself links to may bind actions. A missing or
+    // contradictory record leaves case.approvedOfferId as an unclear state.
+    ...(detail.approvedOffer && (!detail.case.approvedOfferId || detail.approvedOffer.approvedOfferId === detail.case.approvedOfferId)
+      ? { approvedOffer: detail.approvedOffer }
+      : {}),
     ...(handoff ? { handoff } : {})
   };
 }

@@ -229,15 +229,6 @@ export function ProductionQuestionPanel({
               >
                 {productionQuestions.length > 0 ? "Rückfragen beantworten" : "Angaben prüfen"}
               </button>
-              {actionState.showSaveAnswersButton ? (
-                <button
-                  className="secondary-button"
-                  disabled={actionState.saveAnswersDisabled}
-                  onClick={() => void saveSpecEdit()}
-                >
-                  Antworten speichern
-                </button>
-              ) : null}
               {!continuationEditorOnly ? <button
                 disabled={actionState.primaryActionDisabled}
                 onClick={() => void createPlan(focusedProductionSpec, { sourceReviewConfirmed })}
@@ -271,6 +262,7 @@ export function ProductionQuestionPanel({
               answerEditor={
                 answersEditable && actionState.isFocusedSpecEditing ? (
                   <ProductionStructuredAnswerEditor
+                    footer={<div className="action-row"><button type="button" disabled={actionState.saveAnswersDisabled} onClick={() => void saveSpecEdit()}>Antworten speichern</button>{actionState.saveAnswersDisabled ? <span className="helper-text">{submitting ? "Speichern läuft …" : "Ändere zuerst eine Angabe."}</span> : null}</div>}
                     canEditPurchasedQuantities={canEditPurchasedQuantities}
                     canSplitComponents={Boolean(splitEnabled && canEditPurchasedQuantities && questionState.currentDraft && !questionState.currentDraft.draftArtifacts?.productionPlan && !questionState.currentDraft.draftArtifacts?.purchaseList && !questionState.currentDraft.draftArtifacts?.recipes)}
                     focusedProductionSpec={focusedProductionSpec}
@@ -297,7 +289,7 @@ export function ProductionQuestionPanel({
             />
             {productionAssumptions.length > 0 ? (
               <>
-                <p className="eyebrow">Annahmen des Agenten</p>
+                <p className="eyebrow">Annahmen aus der Anfrage</p>
                 <ul className="item-list compact">
                   {productionAssumptions.map((item) => (
                     <li key={item}>{item}</li>

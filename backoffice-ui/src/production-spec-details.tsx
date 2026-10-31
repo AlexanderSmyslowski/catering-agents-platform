@@ -13,8 +13,8 @@ export function ProductionSpecDetailsCard({ spec, readinessLabel }: ProductionSp
   }
 
   return (
-    <div className="component-answer-card">
-      <p className="eyebrow">Spezifikationsdetails</p>
+    <details className="component-answer-card technical-context-details">
+      <summary>Auftragsdetails und technische Angaben</summary>
       <p className="helper-text">{detailsState.contextLabel}</p>
       <p className="helper-text">{detailsState.eventLabel}</p>
       <p className="helper-text">{detailsState.summaryLabel}</p>
@@ -27,6 +27,6 @@ export function ProductionSpecDetailsCard({ spec, readinessLabel }: ProductionSp
           </li>
         ))}
       </ul>
-    </div>
+    </details>
   );
 }

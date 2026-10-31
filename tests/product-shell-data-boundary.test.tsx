@@ -316,7 +316,8 @@ describe("independent product loader boundaries", () => {
   };
 
   it("keeps the portal free of operational requests and health checks", async () => {
-    const { fetchMock } = await renderAt("/");
+    const { fetchMock, container } = await renderAt("/");
+    expect(container.querySelector('[aria-label="Startauswahl"] a[href="/produktion"]')?.textContent).toBe("Produktion öffnen");
     const productCalls = fetchMock.mock.calls
       .map(([input]) => String(input))
       .filter((url) => !url.endsWith("/api/intake/v1/auth/session"));
@@ -351,6 +352,7 @@ describe("independent product loader boundaries", () => {
       schemaVersion: "1.0", source: { tier: "digitized_cookbook", originType: "approved_import", reference: "synthetic-test", retrievedAt: "", approvalState: "review_required", qualityScore: 0.5, fitScore: 0.5, extractionCompleteness: 0.5 },
       baseYield: { servings: 10, unit: "servings" }, ingredients: [], steps: [], scalingRules: { defaultLossFactor: 1 }, allergens: [], dietTags: [] }];
     vi.spyOn(api, "loadProductionProductData").mockResolvedValue(data);
+    const review = vi.spyOn(api, "reviewRecipe").mockResolvedValue({ recipe: {} });
     const { container } = await renderAt("/produktion?productionCaseId=case-a");
     const status = container.querySelector('[aria-label="Rezeptprüfung"]');
     expect(status?.textContent).toContain("1 Rezepte insgesamt");
@@ -359,6 +361,25 @@ describe("independent product loader boundaries", () => {
     expect(summary).toBeDefined();
     await act(async () => { summary!.click(); await flush(); });
     expect(container.textContent).toContain("Neu importiertes Küchenrezept");
+    const recipeSection = summary!.closest("details")!;
+    expect([...recipeSection.querySelectorAll("label")].some(label => label.textContent?.includes("Rezeptname (optional)") && label.querySelector("input"))).toBe(true);
+    expect([...recipeSection.querySelectorAll("label")].some(label => label.textContent?.includes("Rezeptdatei") && label.querySelector('input[type="file"]'))).toBe(true);
+    for (const button of [...recipeSection.querySelectorAll("button")].filter(button => /Für (Angebote|Produktion) speichern/.test(button.textContent ?? ""))) expect(button.disabled).toBe(true);
+    expect(recipeSection.textContent).toContain("Bibliotheksstatus");
+    const reject = [...recipeSection.querySelectorAll("button")].find(button => button.textContent === "Ablehnen")!;
+    await act(async () => reject.click());
+    expect(recipeSection.querySelector('[aria-label="Bibliotheksentscheidung bestätigen"]')?.textContent).toContain("ablehnen");
+    await act(async () => [...recipeSection.querySelectorAll("button")].find(button => button.textContent === "Abbrechen")!.click());
+    expect(review).not.toHaveBeenCalled();
+    const approve = [...recipeSection.querySelectorAll("button")].find(button => button.textContent === "Freigeben")!;
+    await act(async () => approve.click());
+    expect(review).not.toHaveBeenCalled();
+    expect(recipeSection.querySelector('[aria-label="Bibliotheksentscheidung bestätigen"]')?.textContent).toContain("Neu importiertes Küchenrezept");
+    await act(async () => [...recipeSection.querySelectorAll("button")].find(button => button.textContent === "Abbrechen")!.click());
+    expect(review).not.toHaveBeenCalled();
+    await act(async () => approve.click());
+    await act(async () => { [...recipeSection.querySelectorAll("button")].find(button => button.textContent === "Bestätigen")!.click(); await flush(); });
+    expect(review).toHaveBeenCalledExactlyOnceWith("production", "new-library-recipe", "approve");
   });
 
   it.each([
@@ -374,7 +395,7 @@ describe("independent product loader boundaries", () => {
     vi.spyOn(api, "loadProductionProductData").mockResolvedValue(data);
     const { container } = await renderAt("/produktion?productionCaseId=case-a");
     const facts = container.querySelector('[aria-label="Datenstand Produktionsauftrag"]');
-    expect(facts?.textContent).toContain("Interne Produktionsfreigabe:");
+    expect(facts?.textContent).toContain("Freigabe für diesen Auftrag:");
     expect(facts?.textContent).toContain(label);
   });
 
@@ -1017,6 +1038,33 @@ describe("independent product loader boundaries", () => {
     expect(state.handoff?.handoffId).toBe("handoff-a");
   });
 
+  it("does not bind an approval record the case itself does not link to", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/offers/v1/offers/cases")) {
+        return Response.json({ items: [{ caseId: "case-a", product: "offer", displayName: "A", status: "open", createdAt: "", updatedAt: "" }] });
+      }
+      if (url.endsWith("/api/offers/v1/offers/cases/case-a")) {
+        return Response.json({
+          case: {
+            caseId: "case-a", product: "offer", displayName: "A", status: "open",
+            schemaVersion: "1.0", businessId: "local", version: 2, createdAt: "", updatedAt: "",
+            approvedOfferId: "approved-offer-current"
+          },
+          events: [],
+          approvedOffer: { approvedOfferId: "approved-offer-other", sourceDraft: { draftId: "draft-a", revision: 1 } }
+        });
+      }
+      throw new Error(`Unerwartete persistierte Angebotsladung: ${url}`);
+    }));
+
+    const state = await api.loadOfferWorkspaceState("case-a");
+
+    // The case link stays visible as an unclear approval instead of a definite binding.
+    expect(state.approvedOffer).toBeUndefined();
+    expect(state.activeCase?.approvedOfferId).toBe("approved-offer-current");
+  });
+
   it("loads the production plan and purchase list only through the active case references", async () => {
     const calls: string[] = [];
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
@@ -1286,6 +1334,24 @@ describe("independent product loader boundaries", () => {
     expect(latest?.purchaseLists[0]?.purchaseListId).toBe("list-new");
     await act(async () => root.unmount());
     container.remove();
+  });
+
+  it("places the single save action after the answer fields and explains why it is disabled", async () => {
+    const props = productionQuestionPanelProps("case-a");
+    props.editorState = { ...props.editorState, editingSpecId: "spec-a", hasFocusedSpecEditChanges: false };
+    const node = document.body.appendChild(document.createElement("div"));
+    const root = createRoot(node);
+    await act(async () => { root.render(createElement(ProductionQuestionPanel, props)); await flush(); });
+    const editor = node.querySelector(".structured-chat-bubble--user")!;
+    const buttons = [...node.querySelectorAll("button")].filter(button => button.textContent === "Antworten speichern");
+    expect(buttons).toHaveLength(1);
+    expect(editor.contains(buttons[0]!)).toBe(true);
+    expect(buttons[0]!.disabled).toBe(true);
+    expect(editor.textContent).toContain("Ändere zuerst eine Angabe.");
+    props.editorState = { ...props.editorState, hasFocusedSpecEditChanges: true };
+    await act(async () => root.render(createElement(ProductionQuestionPanel, props)));
+    expect([...node.querySelectorAll("button")].find(button => button.textContent === "Antworten speichern")?.disabled).toBe(false);
+    await act(async () => root.unmount()); node.remove();
   });
 
   it("labels the detached answer fields even after they contain values", async () => {

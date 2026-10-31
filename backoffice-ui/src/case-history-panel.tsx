@@ -43,7 +43,7 @@ export function CaseHistoryPanel({
   const historyRef = useRef<HTMLDetailsElement>(null);
   const firstHistoryRender = useRef(true);
   useEffect(() => {
-    if (historyRef.current) historyRef.current.open = !activeCaseId || (firstHistoryRender.current && window.location.hash === "#history");
+    if (historyRef.current) historyRef.current.open = firstHistoryRender.current && window.location.hash === "#history";
     firstHistoryRender.current = false;
     setShowAll(false);
   }, [activeCaseId]);
@@ -122,7 +122,7 @@ export function CaseHistoryPanel({
                       disabled={copyingCaseId === item.caseId}
                       onClick={() => void copyCase(item.caseId)}
                     >
-                      {copyingCaseId === item.caseId ? "Wird angelegt ..." : "Neuen Auftrag anlegen"}
+                      {copyingCaseId === item.caseId ? "Wird angelegt ..." : "Neuen Auftrag mit diesem Namen anlegen"}
                     </button>
                   </div>
                 </li>

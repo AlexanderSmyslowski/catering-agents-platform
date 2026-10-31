@@ -24,6 +24,7 @@ export function ProductionHandoffPanel({
           Hier siehst du, woher der Auftrag stammt und welche Unterlagen vorliegen.
         </p>
       </header>
+      <details className="technical-context-details"><summary>Herkunft und Bearbeitungsverlauf anzeigen</summary>
       <div className="handoff-fact-grid">
         {state.facts.map((fact) => (
           <div className="handoff-fact" key={fact.key}>
@@ -32,6 +33,7 @@ export function ProductionHandoffPanel({
           </div>
         ))}
       </div>
+      </details>
       <p className="helper-text">
         Produktionsplan, Einkaufsliste und Verlauf sind interne Arbeitsunterlagen.
         Fehlende Unterlagen bleiben als offen gekennzeichnet.

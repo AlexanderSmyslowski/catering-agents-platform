@@ -140,7 +140,31 @@ export function registerOfferCaseRoutes(
     const trustedActor = actor(request);
     const offerCase = await store.getCase(trustedActor, request.params.caseId);
     if (!offerCase) return reply.code(404).send({ message: "Angebotsauftrag nicht gefunden." });
-    return reply.send({ case: offerCase, events: await store.listEvents(trustedActor, offerCase.caseId) });
+    const events = await store.listEvents(trustedActor, offerCase.caseId);
+    // A reopened case must show its persisted internal approval. Only the
+    // binding identity is projected; the case link and its approval event
+    // remain the authority, so a contradictory record is never presented.
+    const approvedOffer = offerCase.approvedOfferId
+      ? await store.getApprovedOffer(trustedActor, offerCase.approvedOfferId)
+      : undefined;
+    const approvalEventPresent = approvedOffer !== undefined && events.some((event) =>
+      event.kind === "approval" && event.artifactId === approvedOffer.approvedOfferId);
+    const approvedOfferSummary = approvedOffer &&
+      approvedOffer.approvedOfferId === offerCase.approvedOfferId &&
+      approvedOffer.businessId === offerCase.businessId &&
+      approvalEventPresent
+      ? {
+          approvedOfferId: approvedOffer.approvedOfferId,
+          sourceDraft: { draftId: approvedOffer.sourceDraft.draftId, revision: approvedOffer.sourceDraft.revision },
+          selectedVariantId: approvedOffer.selectedVariantId,
+          approvedAt: approvedOffer.approvedAt
+        }
+      : undefined;
+    return reply.send({
+      case: offerCase,
+      events,
+      ...(approvedOfferSummary ? { approvedOffer: approvedOfferSummary } : {})
+    });
   });
 
   app.post<{ Params: { caseId: string }; Body: Record<string, never> }>(

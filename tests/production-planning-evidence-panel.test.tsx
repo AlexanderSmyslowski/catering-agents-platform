@@ -81,7 +81,7 @@ describe("planning evidence operator panel", () => {
     expect(container.textContent).toContain("Vorbereiteter Rezeptstand");
     vi.mocked(api.loadProductionDrafts).mockResolvedValue({ items: [draft(recipe.recipeId, 6)], planningEvidence: [], planningRecipes });
     await act(async () => window.dispatchEvent(new CustomEvent("catering:production-draft-review", { detail: { draftId: "draft-6" } })));
-    expect(container.textContent).toContain("Revision 6");
+    expect(container.textContent).toContain("Prüffassung 6");
     expect(container.textContent).not.toContain("Vorbereiteter Rezeptstand");
     expect(container.querySelector('select[aria-label="Rezeptgrundlage"]')).not.toBeNull();
   });
@@ -195,7 +195,8 @@ describe("planning evidence operator panel", () => {
     await setup();
     expect(container.textContent).toContain("Kaffeepause kompakt");
     expect(container.textContent).not.toContain("Croissants Zukauf");
-    expect(container.textContent).toContain("review_required");
+    expect(container.textContent).toContain("Prüfung nötig");
+    expect(container.textContent).not.toContain("review_required");
     expect(container.textContent).toContain("35");
     const confirmations = container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
     expect(confirmations).toHaveLength(4);
@@ -225,7 +226,7 @@ describe("planning evidence operator panel", () => {
       .mockResolvedValue({ items: [draft(recipe.recipeId, 2)], planningEvidence: [], planningRecipes });
     await click("Rezeptzuordnung speichern");
     expect(revised.mock.calls[0]![1]).toMatchObject({ caseId: "case-1", expectedRevision: 1, componentUpdates: [{ componentId: "coffee", recipeOverrideId: recipe.recipeId }] });
-    expect(container.textContent).toContain("Revision 2");
+    expect(container.textContent).toContain("Prüffassung 2");
     expect([...container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].every(item => !item.checked)).toBe(true);
   });
 
@@ -251,7 +252,7 @@ describe("planning evidence operator panel", () => {
     expect(container.querySelectorAll('input[type="checkbox"]')).toHaveLength(0);
     vi.mocked(api.loadProductionDrafts).mockResolvedValue({ items: [draft(recipe.recipeId, 2)], planningEvidence: [evidence], planningRecipes });
     await act(async () => window.dispatchEvent(new Event("catering:production-draft-refresh")));
-    expect(container.textContent).toContain("Vorgänger");
+    expect(container.textContent).toContain("Frühere Prüfnachweise");
     expect([...container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].every(item => !item.checked)).toBe(true);
   });
 });

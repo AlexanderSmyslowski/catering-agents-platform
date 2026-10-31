@@ -16,10 +16,10 @@ function quantity(value: { amount: number; unit: string } | undefined): string {
 export function renderAppliedProductionContext(snapshot?: AppliedProductionSnapshot): string {
   if (!snapshot) return "";
   const { productionCase, approvedSpec, manifest } = snapshot;
-  return `<section><h2>Freigegebener Produktionsstand</h2><ul>${[
-    `Fall: ${productionCase.caseId}`, `ApprovedProductionSpec: ${approvedSpec.approvedProductionSpecId}`,
-    `Quelldraft: ${approvedSpec.sourceDraft.draftId} · Revision ${approvedSpec.sourceDraft.revision}`,
-    `Apply: ${manifest.approvedProductionSpecId} · ${manifest.appliedAt}`,
+  return `<section><h2>Technischer Nachweis des freigegebenen Produktionsstands</h2><ul>${[
+    `Auftrag: ${productionCase.caseId}`, `Freigegebener Stand: ${approvedSpec.approvedProductionSpecId}`,
+    `Quellfassung: ${approvedSpec.sourceDraft.draftId} · Revision ${approvedSpec.sourceDraft.revision}`,
+    `Übernahme: ${manifest.approvedProductionSpecId} · ${manifest.appliedAt}`,
     `Produktionsplan: ${manifest.planId}`, `Einkaufsliste: ${manifest.purchaseListId}`
   ].map(value => `<li>${escapeHtml(value)}</li>`).join("")}</ul></section>`;
 }

@@ -183,6 +183,33 @@ describe("offer workbench approval binding", () => {
     expect(doc.body.textContent).toContain("Erfasste Veranstaltungsdaten");
   });
 
+  it("keeps a reopened persisted approval visible and blocks re-approval only for an unclear case link", () => {
+    // Projection the case detail route now returns after a reload.
+    const reloaded = buildOfferApprovalBinding({ approvedOfferId: "approved-a", sourceDraft: { draftId: "draft-a", revision: 1 } });
+    const approved = new DOMParser().parseFromString(renderToStaticMarkup(createElement(OfferConversationalWorkbench, props({
+      approvalBinding: reloaded, approvalBindingState: "valid"
+    }))), "text/html");
+    expect(approved.querySelector('[role="status"]')?.textContent).toContain("Intern freigegeben – diese Fassung");
+    expect([...approved.querySelectorAll("button")].some(button => button.textContent?.startsWith("Variante freigeben"))).toBe(false);
+
+    const unclear = new DOMParser().parseFromString(renderToStaticMarkup(createElement(OfferConversationalWorkbench, props({
+      approvalBinding: undefined, approvalBindingState: "invalid"
+    }))), "text/html");
+    expect(unclear.querySelector('[role="status"]')?.textContent).toContain("Freigabestand nicht eindeutig – Auftrag neu laden");
+    expect(unclear.querySelector('[role="status"]')?.textContent).not.toContain("Noch nicht freigegeben");
+    expect(unclear.querySelector('[role="alert"]')?.textContent).toContain("erneut laden");
+    expect([...unclear.querySelectorAll("button")].some(button => button.textContent?.startsWith("Variante freigeben"))).toBe(false);
+
+    const absent = new DOMParser().parseFromString(renderToStaticMarkup(createElement(OfferConversationalWorkbench, props({
+      approvalBindingState: "absent"
+    }))), "text/html");
+    expect(absent.querySelector('[role="status"]')?.textContent).toContain("Noch nicht freigegeben");
+    const scope = absent.querySelector(".offer-approval-scope")?.textContent ?? "";
+    expect(scope).toContain("intern");
+    expect(scope).toContain("kein Versand an den Kunden");
+    expect([...absent.querySelectorAll("button")].map(button => button.textContent)).toContain("Variante freigeben: Klassisch");
+  });
+
   it("offers no customer export while the offer needs a successful refresh", () => {
     const normal = renderToStaticMarkup(createElement(OfferConversationalWorkbench, props()));
     expect(normal).toContain("Interne Prüfunterlage öffnen");
@@ -260,6 +287,17 @@ describe("offer workbench approval binding", () => {
     await act(async () => root.unmount());
   });
 
+
+  it("requires the case-linked approval projection before trusting a handoff", () => {
+    const handoff = { handoffId: "handoff-a", approvedOfferId: "approved-a", source: { draftId: "draft-a", revision: 1, selectedVariantId: "classic" } };
+    const projection = { approvedOfferId: "approved-a", sourceDraft: { draftId: "draft-a", revision: 1 } };
+    expect(buildOfferApprovalBinding(undefined, handoff, "approved-a")).toBeUndefined();
+    expect(buildOfferApprovalBinding(undefined, handoff)?.handoffId).toBe("handoff-a");
+    expect(buildOfferApprovalBinding(projection, handoff, "approved-b")).toBeUndefined();
+    expect(buildOfferApprovalBinding(projection, { ...handoff, approvedOfferId: "approved-b" }, "approved-a")).toBeUndefined();
+    expect(buildOfferApprovalBinding(projection, { ...handoff, source: { ...handoff.source, revision: 2 } }, "approved-a")).toBeUndefined();
+    expect(buildOfferApprovalBinding(projection, handoff, "approved-a")?.handoffId).toBe("handoff-a");
+  });
 
   it("resolves a persisted handoff before reopening production instead of navigating with only a draft ID", async () => {
     const openProductionHandoff = vi.fn(async (_handoffId: string) => undefined);
@@ -377,13 +415,16 @@ describe("offer workbench approval binding", () => {
     const markup = renderToStaticMarkup(createElement(OfferConversationalWorkbench, props({
       activeDraft: revisionTwo,
       selectedDraft: revisionTwo,
-      approvalBinding: revisionOneBinding
+      approvalBinding: revisionOneBinding,
+      approvalBindingState: "valid"
     })));
 
     expect(markup).toContain("Angebot A, korrigiert");
     expect(markup).not.toContain("An Produktion übergeben");
     expect(markup).not.toContain("Produktionsauftrag öffnen");
     expect(markup).not.toContain("production-a-revision-1");
+    expect(markup).toContain("Für diesen Auftrag ist bereits eine andere Angebotsfassung intern freigegeben");
+    expect(markup).not.toContain("Variante freigeben: Klassisch");
   });
 });
 
@@ -396,6 +437,9 @@ it("removes all repeated extraction questions when a revised offer answers them"
   const duplicateKeyWarning = vi.spyOn(console, "error").mockImplementation(() => undefined);
   try {
     await act(async () => root.render(createElement(OfferConversationalWorkbench, props({ activeDraft: initial, selectedDraft: initial }))));
+    const initialRegion = document.querySelector('[aria-label="Offene Punkte"]')!;
+    // The same question from two source passages is shown once.
+    expect(Array.from(initialRegion.querySelectorAll("li")).map(item => item.textContent)).toEqual([repeatedTimeQuestion, unanswered]);
     await act(async () => root.render(createElement(OfferConversationalWorkbench, props({ activeDraft: revised, selectedDraft: revised }))));
     const region = document.querySelector('[aria-label="Offene Punkte"]')!;
     expect(region.querySelector("h3")?.textContent).toBe("Offene Punkte (1)");

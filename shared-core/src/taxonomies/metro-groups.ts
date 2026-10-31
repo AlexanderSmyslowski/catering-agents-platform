@@ -28,7 +28,7 @@ export function metroGroupSortIndex(groupId: string): number {
 }
 
 export function formatMetroGroupLabel(groupId: string): string {
-  return metroGroupLabels.get(groupId) ?? groupId;
+  return groupId === "misc" ? "Sonstiges" : metroGroupLabels.get(groupId) ?? groupId;
 }
 
 export function isMetroIngredientGroupId(value: string): value is MetroIngredientGroupId {

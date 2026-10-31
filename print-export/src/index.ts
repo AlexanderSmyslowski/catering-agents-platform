@@ -274,7 +274,7 @@ export function renderOfferHtml(draft: OfferDraft, options: { unverifiedCase?: b
     ...draft.serviceModules.filter(module => module.category !== "food" || !draft.proposedEventSpec.menuPlan?.length)
       .map((module) => `<li>${escapeHtml(module.label)}</li>`),
     "</ul>",
-    ...(!draft.pricingSummary.calculation ? [`<p>Gesamt: ${draft.pricingSummary.subtotal.amount.toFixed(2)} ${escapeHtml(draft.pricingSummary.subtotal.currency)}</p>`] : []),
+    ...(!draft.pricingSummary.calculation ? [`<p>Gesamt: ${draft.pricingSummary.subtotal.amount.toLocaleString("de-DE", { style: "currency", currency: draft.pricingSummary.subtotal.currency })}</p>`] : []),
     renderOfferPricingHtml(draft.pricingSummary, !publishApproved),
     ...reviewStatusSection,
     ...customerTextSection,
@@ -431,6 +431,23 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
     : reply.code(403).send({ message: "Produktions-Operator erforderlich." });
   const app = Fastify({
     logger: false
+  });
+  app.addHook("onSend", async (request, reply, payload) => {
+    const pathname = request.url.split("?", 1)[0];
+    const acceptedTypes = (request.headers.accept ?? "").split(",").map(part => {
+      const [mediaType, ...parameters] = part.trim().toLowerCase().split(";");
+      const quality = parameters.map(parameter => parameter.trim()).find(parameter => parameter.startsWith("q="));
+      const value = quality === undefined ? 1 : Number(quality.slice(2));
+      return { mediaType, quality: Number.isFinite(value) && value >= 0 && value <= 1 ? value : 0 };
+    });
+    const htmlQuality = Math.max(0, ...acceptedTypes.filter(item => item.mediaType === "text/html").map(item => item.quality));
+    const jsonQuality = Math.max(0, ...acceptedTypes.filter(item => item.mediaType === "application/json").map(item => item.quality));
+    const acceptsHtml = htmlQuality > 0 && htmlQuality > jsonQuality;
+    if (request.method !== "GET" || !acceptsHtml || reply.statusCode < 400 ||
+        !/^\/v1\/exports\/(?:offers|production-plans|production-folders)\/[^/]+\/html$/.test(pathname)) return payload;
+    const destination = pathname.startsWith("/v1/exports/offers/") ? "/angebot" : "/produktion";
+    reply.type("text/html; charset=utf-8");
+    return `<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Unterlage nicht verfügbar</title><style>body{margin:0;background:#f5f5f7;color:#1d1d1f;font:16px/1.5 system-ui,-apple-system,sans-serif}main{max-width:38rem;margin:clamp(24px,8vh,96px) auto;padding:24px;background:#fff;border:1px solid #d2d2d7;border-radius:12px}h1{font-size:1.5rem;margin:0 0 16px}a{display:inline-flex;align-items:center;min-height:44px;color:#0066cc;text-underline-offset:3px}a:focus-visible{outline:3px solid #0066cc;outline-offset:3px}@media(max-width:680px){main{margin:16px}}</style></head><body><main><h1>Unterlage nicht verfügbar</h1><p>Die Unterlage konnte nicht geöffnet werden. Bitte den Auftrag erneut laden und die Voraussetzungen für den Export prüfen.</p><p><a href="${destination}">Zurück zum Arbeitsbereich</a></p></main></body></html>`;
   });
   const userStore = options.userStore ?? new CateringUserStore({
     rootDir: options.rootDir,
