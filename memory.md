@@ -3541,3 +3541,76 @@ und finale Desktop-/Mobilbilder. Keine privaten Rohangebote/Rechnungen imGit ode
 Reviewmaterial. Preis-/Lieferanten-/Allergen-/Hygiene-/Ausbeute-/Realpilotfreigaben
 bleiben getrennt. Führender Betriebsnachweis weiter5.688, neue Produktänderung
 noch nicht integriert oder aufNürnberg.
+
+
+## Historischer Mehrrezeptfall vollständig lokal bestanden — Version 5.690 / 31.10.2026
+
+Der HOLD aus5.689 ist für den lokalen Fachablauf geschlossen. Terra6.1 implementierte
+explizite Aufteilungen im vorhandenen strukturierten Produktionsentwurf. Quelle,
+Ausgabeportionen und Begründung bleiben erhalten; eigene Produktionsmengen und
+RezeptIDs werden ausdrücklich gesetzt. Gemeinsame Übergangsprüfung in Revise und
+Apply, unveränderliche Vorgänger/Handoff/Angebote und unabhängige Prüfziele bleiben
+erhalten. Kinder erben weder Herstellungs- noch Ernährungsentscheidung. Offene
+quell-/indexgebundene Rückfragen und betroffene unabhängige Prüfziele werden vor
+Mutation gesperrt, statt still falsch zugeordnet. Keine neue Prüfplattform.
+
+Tatsächlich im isolierten lokalen Chrome über normale Anwendungsschnittstellen:
+acht Angebotspositionen je50 → elf Produktionskomponenten; erstes Gericht50+50,
+Kuchenbar50 Ausgabe und3×18=54 Produktion einschließlich4 Reserve. Split speichern,
+Reload, explizite Herstellungs-/Ernährungsentscheidungen, elf neue ausdrücklich
+synthetische Mengen-/Eventprüfungen, Prepare,15 Prüfentscheidungen, Freigabe, Apply,
+sofortige Ergebnisanzeige und kompletter Reload bestanden. Kein echter Kunde und
+keine echte Küchen-/Allergen-/Hygienefreigabe wurden damit bearbeitet oder erteilt.
+
+Elf Rezeptblätter enthalten122 Zutatenbeiträge. Ein unabhängiger Decimalvergleich
+über normalisierte Artikelnamen/Einheiten bestätigt die vollständige Übereinstimmung
+mit61 Einkaufspositionen. Auch die tatsächlichen Druck-HTML-Tabellen und die
+Excel-DE-CSV stimmen exakt überein; Zimt bleibt2g. Der ursprüngliche Kundenentwurf
+enthält NACH Produktions-Apply unverändert8×50 und keine internen Kosten/Quellen.
+Produktionsmappe im echten Browser geöffnet; kein physischer Druck/PDF-Dialog behauptet.
+
+Tatsächlicher Opus5.5/firstParty-Review der neuen Logik und Desktop-/Mobilbilder
+forderte zwei präzisere Bedienhinweise und ein standardmäßig geschlossenes Schreibgate.
+Terra korrigierte die Warnung vor unveränderbaren Namen/Produktionsportionen sowie
+den ausführbaren Konfliktweg „Aufteilung verwerfen → übrige Änderungen speichern →
+erneut aufteilen“. Herkunft in zwei Zeilen, neutrale Kindkategorie und klare Druckspalte.
+Der enge Opus5.5-Nachreview49d8bfea-d517-4a85-b8df-1f9af4c55073 ist ACCEPT
+für das Konsequenzdelta893570e→df4427b; statisch samt echten Screenshots, kein
+behaupteter eigener Reviewer-Browserlauf und kein allgemeines Produkt-/Pilot-GO.
+
+Rückfallgrenze: PR770 weist das neue optionale productionSource-JSON-Feld ab.
+Ein reiner Image-Rückfall bei beibehaltenem Datenvolume wäre nach ersten Splits
+nicht ausreichend. Deshalb CATERING_PRODUCTION_COMPONENT_SPLITS standardmäßig AUS;
+nur exakt enabled öffnet den Serverweg. Sperre nach Autorisierung VOR Draft-Lesung,
+Mutation/Audit; bestehender plans-Response liefert dieselbe Fähigkeit, UI bei fehlender
+Fähigkeit ebenfalls aus. Tatsächliche Loopback-HTTP-Prüfung: Fähigkeit false und409
+vor Draft-Lesung. Nur lokaler synthetischer Harness ausdrücklich enabled. Normale
+Operator-/UI-/LLM-Wege erzeugen das Feld nicht außerhalb dieses Wegs. Vertrauenswürdige
+interne Production-Service-Vollspec-Endpunkte sind kein globaler Datensatzfilter;
+das Gate behauptet keine Abwehr eines berechtigten direkten Service-Schreibers.
+Vor Zielaktivierung muss ein installierter/geprüfter kompatibler Vorgänger als
+Rückfall gebunden sein. Kein Metadatenverlust, keine automatische Datenbereinigung.
+
+Gezielte finale Terra-Prüfungen:17 Gate-/Split-/Capabilityfälle sowie107 relevante
+Access-/UI-/Copy-/Exportfälle PASS, Build und Shell-Syntaxprüfung PASS. Gültiger
+historischer Fullflow wird für unveränderte Logik wiederverwendet. Neue Warnung,
+gemischtes Speichern und Rückkehr zu ausgeblendeten Änderungen zusätzlich tatsächlich
+im Chrome bestätigt;390px ohne äußeren Überlauf. Impeccable meldet nur den bereits
+auf Main vorhandenen Inter-Fonthinweis in Produktionsunterlagen, keinen neuen Befund.
+
+Gebündelter Stand in PR771; Kundenentwurf-Head16b3c31 mit Pflicht-CI41185497305
+vollständig SUCCESS. Diese alte CI ist KEIN Nachweis des neuen Split-/Gate-Heads.
+Neue Pflicht-CI und Integration des Gesamtpakets stehen noch aus. Nürnberg bleibt
+unverändert PR770/fcfb360 mit angenommenen100-Gäste- und regulären Backup/Restore-
+Nachweisen5.687/5.688. Keine Installation, Aktivierung des Splits, Konto-/Netz-/DNS-/
+Helsinki-/ADH-/Backup-/Alarmänderung oder neue Erinnerung in diesem Produktblock.
+
+Belege im bestehenden E/tmp/customer-offer-28042: historical-completion.private.json,
+historical-prepared.private.json, historical-quantity-comparison.private.json,
+Druck-HTML/CSV, historical-applied-after-reload.png, historical-shopping-cinnamon.png,
+gate-default-off.private.json, beide tatsächlichen Opus-Split-Reviewresultate sowie
+finale Warnungs-/Konfliktbilder. Keine privaten Rohangebote/Rechnungen im Git.
+Nächster Schritt: den akzeptierten gebündelten Head durch Pflicht-CI integrieren;
+Zielaufbau zunächst als kompatibler Leser bei unverändert geschlossenem Split-Gate.
+Endgültiger Kundenversand, einfache Korrektur bereits gespeicherter Splitnamen/-mengen
+und reale Preis-/Lieferanten-/Küchen-/Allergen-/Hygiene-/Pilotfreigaben bleiben offen.

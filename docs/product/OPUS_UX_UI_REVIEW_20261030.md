@@ -245,3 +245,29 @@ lokal, LinuxCI räumt seinen temporärenWorkspace regulär selbst auf.
 HistorischerMehrrezeptfall separatHOLD:8Angebotspositionen sind noch nicht sicher
 11Produktionsrezepten zugeordnet. Kein Apply und kein Review dieses nichtimplementierten
 Splits behauptet. Quellen/Originalurteil E/tmp/customer-offer-28042.
+
+
+## 31.10.2026 — Produktionsaufteilung und enger Konsequenznachreview (5.690)
+
+Tatsächlicher Opus5.5/firstParty-Review akzeptierte Funktion/Lineage/Autorisierung der
+neuen Aufteilung, verlangte aber zwei UX-Texte und ein Default-Off-Schreibgate vor
+Release. Terra korrigierte diese Punkte samt vorhandener UI-Server-Fähigkeitsbindung
+und dem konkret gefundenen Risiko unauflösbarer Quellrückfragen. Kein erneuter
+Gesamtarchitekturreview oder unveränderter Volltest.
+
+Tatsächlicher Nachreview Session49d8bfea-d517-4a85-b8df-1f9af4c55073,
+canonicalModelclaude-opus-5-5, providerfirstParty, success: ACCEPT für893570e→df4427b.
+Reviewer las exaktes Diff und neue Desktop-/390px-/Konfliktbilder, führte selbst keine
+Tests und keinen Browser aus. Root hat neuen Bedienweg/Fehlermeldung/Verwerfen und
+Default-Off-HTTP tatsächlich geprüft. Voller historischer Normal-UI-Ablauf ist lokal
+PASS mit11Rezeptblättern,122Beiträgen,61Druck-/CSVpositionen einschließlich2gZimt;
+kein Nürnberger Update oder echter Küchen-/Pilotnachweis.
+
+Releasegrenze bleibt explizit: Ziel-Split erst nach kompatiblem installiertem/geprüftem
+Rückfallvorgänger einschalten. PR770 könnte die neuen JSON-Datensätze sonst nicht
+lesen. Standard off und unsichtbare Splitaktion erhalten den bestehenden Rückfall.
+Kleine nicht blockierende Hinweise: doppelte bestehende Fehleranzeige; genaue Ursache
+bei fremden indexgebundenen Fragen könnte noch verständlicher sein. Aktuell erzeugte
+Fragepfade und einziger normaler Split-Schreibweg sind an tatsächlichen Quellen geprüft;
+interne vertrauenswürdige Service-Vollspec-Endpunkte sind kein globaler Datenfilter.
+Quellen/Urteile und tatsächliche Screenshots unter E/tmp/customer-offer-28042.

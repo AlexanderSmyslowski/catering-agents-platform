@@ -1,3 +1,20 @@
+## Aktueller Produktstand — Version 5.690 / 31.10.2026
+
+Nürnberg bleibt angenommenes PR770/fcfb360 (5.688). Neues gebündeltes Paket in PR771:
+expliziter Kundenentwurf ohne interne Kosten/Quellen sowie sichere Aufteilung von
+Angebotspositionen in mehrere Produktionsrezepte. Tatsächlicher isolierter historischer
+UI-Lauf8×50→11Rezepte→122Zutatenbeiträge→61Print-/CSVpositionen mit2gZimt einschließlich
+Freigabe/Apply/Reload vollständig PASS. Angebot bleibt nach Apply unverändert8×50.
+Terra6.1-Umsetzung und tatsächliches enges Opus5.5-ACCEPT49d8bfea vorhanden.
+
+Split-Schreibgate standardmäßig AUS, UI folgt derselben Serverfähigkeit. PR770 kann
+das neue JSON-Feld nicht lesen; vor Zielaktivierung braucht es einen installierten und
+geprüften kompatiblen Rückfallvorgänger. Kein neues Deployment oder Zielenable erfolgt.
+Gezielte Tests/Build und reale Desktop-/390px-/Konfliktprüfungen bestanden. Pflicht-CI
+für alten Kundenentwurf-Head16b3c31 SUCCESS; Gesamtpaket-CI/Integration noch offen.
+Details und Belege in memory5.690, E/tmp/customer-offer-28042. Keine Wiederholung des
+gültigen PR770-Zieltests, kein neuer Beobachter und kein Kundenversand-/Küchen-/Pilot-GO.
+
 ## Aktueller Produktstand — Version5.689 /31.10.2026
 
 Nürnberg PR770 bleibt technisch/synthetisch nach5.688 abgeschlossen. Neues lokales
