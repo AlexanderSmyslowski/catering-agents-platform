@@ -215,6 +215,13 @@ describe("Gate B production read-only UI", () => {
     expect(JSON.stringify(result)).not.toContain("8.192,44 EUR");
   });
 
+  it("uses only the server-advertised split capability", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ access: { canOperateProduction: true, canSplitProductionComponents: true }, items: [] })));
+    expect((await loadProductionRouteAccessData()).access.canSplitProductionComponents).toBe(true);
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ access: { canOperateProduction: true }, items: [] })));
+    expect((await loadProductionRouteAccessData()).access.canSplitProductionComponents).toBe(false);
+  });
+
   it("renders executable kitchen and purchase facts without actions or exports", async () => {
     const container = await renderReader({
       access: { canOperateProduction: false },

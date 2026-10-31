@@ -1,6 +1,7 @@
 export type PurchasedQuantityEdit = { element: string; amountPerPerson: string; unit: string };
 
 export type ComponentEditState = {
+  split?: { reason: string; children: Array<{ label: string; servings: string; recipeId: string }> };
   menuCategory: string;
   productionMode: string;
   productionStation?: string;

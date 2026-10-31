@@ -1,3 +1,5 @@
+import { useContext } from "react";
+import { ProductionSplitCapability } from "./production-capabilities.js";
 import { productionDraftEntryId } from "./production-entry-focus.js";
 import { ProductionDietaryQuestionActions } from "./production-dietary-question-actions.js";
 import type { ProductionDraft } from "./api.js";
@@ -91,6 +93,7 @@ export function ProductionQuestionPanel({
   editorState,
   editorActions
 }: ProductionQuestionPanelProps) {
+  const splitEnabled = useContext(ProductionSplitCapability);
   const {
     focusedProductionSpec,
     focusedSpecReadinessLabel,
@@ -267,6 +270,7 @@ export function ProductionQuestionPanel({
                 answersEditable && actionState.isFocusedSpecEditing ? (
                   <ProductionStructuredAnswerEditor
                     canEditPurchasedQuantities={canEditPurchasedQuantities}
+                    canSplitComponents={Boolean(splitEnabled && canEditPurchasedQuantities && questionState.currentDraft && !questionState.currentDraft.draftArtifacts?.productionPlan && !questionState.currentDraft.draftArtifacts?.purchaseList && !questionState.currentDraft.draftArtifacts?.recipes)}
                     focusedProductionSpec={focusedProductionSpec}
                     editingEventType={editingEventType}
                     editingEventDate={editingEventDate}

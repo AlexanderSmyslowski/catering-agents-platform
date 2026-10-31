@@ -290,6 +290,7 @@ export interface ProductionProductData {
 export interface ProductionRouteAccessData {
   access: {
     canOperateProduction: boolean;
+    canSplitProductionComponents?: boolean;
   };
   productionPlans: ProductionPlan[];
   purchaseLists: PurchaseList[];
@@ -362,7 +363,8 @@ export async function loadProductionRouteAccessData(): Promise<ProductionRouteAc
   }
 
   const access = {
-    canOperateProduction: planResponse.access.canOperateProduction
+    canOperateProduction: planResponse.access.canOperateProduction,
+    canSplitProductionComponents: planResponse.access.canSplitProductionComponents === true
   };
   const productionPlans = planResponse.items as ProductionPlan[];
   if (access.canOperateProduction) {
@@ -1118,6 +1120,7 @@ export type ProductionDraftClassificationUpdate = {
   caseId: string;
   expectedRevision: number;
   componentClassifications: Array<{ componentId: string; menuCategory: "classic" | "vegetarian" | "vegan" }>;
+  componentSplits?: Array<{ parentComponentId: string; reason: string; children: Array<{ label: string; servings: number; recipeId: string }> }>;
   componentUpdates?: Array<{
     componentId: string;
     productionMode?: "scratch" | "hybrid" | "convenience_purchase" | "external_finished";
@@ -1320,8 +1323,8 @@ export async function seedDemoData() {
   };
 }
 
-export function offerExportUrl(draftId: string): string {
-  return `/api/exports/v1/exports/offers/${draftId}/html`;
+export function offerExportUrl(draftId: string, view?: "kundenentwurf"): string {
+  return `/api/exports/v1/exports/offers/${draftId}/html${view ? `?ansicht=${view}` : ""}`;
 }
 
 export function productionExportUrl(planId: string): string {

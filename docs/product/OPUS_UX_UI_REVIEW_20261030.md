@@ -226,3 +226,48 @@ Grenzen: synthetische35Gäste-Fixture; offene Folgefassung und frische Planungsn
 ## Unabhängige Produktarbeit während des Ziel-Zeitgates (5.676)
 
 Die zuvor offenen Formular-/Sprachbefunde sind lokal weiter behandelt: dauerhafte Labels, nativer manueller Datepicker, deutsche Vorschläge bei erhaltenen Schlüsseln und freie Eingaben, CateringOS/Fachbereichsnamen. Gebündelte echte Desktop-/390px-Prüfung und tatsächlicher lokaler35Gäste-HTTP-Speicherweg. Dabei belegte manuelle Namens-/Neuladefehler gezielt mit vorhandenen Case-/URLkomponenten korrigiert; nach unabhängigemTerra-Kalenderbefund eng nachgeprüft. Nach vollständigemReload bleibt genau der neue offeneFall mit Kunde/Veranstaltungsdatum/Gästen. Dies ist Codex/Terra-Umsetzungsevidenz, kein nachträglich behauptetes Opus-Gesamturteil und kein neuer Nürnberg100Gäste-/Laien-/Pilotpass. Details/Grenzenmemory5.676.
+
+
+## 31.10.2026 — begrenzter Kundenentwurf-Inkrementreview
+
+Tatsächlicher Opus5.5/firstParty-Aufruf, Sessionabec3a44-7c9c-4991-9f1a-52fd8be3481f,
+subtype success, canonicalModelclaude-opus-5-5: **ACCEPT** für neue Kundenentwurf-
+Vorschau, Fassungs-/Zugriffs-/Kostenfilter und Verständlichkeit. Bereinigte neue
+Quellen/Diff und echte lokaleDesktop-/390pxScreenshots gelesen; kein eigener
+Livebrowser-/Testlauf, kein gesamtes Produkt-/Laien-/Küchen-/PilotGO.
+
+Kleine Hinweise gebündelt präzisiert: Benennung Kundenentwurf, ehrlicher Status bei
+offenerSteuer, Berechnungsdetails nurintern, klareBruttosumme. Bestehende
+Varianten-/Preisbindung wurde an vorhandener Preisrevision und ihren gültigen Tests
+bestätigt. Kein destruktiver Cleanupvorschlag übernommen; macOS-Papierkorb bleibt
+lokal, LinuxCI räumt seinen temporärenWorkspace regulär selbst auf.
+
+HistorischerMehrrezeptfall separatHOLD:8Angebotspositionen sind noch nicht sicher
+11Produktionsrezepten zugeordnet. Kein Apply und kein Review dieses nichtimplementierten
+Splits behauptet. Quellen/Originalurteil E/tmp/customer-offer-28042.
+
+
+## 31.10.2026 — Produktionsaufteilung und enger Konsequenznachreview (5.690)
+
+Tatsächlicher Opus5.5/firstParty-Review akzeptierte Funktion/Lineage/Autorisierung der
+neuen Aufteilung, verlangte aber zwei UX-Texte und ein Default-Off-Schreibgate vor
+Release. Terra korrigierte diese Punkte samt vorhandener UI-Server-Fähigkeitsbindung
+und dem konkret gefundenen Risiko unauflösbarer Quellrückfragen. Kein erneuter
+Gesamtarchitekturreview oder unveränderter Volltest.
+
+Tatsächlicher Nachreview Session49d8bfea-d517-4a85-b8df-1f9af4c55073,
+canonicalModelclaude-opus-5-5, providerfirstParty, success: ACCEPT für893570e→df4427b.
+Reviewer las exaktes Diff und neue Desktop-/390px-/Konfliktbilder, führte selbst keine
+Tests und keinen Browser aus. Root hat neuen Bedienweg/Fehlermeldung/Verwerfen und
+Default-Off-HTTP tatsächlich geprüft. Voller historischer Normal-UI-Ablauf ist lokal
+PASS mit11Rezeptblättern,122Beiträgen,61Druck-/CSVpositionen einschließlich2gZimt;
+kein Nürnberger Update oder echter Küchen-/Pilotnachweis.
+
+Releasegrenze bleibt explizit: Ziel-Split erst nach kompatiblem installiertem/geprüftem
+Rückfallvorgänger einschalten. PR770 könnte die neuen JSON-Datensätze sonst nicht
+lesen. Standard off und unsichtbare Splitaktion erhalten den bestehenden Rückfall.
+Kleine nicht blockierende Hinweise: doppelte bestehende Fehleranzeige; genaue Ursache
+bei fremden indexgebundenen Fragen könnte noch verständlicher sein. Aktuell erzeugte
+Fragepfade und einziger normaler Split-Schreibweg sind an tatsächlichen Quellen geprüft;
+interne vertrauenswürdige Service-Vollspec-Endpunkte sind kein globaler Datenfilter.
+Quellen/Urteile und tatsächliche Screenshots unter E/tmp/customer-offer-28042.

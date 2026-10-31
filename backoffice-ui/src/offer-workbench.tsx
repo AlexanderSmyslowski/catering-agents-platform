@@ -326,7 +326,7 @@ export function OfferConversationalWorkbench({
             <dl className="order-status-facts" role="status">
               <div><dt>Angebot</dt><dd>{focusedApprovalBinding ? "Intern freigegeben" : "Noch nicht freigegeben"}</dd></div>
               <div><dt>Küche</dt><dd>{focusedHandoffId ? "Übergeben – Planung im Produktionsauftrag" : "Noch nicht übergeben"}</dd></div>
-              <div><dt>Unterlagen</dt><dd>{refreshRequired ? "Nach erfolgreichem Aktualisieren verfügbar" : editingMenu || editingPricing || editingEvent ? "Nach dem Speichern verfügbar" : incompletePricingTax || !focusedPricing?.calculation ? "Export als Entwurf; Kalkulation unvollständig" : "Angebot zum Drucken und Exportieren verfügbar"}</dd></div>
+              <div><dt>Unterlagen</dt><dd>{refreshRequired ? "Nach erfolgreichem Aktualisieren verfügbar" : editingMenu || editingPricing || editingEvent ? "Nach dem Speichern verfügbar" : !focusedPricing?.calculation ? "Interne Prüfunterlage; Kalkulation unvollständig" : incompletePricingTax ? "Interne Prüfunterlage und Kundenentwurf; Steuer offen" : "Interne Prüfunterlage und Kundenentwurf verfügbar"}</dd></div>
             </dl>
             <section className="order-safety-notes" aria-label="Vor jeder Freigabe prüfen">
               <h4>Vor jeder Freigabe prüfen</h4>
@@ -489,9 +489,15 @@ export function OfferConversationalWorkbench({
                 ) : refreshRequired ? (
                   <span className="helper-text">Zum Export den Auftrag zuerst erneut laden.</span>
                 ) : (
-                  <a className="ghost-link" href={offerExportUrl(focusedDraftId)} target="_blank" rel="noreferrer">
-                    Angebot exportieren
-                  </a>
+                  <>
+                    <a className="ghost-link" href={offerExportUrl(focusedDraftId)} target="_blank" rel="noreferrer">
+                      Interne Prüfunterlage öffnen
+                    </a>
+                    {focusedPricing?.calculation ? <a className="ghost-link" href={offerExportUrl(focusedDraftId, "kundenentwurf")} target="_blank" rel="noreferrer">
+                      Kundenentwurf ansehen
+                    </a> : null}
+                    <span className="helper-text">{focusedPricing?.calculation ? "Kundenansicht ohne interne Kosten und Quellen. Entwurf – noch nicht zum Versand freigegeben." : "Für die Kundenansicht zuerst die Preisaufstellung speichern."}</span>
+                  </>
                 )}
                 {(focusedApprovalBinding || focusedHandoffId) ? <details className="technical-context-details"><summary>Übergabeaktionen anzeigen</summary>
                 {focusedApprovalBinding && !focusedHandoffId && createHandoff ? (

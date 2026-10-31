@@ -27,6 +27,7 @@ export type SpecEditComponentUpdate = {
 
 export type SpecEditUpdateInput = {
   specialDietResponse?: string;
+  componentSplits?: Array<{ parentComponentId: string; reason: string; children: Array<{ label: string; servings: number; recipeId: string }> }>;
   eventDate?: string;
   eventSchedule?: Array<{ label: string; start?: string; end?: string }>;
   attendeeCount?: number;
@@ -105,7 +106,14 @@ export function buildSpecEditUpdateInput(state: SpecEditUpdateFormState): SpecEd
     }
   );
 
+  const componentSplits = Object.entries(state.componentStates).flatMap(([parentComponentId, component]) => component.split ? [{
+    parentComponentId, reason: component.split.reason.trim(), children: component.split.children.map(child => ({ label: child.label.trim(), servings: Number(child.servings), recipeId: child.recipeId }))
+  }] : []);
+  if (componentSplits.some(split => !split.reason || split.children.some(child => !child.label || !child.recipeId || !Number.isSafeInteger(child.servings) || child.servings <= 0))) {
+    throw new Error("Für jede Aufteilung bitte Begründung sowie Name, positive ganze Produktionsportionen und Rezept jeder Komponente angeben.");
+  }
   return {
+    ...(componentSplits.length ? { componentSplits } : {}),
     eventType: state.eventType.trim() || undefined,
     ...(state.specialDietResponse?.trim() ? { specialDietResponse: state.specialDietResponse.trim() } : {}),
     eventDate: state.eventDate.trim() || undefined,

@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { ProductionSplitCapability } from "../backoffice-ui/src/production-capabilities.js";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it } from "vitest";
@@ -9,9 +10,9 @@ import { useProductionSpecEditor } from "../backoffice-ui/src/use-production-spe
 
 const roots: Array<ReturnType<typeof createRoot>> = [];
 afterEach(() => { roots.splice(0).forEach(root => act(() => root.unmount())); document.body.innerHTML = ""; });
-const spec = { specId: "quantity-edit-spec", attendees: { expected: 35 }, menuPlan: [{ componentId: "water", label: "Wasser", productionDecision: { mode: "convenience_purchase", purchasedElements: ["Wasser"] } }] };
+const spec = { specId: "quantity-edit-spec", attendees: { expected: 35 }, menuPlan: [{ componentId: "water", label: "Wasser", servings: 50, productionDecision: { mode: "convenience_purchase", purchasedElements: ["Wasser"] } }] };
 const canonical: ProductionDraftEditContext = { caseId: "quantity-case", draft: { draftId: "quantity-draft", revision: 2, createdAt: "2026-09-19", status: "pending_review", source: { sourceRef: "offer-handoff:synthetic" }, reviewCards: [], draftArtifacts: { eventSpec: spec } } };
-function renderContext(productionDraftContext?: ProductionDraftEditContext) {
+function renderContext(productionDraftContext?: ProductionDraftEditContext, splitEnabled = false) {
   const container = document.createElement("div"); document.body.append(container);
   const root = createRoot(container); roots.push(root);
   let editor: ReturnType<typeof useProductionSpecEditor>;
@@ -19,13 +20,13 @@ function renderContext(productionDraftContext?: ProductionDraftEditContext) {
     editor = useProductionSpecEditor({ focusedProductionSpec: spec });
     return createElement(ProductionQuestionPanel, {
       submitting: false,
-      questionState: { focusedProductionSpec: spec, focusedSpecReadinessLabel: "offen", currentSpecPurchaseLists: [], productionQuestions: [], productionAssumptions: [], productionConversationProjection: { sessionId: "synthetic", messages: [] }, workbenchSpecFacts: [], intakeRequestDetail: null, filteredSpecs: [], documentPhase: "idle", productionWorkspaceCleared: false },
+      questionState: { currentDraft: productionDraftContext?.draft, focusedProductionSpec: spec, focusedSpecReadinessLabel: "offen", currentSpecPurchaseLists: [], productionQuestions: [], productionAssumptions: [], productionConversationProjection: { sessionId: "synthetic", messages: [] }, workbenchSpecFacts: [], intakeRequestDetail: null, filteredSpecs: [], documentPhase: "idle", productionWorkspaceCleared: false },
       questionActions: { openSpecForQuestions: () => {} },
       editorState: buildProductionQuestionEditorState({ ...editor, recipes: [], canEditPurchasedQuantities: canEditProductionDraftQuantities(editor.editingSpecId, productionDraftContext) }),
       editorActions: { ...editor, beginSpecEdit: editor.beginSpecEdit, saveSpecEdit: async () => {}, createPlan: async () => {} }
     });
   }
-  act(() => root.render(createElement(Probe)));
+  act(() => root.render(createElement(ProductionSplitCapability.Provider, { value: splitEnabled }, createElement(Probe))));
   act(() => editor.beginSpecEdit(spec));
   return { container, get editor() { return editor; } };
 }
@@ -76,4 +77,22 @@ it("keeps a legacy note edit saveable without adding structured quantities", asy
   act(() => probe.editor.beginSpecEdit(saved!));
   expect(probe.editor.editingComponentStates.water!.notes).toBe("legacy note");
   expect(probe.editor.editingComponentStates.water!.purchasedQuantities).toBeUndefined();
+});
+
+
+it("exposes an actionable split editor, marks it changed, and hides replaced production fields", () => {
+  const probe = renderContext(canonical, true);
+  const start = Array.from(probe.container.querySelectorAll("button")).find(button => button.textContent?.includes("In Produktionskomponenten aufteilen"));
+  expect(start).toBeDefined();
+  act(() => start!.click());
+  expect(probe.editor.hasFocusedSpecEditChanges).toBe(true);
+  expect(probe.container.textContent).toContain("ersetzt die bisherige Produktionszuordnung");
+  expect(probe.container.textContent).toContain("50 Ausgabeportionen");
+  expect(probe.container.textContent).not.toContain("Zugekaufte Bestandteile");
+  expect(probe.container.querySelectorAll("fieldset select")).toHaveLength(2);
+});
+
+it("hides the split editor when the server capability is off", () => {
+  const probe = renderContext(canonical);
+  expect(probe.container.textContent).not.toContain("In Produktionskomponenten aufteilen");
 });

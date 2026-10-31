@@ -1,4 +1,5 @@
 import { renderOfferPricingHtml } from "./offer-pricing-html.js";
+import { renderCustomerOfferPreview } from "./customer-offer-html.js";
 import { formatDocumentDate, formatProductionStation, formatKitchenQuantity } from "./document-labels.js";
 import Fastify from "fastify";
 import { IntakeStore } from "@catering/intake-service";
@@ -522,6 +523,15 @@ export function buildPrintExportApp(options: PrintExportAppOptions = {}) {
         return reply.code(409).type("text/html; charset=utf-8").send(
           '<!doctype html><html lang="de"><head><meta charset="utf-8"><title>Angebot aktualisieren</title></head><body><main><h1>Der Auftrag wurde inzwischen geändert</h1><p>Bitte zum Auftrag zurückkehren, ihn erneut laden und die aktuelle Fassung prüfen.</p><p><a href="?ansicht=archiv">Ältere Fassung als interne Unterlage ansehen</a></p></main></body></html>'
         );
+      }
+      if (request.query.ansicht === "kundenentwurf") {
+        if (result.status !== "current" || !result.draft.pricingSummary.calculation) {
+          return reply.code(409).type("text/html; charset=utf-8").send(
+            '<!doctype html><html lang="de"><head><meta charset="utf-8"><title>Kundenansicht vorbereiten</title></head><body><main><h1>Kundenansicht noch nicht verfügbar</h1><p>Bitte den aktuellen Auftrag öffnen und zuerst die Preisaufstellung speichern. Die interne Prüfunterlage bleibt verfügbar.</p></main></body></html>'
+          );
+        }
+        reply.header("content-disposition", `inline; filename="kundenentwurf-${request.params.draftId}.html"`);
+        return reply.type("text/html; charset=utf-8").send(renderCustomerOfferPreview(result.draft));
       }
       const html = renderOfferHtml(result.draft, {
         unverifiedCase: result.status === "unverified",

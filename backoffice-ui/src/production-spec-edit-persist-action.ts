@@ -101,7 +101,9 @@ function buildClassificationUpdate(context: ProductionDraftEditContext, update: 
   if (seen.size !== baseline.componentUpdates?.length) throw new Error("Vorhandene Komponenten dürfen hier nicht entfernt werden.");
   const scheduleChanged = !equal(update.eventSchedule, baseline.eventSchedule);
   if (scheduleChanged && !update.eventSchedule?.length) throw new Error("Das Zeitfenster kann hier nicht gelöscht werden.");
+  if (update.componentSplits?.length && (componentClassifications.length || componentUpdates.length || scheduleChanged || update.specialDietResponse)) throw new Error("Aufteilung und andere Änderungen können nicht zusammen gespeichert werden. Bitte „Aufteilung verwerfen“ wählen, die übrigen Änderungen speichern und danach erneut aufteilen.");
   return { caseId, expectedRevision: draft.revision!, componentClassifications,
+    ...(update.componentSplits?.length ? { componentSplits: update.componentSplits } : {}),
     ...(update.specialDietResponse ? { specialDietResponse: update.specialDietResponse } : {}),
     ...(componentUpdates.length ? { componentUpdates } : {}),
     ...(scheduleChanged ? { eventSchedule: update.eventSchedule } : {})
@@ -157,7 +159,7 @@ export function buildProductionSpecEditPersistAction({
         throw new Error("Die geöffneten Antworten gehören nicht eindeutig zu diesem Produktionsentwurf.");
       }
       const command = buildClassificationUpdate(productionDraftContext!, update);
-      if (command.componentClassifications.length === 0 && !command.componentUpdates?.length && !command.eventSchedule && !command.specialDietResponse) {
+      if (command.componentClassifications.length === 0 && !command.componentUpdates?.length && !command.componentSplits?.length && !command.eventSchedule && !command.specialDietResponse) {
         return productionDraftContext!.draft.draftArtifacts!.eventSpec;
       }
       const response = await reviseProductionDraft(productionDraftContext!.draft.draftId, command);
@@ -170,6 +172,7 @@ export function buildProductionSpecEditPersistAction({
       assertCurrentProductionDraftContext(savedContext, getCurrentProductionDraftContext, productionDraftContext);
       onDraftRevised?.(response.draft);
     } else {
+      if (update.componentSplits?.length) throw new Error("Aufteilungen benötigen einen offenen Produktionsentwurf aus dem Angebot.");
       if (update.componentUpdates?.some(component => component.purchasedQuantities !== undefined)) {
         throw new Error("Strukturierte Zukaufmengen benötigen einen kanonischen Produktionsentwurf. Bitte den Produktionsfall öffnen.");
       }

@@ -1,3 +1,4 @@
+import { ProductionSplitCapability } from "./production-capabilities.js";
 import { useEffect, useState } from "react";
 import { DashboardShell } from "../components/dashboard-shell.js";
 import {
@@ -43,7 +44,7 @@ export function ProductionRouteAccessBoundary(props: ProductionProductAppProps) 
   }, []);
 
   if (data?.access.canOperateProduction === true) {
-    return <ProductionProductApp {...props} />;
+    return <ProductionSplitCapability.Provider value={data.access.canSplitProductionComponents === true}><ProductionProductApp {...props} /></ProductionSplitCapability.Provider>;
   }
 
   return (

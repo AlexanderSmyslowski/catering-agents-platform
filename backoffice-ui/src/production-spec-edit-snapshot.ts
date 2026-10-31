@@ -81,6 +81,7 @@ export function normalizedSpecEditSnapshot(snapshot: SpecEditSnapshot): string {
       .map(([componentId, state]) => [
         componentId,
         {
+          ...(state.split ? { split: state.split } : {}),
           menuCategory: state.menuCategory.trim(),
           productionMode: state.productionMode.trim(),
           ...(state.productionStation !== undefined ? { productionStation: state.productionStation } : {}),

@@ -20,22 +20,22 @@ export function renderOfferPricingHtml(summary: PricingSummary, includeSources =
       + (line.directCost!.estimateDate ? " · Schätzstand: " + escape(line.directCost!.estimateDate) : "") + "</li>"), "</ul></section>"
   ].join("") : "";
   return [
-    '<section class="offer-pricing"><h2>Preisaufstellung</h2><p>Verkaufspreise netto. Preis- und Steuergrundlage bleiben prüfpflichtig.</p>',
+    '<section class="offer-pricing"><h2>Preisaufstellung</h2><p>Verkaufspreise netto.' + (includeSources ? ' Preis- und Steuergrundlage bleiben prüfpflichtig.' : '') + '</p>',
     c.containsSynthetic ? "<p><strong>Enthält synthetische Testannahmen – keine Unternehmenspreise.</strong></p>" : "",
     "<table><thead><tr><th>Leistung</th><th>Menge / Einheit</th><th>Einzelpreis netto</th><th>Betrag netto</th><th>Steuer</th>",
     includeSources ? "<th>Quelle · prüfpflichtig</th>" : "", "</tr></thead><tbody>",
-    ...c.lines.map(line => "<tr><td>" + escape(line.label) + (line.zeroPriceReason ? " · " + escape(line.zeroPriceReason) : "")
-      + '</td><td><span class="quantity">' + escape(line.quantity) + " " + units[line.unit][Number(line.quantity) === 1 ? 0 : 1] + "</span>"
-      + "</td><td>" + money(line.unitNetCents) + "</td><td>" + money(line.netCents)
-      + "</td><td>" + (line.taxRateBps === undefined ? "offen" : escape(line.taxRateBps / 100) + " %")
-      + (line.taxReason ? " · " + escape(line.taxReason) : "") + "</td>"
+    ...c.lines.map(line => '<tr><td data-label="Leistung">' + escape(line.label) + (includeSources && line.zeroPriceReason ? " · " + escape(line.zeroPriceReason) : "")
+      + '</td><td data-label="Menge / Einheit"><span class="quantity">' + escape(line.quantity) + " " + units[line.unit][Number(line.quantity) === 1 ? 0 : 1] + "</span>"
+      + '</td><td data-label="Einzelpreis netto">' + money(line.unitNetCents) + '</td><td data-label="Betrag netto">' + money(line.netCents)
+      + '</td><td data-label="Steuer">' + (line.taxRateBps === undefined ? "offen" : escape(line.taxRateBps / 100) + " %")
+      + (includeSources && line.taxReason ? " · " + escape(line.taxReason) : "") + "</td>"
       + (includeSources ? "<td>" + escape(line.sourceReference) + (line.sourceKind === "synthetic" ? " · synthetisch" : "") + "</td>" : "") + "</tr>"),
     "</tbody></table><p>Netto gesamt: " + euro(c.netCents) + "</p>",
     ...c.taxGroups.map(group => "<p>Steuer " + escape(group.rateBps / 100) + " % auf " + euro(group.netCents) + ": " + euro(group.taxCents) + "</p>"),
-    "<p>Brutto gesamt: " + euro(c.grossCents) + "</p>",
+    (includeSources ? "<p>" : '<p class="offer-pricing__gross">') + "Brutto gesamt: " + euro(c.grossCents) + "</p>",
     "<p>Netto je Gast (gerundet, " + escape(c.guestCount) + " Gäste): " + euro(Math.round(summary.perPerson!.amount * 100)) + "</p>",
     c.missingTaxLineIds.length ? "<p><strong>Steuerfestlegung unvollständig; Brutto offen und Freigabe gesperrt.</strong></p>" : "",
     internalCosts,
-    "<p>Berechnung: Netto je Zeile auf Cent; Steuer je erfasstem Satz auf die Nettogruppensumme, jeweils kaufmännisch gerundet.</p></section>"
+    includeSources ? "<p>Berechnung: Netto je Zeile auf Cent; Steuer je erfasstem Satz auf die Nettogruppensumme, jeweils kaufmännisch gerundet.</p>" : "", "</section>"
   ].join("");
 }

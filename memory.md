@@ -3475,3 +3475,142 @@ frischen bestehenden Gates. PR769 und das neue lokale Paket bleiben dafür
 zurückgestellt. Eigener79647-Koordinator/fünfOwnruns weiterhin lebend, vor
 Änderungen exakt validieren; alter Providerbeleg ist abgelaufen. Keine persönliche
 Eingabe wartet, Produktziel aktiv, echte fachliche Freigaben weiterhin offen.
+
+
+## Kundenentwurf lokal geprüft; historischer Mehrrezeptfall konkret eingegrenzt — Version5.689 /31.10.2026
+
+Nürnberg bleibt der abgeschlossene PR770/fcfb360-Stand mit echtem100Gäste-UI-PASS
+und regulärem neuem3DB/Globals/8Dateibäume-Restore/Compare/Cleanup aus5.688.
+Keine neue Installation, Sicherung, Konto-/Netzänderung oder Erinnerung.
+
+Neues lokales Paket in E=catering-open-extras, codex/customer-offer-preview:
+Der irreführende Link „Angebot exportieren“ heißt ausdrücklich „Interne Prüfunterlage
+öffnen“. Separater „Kundenentwurf ansehen“-Link nutzt denselben authentifizierten
+Exportpfad mit ansicht=kundenentwurf. Nur aktuelle eindeutig fallgebundene Fassung
+mit Preisaufstellung; alte/unverknüpfte, fremde Betriebs- und unberechtigte Zugriffe
+bleiben gesperrt, no-store bleibt. Kundenlayout übernimmt ausschließlich Eventkopf,
+Menü und explizite Verkaufspreise/Summen. Interne Kosten/Quellen, Steuer-/Nullpreis-
+Freitextgründe, freie Erzähltexte, offene interne Fragen und automatische Leistungs-
+vorschläge werden nicht ausgegeben. HTML maskiert; Preis-/Mengenberechnung unverändert.
+Synthetische Kennzeichnung/offene Steuer und Brutto bleiben ehrlich.
+
+Kundenentwurf ist sichtbar NICHT zum Versand freigegeben; keine Änderung an
+publishApproved oder ApprovalRequestRecord. Variantenfreigabe wird nicht still zur
+Versandfreigabe umgedeutet. Der endgültige fachliche Publikationsweg bleibt offen.
+Desktop und390px im tatsächlichen lokalenChrome bedient,8Menüzeilen, keine internen
+Marker und kein äußerer Überlauf; UI-Link und gespeicherter Auftrag nach Reload
+bestätigt. Keine neue PDF-/physischeDruck- oder Zielserverabnahme daraus.
+
+Gezielte tatsächliche Export-/Mehrtab-/Preise-/Tenant-/Rechte-/UI-Tests bestanden,
+TypeScript und ViteBuild bestanden. Ein verbleibender alter UI-Erwartungstext nach
+der Umbenennung gezielt korrigiert und sein Test erneutPASS; keine Schutzassertion
+abgeschwächt. LinuxCI benötigt keinen macOS-Papierkorb und bekommt keine destruktive
+Cleanupalternative. ImpeccableDetektor meldete[]; AgenturOSGestaltungsleitlinie
+angewendet. Unabhängiger tatsächlicher Opus5.5/firstParty-Review Session
+abec3a44-7c9c-4991-9f1a-52fd8be3481f ACCEPT für begrenzte neue Logik/UX/UI und reale
+Desktop-/Mobilbilder, kein eigener Browser-/Testlauf durch Reviewer. Seine kleinen
+Hinweise zu Benennung, offenem Steuerstatus, Summenhierarchie und internem
+Berechnungstext anschließend gebündelt als reine Darstellung präzisiert. Kein
+generisches OpusGesamtprodukt-/Kunden-/Küchen-/Pilot-GO.
+
+Historischer vollständiger8PositionenFall jetzt tatsächlich isoliert über normale
+HTTP-Anwendungsschnittstellen bis zu Preisaufstellung/Kundenentwurf, interner
+Variantenfreigabe und kanonischem Produktions-Handoff erfasst. Alle8×50erhalten;
+ausschließlich ausdrücklich synthetischer Pauschalpreis, KEINE historischen
+Verkaufspreise/Steuern als bestätigt übernommen. Alle11unveränderten synthetisch
+transkribierten Rezepte weiter review_required. Produktionsentwurf bleibt offen;
+kein unvollständiger Plan freigegeben oder übernommen.
+
+Konkreter HOLD: eine Angebotsposition braucht mehrere Rezepte (Hauptgericht und
+Beilage je50; Kuchenbar50Ausgabe mit3×18Produktion=54/4Reserve). Vorhandener
+strukturierter UI-Revisionpfad erlaubt nur eine RezeptID pro vorhandener Komponente;
+tatsächliche Listenangabe wird422abgewiesen. Terra6.1bestätigt zusätzlich: allein
+Revise/Schema/UI zu ändern genügt nicht, Apply prüft autorisierte Amendments mit
+identischer Anzahl/IDs und unabhängige Reviewkarten besitzen Index-/Targetbindungen.
+Deshalb KEIN isolierter Split-Patch oder Schutzlockerung. Der eigens angelegte
+Terra-Worktree catering-production-split ist sauber, ohne Codeänderung/Commit.
+Nächster fachlicher Baustein ist eine explizite revisionsgebundene Aufteilung mit
+Quellposition/Ausgabemenge, eigenen Produktionsmengen, gemeinsamer Prüfung in
+Revise UND Apply, erhaltener unabhängiger Prüfevidenz und sichtbarer Herkunft in
+Küchenunterlagen. Bestehende Mengen-/Freigabe-/Applywege wiederverwenden; keine
+neue Prüfplattform oder LLM-Abkürzung. Vollständiger8→11→Einkauf-PASS bleibt offen.
+
+Lokale tatsächliche Belege: E/tmp/customer-offer-28042, insbesondere
+historical-result.private.json, reference-responses.private.json, Opus-Ergebnis
+und finale Desktop-/Mobilbilder. Keine privaten Rohangebote/Rechnungen imGit oder
+Reviewmaterial. Preis-/Lieferanten-/Allergen-/Hygiene-/Ausbeute-/Realpilotfreigaben
+bleiben getrennt. Führender Betriebsnachweis weiter5.688, neue Produktänderung
+noch nicht integriert oder aufNürnberg.
+
+
+## Historischer Mehrrezeptfall vollständig lokal bestanden — Version 5.690 / 31.10.2026
+
+Der HOLD aus5.689 ist für den lokalen Fachablauf geschlossen. Terra6.1 implementierte
+explizite Aufteilungen im vorhandenen strukturierten Produktionsentwurf. Quelle,
+Ausgabeportionen und Begründung bleiben erhalten; eigene Produktionsmengen und
+RezeptIDs werden ausdrücklich gesetzt. Gemeinsame Übergangsprüfung in Revise und
+Apply, unveränderliche Vorgänger/Handoff/Angebote und unabhängige Prüfziele bleiben
+erhalten. Kinder erben weder Herstellungs- noch Ernährungsentscheidung. Offene
+quell-/indexgebundene Rückfragen und betroffene unabhängige Prüfziele werden vor
+Mutation gesperrt, statt still falsch zugeordnet. Keine neue Prüfplattform.
+
+Tatsächlich im isolierten lokalen Chrome über normale Anwendungsschnittstellen:
+acht Angebotspositionen je50 → elf Produktionskomponenten; erstes Gericht50+50,
+Kuchenbar50 Ausgabe und3×18=54 Produktion einschließlich4 Reserve. Split speichern,
+Reload, explizite Herstellungs-/Ernährungsentscheidungen, elf neue ausdrücklich
+synthetische Mengen-/Eventprüfungen, Prepare,15 Prüfentscheidungen, Freigabe, Apply,
+sofortige Ergebnisanzeige und kompletter Reload bestanden. Kein echter Kunde und
+keine echte Küchen-/Allergen-/Hygienefreigabe wurden damit bearbeitet oder erteilt.
+
+Elf Rezeptblätter enthalten122 Zutatenbeiträge. Ein unabhängiger Decimalvergleich
+über normalisierte Artikelnamen/Einheiten bestätigt die vollständige Übereinstimmung
+mit61 Einkaufspositionen. Auch die tatsächlichen Druck-HTML-Tabellen und die
+Excel-DE-CSV stimmen exakt überein; Zimt bleibt2g. Der ursprüngliche Kundenentwurf
+enthält NACH Produktions-Apply unverändert8×50 und keine internen Kosten/Quellen.
+Produktionsmappe im echten Browser geöffnet; kein physischer Druck/PDF-Dialog behauptet.
+
+Tatsächlicher Opus5.5/firstParty-Review der neuen Logik und Desktop-/Mobilbilder
+forderte zwei präzisere Bedienhinweise und ein standardmäßig geschlossenes Schreibgate.
+Terra korrigierte die Warnung vor unveränderbaren Namen/Produktionsportionen sowie
+den ausführbaren Konfliktweg „Aufteilung verwerfen → übrige Änderungen speichern →
+erneut aufteilen“. Herkunft in zwei Zeilen, neutrale Kindkategorie und klare Druckspalte.
+Der enge Opus5.5-Nachreview49d8bfea-d517-4a85-b8df-1f9af4c55073 ist ACCEPT
+für das Konsequenzdelta893570e→df4427b; statisch samt echten Screenshots, kein
+behaupteter eigener Reviewer-Browserlauf und kein allgemeines Produkt-/Pilot-GO.
+
+Rückfallgrenze: PR770 weist das neue optionale productionSource-JSON-Feld ab.
+Ein reiner Image-Rückfall bei beibehaltenem Datenvolume wäre nach ersten Splits
+nicht ausreichend. Deshalb CATERING_PRODUCTION_COMPONENT_SPLITS standardmäßig AUS;
+nur exakt enabled öffnet den Serverweg. Sperre nach Autorisierung VOR Draft-Lesung,
+Mutation/Audit; bestehender plans-Response liefert dieselbe Fähigkeit, UI bei fehlender
+Fähigkeit ebenfalls aus. Tatsächliche Loopback-HTTP-Prüfung: Fähigkeit false und409
+vor Draft-Lesung. Nur lokaler synthetischer Harness ausdrücklich enabled. Normale
+Operator-/UI-/LLM-Wege erzeugen das Feld nicht außerhalb dieses Wegs. Vertrauenswürdige
+interne Production-Service-Vollspec-Endpunkte sind kein globaler Datensatzfilter;
+das Gate behauptet keine Abwehr eines berechtigten direkten Service-Schreibers.
+Vor Zielaktivierung muss ein installierter/geprüfter kompatibler Vorgänger als
+Rückfall gebunden sein. Kein Metadatenverlust, keine automatische Datenbereinigung.
+
+Gezielte finale Terra-Prüfungen:17 Gate-/Split-/Capabilityfälle sowie107 relevante
+Access-/UI-/Copy-/Exportfälle PASS, Build und Shell-Syntaxprüfung PASS. Gültiger
+historischer Fullflow wird für unveränderte Logik wiederverwendet. Neue Warnung,
+gemischtes Speichern und Rückkehr zu ausgeblendeten Änderungen zusätzlich tatsächlich
+im Chrome bestätigt;390px ohne äußeren Überlauf. Impeccable meldet nur den bereits
+auf Main vorhandenen Inter-Fonthinweis in Produktionsunterlagen, keinen neuen Befund.
+
+Gebündelter Stand in PR771; Kundenentwurf-Head16b3c31 mit Pflicht-CI41185497305
+vollständig SUCCESS. Diese alte CI ist KEIN Nachweis des neuen Split-/Gate-Heads.
+Neue Pflicht-CI und Integration des Gesamtpakets stehen noch aus. Nürnberg bleibt
+unverändert PR770/fcfb360 mit angenommenen100-Gäste- und regulären Backup/Restore-
+Nachweisen5.687/5.688. Keine Installation, Aktivierung des Splits, Konto-/Netz-/DNS-/
+Helsinki-/ADH-/Backup-/Alarmänderung oder neue Erinnerung in diesem Produktblock.
+
+Belege im bestehenden E/tmp/customer-offer-28042: historical-completion.private.json,
+historical-prepared.private.json, historical-quantity-comparison.private.json,
+Druck-HTML/CSV, historical-applied-after-reload.png, historical-shopping-cinnamon.png,
+gate-default-off.private.json, beide tatsächlichen Opus-Split-Reviewresultate sowie
+finale Warnungs-/Konfliktbilder. Keine privaten Rohangebote/Rechnungen im Git.
+Nächster Schritt: den akzeptierten gebündelten Head durch Pflicht-CI integrieren;
+Zielaufbau zunächst als kompatibler Leser bei unverändert geschlossenem Split-Gate.
+Endgültiger Kundenversand, einfache Korrektur bereits gespeicherter Splitnamen/-mengen
+und reale Preis-/Lieferanten-/Küchen-/Allergen-/Hygiene-/Pilotfreigaben bleiben offen.

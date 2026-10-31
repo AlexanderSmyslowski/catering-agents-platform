@@ -1,5 +1,6 @@
 type ProductionComponentClassificationFieldsProps = {
   menuCategory: string;
+  isSplitComponent?: boolean;
   productionMode: string;
   productionStation?: string;
   onProductionStationChange?: (productionStation: string) => void;
@@ -9,6 +10,7 @@ type ProductionComponentClassificationFieldsProps = {
 
 export function ProductionComponentClassificationFields({
   menuCategory,
+  isSplitComponent = false,
   productionMode,
   productionStation,
   onProductionStationChange,
@@ -18,9 +20,9 @@ export function ProductionComponentClassificationFields({
   return (
     <div className="answer-grid">
       <label className="field-block">
-        <span>Kategorie im Angebot</span>
+        <span>{isSplitComponent ? "Kategorie" : "Kategorie im Angebot"}</span>
         <select
-          aria-label="Kategorie im Angebot"
+          aria-label={isSplitComponent ? "Kategorie" : "Kategorie im Angebot"}
           value={menuCategory}
           onChange={(event) => onMenuCategoryChange(event.target.value)}
         >
