@@ -49,3 +49,39 @@ export function validateComponentSplitTransition(previous: AcceptedEventSpec, ne
   const expected = { ...previous, menuPlan: rebuilt };
   return areJsonValuesEqual(expected, next) ? { indexMap } : undefined;
 }
+
+/** Find the immutable transition that originally created this child. */
+export function hasVerifiedSplitOrigin(lineage: Array<{ draftArtifacts: { eventSpec?: AcceptedEventSpec } }>, component: Component): boolean {
+  if (!component.productionSource) return false;
+  for (let index = 0; index + 1 < lineage.length; index++) {
+    const successor = lineage[index]?.draftArtifacts.eventSpec;
+    const predecessor = lineage[index + 1]?.draftArtifacts.eventSpec;
+    if (!successor || !predecessor || successor.menuPlan.length === predecessor.menuPlan.length ||
+        !validateComponentSplitTransition(predecessor, successor)) continue;
+    const created = successor.menuPlan.filter(item => item.componentId === component.componentId);
+    if (created.length === 1 && !predecessor.menuPlan.some(item => item.componentId === component.componentId) &&
+        areJsonValuesEqual(created[0]!.productionSource, component.productionSource)) return true;
+  }
+  return false;
+}
+
+export function validSplitCorrection(previous: Component, next: Component): boolean {
+  return Boolean(previous.productionSource && previous.componentId === next.componentId &&
+    areJsonValuesEqual(previous.productionSource, next.productionSource) &&
+    text(next.label, 200) && Number.isSafeInteger(next.servings) && next.servings! > 0);
+}
+
+/** Preserve the original split's unique label/recipe pairs after a correction. */
+export function validSplitCorrectionGroups(previous: AcceptedEventSpec, next: AcceptedEventSpec): boolean {
+  const changedParents = new Set(previous.menuPlan.flatMap((component, index) => {
+    const successor = next.menuPlan[index];
+    return component.productionSource && successor && (component.label !== successor.label || component.servings !== successor.servings)
+      ? [component.productionSource.parentComponentId] : [];
+  }));
+  for (const parentId of changedParents) {
+    const keys = next.menuPlan.filter(component => component.productionSource?.parentComponentId === parentId)
+      .map(component => `${component.label.normalize("NFKC").toLowerCase()}\0${component.recipeOverrideId ?? ""}`);
+    if (new Set(keys).size !== keys.length) return false;
+  }
+  return true;
+}

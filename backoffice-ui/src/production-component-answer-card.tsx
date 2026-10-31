@@ -36,7 +36,7 @@ export function ProductionComponentAnswerCard({
         <p>Aus Angebotsposition: {sourceServings} Ausgabeportionen</p>
         {!state.split ? <button type="button" className="secondary-button" onClick={() => updateEditingComponentState(componentId, { split: { reason: "", children: [{ label: "", servings: "", recipeId: "" }, { label: "", servings: "", recipeId: "" }] } })}>In Produktionskomponenten aufteilen</button> : <fieldset>
           <legend>Produktionskomponenten</legend>
-          <p className="helper-text">Die Aufteilung ersetzt die bisherige Produktionszuordnung dieser Position. Die Ausgabeportionen bleiben unverändert. Für jede Komponente Produktionsportionen und Rezept festlegen und anschließend neu prüfen. Andere Änderungen bitte separat speichern. Nach dem Speichern lassen sich Bezeichnung und Produktionsportionen in dieser Entwurfslinie nicht mehr ändern; bitte vorher prüfen.</p>
+          <p className="helper-text">Die Aufteilung ersetzt die bisherige Produktionszuordnung dieser Position. Die Ausgabeportionen bleiben unverändert. Für jede Komponente Produktionsportionen und Rezept festlegen und anschließend neu prüfen. Andere Änderungen bitte separat speichern. Bezeichnung und Produktionsportionen können später in einer neuen Prüffassung korrigiert werden.</p>
           <label className="field-block"><span>Begründung</span><input value={state.split.reason} onChange={event => updateEditingComponentState(componentId, { split: { ...state.split!, reason: event.target.value } })} /></label>
           {state.split.children.map((child, index) => <div key={index}>
             <strong>Komponente {index + 1}</strong>
@@ -50,6 +50,12 @@ export function ProductionComponentAnswerCard({
         </fieldset>}
       </section> : null}
       {!state.split ? <>
+      {productionSource && canEditPurchasedQuantities ? <fieldset>
+        <legend>Produktionskomponente korrigieren</legend>
+        <p className="helper-text">Änderungen erzeugen eine neue Prüffassung. Mengen und Rezeptverwendung müssen erneut geprüft werden; die Angebotsmenge bleibt erhalten.</p>
+        <label className="field-block"><span>Bezeichnung der Produktionskomponente</span><input value={state.correctionLabel ?? ""} maxLength={200} onChange={event => updateEditingComponentState(componentId, { correctionLabel: event.target.value })} /></label>
+        <label className="field-block"><span>Produktionsportionen</span><input type="number" min="1" step="1" value={state.correctionServings ?? ""} onChange={event => updateEditingComponentState(componentId, { correctionServings: event.target.value })} /></label>
+      </fieldset> : null}
       <ProductionComponentClassificationFields
         isSplitComponent={Boolean(productionSource)}
         menuCategory={state.menuCategory}

@@ -1,4 +1,4 @@
-import { buildComponentSplit, validateComponentSplitTransition, type ComponentSplit } from "../rules/production-component-splits.js";
+import { buildComponentSplit, hasVerifiedSplitOrigin, validSplitCorrectionGroups, validateComponentSplitTransition, type ComponentSplit } from "../rules/production-component-splits.js";
 import { resolveLastAppliedSnapshot } from "../last-applied-snapshot.js";
 import { recordSpecialDietResponse } from "../../../shared-core/src/special-diet-response.js";
 import { validPurchasedQuantities, type PurchasedQuantity } from "@catering/shared-core";
@@ -2905,8 +2905,10 @@ export function registerProductionArtifactRoutes(
             Object.keys(item).some((key) => !["componentId", "menuCategory"].includes(key)) ||
             typeof item.componentId !== "string" || (typeof item.menuCategory !== "string" || !["classic", "vegetarian", "vegan"].includes(item.menuCategory))) ||
           componentUpdates.some((item) => !isRecord(item) ||
-            Object.keys(item).some((key) => !["componentId", "productionMode", "purchasedElements", "purchasedQuantities", "recipeOverrideId", "productionStation", "notes"].includes(key)) ||
+            Object.keys(item).some((key) => !["componentId", "label", "servings", "productionMode", "purchasedElements", "purchasedQuantities", "recipeOverrideId", "productionStation", "notes"].includes(key)) ||
             Object.keys(item).length < 2 || typeof item.componentId !== "string" || !item.componentId.trim() ||
+            (has(item, "label") && (typeof item.label !== "string" || !item.label || item.label !== item.label.trim() || item.label.length > 200)) ||
+            (has(item, "servings") && (!Number.isSafeInteger(item.servings) || (item.servings as number) <= 0)) ||
             (has(item, "productionMode") && (typeof item.productionMode !== "string" || !modes.includes(item.productionMode))) ||
             (has(item, "purchasedElements") && (!Array.isArray(item.purchasedElements) || item.purchasedElements.length > 100 ||
               item.purchasedElements.some(value => typeof value !== "string" || !value.trim() || value.length > 500))) ||
@@ -2927,7 +2929,7 @@ export function registerProductionArtifactRoutes(
         const categories = new Map<string, "classic" | "vegetarian" | "vegan">(
           classifications.map((item) => [item.componentId, item.menuCategory])
         );
-        type ComponentPatch = { componentId: string; productionMode?: NonNullable<AcceptedEventSpec["menuPlan"][number]["productionDecision"]>["mode"]; purchasedElements?: string[]; purchasedQuantities?: PurchasedQuantity[]; recipeOverrideId?: string; productionStation?: "" | NonNullable<AcceptedEventSpec["menuPlan"][number]["productionStation"]>; notes?: string };
+        type ComponentPatch = { componentId: string; label?: string; servings?: number; productionMode?: NonNullable<AcceptedEventSpec["menuPlan"][number]["productionDecision"]>["mode"]; purchasedElements?: string[]; purchasedQuantities?: PurchasedQuantity[]; recipeOverrideId?: string; productionStation?: "" | NonNullable<AcceptedEventSpec["menuPlan"][number]["productionStation"]>; notes?: string };
         const patches = new Map<string, ComponentPatch>(componentUpdates.map(item => [item.componentId, item as ComponentPatch]));
         if (!eventSpec || categories.size !== classifications.length || patches.size !== componentUpdates.length ||
           [...categories.keys(), ...patches.keys()].some((id) => !eventSpec.menuPlan.some((component) => component.componentId === id))) {
@@ -2961,6 +2963,29 @@ export function registerProductionArtifactRoutes(
         const caseIds = await Promise.all(lineage.map((item) => store.findCaseIdForArtifact(actor, item.draftId)));
         if (caseIds.some((id) => id !== caseId)) {
           return reply.code(409).send({ message: "ProductionDraft ist nicht eindeutig an den angegebenen Produktionsauftrag gebunden." });
+        }
+        const corrections = [...patches].filter(([, patch]) => has(patch, "label") || has(patch, "servings"));
+        if (corrections.length) {
+          if (classifications.length || schedule !== undefined || specialDietResponse !== undefined || patches.size !== corrections.length ||
+              corrections.some(([, patch]) => Object.keys(patch).some(key => !["componentId", "label", "servings"].includes(key)))) {
+            return reply.code(422).send({ message: "Bitte die Korrektur von Bezeichnung und Produktionsportionen getrennt von anderen Änderungen speichern." });
+          }
+          if (draft.status !== "pending_review") return reply.code(409).send({ message: "Diese Fassung ist nicht mehr offen. Bitte die aktuelle Prüffassung laden." });
+          for (const [componentId] of corrections) {
+            const matches = eventSpec.menuPlan.filter(item => item.componentId === componentId);
+            if (matches.length !== 1 || !hasVerifiedSplitOrigin(lineage, matches[0]!)) {
+              return reply.code(422).send({ message: "Name und Produktionsportionen können nur für eindeutig nachgewiesene Aufteilungskomponenten geändert werden." });
+            }
+          }
+          for (const question of [...(eventSpec.uncertainties ?? []), ...(draft.draftArtifacts.openQuestions ?? [])]) {
+            const target = /^(?:\$\.)?(?:draftArtifacts\.eventSpec\.)?menuPlan[.\[]/.test(question.field);
+            const componentReference = corrections.some(([id, patch]) => {
+              const component = eventSpec.menuPlan.find(item => item.componentId === id)!;
+              return question.field === id || (has(patch, "label") && question.field === "menuPlan" &&
+                [question.message, question.suggestedQuestion].some(value => value?.includes(component.label)));
+            });
+            if (target || componentReference) return reply.code(422).send({ message: "Eine Rückfrage zur Menüposition muss vor der Korrektur geklärt werden." });
+          }
         }
         let splitMenuPlan = eventSpec.menuPlan;
         let splitIndexMap: Map<number, number> | undefined;
@@ -2996,6 +3021,18 @@ export function registerProductionArtifactRoutes(
         const sourceReviewCards = independentDraftReviewCards(draft, caseId);
         if (!sourceReviewCards) {
           return reply.code(422).send({ message: "Ein unabhängiger Prüfpunkt verweist auf ein zu ersetzendes Artefakt und muss zuerst geklärt werden." });
+        }
+        if (corrections.length) {
+          for (const card of sourceReviewCards) {
+            const target = card.targetPath?.match(/^\$\.draftArtifacts\.eventSpec\.menuPlan\[(\d+)\](?:[.\[]|$)/);
+            const targetComponent = target ? eventSpec.menuPlan[Number(target[1])] : undefined;
+            if ((target && (!targetComponent || (card.targetId && card.targetId !== targetComponent.componentId))) ||
+                (targetComponent && corrections.some(([id]) => id === targetComponent.componentId)) ||
+                (card.targetId && corrections.some(([id]) => id === card.targetId)) ||
+                (!target && card.targetPath?.startsWith("$.draftArtifacts.eventSpec.menuPlan"))) {
+              return reply.code(422).send({ message: "Eine unabhängige Prüfpflicht zur Komponente muss vor der Korrektur geklärt werden." });
+            }
+          }
         }
         if (splitIndexMap) {
           for (const card of sourceReviewCards) {
@@ -3060,6 +3097,8 @@ export function registerProductionArtifactRoutes(
             const decisionChanged = patch && ["productionMode", "purchasedElements", "purchasedQuantities", "notes"].some(key => has(patch, key));
             return {
               ...component,
+              ...(patch && has(patch, "label") ? { label: patch.label } : {}),
+              ...(patch && has(patch, "servings") ? { servings: patch.servings } : {}),
               ...(categories.has(component.componentId) ? { menuCategory: categories.get(component.componentId) } : {}),
               ...(patch && has(patch, "recipeOverrideId") ? { recipeOverrideId: patch.recipeOverrideId || undefined } : {}),
               ...(patch && has(patch, "productionStation") ? { productionStation: patch.productionStation || undefined } : {}),
@@ -3073,6 +3112,9 @@ export function registerProductionArtifactRoutes(
             };
           })
         });
+        if (corrections.length && !validSplitCorrectionGroups(eventSpec, revisedEventSpec)) {
+          return reply.code(422).send({ message: "Bezeichnung und Rezept müssen innerhalb derselben Aufteilung eindeutig sein." });
+        }
         // Keep the existing category-only command identity stable for interrupted retries.
         const commandHash = hashText(stableJson({ caseId, classifications: [...categories].sort(([left], [right]) => left.localeCompare(right)),
           ...(splits.length ? { componentSplits: splits } : {}),

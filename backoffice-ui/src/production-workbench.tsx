@@ -9,6 +9,7 @@ export type ProductionWorkbenchSummary = {
   approvalState?: "pending" | "approved" | "applied";
   productionNotes?: string[];
   hasActiveContext?: boolean;
+  hasHistoricalApplied?: boolean;
   activeSpecLabel: string;
   activeTechnicalContextLabel?: string;
   readinessLabel: string;
@@ -96,6 +97,7 @@ function buildProductionSummaryFacts(input: {
   planStatusLabel: string;
   purchaseStatusLabel: string;
   productionObjectStatusLabel: string;
+  hasHistoricalApplied?: boolean;
 }): Array<{ label: string; value: string }> {
   return [
     {
@@ -112,7 +114,7 @@ function buildProductionSummaryFacts(input: {
     },
     {
       label: "Plan",
-      value: formatOperatorPlanStatus(input.planStatusLabel)
+      value: input.hasHistoricalApplied && input.planStatusLabel === "offen" ? "neue Fassung: noch kein Plan · bisheriger Plan bleibt verfügbar" : formatOperatorPlanStatus(input.planStatusLabel)
     },
     {
       label: "Einkauf",
@@ -189,7 +191,8 @@ export function ProductionConversationalWorkbench({
     answeredQuestionCount,
     planStatusLabel,
     purchaseStatusLabel,
-    productionObjectStatusLabel
+    productionObjectStatusLabel,
+    hasHistoricalApplied: summary.hasHistoricalApplied
   });
   const hasActiveContext = Boolean(summary.hasActiveContext) || hasVisibleProductionContext({
     answeredQuestionCount,
@@ -290,9 +293,9 @@ export function ProductionConversationalWorkbench({
           aria-label="Ergebnisse der Produktion"
         >
 
-          <h3>{productionOutputAnchor.title}</h3>
-          <p className="helper-text">{productionOutputAnchor.description}</p>
-          <p className="helper-text">{productionOutputAnchor.grouping}</p>
+          <h3>{summary.hasHistoricalApplied ? "Neue Prüffassung vorbereiten" : productionOutputAnchor.title}</h3>
+          <p className="helper-text">{summary.hasHistoricalApplied ? "Für die neue Prüffassung sind Plan und Einkauf noch nicht vorbereitet." : productionOutputAnchor.description}</p>
+          <p className="helper-text">{summary.hasHistoricalApplied ? "Den bisherigen Plan und die bisherigen Unterlagen findest du oben." : productionOutputAnchor.grouping}</p>
         </article>
         <details className="progressive-panel production-objects-panel" open={productionObjectCount > 0}>
           <summary>

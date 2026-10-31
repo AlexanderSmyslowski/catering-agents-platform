@@ -259,6 +259,39 @@ describe("production route main layout", () => {
     }
   });
 
+  it("places the no-question continuation outside collapsed question details", () => {
+    const draft: api.ProductionDraft = { draftId: "applied-draft", revision: 3, status: "approved", createdAt: "2026-10-30T10:00:00Z", reviewCards: [], draftArtifacts: { eventSpec: { specId: "spec-plan-1" } } };
+    const lastApplied = { approvedProductionSpecId: "approved-1", draftId: draft.draftId, draftRevision: draft.revision, eventSpec: { specId: "spec-plan-1" }, productionPlan: { planId: "old-plan" }, purchaseList: { purchaseListId: "old-purchase" } } as api.LastAppliedProductionSnapshot;
+    const markup = renderToStaticMarkup(createElement(ProductionRouteMainLayout, buildProps({ currentDraft: draft, currentApplied: true, activeProductionCaseId: "case-1", lastApplied })));
+    const container = document.createElement("div"); container.innerHTML = markup;
+    const button = [...container.querySelectorAll("button")].find(item => item.textContent === "Neue Prüffassung erstellen");
+    expect(button).toBeDefined();
+    expect(button!.closest("details")).toBeNull();
+    expect(container.querySelectorAll("#production-clarification-continuation")).toHaveLength(1);
+  });
+
+  it("places continuation controls and frozen links outside collapsed details after reopening", () => {
+    const draft: api.ProductionDraft = { draftId: "open-draft", revision: 4, status: "pending_review", supersedesDraftId: "applied-draft", createdAt: "2026-10-30T10:00:00Z", reviewCards: [], draftArtifacts: { eventSpec: { specId: "spec-plan-1" } } };
+    const lastApplied = { approvedProductionSpecId: "approved-1", draftId: "applied-draft", draftRevision: 3, eventSpec: { specId: "spec-plan-1" }, productionPlan: { planId: "old-plan" }, purchaseList: { purchaseListId: "old-purchase" } } as api.LastAppliedProductionSnapshot;
+    const props = buildProps({ currentDraft: draft, currentApplied: false, activeProductionCaseId: "case-1", lastApplied });
+    props.questionState.focusedProductionSpec = { specId: "spec-plan-1", attendees: { expected: 50 }, menuPlan: [{ componentId: "child", label: "Kuchen", servings: 18, productionSource: { parentLabel: "Dessert", parentServings: 50, reason: "Chargen" } }] };
+    props.editorState = { ...props.editorState, answersEditable: true, canEditPurchasedQuantities: true, editingSpecId: "spec-plan-1", editingAttendeeCount: "50", editingComponentStates: { child: { correctionLabel: "Kuchen", correctionServings: "18", menuCategory: "", productionMode: "", purchasedElements: "", recipeOverrideId: "", notes: "" } } };
+    props.workbenchSummary = { ...props.workbenchSummary, planStatusLabel: "offen" };
+    const markup = renderToStaticMarkup(createElement(ProductionRouteMainLayout, props));
+    const container = document.createElement("div"); container.innerHTML = markup;
+    const prepare = [...container.querySelectorAll("button")].find(item => item.textContent === "Prüffassung vorbereiten");
+    const links = [...container.querySelectorAll('.production-last-applied a')];
+    expect(prepare).toBeDefined(); expect(prepare!.closest("details")).toBeNull();
+    expect(links).toHaveLength(3); expect(links.every(link => link.closest("details") === null)).toBe(true);
+    const editor = container.querySelector("#production-question-panel")!;
+    expect(editor.closest("details")?.querySelector("summary")?.textContent).toBe("Angaben und Produktionskomponenten bearbeiten");
+    expect(editor.textContent).toContain("Angaben prüfen");
+    expect(editor.textContent).toContain("Bezeichnung der Produktionskomponente");
+    expect(editor.textContent).not.toContain("Berechnung starten");
+    expect(container.textContent).toContain("neue Fassung: noch kein Plan · bisheriger Plan bleibt verfügbar");
+    expect(container.textContent).not.toContain("Noch keine Pläne, Einkaufslisten oder Exportlinks für diesen Vorgang vorhanden.");
+  });
+
   it("uses the selected plan spec for the upload summary without focusing the question panel", () => {
     const markup = renderToStaticMarkup(createElement(ProductionRouteMainLayout, buildProps()));
 

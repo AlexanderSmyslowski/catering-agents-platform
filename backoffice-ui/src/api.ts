@@ -441,7 +441,9 @@ function auditEntriesFromCaseEvents(events: CaseEvent[]): AuditEntry[] {
       name: event.role,
       source: "case-event"
     },
-    summary: event.text.trim() || `Fallereignis: ${event.kind}`
+    summary: event.kind === "revision_created" && event.text === "Neue Prüffassung für offene Rückfragen erstellt. Der übernommene Stand bleibt erhalten."
+      ? "Neue Prüffassung erstellt. Der übernommene Stand bleibt erhalten."
+      : event.text.trim() || `Fallereignis: ${event.kind}`
   }));
 }
 
@@ -1123,6 +1125,8 @@ export type ProductionDraftClassificationUpdate = {
   componentSplits?: Array<{ parentComponentId: string; reason: string; children: Array<{ label: string; servings: number; recipeId: string }> }>;
   componentUpdates?: Array<{
     componentId: string;
+    label?: string;
+    servings?: number;
     productionMode?: "scratch" | "hybrid" | "convenience_purchase" | "external_finished";
     purchasedElements?: string[];
     purchasedQuantities?: PurchasedQuantity[];

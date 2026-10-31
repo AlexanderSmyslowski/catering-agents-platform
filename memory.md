@@ -3614,3 +3614,51 @@ Nächster Schritt: den akzeptierten gebündelten Head durch Pflicht-CI integrier
 Zielaufbau zunächst als kompatibler Leser bei unverändert geschlossenem Split-Gate.
 Endgültiger Kundenversand, einfache Korrektur bereits gespeicherter Splitnamen/-mengen
 und reale Preis-/Lieferanten-/Küchen-/Allergen-/Hygiene-/Pilotfreigaben bleiben offen.
+
+
+## Gespeicherte Kindmengen korrigieren; Aktivierung als Folgepaket — Version5.695 /31.10.2026
+
+PR771 ist regulär als Main33697ecd719b1c84c394ea2a354b730350ca0d28 integriert.
+Seine Pflicht-PR-CI41188040233 ist SUCCESS; Main-CI41190979010 läuft. Nürnberg
+bleibt unverändertPR770. Dieses SEPARATE Folgepaket in codex/production-split-corrections
+wird nur als Draft mit CI vorbereitet; KEIN Merge/Deployment vor Reader-Abnahme.
+
+4362233 ergänzt vorhandene componentUpdates um getrimmte Bezeichnung und positive
+ganzzahlige Produktionsportionen ausschließlich für echte Split-Kinder mit validiertem
+Ursprung in vollständiger Lineage. ID, productionSource, Angebotsursprung, Vorgänger
+und Gästezahl bleiben unverändert. Korrekturen sind exklusiv, kollidierende Rückfragen/
+Prüfziele oder normierte Name+Rezept-Duplikate werden gesperrt. Neue Mengen-/Eventevidenz,
+Prepare/Review/Approval/Apply erforderlich; bestehende geprüfte Artefakte nicht mutiert.
+Terra:7gezielte Korrektur-/Duplikat-/Frage-/Prüfziel-/Parallelfälle,64betroffeneSplit/
+Klassifikationsfälle und34UI/Speicherfälle PASS; Build/TypeScript PASS. API-Folge81→18
+nach alter Evidenz bis ApplyPASS; Root tatsächliche Chrome-Speichern/Reload-Korrektur
+81→18 und Name, Quelle50/alter81/IDs/Herkunft erhalten, Desktop/390px PASS.
+Tatsächlicher enger Opus5.5/firstParty-Review2cb93167-31c2-401e-b662-48fc49bfdc38
+ACCEPT für Delta und Bilder; kein eigener Reviewer-Test-/Browserlauf behauptet.
+
+7803bb8 bereitet die spätere tatsächliche Aktivierung über ein reguläres Folge-Image
+vor: fehlende Variable oder exakt enabled EIN; disabled/leere/unbekannte Werte AUS.
+Server und lokales Startskript verhalten sich gleich. Ziel-Compose reicht dieses neue
+Flag nicht durch; keine fälschliche ENV-Datei-Aktivierung oder Ops-Vertragsänderung.
+10gezielte Flag/Auth/OFF-no-read-no-mutation-Fälle sowie49relevanteAccess/UI-Fälle,
+Build/bash-Syntax bestanden. Tatsächlicher enger Opus5.5/firstParty-Nachreview
+5cd64ccb-c076-430d-a5d8-c38664f794e7 ACCEPT ausschließlich für lokale Vorbereitung/
+Draft-CI unter der ausdrücklich erhaltenen Releasegrenze. Keine Ziel-/Pilotfreigabe.
+
+ZWINGEND vor Merge/Auslieferung dieses Pakets: Reader33697ec tatsächlich auf Nürnberg
+installieren und prüfen, dessen volle gültige Wiederherstellungs-/Rückfallbelege
+abnehmen und ihn als konkreten vorherigen Manifest-/Config-/Generationsstand des
+normalen Folgeupdates binden. PR770 ist kein kompatibler Split-Datenleser. Ohne diese
+Belege bleibt der Draft offen. Auf dem Ziel schaltet nachher nur ein gebundener
+Image-Rückfall zum Reader die Struktur-Neuschreibfunktion ab; kein nicht vorhandener
+ENV-Notschalter wird behauptet. V1 liest das bekannte JSON-Schema, verweigert aber
+Applys neuer Korrekturlinien einschließlich späterer Applys derselben Lineage sicher;
+das ist eine Funktionsgrenze, kein Daten-/Apply-PASS. Vor echten Testwrites neue
+Serverfähigkeit tatsächlich prüfen. Keine tatsächliche neue Aktivierung erfolgt.
+
+Originalbelege: S/tmp/split-corrections-28042 und S/tmp/activation-default-91990;
+Root-Leitstand ist R/memory.md. Bekannter historischer8→11→122Beiträge→61Print/CSV-
+Vergleich inklusive2gZimt aus5.690 bleibt für unveränderte Teile gültig. Kein neuer
+vollständiger Zieltest oder physischer Druck nachträglich behauptet. Keine neue
+Datenstruktur, API, Architektur, echte Kunden-/Preis-/Küchen-/Allergen-/Hygiene-/
+Versand-/Pilotfreigabe, keine Compose-/DNS-/Netz-/Helsinki-/ADH-/Backup-/Timeraktion.

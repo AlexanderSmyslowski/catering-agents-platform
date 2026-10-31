@@ -29,6 +29,7 @@ export function announceProductionDraftRefresh(): void {
 }
 
 type ProductionDraftReviewPanelProps = {
+  hidePrepareAction?: boolean;
   submitting: boolean;
   caseId?: string;
   embedded?: boolean;
@@ -344,6 +345,7 @@ function ProductionDraftRevisionResult({
 }
 
 export function ProductionDraftReviewPanel({
+  hidePrepareAction = false,
   submitting,
   caseId,
   embedded = false,
@@ -726,7 +728,7 @@ export function ProductionDraftReviewPanel({
                 {draft.reviewCards.filter(card => !draft.dietaryQuestionReviews?.some(review => review.cardId === card.cardId)).map((card) => (
                   <li key={card.cardId}>
                     <strong>{card.title}</strong>
-                    <p className="helper-text">{card.summary}</p>
+                    <p className="helper-text">{card.cardId === "card-classification-event-spec" && card.summary === "Offene Rückfragen einzeln klären. Der übernommene Stand bleibt unverändert; Vorbereitung, Prüfung und Freigabe sind erneut erforderlich." ? "Angaben und gegebenenfalls offene Punkte prüfen. Der übernommene Stand bleibt unverändert; Vorbereitung, Prüfung und Freigabe sind erneut erforderlich." : card.summary}</p>
                     <p className="helper-text">{formatReviewCardMeta(card)}</p>
                     <ProductionDraftFrozenContent draft={draft} card={card} />
                     <ProductionDraftRevisionResult drafts={drafts} draft={draft} card={card} />
@@ -823,7 +825,7 @@ export function ProductionDraftReviewPanel({
                 </div>
               ) : null}
               <div className="action-row">
-                {canPrepareProductionDraft(draft) ? (
+                {!hidePrepareAction && canPrepareProductionDraft(draft) ? (
                   <button
                     disabled={submitting || loading || awaitingDecisionReload}
                     onClick={() => void prepareDraft(draft.draftId)}

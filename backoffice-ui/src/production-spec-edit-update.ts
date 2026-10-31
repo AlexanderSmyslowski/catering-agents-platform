@@ -16,6 +16,8 @@ export type SpecEditUpdateFormState = {
 
 export type SpecEditComponentUpdate = {
   componentId: string;
+  label?: string;
+  servings?: number;
   menuCategory?: "classic" | "vegetarian" | "vegan";
   productionMode?: "scratch" | "hybrid" | "convenience_purchase" | "external_finished";
   purchasedElements?: string[];
@@ -89,12 +91,18 @@ export function buildSpecEditUpdateInput(state: SpecEditUpdateFormState): SpecEd
       if (purchasedQuantities !== undefined && !validPurchasedQuantities({ purchasedElements, purchasedQuantities })) {
         throw new Error("Zukaufmengen benötigen je Bestandteil eine positive endliche Menge pro Person und eine Einheit.");
       }
+      const label = componentState.correctionLabel?.trim();
+      const servings = componentState.correctionServings === undefined ? undefined : Number(componentState.correctionServings);
+      if (componentState.correctionLabel !== undefined && (!label || label.length > 200 || !Number.isSafeInteger(servings) || servings! <= 0)) {
+        throw new Error("Bitte Bezeichnung und eine positive ganze Anzahl Produktionsportionen angeben.");
+      }
       const station = componentState.productionStation;
       if (station !== undefined && !["", "hot-kitchen", "cold-kitchen", "beverage-station", "pastry"].includes(station)) {
         throw new Error("Arbeitsbereich bitte aus der Liste wählen oder offen lassen.");
       }
       return {
         componentId,
+        ...(label !== undefined ? { label, servings } : {}),
         ...(station !== undefined ? { productionStation: station as SpecEditComponentUpdate["productionStation"] } : {}),
         menuCategory: parseMenuCategory(componentState.menuCategory),
         productionMode: parseProductionMode(componentState.productionMode),

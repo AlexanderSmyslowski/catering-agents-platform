@@ -44,6 +44,9 @@ describe("a new review after an applied production plan", () => {
       const after = await resolveLastAppliedSnapshot(fixture.store, context, fixture.caseId);
       expect(after!.approvedSpec).toEqual(before!.approvedSpec);
       expect(after!.manifest).toEqual(before!.manifest);
+      const caseRead = await fixture.app.inject({ method: "GET", url: `/v1/production/cases/${fixture.caseId}`, headers });
+      expect(caseRead.statusCode, caseRead.body).toBe(200);
+      expect(caseRead.json().lastApplied).toMatchObject({ draftId: fixture.prepared.draftId, draftRevision: fixture.prepared.revision, productionPlan: { planId: before!.manifest.planId }, purchaseList: { purchaseListId: before!.manifest.purchaseListId } });
       const retry = await post();
       expect(retry.statusCode, retry.body).toBe(201);
       expect(retry.json().draft).toEqual(child);

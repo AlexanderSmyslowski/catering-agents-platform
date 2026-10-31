@@ -68,6 +68,7 @@ export type ProductionSourceInputActions = {
 };
 
 type ProductionInputPanelProps = {
+  hidePrepareAction?: boolean;
   submitting: boolean;
   activeCaseId?: string;
   sourceInput: ProductionSourceInputValues;
@@ -138,6 +139,7 @@ function isPdfFile(file: File | null): file is File {
 }
 
 export function ProductionInputPanel({
+  hidePrepareAction = false,
   submitting,
   activeCaseId,
   sourceInput,
@@ -224,6 +226,7 @@ export function ProductionInputPanel({
           embedded
           latestOnly
           resumeMode
+          hidePrepareAction={hidePrepareAction}
           onDraftChanged={onDraftChanged}
         />
       ) : null}
@@ -377,6 +380,7 @@ export function ProductionInputPanel({
                         caseId={activeCaseId}
                         embedded
                         latestOnly
+                        hidePrepareAction={hidePrepareAction}
                         onDraftChanged={onDraftChanged}
                       />
                     </>

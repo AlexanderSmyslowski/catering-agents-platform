@@ -75,6 +75,17 @@ describe("planning evidence operator panel", () => {
     expect(button("Rezeptzuordnung speichern")).toBeUndefined();
   });
 
+  it("reloads the evidence panel when a followup revision is announced", async () => {
+    const old = { ...draft(undefined, 5), status: "approved" as const, draftArtifacts: { ...draft(undefined, 5).draftArtifacts, productionPlan: {} } };
+    await setup(old);
+    expect(container.textContent).toContain("Vorbereiteter Rezeptstand");
+    vi.mocked(api.loadProductionDrafts).mockResolvedValue({ items: [draft(recipe.recipeId, 6)], planningEvidence: [], planningRecipes });
+    await act(async () => window.dispatchEvent(new CustomEvent("catering:production-draft-review", { detail: { draftId: "draft-6" } })));
+    expect(container.textContent).toContain("Revision 6");
+    expect(container.textContent).not.toContain("Vorbereiteter Rezeptstand");
+    expect(container.querySelector('select[aria-label="Rezeptgrundlage"]')).not.toBeNull();
+  });
+
   it("allows corrected input after a definitive 422 and requires all confirmations again", async () => {
     await setup(); await completeReview();
     const transport = vi.spyOn(globalThis, "fetch").mockImplementation(async () =>

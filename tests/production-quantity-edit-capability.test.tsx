@@ -3,6 +3,7 @@ import { ProductionSplitCapability } from "../backoffice-ui/src/production-capab
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it } from "vitest";
+import { ProductionComponentAnswerCard } from "../backoffice-ui/src/production-component-answer-card.js";
 import { ProductionQuestionPanel } from "../backoffice-ui/src/production-question-panel.js";
 import { buildProductionQuestionEditorState } from "../backoffice-ui/src/production-question-editor-state.js";
 import { canEditProductionDraftQuantities, type ProductionDraftEditContext } from "../backoffice-ui/src/production-spec-edit-persist-action.js";
@@ -95,4 +96,24 @@ it("exposes an actionable split editor, marks it changed, and hides replaced pro
 it("hides the split editor when the server capability is off", () => {
   const probe = renderContext(canonical);
   expect(probe.container.textContent).not.toContain("In Produktionskomponenten aufteilen");
+});
+
+
+it("edits a saved split child and marks its corrected portion count dirty", () => {
+  const correctedSpec = { specId: "split-spec", attendees: { expected: 50 }, menuPlan: [{ componentId: "child", label: "Kuchen A", servings: 81, productionSource: { parentComponentId: "cake", parentLabel: "Kuchenbar", parentServings: 50, reason: "Reserve", childIndex: 0, childCount: 3 } }] };
+  const container = document.createElement("div"); document.body.append(container);
+  const root = createRoot(container); roots.push(root);
+  let editor!: ReturnType<typeof useProductionSpecEditor>;
+  function Probe() {
+    editor = useProductionSpecEditor({ focusedProductionSpec: correctedSpec });
+    const state = editor.editingComponentStates.child;
+    return state ? createElement(ProductionComponentAnswerCard, { canEditPurchasedQuantities: true, componentId: "child", componentLabel: "Kuchen A", sourceServings: 81, productionSource: correctedSpec.menuPlan[0]!.productionSource, recipes: [], state, updateEditingComponentState: editor.updateEditingComponentState }) : null;
+  }
+  act(() => root.render(createElement(Probe)));
+  act(() => editor.beginSpecEdit(correctedSpec));
+  expect(container.textContent).toContain("50 Ausgabeportionen");
+  const input = container.querySelector<HTMLInputElement>('input[type="number"]')!;
+  act(() => inputValue(input, "18"));
+  expect(editor.hasFocusedSpecEditChanges).toBe(true);
+  expect(editor.buildCurrentSpecUpdateInput().componentUpdates![0]).toMatchObject({ componentId: "child", label: "Kuchen A", servings: 18 });
 });

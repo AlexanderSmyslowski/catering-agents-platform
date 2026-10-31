@@ -1,4 +1,4 @@
-import { validateComponentSplitTransition } from "../rules/production-component-splits.js";
+import { hasVerifiedSplitOrigin, validSplitCorrection, validSplitCorrectionGroups, validateComponentSplitTransition } from "../rules/production-component-splits.js";
 import { isExtractedSpecialDietQuestion, replaySpecialDietResponse } from "../../../shared-core/src/special-diet-response.js";
 import { createHash } from "node:crypto";
 import type { FastifyInstance } from "fastify";
@@ -304,6 +304,19 @@ function acceptedEventSpecConsistencyError(
 
 function isAuthorizedProductionAmendment(previous: AcceptedEventSpec, next: AcceptedEventSpec): boolean {
   if (previous.menuPlan.length !== next.menuPlan.length) return Boolean(validateComponentSplitTransition(previous, next));
+  const hasCorrection = previous.menuPlan.some((component, index) => component.label !== next.menuPlan[index]?.label || component.servings !== next.menuPlan[index]?.servings);
+  if (hasCorrection) {
+    if (!validSplitCorrectionGroups(previous, next)) return false;
+    const expected = structuredClone(previous);
+    for (const [index, component] of expected.menuPlan.entries()) {
+      const successor = next.menuPlan[index]!;
+      if (component.label === successor.label && component.servings === successor.servings) continue;
+      if (!validSplitCorrection(component, successor)) return false;
+      component.label = successor.label;
+      component.servings = successor.servings;
+    }
+    return areJsonValuesEqual(expected, next);
+  }
   let expected = structuredClone(previous);
   if (!areJsonValuesEqual({ constraints: previous.productionConstraints }, { constraints: next.productionConstraints })) {
     const answered = replaySpecialDietResponse(previous, next);
@@ -787,6 +800,18 @@ async function validateHandoffSnapshot(
     }
     if (predecessor.draftArtifacts.eventSpec.menuPlan.length !== draft.draftArtifacts.eventSpec.menuPlan.length) verifiedSplitLineage = true;
     draft = predecessor;
+  }
+  for (let index = 0; index + 1 < lineage.length; index++) {
+    const successor = lineage[index]!.draftArtifacts.eventSpec!;
+    const predecessor = lineage[index + 1]!.draftArtifacts.eventSpec!;
+    if (successor.menuPlan.length !== predecessor.menuPlan.length) continue;
+    for (const [position, component] of predecessor.menuPlan.entries()) {
+      const next = successor.menuPlan[position]!;
+      if ((component.label !== next.label || component.servings !== next.servings) &&
+          !hasVerifiedSplitOrigin(lineage.slice(index + 1), component)) {
+        return { conflict: "Produktionskorrektur besitzt keinen nachgewiesenen Aufteilungsursprung." };
+      }
+    }
   }
   const root = lineage.at(-1);
   if (!root || root.revision !== 1 ||

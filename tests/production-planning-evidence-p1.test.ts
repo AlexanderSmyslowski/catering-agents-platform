@@ -1,4 +1,4 @@
-import { buildComponentSplit, validateComponentSplitTransition } from "../production-service/src/rules/production-component-splits.js";
+import { buildComponentSplit, validSplitCorrectionGroups, validateComponentSplitTransition } from "../production-service/src/rules/production-component-splits.js";
 import { describe, expect, it, vi } from "vitest";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -4835,18 +4835,34 @@ describe("explicit production component splits", () => {
       { parentComponentId: "cake", reason: "Vier Portionen Reserve", children: ["A", "B", "C"].map(label => ({ label, servings: 18, recipeId: "recipe-caesar-salad" })) }
     ] };
   }
-  it("defaults off and rejects a split without changing the draft", async () => {
-    const { app, store, draft, caseId } = await productionFixture(splitSpec());
+  it.each(["disabled", "", "unknown"])("rejects split without mutation for flag %j", async flag => {
+    const { app, store, draft, caseId } = await productionFixture(splitSpec(), { env: { CATERING_PRODUCTION_COMPONENT_SPLITS: flag } });
     try {
       const before = await store.listProductionDrafts({ businessId: "local" });
       const capability = await app.inject({ method: "GET", url: "/v1/production/plans", headers: actorHeaders });
       expect(capability.json().access.canSplitProductionComponents).toBe(false);
       const readDraft = vi.spyOn(store, "getProductionDraft");
+      const forbidden = await app.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/revise`, payload: command(caseId, draft.revision) });
+      expect(forbidden.statusCode).toBe(403);
       const response = await app.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/revise`, headers: actorHeaders, payload: command(caseId, draft.revision) });
       expect(response.statusCode).toBe(409);
       expect(readDraft).not.toHaveBeenCalled();
       expect(response.json().message).toContain("noch nicht freigeschaltet");
       expect(await store.listProductionDrafts({ businessId: "local" })).toEqual(before);
+    } finally { await app.close(); }
+  });
+  it.each([undefined, "enabled"])("enables a valid split for flag %j and retains operator authorization", async flag => {
+    const env = flag === undefined ? {} : { CATERING_PRODUCTION_COMPONENT_SPLITS: flag };
+    const { app, store, draft, caseId } = await productionFixture(splitSpec(), { env });
+    try {
+      const capability = await app.inject({ method: "GET", url: "/v1/production/plans", headers: actorHeaders });
+      expect(capability.json().access.canSplitProductionComponents).toBe(true);
+      const before = await store.listProductionDrafts({ businessId: "local" });
+      const forbidden = await app.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/revise`, payload: command(caseId, draft.revision) });
+      expect(forbidden.statusCode).toBe(403);
+      expect(await store.listProductionDrafts({ businessId: "local" })).toEqual(before);
+      const allowed = await app.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/revise`, headers: actorHeaders, payload: command(caseId, draft.revision) });
+      expect(allowed.statusCode, allowed.body).toBe(201);
     } finally { await app.close(); }
   });
   it.each(["dietary", "indexed"]) ("rejects a source-bound %s question instead of stranding it", async kind => {
@@ -4877,6 +4893,14 @@ describe("explicit production component splits", () => {
       const forged = structuredClone(next); mutate(forged);
       expect(validateComponentSplitTransition(previous, forged)).toBeUndefined();
     }
+  });
+  it("rejects a correction that creates a normalized label and recipe duplicate", () => {
+    const source = splitSpec();
+    const children = buildComponentSplit(source.menuPlan[0]!, command("case", 1).componentSplits[0]!)!;
+    const previous = { ...source, menuPlan: [...children, ...source.menuPlan.slice(1)] };
+    const next = structuredClone(previous);
+    next.menuPlan[0]!.label = "BeIlAgE";
+    expect(validSplitCorrectionGroups(previous, next)).toBe(false);
   });
   it("persists explicit production quantities while retaining the 50-portion sources", async () => {
     const { app, draft, caseId, store } = await productionFixture(splitSpec(), { env: { CATERING_PRODUCTION_COMPONENT_SPLITS: "enabled" } });
@@ -4932,6 +4956,133 @@ describe("explicit production component splits", () => {
       expect(decision.statusCode, decision.body).toBe(201);
       const applied = await app.inject({ method: "POST", url: `/v1/production/approved-specs/${decision.json().approvedProductionSpec.approvedProductionSpecId}/apply`, headers: actorHeaders });
       expect(applied.statusCode, applied.body).toBe(200);
+    } finally { await app.close(); }
+  });
+  it("corrects 81 to 18 in a new revision and requires new evidence before apply", async () => {
+    const withSourceSnapshot = true;
+    const initial = splitSpec();
+    const intake = new InMemoryIntakeRecordsPort();
+    await intake.insertSpec({ businessId: "local" }, withSourceSnapshot ? initial : { ...initial, lifecycle: { commercialState: "accepted" } });
+    const { app, draft, caseId, store } = await productionFixture(initial, { intakeRecords: intake, env: { CATERING_PRODUCTION_COMPONENT_SPLITS: "enabled" } }, withSourceSnapshot ? initial : undefined);
+    const originalSpec = (await store.getProductionDraft({ businessId: "local" }, draft.draftId))!.draftArtifacts.eventSpec;
+    try {
+      const requestCommand = command(caseId, draft.revision);
+      requestCommand.componentSplits[1]!.children[0]!.servings = 81;
+      const request = await app.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/revise`, headers: actorHeaders, payload: requestCommand });
+      expect(request.statusCode, request.body).toBe(201);
+      const split = request.json().draft as ProductionDraft;
+      const target = split.draftArtifacts.eventSpec!.menuPlan.find(c => c.label === "A")!;
+      expect(target.servings).toBe(81);
+      const reviewedFields = await app.inject({ method: "POST", url: `/v1/production/drafts/${split.draftId}/revise`, headers: actorHeaders,
+        payload: { caseId, expectedRevision: split.revision, componentClassifications: [{ componentId: target.componentId, menuCategory: "classic" }], componentUpdates: [{ componentId: target.componentId, productionMode: "scratch" }] } });
+      expect(reviewedFields.statusCode, reviewedFields.body).toBe(201);
+      const beforeCorrection = reviewedFields.json().draft as ProductionDraft;
+      const previousEvidence = planningEvidence({ ...beforeCorrection.draftArtifacts.eventSpec!, menuPlan: [target] });
+      previousEvidence.quantityDecision.perUnitAmount = 81 / 60;
+      previousEvidence.quantityDecision.targetAmount = 81;
+      const oldEvidenceResponse = await app.inject({ method: "POST", url: `/v1/production/cases/${caseId}/planning-evidence`, headers: actorHeaders,
+        payload: { draftId: beforeCorrection.draftId, draftRevision: beforeCorrection.revision, ...previousEvidence } });
+      expect(oldEvidenceResponse.statusCode, oldEvidenceResponse.body).toBe(201);
+      const correction = await app.inject({ method: "POST", url: `/v1/production/drafts/${beforeCorrection.draftId}/revise`, headers: actorHeaders,
+        payload: { caseId, expectedRevision: beforeCorrection.revision, componentUpdates: [{ componentId: target.componentId, label: "Kuchen A", servings: 18 }] } });
+      expect(correction.statusCode, correction.body).toBe(201);
+      const corrected = correction.json().draft as ProductionDraft;
+      const correctedTarget = corrected.draftArtifacts.eventSpec!.menuPlan.find(c => c.componentId === target.componentId)!;
+      expect(correctedTarget).toMatchObject({ label: "Kuchen A", servings: 18, productionSource: target.productionSource });
+      expect(correctedTarget.productionSource!.parentServings).toBe(50);
+      const reopened = await app.inject({ method: "GET", url: `/v1/production/drafts?caseId=${caseId}`, headers: actorHeaders });
+      expect(reopened.json().items.find((item: ProductionDraft) => item.draftId === corrected.draftId).draftArtifacts.eventSpec.menuPlan.find((item: any) => item.componentId === target.componentId).servings).toBe(18);
+      expect((await app.inject({ method: "POST", url: `/v1/production/drafts/${corrected.draftId}/prepare`, headers: actorHeaders, payload: {} })).statusCode).toBe(409);
+      const revision = await app.inject({ method: "POST", url: `/v1/production/drafts/${corrected.draftId}/revise`, headers: actorHeaders,
+        payload: { caseId, expectedRevision: corrected.revision, componentClassifications: corrected.draftArtifacts.eventSpec!.menuPlan.filter(c => c.productionSource).map(c => ({ componentId: c.componentId, menuCategory: "classic" })), componentUpdates: corrected.draftArtifacts.eventSpec!.menuPlan.filter(c => c.productionSource).map(c => ({ componentId: c.componentId, productionMode: "scratch" })) } });
+      expect(revision.statusCode, revision.body).toBe(201);
+      const current = revision.json().draft as ProductionDraft;
+      const currentSpec = current.draftArtifacts.eventSpec!;
+      for (const component of currentSpec.menuPlan) {
+        const evidence = planningEvidence({ ...currentSpec, menuPlan: [component] });
+        evidence.quantityDecision.guestCount = 60;
+        evidence.quantityDecision.perUnitAmount = component.servings! / 60;
+        evidence.quantityDecision.targetAmount = component.servings!;
+        const response = await app.inject({ method: "POST", url: `/v1/production/cases/${caseId}/planning-evidence`, headers: actorHeaders,
+          payload: { draftId: current.draftId, draftRevision: current.revision, ...evidence } });
+        expect(response.statusCode, response.body).toBe(201);
+      }
+      const preparedResponse = await app.inject({ method: "POST", url: `/v1/production/drafts/${current.draftId}/prepare`, headers: actorHeaders, payload: {} });
+      expect(preparedResponse.statusCode, preparedResponse.body).toBe(201);
+      const prepared = preparedResponse.json().draft as ProductionDraft;
+      for (const card of prepared.reviewCards) {
+        const response = await app.inject({ method: "PATCH", url: `/v1/production/drafts/${prepared.draftId}/review-cards/${card.cardId}`, headers: actorHeaders, payload: { decision: "fits" } });
+        expect(response.statusCode, response.body).toBe(200);
+      }
+      const decision = await app.inject({ method: "POST", url: `/v1/production/drafts/${prepared.draftId}/decision`, headers: actorHeaders, payload: { decision: "approved" } });
+      expect(decision.statusCode, decision.body).toBe(201);
+      const closed = await app.inject({ method: "POST", url: `/v1/production/drafts/${prepared.draftId}/revise`, headers: actorHeaders,
+        payload: { caseId, expectedRevision: prepared.revision, componentUpdates: [{ componentId: target.componentId, servings: 19 }] } });
+      expect(closed.statusCode).toBe(409);
+      const applied = await app.inject({ method: "POST", url: `/v1/production/approved-specs/${decision.json().approvedProductionSpec.approvedProductionSpecId}/apply`, headers: actorHeaders });
+      expect(applied.statusCode, applied.body).toBe(200);
+      expect((await store.getProductionDraft({ businessId: "local" }, draft.draftId))!.draftArtifacts.eventSpec).toEqual(originalSpec);
+      expect((await store.getProductionDraft({ businessId: "local" }, split.draftId))!.draftArtifacts.eventSpec!.menuPlan.find(item => item.componentId === target.componentId)!.servings).toBe(81);
+    } finally { await app.close(); }
+  });
+  it("rejects invalid corrections and serializes conflicting tabs", async () => {
+    const { app, draft, caseId, store } = await productionFixture(splitSpec(), { env: { CATERING_PRODUCTION_COMPONENT_SPLITS: "enabled" } });
+    try {
+      const created = await app.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/revise`, headers: actorHeaders, payload: command(caseId, draft.revision) });
+      expect(created.statusCode, created.body).toBe(201);
+      const split = created.json().draft as ProductionDraft;
+      const child = split.draftArtifacts.eventSpec!.menuPlan[0]!;
+      const url = `/v1/production/drafts/${split.draftId}/revise`;
+      const before = await store.listProductionDrafts({ businessId: "local" });
+      for (const update of [{ componentId: child.componentId, servings: 0 }, { componentId: child.componentId, servings: 1.5 }, { componentId: child.componentId, label: " " }, { componentId: child.componentId, label: "BeIlAgE" }, { componentId: "untouched", label: "Other" }, { componentId: child.componentId, productionSource: {} }, { componentId: child.componentId, label: "Neu", productionMode: "scratch" }, { componentId: "missing", servings: 18 }]) {
+        const response = await app.inject({ method: "POST", url, headers: actorHeaders, payload: { caseId, expectedRevision: split.revision, componentUpdates: [update] } });
+        expect(response.statusCode, response.body).toBe(422);
+      }
+      const stale = await app.inject({ method: "POST", url, headers: actorHeaders, payload: { caseId, expectedRevision: split.revision - 1, componentUpdates: [{ componentId: child.componentId, servings: 18 }] } });
+      expect(stale.statusCode).toBe(409);
+      expect(await store.listProductionDrafts({ businessId: "local" })).toEqual(before);
+      const invoke = (servings: number) => app.inject({ method: "POST", url, headers: actorHeaders, payload: { caseId, expectedRevision: split.revision, componentUpdates: [{ componentId: child.componentId, servings }] } });
+      const results = await Promise.all([invoke(18), invoke(19)]);
+      expect(results.map(result => result.statusCode).sort()).toEqual([201, 409]);
+    } finally { await app.close(); }
+  });
+  it("rejects fabricated split metadata without an authentic predecessor transition", async () => {
+    const spec = splitSpec();
+    spec.menuPlan[0]!.productionSource = { parentComponentId: "fake", parentLabel: "fake", parentServings: 50, reason: "fake", childIndex: 0, childCount: 2 };
+    const { app, draft, caseId } = await productionFixture(spec);
+    try {
+      const response = await app.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/revise`, headers: actorHeaders,
+        payload: { caseId, expectedRevision: draft.revision, componentUpdates: [{ componentId: "main", servings: 18 }] } });
+      expect(response.statusCode, response.body).toBe(422);
+    } finally { await app.close(); }
+  });
+  it("rejects corrections that would retarget an independent component review", async () => {
+    const { app, store, draft, caseId } = await productionFixture(splitSpec(), { env: { CATERING_PRODUCTION_COMPONENT_SPLITS: "enabled" } });
+    try {
+      const created = await app.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/revise`, headers: actorHeaders, payload: command(caseId, draft.revision) });
+      expect(created.statusCode).toBe(201);
+      const split = created.json().draft as ProductionDraft;
+      const child = split.draftArtifacts.eventSpec!.menuPlan[0]!;
+      const updated = validateProductionDraft({ ...split, reviewCards: [...split.reviewCards, { cardId: "correction-review", kind: "menu_component", title: "Independent", summary: "Explicit review", decision: "pending", requiredApproval: true, targetPath: "$.draftArtifacts.eventSpec.menuPlan[0].label", targetId: child.componentId }] });
+      await productionDecisionRepositoryFor(store).withTargetCriticalSection({ businessId: "local" }, { kind: "production_draft", artifactId: split.draftId, revision: split.revision }, async scope => { await scope.setDraft(updated); });
+      const response = await app.inject({ method: "POST", url: `/v1/production/drafts/${split.draftId}/revise`, headers: actorHeaders,
+        payload: { caseId, expectedRevision: split.revision, componentUpdates: [{ componentId: child.componentId, label: "Neuer Name" }] } });
+      expect(response.statusCode, response.body).toBe(422);
+    } finally { await app.close(); }
+  });
+  it.each(["label", "id"]) ("rejects a correction with an independent question bound by %s", async binding => {
+    const { app, store, draft, caseId } = await productionFixture(splitSpec(), { env: { CATERING_PRODUCTION_COMPONENT_SPLITS: "enabled" } });
+    try {
+      const created = await app.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/revise`, headers: actorHeaders, payload: command(caseId, draft.revision) });
+      const split = created.json().draft as ProductionDraft;
+      const child = split.draftArtifacts.eventSpec!.menuPlan[0]!;
+      const eventSpec = split.draftArtifacts.eventSpec!;
+      const question = { field: binding === "id" ? child.componentId : "menuPlan", message: binding === "id" ? "Prüfung offen" : `Prüfung ${child.label} offen`, severity: "medium" as const };
+      const updated = validateProductionDraft({ ...split, draftArtifacts: { ...split.draftArtifacts, eventSpec: { ...eventSpec, uncertainties: [...(eventSpec.uncertainties ?? []), question] } } });
+      await productionDecisionRepositoryFor(store).withTargetCriticalSection({ businessId: "local" }, { kind: "production_draft", artifactId: split.draftId, revision: split.revision }, async scope => { await scope.setDraft(updated); });
+      const response = await app.inject({ method: "POST", url: `/v1/production/drafts/${split.draftId}/revise`, headers: actorHeaders,
+        payload: { caseId, expectedRevision: split.revision, componentUpdates: [{ componentId: child.componentId, label: "Neuer Name" }] } });
+      expect(response.statusCode, response.body).toBe(422);
     } finally { await app.close(); }
   });
   it.each([false, true])("preserves or rejects independent targets depending on whether the target survives: %s", async (removed) => {

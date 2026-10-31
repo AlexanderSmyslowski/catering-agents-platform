@@ -271,3 +271,14 @@ bei fremden indexgebundenen Fragen könnte noch verständlicher sein. Aktuell er
 Fragepfade und einziger normaler Split-Schreibweg sind an tatsächlichen Quellen geprüft;
 interne vertrauenswürdige Service-Vollspec-Endpunkte sind kein globaler Datenfilter.
 Quellen/Urteile und tatsächliche Screenshots unter E/tmp/customer-offer-28042.
+
+
+## 31.10.2026 — Korrektur gespeicherter Kinddaten und bedingtes Aktivierungspaket
+
+TatsächlichOpus5.5/firstParty2cb93167 ACCEPT für4362233/Korrekturpfad, exaktesDiff und
+reale Desktop-/390px-Bilder gelesen. Separater engerReview5cd64ccb ACCEPT für7803bb8/
+Default- und Bash-Parität ausschließlich lokal/Draft-CI unter erhaltener Reader-
+Releasegrenze. Reviewer führten keine Tests/Browser aus. Root tatsächliches Save/
+Reload81→18 und Name, Terra API bis Approval/Apply getrennt belegt. Quellen und
+Originalurteile S/tmp/split-corrections-28042 und S/tmp/activation-default-91990.
+Kein Merge/Deploy, kein abschließender Produkt-/Küchen-/Pilot-GO. Details5.695.

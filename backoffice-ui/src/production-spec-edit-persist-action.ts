@@ -87,6 +87,8 @@ function buildClassificationUpdate(context: ProductionDraftEditContext, update: 
       componentClassifications.push({ componentId: component.componentId, menuCategory: component.menuCategory });
     }
     const patch: NonNullable<ProductionDraftClassificationUpdate["componentUpdates"]>[number] = { componentId: component.componentId };
+    if (changed("label")) patch.label = component.label;
+    if (changed("servings")) patch.servings = component.servings;
     if (changed("productionMode")) {
       if (!component.productionMode) throw new Error("Die Herstellungsentscheidung kann hier nicht gelöscht werden.");
       patch.productionMode = component.productionMode;
@@ -101,6 +103,10 @@ function buildClassificationUpdate(context: ProductionDraftEditContext, update: 
   if (seen.size !== baseline.componentUpdates?.length) throw new Error("Vorhandene Komponenten dürfen hier nicht entfernt werden.");
   const scheduleChanged = !equal(update.eventSchedule, baseline.eventSchedule);
   if (scheduleChanged && !update.eventSchedule?.length) throw new Error("Das Zeitfenster kann hier nicht gelöscht werden.");
+  const hasCorrection = componentUpdates.some(component => component.label !== undefined || component.servings !== undefined);
+  if (hasCorrection && (componentClassifications.length || scheduleChanged || update.specialDietResponse || componentUpdates.some(component => Object.keys(component).some(key => !["componentId", "label", "servings"].includes(key))))) {
+    throw new Error("Bitte Bezeichnung und Produktionsportionen getrennt von anderen Änderungen speichern.");
+  }
   if (update.componentSplits?.length && (componentClassifications.length || componentUpdates.length || scheduleChanged || update.specialDietResponse)) throw new Error("Aufteilung und andere Änderungen können nicht zusammen gespeichert werden. Bitte „Aufteilung verwerfen“ wählen, die übrigen Änderungen speichern und danach erneut aufteilen.");
   return { caseId, expectedRevision: draft.revision!, componentClassifications,
     ...(update.componentSplits?.length ? { componentSplits: update.componentSplits } : {}),
@@ -172,6 +178,7 @@ export function buildProductionSpecEditPersistAction({
       assertCurrentProductionDraftContext(savedContext, getCurrentProductionDraftContext, productionDraftContext);
       onDraftRevised?.(response.draft);
     } else {
+      if (update.componentUpdates?.some(component => component.label !== undefined || component.servings !== undefined)) throw new Error("Die Korrektur benötigt einen offenen Produktionsentwurf aus dem Angebot.");
       if (update.componentSplits?.length) throw new Error("Aufteilungen benötigen einen offenen Produktionsentwurf aus dem Angebot.");
       if (update.componentUpdates?.some(component => component.purchasedQuantities !== undefined)) {
         throw new Error("Strukturierte Zukaufmengen benötigen einen kanonischen Produktionsentwurf. Bitte den Produktionsfall öffnen.");

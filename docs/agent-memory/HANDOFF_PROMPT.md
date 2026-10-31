@@ -1,3 +1,14 @@
+## Lokales Folgepaket — Version5.695 /31.10.2026
+
+Branchcodex/production-split-corrections enthält angenommene Kindnamen-/Mengen-
+korrektur4362233 und Aktivierungsfolge7803bb8. Tatsächliche Terra-Tests und Chrome-
+81→18-Speichern/Reload/390px-PASS; tatsächliche engeOpus5.5-ACCEPTs2cb93167 und5cd64ccb.
+Nur Draft-CI vorbereiten; KEIN Merge/Deploy vor tatsächlich installiertem/geprüftem
+Reader33697ec mit vollständigem gültigem Rückfall-/Restorebeleg und konkreter
+Vorgängerbindung. Auf Nürnberg weiterhin PR770, Reader-MainCI41190979010 läuft.
+Keine Ops-/ENV-/Schemaänderung; Details/Grenzen in memory5.695 und bestehender
+CATERING_TARGET_UPDATE.md. Primäres R/memory.md bleibt tatsächlicher Leitstand.
+
 ## Aktueller Produktstand — Version 5.690 / 31.10.2026
 
 Nürnberg bleibt angenommenes PR770/fcfb360 (5.688). Neues gebündeltes Paket in PR771:

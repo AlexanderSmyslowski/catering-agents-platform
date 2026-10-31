@@ -365,3 +365,16 @@ it("explains how to separate conflicting split and ordinary changes", async () =
   expect(actionInput.reviseProductionDraft).not.toHaveBeenCalled();
   expect(actionInput.resetSpecEdit).not.toHaveBeenCalled();
 });
+
+
+it("sends only the changed production child fields to the pinned revision", async () => {
+  const source = { specId: "spec-lunch", attendees: { expected: 35 }, menuPlan: [{ componentId: "child", label: "Kuchen A", servings: 81, productionSource: { parentComponentId: "parent", parentLabel: "Kuchenbar", parentServings: 50, reason: "Reserve", childIndex: 0, childCount: 2 } }] };
+  const draft = { draftId: "canonical-r2", revision: 2, status: "pending_review" as const, createdAt: "2026-09-19", source: { sourceRef: "offer-handoff:handoff-1" }, reviewCards: [], draftArtifacts: { eventSpec: source } };
+  const save = vi.fn(async () => { throw new Error("synthetic failure"); });
+  const actionInput = input({ productionDraftContext: { caseId: "case-1", draft }, reviseProductionDraft: save,
+    buildCurrentSpecUpdateInput: () => ({ attendeeCount: 35, menuItems: ["Kuchen A"], componentUpdates: [{ componentId: "child", label: "Kuchen A", servings: 18, purchasedElements: [], recipeOverrideId: "", notes: "" }] }) });
+  actionInput.getCurrentProductionDraftContext = () => actionInput.productionDraftContext;
+  await expect(buildProductionSpecEditPersistAction(actionInput)()).rejects.toThrow("synthetic failure");
+  expect(save).toHaveBeenCalledWith("canonical-r2", { caseId: "case-1", expectedRevision: 2, componentClassifications: [], componentUpdates: [{ componentId: "child", servings: 18 }] });
+  expect(actionInput.resetSpecEdit).not.toHaveBeenCalled();
+});
