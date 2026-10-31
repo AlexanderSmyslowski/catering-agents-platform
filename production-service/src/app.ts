@@ -334,7 +334,7 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
     auditLog,
     buildLlmAdapter,
     productionDraftDataMode,
-    componentSplitsEnabled: env.CATERING_PRODUCTION_COMPONENT_SPLITS === "enabled",
+    componentSplitsEnabled: env.CATERING_PRODUCTION_COMPONENT_SPLITS === undefined || env.CATERING_PRODUCTION_COMPONENT_SPLITS === "enabled",
     handoffReader,
     trustedActorSecret,
     allowDevActorHeader,

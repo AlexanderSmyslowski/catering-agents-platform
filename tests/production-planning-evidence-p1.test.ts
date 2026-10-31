@@ -4835,18 +4835,34 @@ describe("explicit production component splits", () => {
       { parentComponentId: "cake", reason: "Vier Portionen Reserve", children: ["A", "B", "C"].map(label => ({ label, servings: 18, recipeId: "recipe-caesar-salad" })) }
     ] };
   }
-  it("defaults off and rejects a split without changing the draft", async () => {
-    const { app, store, draft, caseId } = await productionFixture(splitSpec());
+  it.each(["disabled", "", "unknown"])("rejects split without mutation for flag %j", async flag => {
+    const { app, store, draft, caseId } = await productionFixture(splitSpec(), { env: { CATERING_PRODUCTION_COMPONENT_SPLITS: flag } });
     try {
       const before = await store.listProductionDrafts({ businessId: "local" });
       const capability = await app.inject({ method: "GET", url: "/v1/production/plans", headers: actorHeaders });
       expect(capability.json().access.canSplitProductionComponents).toBe(false);
       const readDraft = vi.spyOn(store, "getProductionDraft");
+      const forbidden = await app.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/revise`, payload: command(caseId, draft.revision) });
+      expect(forbidden.statusCode).toBe(403);
       const response = await app.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/revise`, headers: actorHeaders, payload: command(caseId, draft.revision) });
       expect(response.statusCode).toBe(409);
       expect(readDraft).not.toHaveBeenCalled();
       expect(response.json().message).toContain("noch nicht freigeschaltet");
       expect(await store.listProductionDrafts({ businessId: "local" })).toEqual(before);
+    } finally { await app.close(); }
+  });
+  it.each([undefined, "enabled"])("enables a valid split for flag %j and retains operator authorization", async flag => {
+    const env = flag === undefined ? {} : { CATERING_PRODUCTION_COMPONENT_SPLITS: flag };
+    const { app, store, draft, caseId } = await productionFixture(splitSpec(), { env });
+    try {
+      const capability = await app.inject({ method: "GET", url: "/v1/production/plans", headers: actorHeaders });
+      expect(capability.json().access.canSplitProductionComponents).toBe(true);
+      const before = await store.listProductionDrafts({ businessId: "local" });
+      const forbidden = await app.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/revise`, payload: command(caseId, draft.revision) });
+      expect(forbidden.statusCode).toBe(403);
+      expect(await store.listProductionDrafts({ businessId: "local" })).toEqual(before);
+      const allowed = await app.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/revise`, headers: actorHeaders, payload: command(caseId, draft.revision) });
+      expect(allowed.statusCode, allowed.body).toBe(201);
     } finally { await app.close(); }
   });
   it.each(["dietary", "indexed"]) ("rejects a source-bound %s question instead of stranding it", async kind => {

@@ -31,6 +31,20 @@ Der historische Workflow `Deploy production` und `platform-infra/scripts/deploy-
 
 Der erste echte Lauf gegen den Zielserver bleibt ein separater Betriebsauftrag und beginnt mit einer frischen read-only Zielprüfung.
 
+## Freigabegrenze für Produktionsaufteilungen
+
+Das Folgeimage mit standardmäßig aktiver Aufteilung darf erst ausgeliefert werden,
+wenn der kompatible Reader `33697ec` tatsächlich installiert und geprüft ist und
+als konkreter Rückfall-Vorgänger des Update-Laufs gebunden wird. Ein älterer
+PR-770-Vorgänger kann Split-Datensätze nicht zuverlässig lesen; ein Image-Rollback
+mit unverändertem Datenvolume wäre dann nicht sicher. Fehlende Variable oder
+`enabled` aktiviert die Funktion; `disabled`, ein leerer oder unbekannter Wert
+lässt sie aus. Dies ist keine Auslieferungs- oder Betriebsfreigabe.
+
+Der V1-Reader versteht das gespeicherte Split-Schema. Bei späteren Korrekturen von
+Kindbezeichnung oder Produktionsportionen bleibt nach Rückfall deren Apply bis
+zur Rückkehr auf einen kompatiblen Reader gesperrt; dies ist kein Apply-Nachweis.
+
 ## Versionierter Operator-Einstieg
 
 Der einzige neue Einstieg ist `platform-infra/scripts/catering-target-operator.py` auf dem autorisierten Operator-Mac. Produktquelle und Betriebswerkzeug werden aus getrennten, sauberen, detached Checkouts desselben Repositorys gelesen. Beide Commits werden als vollständige lowercase SHA übergeben.
