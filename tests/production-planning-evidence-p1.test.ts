@@ -4835,6 +4835,32 @@ describe("explicit production component splits", () => {
       { parentComponentId: "cake", reason: "Vier Portionen Reserve", children: ["A", "B", "C"].map(label => ({ label, servings: 18, recipeId: "recipe-caesar-salad" })) }
     ] };
   }
+  it("defaults off and rejects a split without changing the draft", async () => {
+    const { app, store, draft, caseId } = await productionFixture(splitSpec());
+    try {
+      const before = await store.listProductionDrafts({ businessId: "local" });
+      const capability = await app.inject({ method: "GET", url: "/v1/production/plans", headers: actorHeaders });
+      expect(capability.json().access.canSplitProductionComponents).toBe(false);
+      const readDraft = vi.spyOn(store, "getProductionDraft");
+      const response = await app.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/revise`, headers: actorHeaders, payload: command(caseId, draft.revision) });
+      expect(response.statusCode).toBe(409);
+      expect(readDraft).not.toHaveBeenCalled();
+      expect(response.json().message).toContain("noch nicht freigeschaltet");
+      expect(await store.listProductionDrafts({ businessId: "local" })).toEqual(before);
+    } finally { await app.close(); }
+  });
+  it.each(["dietary", "indexed"]) ("rejects a source-bound %s question instead of stranding it", async kind => {
+    const spec = splitSpec();
+    spec.uncertainties = [...(spec.uncertainties ?? []), { field: kind === "dietary" ? "menuPlan" : "menuPlan[2].label", message: "Klärung", severity: "medium", ...(kind === "dietary" ? { suggestedQuestion: "Welche Ernährungskennzeichnung gilt nach Rezeptprüfung für main?" } : {}) }];
+    const { app, store, draft, caseId } = await productionFixture(spec, { env: { CATERING_PRODUCTION_COMPONENT_SPLITS: "enabled" } });
+    try {
+      const before = await store.listProductionDrafts({ businessId: "local" });
+      const response = await app.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/revise`, headers: actorHeaders, payload: command(caseId, draft.revision) });
+      expect(response.statusCode, response.body).toBe(422);
+      expect(response.json().message).toContain("Rückfrage");
+      expect(await store.listProductionDrafts({ businessId: "local" })).toEqual(before);
+    } finally { await app.close(); }
+  });
   it("rejects altered transition lineage, source metadata, quantities and child identities", () => {
     const previous = splitSpec();
     const split = command("case", 1).componentSplits[0]!;
@@ -4853,9 +4879,11 @@ describe("explicit production component splits", () => {
     }
   });
   it("persists explicit production quantities while retaining the 50-portion sources", async () => {
-    const { app, draft, caseId, store } = await productionFixture(splitSpec());
+    const { app, draft, caseId, store } = await productionFixture(splitSpec(), { env: { CATERING_PRODUCTION_COMPONENT_SPLITS: "enabled" } });
     const sourceBefore = (await store.getProductionDraft({ businessId: "local" }, draft.draftId))!.draftArtifacts.eventSpec;
     try {
+      const capability = await app.inject({ method: "GET", url: "/v1/production/plans", headers: actorHeaders });
+      expect(capability.json().access.canSplitProductionComponents).toBe(true);
       const result = await app.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/revise`, headers: actorHeaders, payload: command(caseId, draft.revision) });
       expect(result.statusCode, result.body).toBe(201);
       const revised = result.json().draft as ProductionDraft;
@@ -4874,7 +4902,7 @@ describe("explicit production component splits", () => {
     const initial = splitSpec();
     const intake = new InMemoryIntakeRecordsPort();
     await intake.insertSpec({ businessId: "local" }, withSourceSnapshot ? initial : { ...initial, lifecycle: { commercialState: "accepted" } });
-    const { app, draft, caseId } = await productionFixture(initial, { intakeRecords: intake }, withSourceSnapshot ? initial : undefined);
+    const { app, draft, caseId } = await productionFixture(initial, { intakeRecords: intake, env: { CATERING_PRODUCTION_COMPONENT_SPLITS: "enabled" } }, withSourceSnapshot ? initial : undefined);
     try {
       const request = await app.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/revise`, headers: actorHeaders, payload: command(caseId, draft.revision) });
       expect(request.statusCode, request.body).toBe(201);
@@ -4907,7 +4935,7 @@ describe("explicit production component splits", () => {
     } finally { await app.close(); }
   });
   it.each([false, true])("preserves or rejects independent targets depending on whether the target survives: %s", async (removed) => {
-    const { app, store, draft, caseId } = await productionFixture(splitSpec());
+    const { app, store, draft, caseId } = await productionFixture(splitSpec(), { env: { CATERING_PRODUCTION_COMPONENT_SPLITS: "enabled" } });
     try {
       const updated = validateProductionDraft({ ...draft, reviewCards: [...draft.reviewCards, { cardId: "independent-component", kind: "menu_component", title: "Independent", summary: "Explicit review", decision: "pending", requiredApproval: true, targetPath: `$.draftArtifacts.eventSpec.menuPlan[${removed ? 0 : 2}].label`, targetId: removed ? "main" : "untouched" }] });
       await productionDecisionRepositoryFor(store).withTargetCriticalSection({ businessId: "local" }, { kind: "production_draft", artifactId: draft.draftId, revision: draft.revision }, async scope => { await scope.setDraft(updated); });
@@ -4917,7 +4945,7 @@ describe("explicit production component splits", () => {
     } finally { await app.close(); }
   });
   it.each(["stale", "foreign case"]) ("rejects %s before writing", async kind => {
-    const { app, store, draft, caseId } = await productionFixture(splitSpec());
+    const { app, store, draft, caseId } = await productionFixture(splitSpec(), { env: { CATERING_PRODUCTION_COMPONENT_SPLITS: "enabled" } });
     try {
       const payload = command(caseId, draft.revision);
       if (kind === "stale") payload.expectedRevision--; else payload.caseId = "foreign";
@@ -4934,7 +4962,7 @@ describe("explicit production component splits", () => {
     ["duplicate child", (x: any) => x.componentSplits[0].children[1] = x.componentSplits[0].children[0]],
     ["unknown parent", (x: any) => x.componentSplits[0].parentComponentId = "foreign"]
   ])("rejects %s", async (_label, mutate) => {
-    const { app, draft, caseId } = await productionFixture(splitSpec());
+    const { app, draft, caseId } = await productionFixture(splitSpec(), { env: { CATERING_PRODUCTION_COMPONENT_SPLITS: "enabled" } });
     try {
       const payload = command(caseId, draft.revision); mutate(payload);
       const result = await app.inject({ method: "POST", url: `/v1/production/drafts/${draft.draftId}/revise`, headers: actorHeaders, payload });

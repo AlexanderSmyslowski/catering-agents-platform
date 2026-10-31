@@ -206,7 +206,7 @@ function renderSection2(input: RenderProductionFolderInput, recipeById: Map<stri
     return `<tr><td>${escapeHtml(component.label)}${provenance}</td><td>${escapeHtml(linkedRecipeLabel(recipeById, selection?.recipeId))}</td><td>${escapeHtml(portions ? String(portions) : "offen")}</td></tr>`;
   });
 
-  return `<section><h2>2. Verständnis des Angebots</h2><table><thead><tr><th>Menükomponente</th><th>zugeordnetes Rezept</th><th>Portionen</th></tr></thead><tbody>${rows.join("")}</tbody></table></section>`;
+  return `<section><h2>2. Verständnis des Angebots</h2><table><thead><tr><th>Menükomponente</th><th>zugeordnetes Rezept</th><th>Produktionsportionen</th></tr></thead><tbody>${rows.join("")}</tbody></table></section>`;
 }
 
 function renderSection3(input: RenderProductionFolderInput): string {

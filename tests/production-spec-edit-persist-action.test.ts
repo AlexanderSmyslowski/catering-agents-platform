@@ -352,3 +352,16 @@ it("binds split saves to the open draft and preserves editing state on a save fa
   expect(actionInput.resetSpecEdit).not.toHaveBeenCalled();
   expect(actionInput.setNotice).not.toHaveBeenCalled();
 });
+
+
+it("explains how to separate conflicting split and ordinary changes", async () => {
+  const source = { specId: "spec-lunch", attendees: { expected: 35 }, menuPlan: [{ componentId: "coffee", label: "Coffee" }] };
+  const draft = { draftId: "canonical-r2", revision: 2, status: "pending_review" as const, createdAt: "2026-09-19", source: { sourceRef: "offer-handoff:handoff-1" }, reviewCards: [], draftArtifacts: { eventSpec: source } };
+  const splits = [{ parentComponentId: "coffee", reason: "Separat", children: [{ label: "A", servings: 18, recipeId: "a" }, { label: "B", servings: 18, recipeId: "b" }] }];
+  const actionInput = input({ productionDraftContext: { caseId: "case-1", draft }, reviseProductionDraft: vi.fn(),
+    buildCurrentSpecUpdateInput: () => ({ attendeeCount: 35, menuItems: ["Coffee"], componentUpdates: [{ componentId: "coffee", menuCategory: "vegan", purchasedElements: [], recipeOverrideId: "", notes: "" }], componentSplits: splits }) });
+  actionInput.getCurrentProductionDraftContext = () => actionInput.productionDraftContext;
+  await expect(buildProductionSpecEditPersistAction(actionInput)()).rejects.toThrow(/Aufteilung verwerfen.*übrigen Änderungen speichern.*erneut aufteilen/);
+  expect(actionInput.reviseProductionDraft).not.toHaveBeenCalled();
+  expect(actionInput.resetSpecEdit).not.toHaveBeenCalled();
+});

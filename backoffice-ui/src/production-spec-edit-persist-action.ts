@@ -101,7 +101,7 @@ function buildClassificationUpdate(context: ProductionDraftEditContext, update: 
   if (seen.size !== baseline.componentUpdates?.length) throw new Error("Vorhandene Komponenten dürfen hier nicht entfernt werden.");
   const scheduleChanged = !equal(update.eventSchedule, baseline.eventSchedule);
   if (scheduleChanged && !update.eventSchedule?.length) throw new Error("Das Zeitfenster kann hier nicht gelöscht werden.");
-  if (update.componentSplits?.length && (componentClassifications.length || componentUpdates.length || scheduleChanged || update.specialDietResponse)) throw new Error("Bitte Aufteilungen zuerst gesondert speichern; andere Änderungen bleiben bis dahin ungespeichert.");
+  if (update.componentSplits?.length && (componentClassifications.length || componentUpdates.length || scheduleChanged || update.specialDietResponse)) throw new Error("Aufteilung und andere Änderungen können nicht zusammen gespeichert werden. Bitte „Aufteilung verwerfen“ wählen, die übrigen Änderungen speichern und danach erneut aufteilen.");
   return { caseId, expectedRevision: draft.revision!, componentClassifications,
     ...(update.componentSplits?.length ? { componentSplits: update.componentSplits } : {}),
     ...(update.specialDietResponse ? { specialDietResponse: update.specialDietResponse } : {}),

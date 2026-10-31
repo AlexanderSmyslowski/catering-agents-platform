@@ -206,6 +206,7 @@ export interface ProductionArtifactRouteDependencies {
   auditLog: AuditLogStore;
   buildLlmAdapter: () => BoundaryGuardedLlmAdapter;
   productionDraftDataMode: LlmReadinessDataMode;
+  componentSplitsEnabled: boolean;
   handoffReader?: ProductionHandoffReader;
   trustedActorSecret?: string;
   allowDevActorHeader: boolean;
@@ -1158,6 +1159,7 @@ export function registerProductionArtifactRoutes(
     auditLog,
     buildLlmAdapter,
     productionDraftDataMode,
+    componentSplitsEnabled,
     handoffReader,
     trustedActorSecret,
     allowDevActorHeader,
@@ -1344,7 +1346,8 @@ export function registerProductionArtifactRoutes(
     const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
     return reply.send({
       access: {
-        canOperateProduction: hasMinimalMvpCapability(actor, "production")
+        canOperateProduction: hasMinimalMvpCapability(actor, "production"),
+        canSplitProductionComponents: componentSplitsEnabled && hasMinimalMvpCapability(actor, "production")
       },
       items: (await store.listPlans(actor)).map((plan) => projectProductionPlanReadResponse(actor, plan))
     });
@@ -2830,6 +2833,11 @@ export function registerProductionArtifactRoutes(
       }
 
       const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
+      const rawCommand = request.body;
+      if (!componentSplitsEnabled && rawCommand && typeof rawCommand === "object" && !Array.isArray(rawCommand) &&
+          Array.isArray((rawCommand as Record<string, unknown>).componentSplits) && ((rawCommand as Record<string, unknown>).componentSplits as unknown[]).length > 0) {
+        return reply.code(409).send({ message: "Aufteilungen sind in dieser Installation noch nicht freigeschaltet." });
+      }
       const draft = await store.getProductionDraft(actor, request.params.draftId);
       if (!draft) {
         return reply.code(404).send({ message: "ProductionDraft nicht gefunden." });
@@ -2970,6 +2978,15 @@ export function registerProductionArtifactRoutes(
               return reply.code(422).send({ message: "Das ausgewählte Rezept ist in der Rezeptbibliothek dieses Betriebs nicht vorhanden." });
             }
             byParent.set(item.parentComponentId, item);
+          }
+          const questions = [...(eventSpec.uncertainties ?? []), ...(draft.draftArtifacts.openQuestions ?? [])];
+          for (const question of questions) {
+            const indexedTarget = /^(?:\$\.)?(?:draftArtifacts\.eventSpec\.)?menuPlan[.\[]/.test(question.field);
+            const dietaryTarget = question.field === "menuPlan" && [...byParent.keys()].some(id => {
+              const parent = eventSpec.menuPlan.find(component => component.componentId === id)!;
+              return question.suggestedQuestion === `Welche Ernährungskennzeichnung gilt nach Rezeptprüfung für ${parent.label}?`;
+            });
+            if (indexedTarget || dietaryTarget) return reply.code(422).send({ message: "Eine Rückfrage zur Menüposition muss vor der Aufteilung geklärt werden." });
           }
           splitMenuPlan = eventSpec.menuPlan.flatMap(parent => byParent.has(parent.componentId) ? buildComponentSplit(parent, byParent.get(parent.componentId)!)! : [parent]);
           const transition = validateComponentSplitTransition(eventSpec, { ...eventSpec, menuPlan: splitMenuPlan });
@@ -3125,6 +3142,7 @@ export function registerProductionArtifactRoutes(
           details: compactAuditDetails({ draftId: committed.draftId, supersedesDraftId: draft.draftId,
             classificationCount: categories.size, changeRequestHash: commandHash,
             ...(planningChange ? { componentUpdateCount: patches.size, scheduleChanged } : {}),
+            ...(splits.length ? { splitCount: splits.length } : {}),
             humanApprovalRequired: true, writesProductObject: false })
         });
         return reply.code(201).send({ draft: projectProductionDraft(actor, committed) });

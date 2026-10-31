@@ -290,6 +290,7 @@ export interface ProductionProductData {
 export interface ProductionRouteAccessData {
   access: {
     canOperateProduction: boolean;
+    canSplitProductionComponents?: boolean;
   };
   productionPlans: ProductionPlan[];
   purchaseLists: PurchaseList[];
@@ -362,7 +363,8 @@ export async function loadProductionRouteAccessData(): Promise<ProductionRouteAc
   }
 
   const access = {
-    canOperateProduction: planResponse.access.canOperateProduction
+    canOperateProduction: planResponse.access.canOperateProduction,
+    canSplitProductionComponents: planResponse.access.canSplitProductionComponents === true
   };
   const productionPlans = planResponse.items as ProductionPlan[];
   if (access.canOperateProduction) {
