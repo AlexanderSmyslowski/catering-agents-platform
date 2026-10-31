@@ -527,6 +527,82 @@ describe("production folder export", () => {
     expect(html).not.toContain("review_required");
   });
 
+  it("renders each shared-recipe component with its own frozen quantities and allergens", () => {
+    const input = fixture();
+    const baseBatch = input.plan.productionBatches[0]!;
+    const baseSheet = input.plan.kitchenSheets[0]!;
+    const baseSelection = input.plan.recipeSelections[0]!;
+    input.recipe.name = "Synthetisches Fruchtkompott";
+    input.recipe.ingredients = [{ ingredientId: "cinnamon", name: "Zimt", quantity: { amount: 0.001, unit: "kg" }, group: "misc" }];
+    const amounts = [0.0007, 0.0006, 0.0007];
+    const servings = [7, 6, 7];
+    input.spec.menuPlan = servings.map((count, index) => ({ componentId: `charge-${index + 1}`, label: `Fruchtkompott Charge ${index + 1}`, servings: count }));
+    input.plan.recipeSelections = servings.map((_, index) => ({ ...baseSelection, componentId: `charge-${index + 1}` }));
+    input.plan.productionBatches = [2, 0, 1].map(index => ({ ...baseBatch, batchId: `batch-${index}`, componentId: `charge-${index + 1}`, scaledYield: { amount: servings[index]!, unit: "servings" }, ingredients: [{ ...input.recipe.ingredients[0]!, quantity: { amount: amounts[index]!, unit: "kg" } }] }));
+    input.plan.kitchenSheets = [1, 2, 0].map(index => ({ ...baseSheet, componentId: `charge-${index + 1}`, productionQty: { amount: servings[index]!, unit: "servings" }, ingredients: [{ ...input.recipe.ingredients[0]!, quantity: { amount: amounts[index]!, unit: "kg" } }], allergens: [["egg"], ["mustard"], []][index]! }));
+    const before = JSON.stringify(input);
+    const html = renderProductionFolderHtml({ plan: input.plan, spec: input.spec, recipes: [input.recipe] });
+    const cards = html.match(/<article class="recipe-card">[\s\S]*?<\/article>/g) ?? [];
+    expect(cards).toHaveLength(3);
+    for (const [index, card] of cards.entries()) {
+      expect(card).toContain(`Fruchtkompott Charge ${index + 1}`);
+      expect(card).toContain(`${servings[index]} Portionen`);
+      expect(card).toContain(index === 1 ? "0,0006 kg" : "0,0007 kg");
+      expect(card).toContain(index === 0 ? "<strong>Allergene:</strong> Ei" : index === 1 ? "<strong>Allergene:</strong> Senf" : "<strong>Allergene:</strong> Keine ausgewiesenen Allergene");
+      expect(card).toContain("keine Zusicherung von Allergenfreiheit");
+    }
+    expect(JSON.stringify(input)).toBe(before);
+  });
+
+  it.each(["sheet", "batch", "selection"] as const)("retains the %s-only recipe fallback", source => {
+    const input = fixture();
+    if (source !== "sheet") input.plan.kitchenSheets = [];
+    if (source !== "batch") input.plan.productionBatches = [];
+    if (source !== "selection") input.plan.recipeSelections = [];
+    const html = renderProductionFolderHtml({ plan: input.plan, spec: input.spec, recipes: [input.recipe] });
+    const cards = html.match(/<article class="recipe-card">[\s\S]*?<\/article>/g) ?? [];
+    expect(cards).toHaveLength(1);
+    expect(cards[0]).toContain("Vitello Tonnato");
+    expect(cards[0]).toContain("Kalbsnuss");
+    if (source === "selection") expect(cards[0]).toContain("Produktionsmenge: offen · Zutaten aus der unskalierten Rezeptgrundlage");
+    else expect(cards[0]).toContain("Produktionsmenge: 54 Portionen");
+    if (source !== "sheet") expect(cards[0]).toContain("Allergene nicht hinterlegt – vor Produktion prüfen");
+  });
+
+  it("identifies unscaled recipe ingredients when frozen sheet and batch ingredients are empty", () => {
+    const input = fixture();
+    input.plan.productionBatches[0]!.ingredients = [];
+    input.plan.kitchenSheets[0]!.ingredients = [];
+    const html = renderProductionFolderHtml({ plan: input.plan, spec: input.spec, recipes: [input.recipe] });
+    const card = html.match(/<article class="recipe-card">[\s\S]*?<\/article>/)?.[0] ?? "";
+    expect(card).toContain("Zutaten aus der unskalierten Rezeptgrundlage (Grundrezept für 45 Portionen, nicht auf Produktionsmenge umgerechnet)");
+    expect(card).toContain("Produktionsmenge: 54 Portionen");
+    expect(card).toContain("Kalbsnuss");
+  });
+
+  it.each(["sheet", "batch"] as const)("marks multiple %s entries as ambiguous without asserting the first", duplicate => {
+    const input = fixture();
+    const other = { ...structuredClone(input.recipe), recipeId: "recipe-other", name: "Zweites Rezept" };
+    input.plan.kitchenSheets[0]!.allergens = ["egg"];
+    if (duplicate === "sheet") input.plan.kitchenSheets.push({ ...structuredClone(input.plan.kitchenSheets[0]!), productionQty: { amount: 81, unit: "Portionen" }, allergens: [] });
+    else input.plan.productionBatches.push({ ...structuredClone(input.plan.productionBatches[0]!), batchId: "batch-other", scaledYield: { amount: 81, unit: "Portionen" } });
+    input.plan.recipeSelections.push({ ...input.plan.recipeSelections[0]!, componentId: "other", recipeId: other.recipeId });
+    input.spec.menuPlan.push({ componentId: "other", label: "Zweite Komponente", servings: 10 });
+    const html = renderProductionFolderHtml({ plan: input.plan, spec: input.spec, recipes: [input.recipe, other] });
+    const cards = html.match(/<article class="recipe-card">[\s\S]*?<\/article>/g) ?? [];
+    expect(cards).toHaveLength(2);
+    expect(cards[0]).toContain("Produktionsmenge: offen");
+    expect(cards[0]).toContain("Mehrere Planeinträge für diese Komponente – Menge/Zutaten/Allergene nicht eindeutig, vor Produktion prüfen");
+    expect(cards[0]).not.toContain("Produktionsmenge: 54");
+    expect(cards[0]).not.toContain("Produktionsmenge: 81");
+    expect(cards[0]).not.toContain("<strong>Allergene:</strong> Ei");
+    expect(cards[0]).not.toContain("Keine ausgewiesenen Allergene");
+    expect(cards[0]).not.toContain("<table>");
+    expect(cards[0]).not.toContain("<ol>");
+    expect(cards[1]).toContain("Zweite Komponente – Zweites Rezept");
+    expect(cards[1]).toContain("Allergene nicht hinterlegt – vor Produktion prüfen");
+  });
+
   it("renders plan-frozen kitchen allergens instead of live recipe values", () => {
     const input = fixture();
     input.recipe.allergens = ["milk"];

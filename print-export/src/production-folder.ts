@@ -89,17 +89,6 @@ function componentLabel(spec: AcceptedEventSpec, componentId: string): string {
   return spec.menuPlan.find((component) => component.componentId === componentId)?.label ?? componentId;
 }
 
-function recipeIdsForPlan(plan: ProductionPlan): string[] {
-  return [
-    ...new Set(
-      [
-        ...plan.kitchenSheets.flatMap((sheet) => sheet.recipeId ?? []),
-        ...plan.recipeSelections.flatMap((selection) => selection.recipeId ?? [])
-      ].filter(Boolean)
-    )
-  ];
-}
-
 function linkedRecipeLabel(
   recipeById: Map<string, Recipe>,
   recipeId: string | undefined
@@ -311,29 +300,43 @@ function renderSteps(steps: RecipeStep[]): string {
     return "<p>Keine Arbeitsschritte hinterlegt.</p>";
   }
 
-  return `<ol>${steps
+  return `<ol>${[...steps]
     .sort((left, right) => left.index - right.index)
     .map((step) => `<li>${escapeHtml(step.instruction)}</li>`)
     .join("")}</ol>`;
 }
 
 function renderSection7(input: RenderProductionFolderInput, recipeById: Map<string, Recipe>): string {
-  const linkedRecipeIds = recipeIdsForPlan(input.plan);
-  const recipeCards = linkedRecipeIds.flatMap((recipeId) => {
+  const uses = new Map<string, { componentId: string; recipeId: string }>();
+  for (const item of [...input.plan.recipeSelections, ...input.plan.kitchenSheets, ...input.plan.productionBatches]) {
+    if (!item.recipeId) continue;
+    const use = { componentId: item.componentId, recipeId: item.recipeId };
+    uses.set(JSON.stringify([use.componentId, use.recipeId]), use);
+  }
+  const spec = input.appliedSnapshot?.approvedSpec.artifacts.eventSpec ?? input.spec;
+  const recipeCards = [...uses.values()].flatMap(({ componentId, recipeId }) => {
     const recipe = recipeById.get(recipeId);
-    if (!recipe) {
-      return [];
-    }
-
-    const sheet = input.plan.kitchenSheets.find((candidate) => candidate.recipeId === recipeId);
-    const batch = input.plan.productionBatches.find((candidate) => candidate.recipeId === recipeId);
-    const ingredients = ingredientsFor(sheet, batch, recipe);
-
+    if (!recipe) return [];
+    const sheets = input.plan.kitchenSheets.filter(candidate => candidate.componentId === componentId && candidate.recipeId === recipeId);
+    const batches = input.plan.productionBatches.filter(candidate => candidate.componentId === componentId && candidate.recipeId === recipeId);
     const approvalStateLabel = formatRecipeApprovalStateLabel(recipe.source.approvalState) ?? "Status offen";
-
-    return [`<article class="recipe-card"><h3>${escapeHtml(recipe.name)}</h3><p>Quelle: ${escapeHtml(recipe.source.reference)} · Status: ${escapeHtml(approvalStateLabel)}</p>${renderProductionOrderContext(input.appliedSnapshot?.approvedSpec.artifacts.eventSpec ?? input.spec)}${renderFrozenKitchenAllergens(sheet)}<table><thead><tr><th>Zutat</th><th>Menge</th><th>Warengruppe</th></tr></thead><tbody>${renderIngredientRows(ingredients)}</tbody></table>${renderSteps(stepsFor(recipe, sheet, batch))}</article>`];
+    if (sheets.length > 1 || batches.length > 1) {
+      return [`<article class="recipe-card"><h3>${escapeHtml(componentLabel(spec, componentId))} – ${escapeHtml(recipe.name)}</h3><p>Produktionsmenge: offen</p><p>Quelle: ${escapeHtml(recipe.source.reference)} · Status: ${escapeHtml(approvalStateLabel)}</p>${renderProductionOrderContext(spec)}<p>Mehrere Planeinträge für diese Komponente – Menge/Zutaten/Allergene nicht eindeutig, vor Produktion prüfen.</p></article>`];
+    }
+    const sheet = sheets[0];
+    const batch = batches[0];
+    const ingredients = ingredientsFor(sheet, batch, recipe);
+    const productionQuantity = productionQuantityFor(sheet, batch);
+    const quantityLabel = productionQuantity
+      ? formatQuantity({ ...productionQuantity, unit: productionQuantity.unit === "servings" ? "Portionen" : productionQuantity.unit })
+      : "offen";
+    const baseYield = formatQuantity({ amount: recipe.baseYield.servings, unit: recipe.baseYield.unit === "servings" ? "Portionen" : recipe.baseYield.unit });
+    const fallback = !batch?.ingredients.length && !sheet?.ingredients.length
+      ? ` · Zutaten aus der unskalierten Rezeptgrundlage (Grundrezept für ${escapeHtml(baseYield)}, nicht auf Produktionsmenge umgerechnet)` : "";
+    const allergens = renderFrozenKitchenAllergens(sheet);
+    return [`<article class="recipe-card"><h3>${escapeHtml(componentLabel(spec, componentId))} – ${escapeHtml(recipe.name)}</h3><p>Produktionsmenge: ${escapeHtml(quantityLabel)}${fallback}</p><p>Quelle: ${escapeHtml(recipe.source.reference)} · Status: ${escapeHtml(approvalStateLabel)}</p>${renderProductionOrderContext(spec)}${allergens}<table><thead><tr><th>Zutat</th><th>Menge</th><th>Warengruppe</th></tr></thead><tbody>${renderIngredientRows(ingredients)}</tbody></table>${renderSteps(stepsFor(recipe, sheet, batch))}</article>`];
   });
-  const missingRecipeIds = linkedRecipeIds.filter((recipeId) => !recipeById.has(recipeId));
+  const missingRecipeIds = [...new Set([...uses.values()].map(use => use.recipeId).filter(recipeId => !recipeById.has(recipeId)))];
 
   if (recipeCards.length === 0) {
     return `<section class="recipe-section"><h2>7. Rezeptkarten</h2><p>keine freigegebenen Rezeptkarten verknüpft.</p></section>`;
