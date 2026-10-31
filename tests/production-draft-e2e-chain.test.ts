@@ -461,7 +461,7 @@ describe("ProductionDraft E2E chain", () => {
       expect(folderExport.headers["content-type"]).toContain("text/html");
       expect(folderExport.body).toContain("Produktionsmappe");
       expect(folderExport.body).toContain(
-        '<article class="recipe-card"><h3>Vegetarische Tomatensuppe Bankett</h3>'
+        '<article class="recipe-card"><h3>Vegetarische Tomatensuppe – Vegetarische Tomatensuppe Bankett</h3>'
       );
       expect(folderExport.body).toContain("<td>Tomaten</td>");
       expect(folderExport.body).toContain(
