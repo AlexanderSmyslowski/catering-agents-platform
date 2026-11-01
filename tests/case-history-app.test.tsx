@@ -98,6 +98,11 @@ describe("case history in the rendered offer route", () => {
       await flush();
     });
 
+    expect(container.querySelector<HTMLDetailsElement>("#history")?.open).toBe(false);
+    await act(async () => {
+      (container.querySelector("#history > summary") as HTMLElement).click();
+      await flush();
+    });
     expect(container.querySelector<HTMLDetailsElement>("#history")?.open).toBe(true);
     expect(container.querySelector(".workspace-filter-details")?.hasAttribute("open")).toBe(false);
     const openButtons = () => Array.from(container.querySelectorAll("button[data-action='open-case']"));

@@ -516,7 +516,8 @@ describe("backoffice route smoke", () => {
 
     const home = (await renderRoute("/")).text;
     expect(home).toContain("CateringOS");
-    expect(home).toMatch(/gemeinsam.*regelkern/i);
+    expect(home).toContain("Kundenangebote erstellen und die Küche mit Rezepten, Mengen und Einkaufslisten vorbereiten.");
+    expect(home).toContain("Produktion öffnen");
     expect(home).toContain("Neuen Auftrag beginnen");
     expect(home).toContain("Frühere Aufträge");
     expect(home).not.toContain("Interner Arbeitsstand");
