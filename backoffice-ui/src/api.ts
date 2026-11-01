@@ -1103,6 +1103,10 @@ export async function loadProductionDrafts(caseId?: string) {
   );
 }
 
+export async function loadRecipeVisionCapability() {
+  return fetchJson<{available:boolean;provider?:string;model?:string}>("/api/production/v1/production/recipes/vision-capability");
+}
+
 export async function loadProductionRecipeLibrary() {
   return fetchJson<{ items: Array<Recipe & Record<string, unknown>> }>("/api/production/v1/production/recipes", undefined);
 }
@@ -1207,7 +1211,9 @@ async function requestRecipeFile(
   recipeName?: string,
   numberFormat?: RecipeNumberFormat,
   review?: RecipeImportReview,
-  preview = false
+  preview = false,
+  vision = false,
+  manual = false
 ) {
   const formData = new FormData();
   if (review) formData.append("review", JSON.stringify(review));
@@ -1226,7 +1232,7 @@ async function requestRecipeFile(
     method: "POST",
     body: formData
   }, { sessionBound: true });
-  const response = await fetch(preview ? `${endpoint}?preview=true` : endpoint, requestInit);
+  const response = await fetch(preview ? `${endpoint}?preview=true${vision ? "&vision=true" : manual ? "&manual=true" : ""}` : endpoint, requestInit);
   assertCateringSessionBoundResponse(response, requestInit.signal);
 
   if (!response.ok) {
@@ -1242,8 +1248,8 @@ export async function uploadRecipeFile(target: RecipeUploadTarget, file: File, r
   return { recipe: result.recipe };
 }
 
-export async function previewRecipeFile(file: File, recipeName?: string, numberFormat?: RecipeNumberFormat): Promise<RecipeImportPreview> {
-  const result = await requestRecipeFile("production", file, recipeName, numberFormat, undefined, true);
+export async function previewRecipeFile(file: File, recipeName?: string, numberFormat?: RecipeNumberFormat, vision = false, manual = false): Promise<RecipeImportPreview> {
+  const result = await requestRecipeFile("production", file, recipeName, numberFormat, undefined, true, vision, manual);
   if (!result.preview || typeof result.preview.text !== "string") throw new Error("Die Rezeptvorschau konnte nicht gelesen werden. Bitte erneut versuchen.");
   return result.preview;
 }

@@ -1,6 +1,9 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import {
   createUploadSourceMetadata,
+  recipeVisionCapability,
+  transcribeRecipeVision,
+  validateUploadedDocumentSize,
   extractTextFromDocument,
   multipartLimitsForUpload,
   parseUploadedRecipeText,
@@ -14,6 +17,7 @@ import {
   type AuditLogStore,
   type TrustedActor
 } from "@catering/shared-core";
+import { imageDimensions, signRecipePreview, verifyRecipePreview } from "../recipe-vision.js";
 import type { InMemoryRecipeRepository } from "../repositories/in-memory-recipe-repository.js";
 
 interface RecipeTextImportBody {
@@ -35,6 +39,8 @@ export interface ProductionRecipeRouteDependencies {
   repository: InMemoryRecipeRepository;
   auditLog: AuditLogStore;
   trustedActorSecret?: string;
+  visionEnv: Record<string, string | undefined>;
+  previewActorBinding: (request:FastifyRequest)=>string;
   allowDevActorHeader: boolean;
   isProductionOperator: (
     request: { headers: Record<string, string | string[] | undefined> },
@@ -67,8 +73,8 @@ function multipartFieldValue(
 }
 
 async function recipeImportFromMultipart(
-  request: FastifyRequest
-): Promise<RecipeTextImportBody> {
+  request: FastifyRequest, skipPdfExtraction = false
+): Promise<RecipeTextImportBody & { content:Buffer; mimeType:string }> {
   const multipartRequest = request as FastifyRequest & {
     isMultipart: () => boolean;
     file: (options?: { limits?: { fileSize?: number; files?: number; fields?: number; parts?: number } }) => Promise<
@@ -92,23 +98,29 @@ async function recipeImportFromMultipart(
     throw new Error("No recipe file provided.");
   }
 
-  validateUploadedDocumentMetadata({ filename: file.filename, mimeType: file.mimetype });
+  const isImage = /\.(?:png|jpe?g)$/i.test(file.filename) && ["image/png", "image/jpeg"].includes(file.mimetype);
+  if (!isImage) validateUploadedDocumentMetadata({ filename: file.filename, mimeType: file.mimetype });
+  else if (!((/\.png$/i.test(file.filename) && file.mimetype === "image/png") || (/\.jpe?g$/i.test(file.filename) && file.mimetype === "image/jpeg"))) throw Object.assign(new Error("Dateiendung und Bildformat stimmen nicht überein."),{statusCode:422});
   const content = await readLimitedUploadBuffer(file.file, "recipe");
   const document = {
     filename: file.filename,
     mimeType: file.mimetype,
     content
   };
-  validateUploadedDocument(document, "recipe");
-  const text = await extractTextFromDocument(document);
+  validateUploadedDocumentSize(content.length, "recipe");
+  if (isImage) imageDimensions(content,file.mimetype);
+  else validateUploadedDocument(document, "recipe");
+  const review = parseRecipeUploadReview(multipartFieldValue(file.fields, "review"));
+  const skipPdf = file.mimetype === "application/pdf" && (skipPdfExtraction || Boolean(review?.previewToken));
+  const text = isImage || skipPdf ? "" : await extractTextFromDocument(document);
 
   return {
-    text,
+    text, content, mimeType:file.mimetype,
     filename: file.filename,
     recipeName: multipartFieldValue(file.fields, "recipeName"),
     numberFormat: multipartFieldValue(file.fields, "numberFormat") as "de" | "en" | undefined,
     sourceRef: multipartFieldValue(file.fields, "sourceRef"),
-    review: parseRecipeUploadReview(multipartFieldValue(file.fields, "review")),
+    review,
     sourceMetadata: createUploadSourceMetadata({
       filename: file.filename,
       mimeType: file.mimetype,
@@ -126,11 +138,19 @@ export function registerProductionRecipeRoutes(
     repository,
     auditLog,
     trustedActorSecret,
+    visionEnv,
+    previewActorBinding,
     allowDevActorHeader,
     isProductionOperator,
     requireProductionOperator,
     actorForRequest
   } = deps;
+
+  app.get("/v1/production/recipes/vision-capability", async (request,reply) => {
+    if (!isProductionOperator(request,trustedActorSecret,allowDevActorHeader)) return reply.code(403).send({message:"Produktions-Operator erforderlich."});
+    const actor=actorForRequest(request,trustedActorSecret,allowDevActorHeader);
+    return reply.send(recipeVisionCapability(visionEnv,actor.businessId));
+  });
 
   app.get("/v1/production/recipes", async (request, reply) => {
     const forbidden = requireProductionOperator(request, reply, trustedActorSecret, allowDevActorHeader);
@@ -195,17 +215,41 @@ export function registerProductionRecipeRoutes(
     }
 
     try {
-      const query = request.query as { preview?: string };
+      const query = request.query as { preview?: string; vision?:string; manual?:string };
       if (query.preview !== undefined && query.preview !== "true") {
         return reply.code(422).send({ message: "Unbekannter Vorschauauftrag. Bitte die Datei erneut einlesen." });
       }
-      const payload = await recipeImportFromMultipart(request);
+      if (query.vision !== undefined && (query.vision !== "true" || query.preview !== "true")) return reply.code(422).send({message:"Ungültiger Bildauftrag."});
+      if (query.manual !== undefined && (query.manual !== "true" || query.preview !== "true" || query.vision !== undefined)) return reply.code(422).send({message:"Ungültiger manueller Auftrag."});
+      const payload = await recipeImportFromMultipart(request, query.vision === "true" || query.manual === "true");
+      const actor=actorForRequest(request,trustedActorSecret,allowDevActorHeader);
+      const isImage=payload.mimeType === "image/png" || payload.mimeType === "image/jpeg";
       if (query.preview === "true") {
+        if (query.manual === "true") {
+          if (!isImage && payload.mimeType !== "application/pdf") return reply.code(422).send({message:"Manuelle Bildübertragung nur für JPEG, PNG oder PDF."});
+          if (!visionEnv.CATERING_TRUSTED_ACTOR_SECRET) return reply.code(422).send({message:"Manuelle Bildübertragung ist nicht konfiguriert. Bitte den Rezepttext als Textdatei einlesen."});
+          const text="Manuelle Übertragung aus der Originaldatei. Keine automatische Texterkennung.";
+          const preview=prepareRecipeImportPreview({...payload,text});
+          preview.previewToken=signRecipePreview({businessId:actor.businessId,fileHash:payload.sourceMetadata!.sha256,actorBinding:previewActorBinding(request),text,now:Date.now()},visionEnv.CATERING_TRUSTED_ACTOR_SECRET);
+          return reply.send({preview});
+        }
+        if (query.vision === "true") {
+          if (!isImage) return reply.code(422).send({message:"Gescannte PDFs werden noch nicht automatisch gelesen. Bitte als Foto einreichen oder manuell übertragen."});
+          if (!recipeVisionCapability(visionEnv,actor.businessId).available) return reply.code(422).send({message:"Bildverarbeitung ist nicht freigegeben. Bitte Rezepttext manuell eingeben."});
+          const dimensions=imageDimensions(payload.content,payload.mimeType);
+          previewActorBinding(request);
+          const text=await transcribeRecipeVision({content:payload.content,mimeType:payload.mimeType as "image/png"|"image/jpeg",businessId:actor.businessId,...dimensions},visionEnv);
+          const preview=prepareRecipeImportPreview({...payload,text});
+          preview.previewToken=signRecipePreview({businessId:actor.businessId,fileHash:payload.sourceMetadata!.sha256,actorBinding:previewActorBinding(request),text,now:Date.now()},visionEnv.CATERING_TRUSTED_ACTOR_SECRET!);
+          return reply.send({preview});
+        }
+        if (isImage) return reply.code(422).send({message:"Zum Lesen eines Bildes bitte Bildverarbeitung ausdrücklich starten."});
         return reply.send({ preview: prepareRecipeImportPreview(payload) });
       }
+      if (payload.review?.previewToken) payload.text=verifyRecipePreview(payload.review.previewToken,{businessId:actor.businessId,fileHash:payload.sourceMetadata!.sha256,actorBinding:previewActorBinding(request),now:Date.now()},visionEnv.CATERING_TRUSTED_ACTOR_SECRET ?? "");
+      else if (isImage) return reply.code(422).send({message:"Bitte Bild zuerst einlesen und die Vorschau bestätigen."});
       const recipe = parseUploadedRecipeText(payload);
       if (!payload.review) return reply.code(422).send({ message: "Bitte zuerst die Vorschau prüfen und Mengen sowie Originalportionen bestätigen." });
-      const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
       await repository.save(actor, recipe);
       await auditLog.logFor(actor, {
         action: "recipe.uploaded_file",
