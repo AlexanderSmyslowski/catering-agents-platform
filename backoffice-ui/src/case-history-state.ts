@@ -67,3 +67,10 @@ export function completedCaseLabel(product: CaseProduct): "Plan übernommen" | "
 export function formatCaseStatus(product: CaseProduct, status: CaseStatus): string {
   return status === "completed" ? completedCaseLabel(product) : status === "archived" ? "Archiviert" : "Offen";
 }
+
+/** Header status of the opened case. Named as the case (Auftrag) status so it
+ * is not read as the separate offer or production approval state. */
+export function formatCaseHeaderStatus(product: CaseProduct, status: CaseStatus): string {
+  return status === "completed" ? `Auftrag: ${completedCaseLabel(product)}`
+    : status === "archived" ? "Auftrag: archiviert" : "Auftrag: offen";
+}

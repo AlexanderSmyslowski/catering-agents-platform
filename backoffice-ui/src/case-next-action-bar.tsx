@@ -55,7 +55,7 @@ export function CaseNextActionBar({
     add_source: product === "offer" ? "Kundenanfrage als Text oder Datei einfügen." : "Angebot oder Auftragsbeschreibung einfügen.",
     review_draft: product === "offer" ? "Offene Punkte, Menü und Kalkulation im Entwurf prüfen." : "Erkannte Angaben und Küchenplanung prüfen. Noch keine fachliche Freigabe.",
     request_revision: "Änderungswünsche sind notiert. Eine neue Fassung erstellen.",
-    approve_offer: "Gibt die Variante intern frei. Die Übergabe an die Küche ist ein eigener Schritt.",
+    approve_offer: "Führt zur Variantenauswahl. Die interne Freigabe erfolgt erst nach deiner Bestätigung in der Rückfrage; die Übergabe an die Küche ist ein eigener Schritt.",
     send_handoff: "Das freigegebene Angebot als Produktionsauftrag an die Küche übergeben.",
     inspect_handoff: "Die Küche plant im Produktionsauftrag weiter. Änderungen am Angebot brauchen eine neue Fassung und Freigabe.",
     approve_production: "Mengen, Rückfragen und Küchenhinweise prüfen, dann intern freigeben.",

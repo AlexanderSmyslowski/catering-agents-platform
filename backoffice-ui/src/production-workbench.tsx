@@ -8,6 +8,8 @@ import { buildProductionWorkbenchOutputAnchorState } from "./production-workbenc
 export type ProductionWorkbenchSummary = {
   approvalState?: "pending" | "approved" | "applied";
   productionNotes?: string[];
+  /** Raw note strings not shown verbatim above (identifiers, combined duplicates). */
+  productionNoteLineage?: string[];
   hasActiveContext?: boolean;
   hasHistoricalApplied?: boolean;
   activeSpecLabel: string;
@@ -240,10 +242,14 @@ export function ProductionConversationalWorkbench({
               Mengen, Herkunft, Allergene, Preise und Freigabegrenzen bleiben vor Produktion zu prüfen.
             </p>
 
-            {activeTechnicalContextLabel ? (
+            {activeTechnicalContextLabel || summary.productionNoteLineage?.length ? (
               <details className="technical-context-details">
                 <summary>Technische Details</summary>
-                <p className="helper-text">{activeTechnicalContextLabel}</p>
+                {activeTechnicalContextLabel ? <p className="helper-text">{activeTechnicalContextLabel}</p> : null}
+                {summary.productionNoteLineage?.length ? <>
+                  <p className="helper-text">Ursprüngliche Hinweistexte:</p>
+                  <ul className="item-list compact">{summary.productionNoteLineage.map(note => <li key={note} className="helper-text">{note}</li>)}</ul>
+                </> : null}
               </details>
             ) : null}
             {showMiniPilotPanel ? (

@@ -99,7 +99,7 @@ import {
   canRequestProductionRevision
 } from "./production-draft-review-panel.js";
 import { CaseHistoryPanel } from "./case-history-panel.js";
-import { buildCaseHistoryState, formatCaseStatus } from "./case-history-state.js";
+import { buildCaseHistoryState, formatCaseHeaderStatus } from "./case-history-state.js";
 import {
   buildCaseNextAction,
   type CaseNextAction,
@@ -282,11 +282,19 @@ export async function runProductWorkspaceNextAction(
       }
       return;
     case "approve_offer": {
-      const revision = input.activeOfferDraft?.revision;
-      if (input.route !== "offer" || revision === undefined) {
+      // The global bar never posts an approval. It only leads to the
+      // workbench's named variant confirmation, which is the single
+      // revision- and context-bound approval path.
+      const activeDraft = input.activeOfferDraft;
+      if (input.route !== "offer" || activeDraft?.revision === undefined || activeDraft.draftId !== action.draftId) {
         throw new Error("Angebotsfreigabe ist ohne den aktiven Entwurf nicht zulässig.");
       }
-      await input.offerWorkbenchState.approveDraft(action.draftId, revision, action.variantId);
+      const confirmationOpen = typeof document !== "undefined" &&
+        document.getElementById("offer-approval-confirmation") !== null;
+      input.setNotice(confirmationOpen
+        ? "Bitte die ausgewählte Variante in der Rückfrage bestätigen oder abbrechen."
+        : "Bitte unten die Variante wählen und die Freigabe in der Rückfrage bestätigen.");
+      input.focus(confirmationOpen ? "#offer-approval-confirmation" : "#offer-approval-variants");
       return;
     }
     case "send_handoff": {
@@ -294,7 +302,7 @@ export async function runProductWorkspaceNextAction(
       if (input.route !== "offer" || !binding || binding.approvedOfferId !== action.approvedOfferId || !input.offerWorkbenchState.createHandoff) {
         throw new Error("Produktionsübergabe ist ohne bestätigte Angebotsbindung nicht zulässig.");
       }
-      await input.offerWorkbenchState.createHandoff(binding.offerDraftId, binding.offerDraftRevision, binding.approvedOfferId);
+      await input.offerWorkbenchState.createHandoff(binding.offerDraftId, binding.offerDraftRevision, binding.approvedOfferId, binding.selectedVariantId);
       return;
     }
     case "request_revision":
@@ -537,7 +545,8 @@ function ProductWorkspaceView({
     currentOfferApprovalBinding?.handoffId,
     currentOfferApprovalBinding?.offerDraftId,
     currentOfferApprovalBinding?.offerDraftRevision,
-    currentOfferApprovalBinding?.productionDraftId
+    currentOfferApprovalBinding?.productionDraftId,
+    currentOfferApprovalBinding?.selectedVariantId
   ]);
 
   useEffect(() => {
@@ -777,7 +786,8 @@ function ProductWorkspaceView({
     currentOfferApprovalBinding?.handoffId,
     currentOfferApprovalBinding?.offerDraftId,
     currentOfferApprovalBinding?.offerDraftRevision,
-    currentOfferApprovalBinding?.productionDraftId
+    currentOfferApprovalBinding?.productionDraftId,
+    currentOfferApprovalBinding?.selectedVariantId
   ]);
 
   useEffect(() => {
@@ -1415,8 +1425,8 @@ function ProductWorkspaceView({
       return;
     }
 
+    // approve_offer only focuses the workbench confirmation; it never mutates.
     const mutating = action.kind === "inspect_handoff" ||
-      action.kind === "approve_offer" ||
       action.kind === "send_handoff" ||
       action.kind === "approve_production" ||
       action.kind === "apply_approved" ||
@@ -1457,7 +1467,7 @@ function ProductWorkspaceView({
           : offerCaseRefreshFailed ? "Auftragsdaten konnten nicht aktualisiert werden. Bitte erneut laden, bevor du speicherst, freigibst oder exportierst."
             : offerCaseNeedsRefresh && loading ? "Auftragsdaten werden erneut geladen …"
               : offerCaseNotReady ? "Auftragsdaten werden geladen …"
-              : activeCase ? formatCaseStatus(route === "offer" ? "offer" : "production", activeCase.status)
+              : activeCase ? formatCaseHeaderStatus(route === "offer" ? "offer" : "production", activeCase.status)
                 : loaderError ? "Auftragsname nicht verfügbar. Der Auftrag bleibt geöffnet." : "Auftragsdaten werden geladen …"}</p>
         {route === "production" && activeCase?.status === "completed" ? <p className="helper-text">Plan und Einkaufsliste sind gespeichert. Offene Rezept-, Allergen- und Hygieneprüfungen bleiben vor der tatsächlichen Produktion erforderlich.</p> : null}
         {offerCaseRefreshFailed && offerMenuEditing ? <p className="helper-text">{loaderError === OFFER_SAVED_DRAFT_SUPERSEDED_ERROR
@@ -1517,7 +1527,7 @@ function ProductWorkspaceView({
         />
       )}
 
-      {route === "offer" ? <OfferConversationalWorkbench {...offerWorkbenchState} refreshRequired={offerCaseNotReady || offerCaseNeedsRefresh} approvalBindingState={approvalBindingState} /> : null}
+      {route === "offer" ? <OfferConversationalWorkbench {...offerWorkbenchState} refreshRequired={offerCaseNotReady || offerCaseNeedsRefresh} approvalBindingState={approvalBindingState} approvalContextKey={offerActionContextKey} /> : null}
       {route === "production" ? <ProductionRouteMainLayout {...productionRouteMainLayoutState}
         currentDraft={currentProductionDraft} currentApplied={currentProductionApprovalApplied} lastApplied={lastAppliedProduction}
         questionState={{ ...productionRouteMainLayoutState.questionState, currentDraft: currentProductionDraft }}

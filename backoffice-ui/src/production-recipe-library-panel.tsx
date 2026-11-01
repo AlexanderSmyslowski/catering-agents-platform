@@ -39,15 +39,26 @@ type ProductionRecipeLibraryPanelProps = {
   submitting: boolean;
 };
 
-function translateRecipeTier(value?: string): string {
+/** The source tier is a provenance class, not an approval state. In particular
+ * "internal_approved" is assigned to every own upload, also while the separate
+ * library approval state still requires review. */
+export function translateRecipeTier(value?: string): string {
   const labels: Record<string, string> = {
-    internal_verified: "intern verifiziert",
+    internal_verified: "eigene Rezeptsammlung, verifiziert",
     digitized_cookbook: "digitalisiertes Kochbuch",
-    internal_approved: "intern freigegeben",
+    internal_approved: "eigene Rezeptsammlung",
     internet_fallback: "Internet-Ausweichquelle"
   };
   return value ? labels[value] ?? value : "-";
 }
+
+type LibraryDecision = "approve" | "verify" | "reject";
+
+const decisionQuestion: Record<LibraryDecision, string> = {
+  approve: "in der Bibliothek freigeben",
+  verify: "in der Bibliothek verifizieren und damit freigeben",
+  reject: "in der Bibliothek ablehnen"
+};
 
 function translateApprovalState(value?: string): string {
   const labels: Record<string, string> = {
@@ -68,7 +79,7 @@ export function ProductionRecipeLibraryPanel({
 }: ProductionRecipeLibraryPanelProps) {
   const { recipeReviewStatusLabel, recipeUsageStatusLabel, recipeReviewCounts, recipeCount } = statusState;
   const { recipeName, recipeFile } = uploadState;
-  const [decisionTarget, setDecisionTarget] = useState<{ recipeId: string; decision: "approve" | "reject" }>();
+  const [decisionTarget, setDecisionTarget] = useState<{ recipeId: string; decision: LibraryDecision }>();
   const [deciding, setDeciding] = useState(false);
   const decidingRef = useRef(false);
   const [numberFormat, setNumberFormat] = useState<RecipeNumberFormat | "">("");
@@ -135,14 +146,18 @@ export function ProductionRecipeLibraryPanel({
           <header>
             <p className="eyebrow">Rezeptbestand</p>
             <h3>Freigaben, Herkunft und Internet-Ausweichquellen</h3>
+            <p className="helper-text">
+              Der Bibliotheksstatus zeigt, ob ein Rezept freigegeben ist; die Herkunft sagt nur, woher es stammt.
+              „Verifizieren“ gibt ein Rezept frei und kennzeichnet es zusätzlich als intern verifiziert.
+            </p>
           </header>
           <ul className="item-list compact">
             {filteredRecipes.slice(0, 12).map((recipe) => (
               <li key={String(recipe.recipeId)}>
                 <strong>{String(recipe.name)}</strong>
                 <p>
-                  {translateRecipeTier(String((recipe.source as Record<string, unknown>)?.tier ?? "-"))} ·{" "}
-                  Bibliotheksstatus: {translateApprovalState(String((recipe.source as Record<string, unknown>)?.approvalState ?? "-"))}
+                  Bibliotheksstatus: {translateApprovalState(String((recipe.source as Record<string, unknown>)?.approvalState ?? "-"))} ·{" "}
+                  Herkunft: {translateRecipeTier(String((recipe.source as Record<string, unknown>)?.tier ?? "-"))}
                 </p>
                 <div className="action-row">
                   <button
@@ -155,7 +170,7 @@ export function ProductionRecipeLibraryPanel({
                   <button
                     className="secondary-button"
                     disabled={submitting}
-                    onClick={() => void reviewRecipe("production", String(recipe.recipeId), "verify")}
+                    onClick={() => setDecisionTarget({ recipeId: String(recipe.recipeId), decision: "verify" })}
                   >
                     Verifizieren
                   </button>
@@ -168,7 +183,8 @@ export function ProductionRecipeLibraryPanel({
                   </button>
                 </div>
                 {decisionTarget?.recipeId === String(recipe.recipeId) ? <div className="production-discard-confirmation" role="group" aria-label="Bibliotheksentscheidung bestätigen">
-                  <p>„{String(recipe.name)}“ in der Bibliothek {decisionTarget.decision === "approve" ? "freigeben" : "ablehnen"}?</p>
+                  <p>„{String(recipe.name)}“ {decisionQuestion[decisionTarget.decision]}?</p>
+                  {decisionTarget.decision === "reject" ? null : <p className="helper-text">Die Bibliotheksfreigabe ersetzt nicht die Freigabe für einen Auftrag.</p>}
                   <button type="button" disabled={submitting || deciding} onClick={() => {
                     if (decidingRef.current) return;
                     decidingRef.current = true; setDeciding(true);

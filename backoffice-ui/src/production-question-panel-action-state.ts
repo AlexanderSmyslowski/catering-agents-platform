@@ -18,6 +18,9 @@ export type ProductionQuestionPanelActionState = {
   primaryActionLabel: string;
   primaryActionDisabled: boolean;
   sourceReviewHelperText?: string;
+  /** Reason shown directly beside the disabled primary action. */
+  primaryActionReason?: string;
+  sourceReviewBlocking: boolean;
 };
 
 export function buildProductionQuestionPanelActionState({
@@ -50,6 +53,13 @@ export function buildProductionQuestionPanelActionState({
       : "Rückfragen beantworten, bevor Mengen, Rezepte und Einkaufsliste berechnet werden."
     : undefined;
 
+  // With the answer fields already open, the actionable reason is the missing
+  // change in those fields, not "answer the questions" again.
+  const openQuestionActionReason = blocksForOpenQuestions && isFocusedSpecEditing
+    ? "Ändere zuerst eine Angabe in den geöffneten Antwortfeldern."
+    : openQuestionHelperText;
+  const primaryActionDisabled = submitting || blocksForSourceReview || blocksForOpenQuestions;
+
   return {
     focusedSpecId,
     isFocusedSpecEditing,
@@ -59,8 +69,14 @@ export function buildProductionQuestionPanelActionState({
     primaryActionLabel: hasExistingPlan
       ? isFocusedSpecEditing ? "Speichern und neu berechnen" : "Erneut berechnen"
       : isFocusedSpecEditing ? "Speichern und Berechnung starten" : "Berechnung starten",
-    primaryActionDisabled: submitting || blocksForSourceReview || blocksForOpenQuestions,
+    primaryActionDisabled,
     sourceReviewHelperText: [sourceReviewHelperText, openQuestionHelperText].filter(Boolean).join(" ")
-      || undefined
+      || undefined,
+    primaryActionReason: primaryActionDisabled
+      ? submitting
+        ? "Aktion läuft …"
+        : [sourceReviewHelperText, openQuestionActionReason].filter(Boolean).join(" ") || undefined
+      : undefined,
+    sourceReviewBlocking: blocksForSourceReview
   };
 }

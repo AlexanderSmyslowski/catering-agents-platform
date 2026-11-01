@@ -380,6 +380,34 @@ describe("independent product loader boundaries", () => {
     await act(async () => approve.click());
     await act(async () => { [...recipeSection.querySelectorAll("button")].find(button => button.textContent === "Bestätigen")!.click(); await flush(); });
     expect(review).toHaveBeenCalledExactlyOnceWith("production", "new-library-recipe", "approve");
+    // "Verifizieren" also approves in the library, so it uses the same named confirmation.
+    const verify = [...recipeSection.querySelectorAll("button")].find(button => button.textContent === "Verifizieren")!;
+    await act(async () => verify.click());
+    expect(review).toHaveBeenCalledTimes(1);
+    const verifyConfirmation = recipeSection.querySelector('[aria-label="Bibliotheksentscheidung bestätigen"]')?.textContent ?? "";
+    expect(verifyConfirmation).toContain("Neu importiertes Küchenrezept");
+    expect(verifyConfirmation).toContain("verifizieren und damit freigeben");
+    await act(async () => [...recipeSection.querySelectorAll("button")].find(button => button.textContent === "Abbrechen")!.click());
+    expect(review).toHaveBeenCalledTimes(1);
+    await act(async () => verify.click());
+    await act(async () => { [...recipeSection.querySelectorAll("button")].find(button => button.textContent === "Bestätigen")!.click(); await flush(); });
+    expect(review).toHaveBeenCalledTimes(2);
+    expect(review).toHaveBeenLastCalledWith("production", "new-library-recipe", "verify");
+  });
+
+  it("names an own upload's provenance without presenting it as approved", async () => {
+    const data = productionProductData(undefined, undefined, "case-a");
+    data.acceptedSpecs = [acceptedSpecSentinel("spec-a", "Aktiver Produktionsauftrag")];
+    data.recipes = [{ recipeId: "own-upload", name: "Eigenes Rezept in Prüfung",
+      schemaVersion: "1.0", source: { tier: "internal_approved", originType: "approved_import", reference: "synthetic-test", retrievedAt: "", approvalState: "review_required", qualityScore: 0.5, fitScore: 0.5, extractionCompleteness: 0.5 },
+      baseYield: { servings: 10, unit: "servings" }, ingredients: [], steps: [], scalingRules: { defaultLossFactor: 1 }, allergens: [], dietTags: [] }];
+    vi.spyOn(api, "loadProductionProductData").mockResolvedValue(data);
+    const { container } = await renderAt("/produktion?productionCaseId=case-a");
+    const summary = [...container.querySelectorAll("summary")].find(item => item.textContent?.includes("Rezepte verwalten"))!;
+    await act(async () => { summary.click(); await flush(); });
+    const row = [...summary.closest("details")!.querySelectorAll("li")].find(item => item.textContent?.includes("Eigenes Rezept in Prüfung"))!;
+    expect(row.textContent).toContain("Bibliotheksstatus: Prüfung nötig · Herkunft: eigene Rezeptsammlung");
+    expect(row.textContent).not.toContain("freigegeben");
   });
 
   it.each([
@@ -1409,6 +1437,41 @@ describe("independent product loader boundaries", () => {
     props.editorState = { ...props.editorState, answersEditable: true, canResetStaleEditor: false, editingSpecId: undefined };
     await act(async () => { root.render(createElement(ProductionQuestionPanel, props)); await flush(); });
     expect(container.textContent).toContain("Rückfragen beantworten");
+    await act(async () => root.unmount());
+    container.remove();
+  });
+
+  it("explains a disabled calculation beside it and leads to the already open answer fields", async () => {
+    const props = productionQuestionPanelProps("case-a");
+    props.questionState.productionQuestions = ["Herstellungsentscheidung fehlt"];
+    const createPlan = vi.fn(async () => undefined);
+    const saveSpecEdit = vi.fn(async () => undefined);
+    const beginSpecEdit = vi.fn();
+    props.editorActions = { ...props.editorActions, createPlan, saveSpecEdit, beginSpecEdit };
+    const container = document.body.appendChild(document.createElement("div"));
+    const root = createRoot(container);
+    await act(async () => { root.render(createElement(ProductionQuestionPanel, props)); await flush(); });
+    const actions = () => container.querySelector('[aria-label="Nächste Aktion für Rückfragen"]')!;
+    const calculate = [...actions().querySelectorAll("button")].find(button => button.textContent === "Berechnung starten")!;
+    expect(calculate.disabled).toBe(true);
+    const reason = actions().querySelector(`#${calculate.getAttribute("aria-describedby")}`);
+    expect(reason?.textContent).toContain("Rückfragen beantworten, bevor Mengen, Rezepte und Einkaufsliste berechnet werden.");
+    await act(async () => [...actions().querySelectorAll("button")].find(button => button.textContent === "Rückfragen beantworten")!.click());
+    expect(beginSpecEdit).toHaveBeenCalledOnce();
+
+    props.editorState = { ...props.editorState, editingSpecId: "spec-a" };
+    await act(async () => { root.render(createElement(ProductionQuestionPanel, props)); await flush(); });
+    // No mysterious grey button: a status with a link to the open fields instead.
+    expect([...actions().querySelectorAll("button")].some(button => button.textContent === "Rückfragen beantworten")).toBe(false);
+    expect(actions().textContent).toContain("Antwortfelder sind geöffnet.");
+    expect(actions().textContent).toContain("Ändere zuerst eine Angabe in den geöffneten Antwortfeldern.");
+    const link = [...actions().querySelectorAll("a")].find(anchor => anchor.textContent?.trim() === "Zu den Antwortfeldern")!;
+    await act(async () => link.click());
+    expect(document.activeElement?.id).toBe("production-answer-editor");
+    // The real bottom save remains; nothing was submitted by navigating.
+    expect([...container.querySelectorAll("button")].some(button => button.textContent === "Antworten speichern")).toBe(true);
+    expect(saveSpecEdit).not.toHaveBeenCalled();
+    expect(createPlan).not.toHaveBeenCalled();
     await act(async () => root.unmount());
     container.remove();
   });

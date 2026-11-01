@@ -68,6 +68,39 @@ describe("offer approval action", () => {
     ]);
   });
 
+  it("keeps only the server-persisted variant identity through approval and handoff", async () => {
+    const bindings: Array<Record<string, unknown>> = [];
+    const build = (approvedVariant: string | undefined, handoffVariant: string | undefined) => buildOfferApprovalAction({
+      decideOfferDraft: async () => ({ approvedOffer: { approvedOfferId: "offer-1", ...(approvedVariant ? { selectedVariantId: approvedVariant } : {}) } }),
+      createProductionHandoff: async () => ({ handoff: { handoffId: "handoff-1", ...(handoffVariant ? { source: { selectedVariantId: handoffVariant } } : {}) } }),
+      createProductionCaseFromHandoff: async () => ({ case: { caseId: "production-case-1" } }),
+      createProductionDraftFromHandoff: async () => ({ draft: { draftId: "production-draft-1" } }),
+      setActiveProductionCaseId: () => undefined,
+      clearActiveOfferCaseId: () => undefined,
+      setSubmitting: () => undefined,
+      clearMessages: () => undefined,
+      refreshDashboard: async () => undefined,
+      setNotice: () => undefined,
+      setError: () => undefined,
+      setApprovalBinding: (binding) => bindings.push(binding),
+      openProductionEntry: () => undefined
+    });
+
+    await build("variant-2", "variant-2").approve("draft-1", 2, "variant-2");
+    expect(bindings.at(-1)?.selectedVariantId).toBe("variant-2");
+    // A missing response field is never filled from the requested variant.
+    await build(undefined, undefined).approve("draft-1", 2, "variant-2");
+    expect(bindings.at(-1)).not.toHaveProperty("selectedVariantId");
+
+    await build(undefined, "variant-2").createHandoff("draft-1", 2, "offer-1", "variant-2");
+    expect(bindings.at(-1)).toMatchObject({ handoffId: "handoff-1", selectedVariantId: "variant-2" });
+    await build(undefined, undefined).createHandoff("draft-1", 2, "offer-1", "variant-2");
+    expect(bindings.at(-1)).toMatchObject({ handoffId: "handoff-1", selectedVariantId: "variant-2" });
+    await build(undefined, "variant-3").createHandoff("draft-1", 2, "offer-1", "variant-2");
+    expect(bindings.at(-1)?.handoffId).toBe("handoff-1");
+    expect(bindings.at(-1)).not.toHaveProperty("selectedVariantId");
+  });
+
   it("keeps the active offer case when the handoff flow fails and can be retried", async () => {
     const calls: string[] = [];
     const action = buildOfferApprovalAction({

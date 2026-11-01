@@ -2126,11 +2126,12 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Rezepte verwalten");
     expect(content).toContain("3 Rezepte · 1 freigegeben · 1 Prüfung nötig");
     expect(content).toContain("Freigegebenes Baguette");
-    expect(content).toContain("intern verifiziert · Bibliotheksstatus: intern freigegeben");
+    // Approval state first; the source tier is shown as provenance only.
+    expect(content).toContain("Bibliotheksstatus: intern freigegeben · Herkunft: eigene Rezeptsammlung, verifiziert");
     expect(content).toContain("Baguette in Prüfung");
-    expect(content).toContain("digitalisiertes Kochbuch · Bibliotheksstatus: Prüfung nötig");
+    expect(content).toContain("Bibliotheksstatus: Prüfung nötig · Herkunft: digitalisiertes Kochbuch");
     expect(content).toContain("Abgelehnte Baguette-Variante");
-    expect(content).toContain("Internet-Ausweichquelle · Bibliotheksstatus: abgelehnt");
+    expect(content).toContain("Bibliotheksstatus: abgelehnt · Herkunft: Internet-Ausweichquelle");
     expect(content).toContain("Freigeben");
     expect(content).toContain("Verifizieren");
     expect(content).toContain("Ablehnen");

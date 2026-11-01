@@ -118,7 +118,7 @@ describe("quantity workflow preview UI", () => {
     expect(button("Änderung übernehmen")).toBeDefined();
     await act(async () => root.render(createElement(ProductionQuantityWorkflowPanel, { caseId: "case-b" })));
     expect(document.querySelector('[aria-label="Mengenvorschau"]')).toBeNull();
-    expect((document.querySelector('input[aria-label="Hähnchenragout Menge pro Person"]') as HTMLInputElement).value).toBe("0.55");
+    expect((document.querySelector('input[aria-label="Hähnchenragout Menge pro Person"]') as HTMLInputElement).value).toBe("0,55");
     expect(confirmProductionQuantityOverride).not.toHaveBeenCalled();
     await act(async () => root.unmount());
   });
@@ -154,6 +154,62 @@ describe("quantity workflow preview UI", () => {
     expect(document.body.textContent).toContain("Anderes Gericht");
     expect(document.body.textContent).not.toContain(item.label);
     expect(previewProductionQuantityOverride).not.toHaveBeenCalled();
+    await act(async () => root.unmount());
+  });
+
+  it("shows the stored value in German notation and previews it unchanged without rounding", async () => {
+    const root = await mount();
+    const field = document.querySelector('input[aria-label="Hähnchenragout Menge pro Person"]') as HTMLInputElement;
+    expect(field.value).toBe("0,55");
+    vi.mocked(previewProductionQuantityOverride).mockResolvedValue(ready("preview-055", 55));
+    await act(async () => button("Änderung prüfen").click());
+    expect(previewProductionQuantityOverride).toHaveBeenCalledExactlyOnceWith("case-a", "chicken", { origin: "target_output", perUnitAmount: 0.55, unit: "servings" });
+    await act(async () => root.unmount());
+  });
+
+  it("renders preview and failures inside the affected component row and moves focus there", async () => {
+    const other: ProductionQuantityWorkflowItem = { ...item, componentId: "muffins", label: "Tortilla-Muffins" };
+    vi.mocked(fetchProductionQuantityWorkflow).mockResolvedValue({ items: [item, other] });
+    const root = createRoot(document.body.appendChild(document.createElement("div")));
+    await act(async () => root.render(createElement(ProductionQuantityWorkflowPanel, { caseId: "case-a" })));
+    const rows = () => Array.from(document.querySelectorAll('[data-testid="production-quantity-workflow"] > ul > li'));
+    vi.mocked(previewProductionQuantityOverride).mockResolvedValueOnce(ready("preview-060", 60)).mockRejectedValueOnce(new Error("409 Conflict"));
+    await change("0,6");
+    await act(async () => button("Änderung prüfen").click());
+    const preview = document.querySelector('[aria-label="Mengenvorschau"]')!;
+    expect(rows()[0].contains(preview)).toBe(true);
+    expect(rows()[1].contains(preview)).toBe(false);
+    expect(document.activeElement?.contains(preview)).toBe(true);
+
+    await change("0,9");
+    expect(rows()[0].querySelector('[role="status"]')?.textContent).toContain("Die Eingabe wurde geändert");
+    await act(async () => button("Änderung prüfen").click());
+    const failure = document.querySelector('[role="alert"]')!;
+    expect(rows()[0].contains(failure)).toBe(true);
+    expect(failure.textContent).toContain("409 Conflict");
+    expect(document.activeElement?.contains(failure)).toBe(true);
+
+    await change("0");
+    await act(async () => button("Änderung prüfen").click());
+    expect(rows()[0].querySelector('[role="alert"]')?.textContent).toContain("positive Menge");
+    expect(rows()[1].querySelector('[role="alert"]')).toBeNull();
+    expect(confirmProductionQuantityOverride).not.toHaveBeenCalled();
+    await act(async () => root.unmount());
+  });
+
+  it("shows a purchase quantity preview inside its purchase row", async () => {
+    const withPurchase: ProductionQuantityWorkflowItem = { ...item, purchaseRows: [
+      { rowId: "row-zimt", articleName: "Zimt", amount: 0.002, unit: "kg", editable: true, lineage: { ingredientId: "zimt" } } as ProductionQuantityWorkflowItem["purchaseRows"][number]
+    ] };
+    vi.mocked(fetchProductionQuantityWorkflow).mockResolvedValue({ items: [withPurchase] });
+    const root = createRoot(document.body.appendChild(document.createElement("div")));
+    await act(async () => root.render(createElement(ProductionQuantityWorkflowPanel, { caseId: "case-a" })));
+    const purchaseInput = document.querySelector('input[aria-label="Zimt Einkaufsmenge"]') as HTMLInputElement;
+    expect(purchaseInput.value).toBe("0,002");
+    vi.mocked(previewProductionQuantityOverride).mockResolvedValue(ready("preview-zimt", 55));
+    await act(async () => button("Einkaufsmenge prüfen").click());
+    expect(previewProductionQuantityOverride).toHaveBeenCalledExactlyOnceWith("case-a", "chicken", { origin: "purchase_ingredient", ingredientId: "zimt", amount: 0.002, unit: "kg" });
+    expect(purchaseInput.closest("li")!.querySelector('[aria-label="Mengenvorschau"]')).not.toBeNull();
     await act(async () => root.unmount());
   });
 
