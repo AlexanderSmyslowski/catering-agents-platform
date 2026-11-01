@@ -69,6 +69,7 @@ describe("recipe discovery service", () => {
       sourceRef: "test:kalbsbuletten",
       text: [
         "Kalbsbuletten",
+        "8 Portionen", // Synthetic fixture yield; not a product default.
         "Zutaten",
         "1 kg Kalbsgehacktes",
         "250 g Zwiebeln",

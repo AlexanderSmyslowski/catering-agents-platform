@@ -487,16 +487,8 @@ function routePayload(route: MutableRoute): unknown {
 }
 
 function recipeImportPayload(label: string) {
-  return {
-    recipeName: `Matrix Rezept ${label}`,
-    text: [
-      "Zutaten",
-      "1 kg Wasser",
-      "500 g Tomaten",
-      "Zubereitung",
-      "1. Alles erhitzen und abschmecken."
-    ].join("\n")
-  };
+  const text = ["8 Portionen", "Zutaten", "1 kg Wasser", "500 g Tomaten", "Zubereitung", "1. Alles erhitzen und abschmecken."].join("\n");
+  return { recipeName: `Matrix Rezept ${label}`, text, review: { text, servings: 8, confirmed: true } };
 }
 
 async function inject(

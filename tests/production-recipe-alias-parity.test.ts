@@ -77,6 +77,7 @@ describe("production recipe alias parity", () => {
       sourceRef: "test:middle-east-dip-vegan",
       text: [
         "Humus Tahini Dip vegan",
+        "8 Portionen", // Synthetic fixture yield; not a product default.
         "Zutaten",
         "1 kg Kichererbsen",
         "250 g Tahini",
@@ -94,6 +95,7 @@ describe("production recipe alias parity", () => {
       sourceRef: "test:vegetable-pan-vegan",
       text: [
         "Gemüsepfanne Zucchini Pilze Pak Choi vegan",
+        "8 Portionen",
         "Zutaten",
         "2 kg Zucchini",
         "1 kg Pilze",
@@ -112,6 +114,7 @@ describe("production recipe alias parity", () => {
       sourceRef: "test:vegetable-stir-fry-vegan",
       text: [
         "Vegetable Stir Fry with Pak Choi vegan",
+        "8 Portionen",
         "Zutaten",
         "2 kg Zucchini",
         "1 kg mushrooms",
@@ -130,6 +133,7 @@ describe("production recipe alias parity", () => {
       sourceRef: "test:tomato-soup-vegetarian",
       text: [
         "Tomato Soup vegetarian",
+        "8 Portionen",
         "Zutaten",
         "6 kg Tomaten",
         "1 kg Zwiebeln",
@@ -148,6 +152,7 @@ describe("production recipe alias parity", () => {
       sourceRef: "test:coffee-break-fruit-skewers",
       text: [
         "Fruit Skewers vegan",
+        "8 Portionen",
         "Zutaten",
         "3 kg Melone",
         "2 kg Trauben",
@@ -167,6 +172,7 @@ describe("production recipe alias parity", () => {
       sourceRef: "test:buffet-pasta-salad-fresh-vegetables",
       text: [
         "Pasta-Salat mit frischem Gemüse",
+        "8 Portionen",
         "Zutaten",
         "3 kg Pasta",
         "2 kg Tomaten",
@@ -186,6 +192,7 @@ describe("production recipe alias parity", () => {
       sourceRef: "test:buffet-potato-gratin-vegetarian",
       text: [
         "Potato Gratin vegetarian",
+        "8 Portionen",
         "Zutaten",
         "5 kg Kartoffeln",
         "2 l Sahne",
@@ -203,10 +210,11 @@ describe("production recipe alias parity", () => {
       sourceRef: "test:reception-mini-quiche-spinat-feta",
       text: [
         "Flying Bites Mini-Quiche Spinat Feta",
+        "8 Portionen",
         "Zutaten",
         "1 kg Spinat",
         "500 g Feta",
-        "12 Eier",
+        "12 pcs Eier",
         "1 kg Quiche-Teig",
         "Zubereitung",
         "1. Spinat und Feta vorbereiten.",
@@ -221,6 +229,7 @@ describe("production recipe alias parity", () => {
       sourceRef: "test:reception-tomaten-mozzarella-spiesse",
       text: [
         "Tomaten Mozzarella Spiesse vegetarisch",
+        "8 Portionen",
         "Zutaten",
         "1 kg Tomaten",
         "800 g Mozzarella",
@@ -239,6 +248,7 @@ describe("production recipe alias parity", () => {
       sourceRef: "test:lentil-stew-vegan",
       text: [
         "Lentil Stew vegan",
+        "8 Portionen",
         "Zutaten",
         "3 kg Linsen",
         "2 kg Karotten",
@@ -258,6 +268,7 @@ describe("production recipe alias parity", () => {
       sourceRef: "test:quick-lunch-almond-curry",
       text: [
         "Almond Curry with Basmati Rice vegan",
+        "8 Portionen",
         "Zutaten",
         "1 kg Gemüse",
         "400 g almonds",
@@ -277,6 +288,7 @@ describe("production recipe alias parity", () => {
       sourceRef: "test:quick-lunch-cabbage-carrot-salad",
       text: [
         "Coleslaw Cabbage Carrot Salad vegan",
+        "8 Portionen",
         "Zutaten",
         "2 kg Kraut",
         "1 kg Karotten",
@@ -295,6 +307,7 @@ describe("production recipe alias parity", () => {
       sourceRef: "test:antipasti-eggplant-rolls",
       text: [
         "Eggplant Rolls vegan",
+        "8 Portionen",
         "Zutaten",
         "4 kg Auberginen",
         "1 kg Tomaten",
@@ -312,6 +325,7 @@ describe("production recipe alias parity", () => {
       sourceRef: "test:dessert-chocolate-cake",
       text: [
         "Chocolate Cake vegan",
+        "8 Portionen",
         "Zutaten",
         "2 kg Mehl",
         "1 kg Zucker",
@@ -329,6 +343,7 @@ describe("production recipe alias parity", () => {
       sourceRef: "test:buffet-wild-herb-salad",
       text: [
         "Wild Herb Salad Parsley Vinaigrette vegan",
+        "8 Portionen",
         "Zutaten",
         "3 kg Wildkräuter",
         "800 g Petersilie",

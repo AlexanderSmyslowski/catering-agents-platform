@@ -630,11 +630,12 @@ describe("catering agents platform", () => {
       sourceRef: "test:recipe-parser-preparation-heading",
       text: [
         "Veal Meatballs with Braised Onions",
+        "8 Portionen", // Synthetic fixture yield; not a product default.
         "Ingredients",
         "1 kg minced veal",
         "250 g onions",
         "120 g breadcrumbs",
-        "2 eggs",
+        "2 pcs eggs",
         "Preparation",
         "1. Mix veal, breadcrumbs and eggs.",
         "2. Shape meatballs and fry with braised onions."
@@ -660,10 +661,11 @@ describe("catering agents platform", () => {
       sourceRef: "test:recipe-parser-zero-trust-review",
       text: [
         "Spinach Feta Quiche",
+        "8 Portionen",
         "Ingredients",
         "1 kg spinach",
         "500 g feta",
-        "12 eggs",
+        "12 pcs eggs",
         "1 l cream",
         "Preparation",
         "1. Mix everything.",
@@ -688,11 +690,12 @@ describe("catering agents platform", () => {
         sourceRef: "test:quick-lunch-veal-meatballs",
         text: [
           "Veal Meatballs with Braised Onions",
+          "8 Portionen",
           "Ingredients",
           "1 kg minced veal",
           "250 g onions",
           "120 g breadcrumbs",
-          "2 eggs",
+          "2 pcs eggs",
           "Preparation",
           "1. Mix veal, breadcrumbs and eggs.",
           "2. Shape meatballs and fry with braised onions."
@@ -704,6 +707,7 @@ describe("catering agents platform", () => {
         sourceRef: "test:quick-lunch-potato-salad",
         text: [
           "Potato Salad with Herbs",
+          "8 Portionen",
           "Ingredients",
           "1 kg potatoes",
           "250 g cucumber",
@@ -720,6 +724,7 @@ describe("catering agents platform", () => {
         sourceRef: "test:quick-lunch-pasta-salat",
         text: [
           "Pasta-Salat mit frischem Gemüse",
+          "8 Portionen",
           "Zutaten",
           "1 kg Pasta",
           "600 g Gurken",
@@ -736,6 +741,7 @@ describe("catering agents platform", () => {
         sourceRef: "test:quick-lunch-krautsalat",
         text: [
           "Krautsalat mit Apfel",
+          "8 Portionen",
           "Zutaten",
           "1 kg Weißkohl",
           "400 g Karotten",
@@ -752,6 +758,7 @@ describe("catering agents platform", () => {
         sourceRef: "test:quick-lunch-mandel-curry",
         text: [
           "Mandel-Curry mit Basmatireis vegan",
+          "8 Portionen",
           "Zutaten",
           "1 kg Gemüse",
           "400 g Mandeln",
@@ -768,6 +775,7 @@ describe("catering agents platform", () => {
         sourceRef: "test:quick-lunch-gemuesepfanne",
         text: [
           "Zucchini Pilze Zuckerschoten Baby-Pak-Choi vegan",
+          "8 Portionen",
           "Zutaten",
           "700 g Zucchini",
           "500 g Pilze",
@@ -784,6 +792,7 @@ describe("catering agents platform", () => {
         sourceRef: "test:quick-lunch-wildkraeutersalat",
         text: [
           "Wildkräutersalat mit Petersilien-Vinaigrette vegan",
+          "8 Portionen",
           "Zutaten",
           "600 g Wildkräuter",
           "120 g Petersilie",
@@ -799,6 +808,7 @@ describe("catering agents platform", () => {
         sourceRef: "test:quick-lunch-schokoladenkuchen",
         text: [
           "Veganer Schokoladenkuchen",
+          "8 Portionen",
           "Zutaten",
           "500 g Mehl",
           "300 g Zucker",
@@ -922,10 +932,11 @@ describe("catering agents platform", () => {
         sourceRef: "test:reception-mini-quiche-spinat-feta",
         text: [
           "Flying Bites Mini-Quiche Spinat Feta",
+          "8 Portionen",
           "Zutaten",
           "1 kg Spinat",
           "500 g Feta",
-          "12 Eier",
+          "12 pcs Eier",
           "1 kg Quiche-Teig",
           "Zubereitung",
           "1. Spinat und Feta vorbereiten.",
@@ -938,6 +949,7 @@ describe("catering agents platform", () => {
         sourceRef: "test:reception-hummus-gemuese-cups",
         text: [
           "Hummus Gemüse Cups vegan",
+          "8 Portionen",
           "Zutaten",
           "1 kg Kichererbsen",
           "250 g Tahini",
@@ -954,6 +966,7 @@ describe("catering agents platform", () => {
         sourceRef: "test:reception-tomaten-mozzarella-spiesse",
         text: [
           "Tomaten Mozzarella Spiesse vegetarisch",
+          "8 Portionen",
           "Zutaten",
           "1 kg Tomaten",
           "800 g Mozzarella",
@@ -970,6 +983,7 @@ describe("catering agents platform", () => {
         sourceRef: "test:reception-brownie-bites",
         text: [
           "Brownie Bites",
+          "8 Portionen",
           "Zutaten",
           "500 g Mehl",
           "400 g Schokolade",
@@ -1081,6 +1095,7 @@ describe("catering agents platform", () => {
         sourceRef: "test:business-buffet-tomatensuppe",
         text: [
           "Tomatensuppe mit Basilikum",
+          "8 Portionen",
           "Zutaten",
           "4 kg Tomaten",
           "800 g Zwiebeln",
@@ -1098,10 +1113,11 @@ describe("catering agents platform", () => {
         sourceRef: "test:business-buffet-quiche-spinat-feta",
         text: [
           "Quiche Spinat Feta",
+          "8 Portionen",
           "Zutaten",
           "2 kg Spinat",
           "900 g Feta",
-          "18 Eier",
+          "18 pcs Eier",
           "1 l Sahne",
           "Zubereitung",
           "1. Füllung mischen.",
@@ -1114,6 +1130,7 @@ describe("catering agents platform", () => {
         sourceRef: "test:business-buffet-panna-cotta",
         text: [
           "Panna Cotta mit Beerenspiegel",
+          "8 Portionen",
           "Zutaten",
           "3 l Sahne",
           "500 g Zucker",
@@ -1400,23 +1417,26 @@ describe("catering agents platform", () => {
       dataRoot
     });
 
+    const reviewedRecipeText = [
+      "Wildkräutersalat mit Petersilien-Vinaigrette",
+      "8 Portionen",
+      "Zutaten",
+      "500 g Wildkräuter",
+      "120 ml Olivenöl",
+      "40 ml Zitronensaft",
+      "1 pcs Bund Petersilie",
+      "Zubereitung",
+      "1. Wildkräuter waschen.",
+      "2. Petersilie fein hacken und mit Öl und Zitronensaft verrühren.",
+      "3. Vor dem Service mischen."
+    ].join("\n");
     const uploadResponse = await productionApp.inject({
       method: "POST",
       url: "/v1/production/recipes/import-text",
       payload: {
         recipeName: "Wildkräutersalat mit Petersilien-Vinaigrette",
-        text: [
-          "Wildkräutersalat mit Petersilien-Vinaigrette",
-          "Zutaten",
-          "500 g Wildkräuter",
-          "120 ml Olivenöl",
-          "40 ml Zitronensaft",
-          "1 Bund Petersilie",
-          "Zubereitung",
-          "1. Wildkräuter waschen.",
-          "2. Petersilie fein hacken und mit Öl und Zitronensaft verrühren.",
-          "3. Vor dem Service mischen."
-        ].join("\n")
+        text: reviewedRecipeText,
+        review: { text: reviewedRecipeText, servings: 8, confirmed: true }
       }
     });
 
@@ -1694,6 +1714,7 @@ describe("catering agents platform", () => {
         sourceRef: "test:coffee-break-blueberry-mini-muffins",
         text: [
           "Blueberry Mini Muffins",
+          "8 Portionen",
           "Zutaten",
           "800 g Mehl",
           "500 g Blaubeeren",
@@ -1710,6 +1731,7 @@ describe("catering agents platform", () => {
         sourceRef: "test:coffee-break-fruit-skewers",
         text: [
           "Fruit Skewers vegan",
+          "8 Portionen",
           "Zutaten",
           "3 kg Melone",
           "2 kg Trauben",
@@ -2315,10 +2337,11 @@ describe("catering agents platform", () => {
         sourceRef: "test:quiche-spinat-schafskaese",
         text: [
           "Quiche Spinat Schafskäse 1:1 GN",
+          "8 Portionen",
           "Zutaten",
           "1 kg Spinat",
           "500 g Feta",
-          "12 Eier",
+          "12 pcs Eier",
           "1 l Sahne",
           "Zubereitung",
           "1. Alles mischen.",
@@ -2363,12 +2386,13 @@ describe("catering agents platform", () => {
         sourceRef: "test:mandel-orangen-kuchen-vegan",
         text: [
           "Mandel-Orangen-Kuchen (vegan)",
+          "8 Portionen",
           "Zutaten",
           "500 g Mehl",
           "300 g Zucker",
           "300 ml Pflanzenmilch",
           "200 g Mandeln",
-          "3 Orangen",
+          "3 pcs Orangen",
           "Zubereitung",
           "1. Alles mischen.",
           "2. Backen."
@@ -2415,10 +2439,11 @@ describe("catering agents platform", () => {
         sourceRef: "test:ananas-salat",
         text: [
           "Ananas Salat",
+          "8 Portionen",
           "Zutaten",
-          "1 Ananas",
-          "1 Gurke",
-          "1 rote Zwiebel",
+          "1 pcs Ananas",
+          "1 pcs Gurke",
+          "1 pcs rote Zwiebel",
           "Zubereitung",
           "1. Alles klein schneiden.",
           "2. Marinieren."
@@ -2460,6 +2485,7 @@ describe("catering agents platform", () => {
         sourceRef: "test:krautsalat-mit-apfel",
         text: [
           "Krautsalat mit Apfel",
+          "8 Portionen",
           "Zutaten",
           "1 kg Weißkohl",
           "400 g Karotten",
@@ -2480,11 +2506,12 @@ describe("catering agents platform", () => {
         sourceRef: "test:wintersalat",
         text: [
           "Winterlicher Karotten-Apfel-Fenchel-Radicchio-Salat",
+          "8 Portionen",
           "Zutaten",
           "400 g Karotten",
           "300 g Apfel",
-          "1 Fenchel",
-          "1 Radicchio",
+          "1 pcs Fenchel",
+          "1 pcs Radicchio",
           "Zubereitung",
           "1. Gemüse fein schneiden.",
           "2. Alles mischen."
@@ -2531,6 +2558,7 @@ describe("catering agents platform", () => {
         sourceRef: "test:pasta-salat-frisch",
         text: [
           "Pasta-Salat mit frischem Gemüse",
+          "8 Portionen",
           "Zutaten",
           "1 kg Pasta",
           "600 g Gurken",
@@ -2585,6 +2613,7 @@ describe("catering agents platform", () => {
         sourceRef: "test:potato-salad-herbs",
         text: [
           "Potato Salad with Herbs",
+          "8 Portionen",
           "Ingredients",
           "1 kg potatoes",
           "200 g cucumber",
@@ -2639,11 +2668,12 @@ describe("catering agents platform", () => {
         sourceRef: "test:veal-meatballs-braised-onions",
         text: [
           "Veal Meatballs with Braised Onions",
+          "8 Portionen",
           "Ingredients",
           "1 kg minced veal",
           "200 g onions",
           "100 g breadcrumbs",
-          "2 eggs",
+          "2 pcs eggs",
           "Preparation",
           "1. Mix veal with breadcrumbs and eggs.",
           "2. Shape meatballs and fry with onions."
@@ -2697,6 +2727,7 @@ describe("catering agents platform", () => {
         sourceRef: "test:eggplant-ricotta-rolls",
         text: [
           "Eggplant Ricotta Rolls",
+          "8 Portionen",
           "Ingredients",
           "1 kg eggplant",
           "500 g ricotta",
@@ -2753,6 +2784,7 @@ describe("catering agents platform", () => {
         sourceRef: "test:humus-tahini-dip-vegan",
         text: [
           "Humus Tahini Dip vegan",
+          "8 Portionen",
           "Zutaten",
           "1 kg Kichererbsen",
           "250 g Tahini",
@@ -2802,6 +2834,7 @@ describe("catering agents platform", () => {
         sourceRef: "test:vegetable-pan-vegan",
         text: [
           "Gemüsepfanne Zucchini Pilze Pak Choi vegan",
+          "8 Portionen",
           "Zutaten",
           "2 kg Zucchini",
           "1 kg Pilze",
@@ -3492,20 +3525,23 @@ describe("catering agents platform", () => {
       rootDir: dataRoot
     });
 
+    const reviewedRecipeText = [
+      "Smoked Pepper Dip",
+      "8 Portionen",
+      "Ingredients",
+      "500 g Paprika",
+      "200 ml Olive Oil",
+      "Instructions",
+      "1. Blend ingredients.",
+      "2. Chill before service."
+    ].join("\n");
     const uploadResponse = await offerApp.inject({
       method: "POST",
       url: "/v1/offers/recipes/import-text",
       payload: {
         recipeName: "Smoked Pepper Dip",
-        text: [
-          "Smoked Pepper Dip",
-          "Ingredients",
-          "500 g Paprika",
-          "200 ml Olive Oil",
-          "Instructions",
-          "1. Blend ingredients.",
-          "2. Chill before service."
-        ].join("\n")
+        text: reviewedRecipeText,
+        review: { text: reviewedRecipeText, servings: 8, confirmed: true }
       }
     });
 
@@ -3964,22 +4000,25 @@ describe("catering agents platform", () => {
       rootDir: dataRoot
     });
 
+    const reviewedRecipeText = [
+      "Humus Bowl",
+      "8 Portionen",
+      "Zutaten",
+      "500 g Kichererbsen",
+      "150 ml Olivenoel",
+      "2 pcs Zitronen",
+      "Zubereitung",
+      "1. Kichererbsen mixen.",
+      "2. Olivenoel und Zitronensaft zugeben.",
+      "3. Abschmecken und kalt stellen."
+    ].join("\n");
     const uploadResponse = await offerApp.inject({
       method: "POST",
       url: "/v1/offers/recipes/import-text",
       payload: {
         recipeName: "Humus Bowl",
-        text: [
-          "Humus Bowl",
-          "Zutaten",
-          "500 g Kichererbsen",
-          "150 ml Olivenoel",
-          "2 pcs Zitronen",
-          "Zubereitung",
-          "1. Kichererbsen mixen.",
-          "2. Olivenoel und Zitronensaft zugeben.",
-          "3. Abschmecken und kalt stellen."
-        ].join("\n")
+        text: reviewedRecipeText,
+        review: { text: reviewedRecipeText, servings: 8, confirmed: true }
       }
     });
 
@@ -4036,22 +4075,25 @@ describe("catering agents platform", () => {
       dataRoot
     });
 
+    const reviewedRecipeText = [
+      "Tomatensalsa",
+      "8 Portionen",
+      "Ingredients",
+      "1 kg Tomatoes",
+      "200 g Onion",
+      "100 ml Olive Oil",
+      "Instructions",
+      "1. Dice tomatoes and onion.",
+      "2. Mix with olive oil.",
+      "3. Chill before service."
+    ].join("\n");
     const uploadResponse = await productionApp.inject({
       method: "POST",
       url: "/v1/production/recipes/import-text",
       payload: {
         recipeName: "Tomatensalsa",
-        text: [
-          "Tomatensalsa",
-          "Ingredients",
-          "1 kg Tomatoes",
-          "200 g Onion",
-          "100 ml Olive Oil",
-          "Instructions",
-          "1. Dice tomatoes and onion.",
-          "2. Mix with olive oil.",
-          "3. Chill before service."
-        ].join("\n")
+        text: reviewedRecipeText,
+        review: { text: reviewedRecipeText, servings: 8, confirmed: true }
       }
     });
 

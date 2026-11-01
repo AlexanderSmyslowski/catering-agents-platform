@@ -1,4 +1,4 @@
-import type { RecipeNumberFormat } from "../../shared-core/src/recipe-library.js";
+import type { RecipeNumberFormat, RecipeImportReview } from "../../shared-core/src/recipe-library.js";
 import type {
   RecipeReviewDecision,
   RecipeUploadTarget
@@ -6,7 +6,7 @@ import type {
 import { formatSubmitErrorMessage } from "./submit-error-message.js";
 
 export type ProductionRecipeSubmissionActionServices = {
-  uploadRecipeFile: (target: RecipeUploadTarget, file: File, recipeName?: string, numberFormat?: RecipeNumberFormat) => Promise<unknown>;
+  uploadRecipeFile: (target: RecipeUploadTarget, file: File, recipeName?: string, numberFormat?: RecipeNumberFormat, review?: RecipeImportReview) => Promise<unknown>;
   reviewRecipe: (
     target: RecipeUploadTarget,
     recipeId: string,
@@ -33,8 +33,10 @@ export type ProductionRecipeSubmissionActionsInput =
   ProductionRecipeSubmissionActionState &
   ProductionRecipeSubmissionActionCallbacks;
 
+export type RecipeImportSaveResult = { saved: boolean; message?: string };
+
 export type ProductionRecipeSubmissionActions = {
-  handleRecipeUpload: (target: RecipeUploadTarget, numberFormat?: RecipeNumberFormat) => Promise<void>;
+  handleRecipeUpload: (target: RecipeUploadTarget, numberFormat?: RecipeNumberFormat, review?: RecipeImportReview) => Promise<RecipeImportSaveResult>;
   handleRecipeReview: (
     target: RecipeUploadTarget,
     recipeId: string,
@@ -55,22 +57,32 @@ export function buildProductionRecipeSubmissionActions({
   setError
 }: ProductionRecipeSubmissionActionsInput): ProductionRecipeSubmissionActions {
   return {
-    handleRecipeUpload: async (target, numberFormat) => {
+    handleRecipeUpload: async (target, numberFormat, review) => {
       if (!recipeFile) {
         setError("Bitte wähle zuerst eine Rezeptdatei aus.");
-        return;
+        return { saved: false, message: "Bitte wähle zuerst eine Rezeptdatei aus." };
       }
 
       setSubmitting(true);
       clearMessages();
+      let saved = false;
       try {
-        if (numberFormat) await uploadRecipeFile(target, recipeFile, recipeName, numberFormat);
+        if (review) await uploadRecipeFile(target, recipeFile, recipeName, numberFormat, review);
+        else if (numberFormat) await uploadRecipeFile(target, recipeFile, recipeName, numberFormat);
         else await uploadRecipeFile(target, recipeFile, recipeName);
+        saved = true;
         clearRecipeUploadDraft();
         await refreshDashboard();
         setNotice("Rezeptdatei wurde in die gemeinsame Bibliothek übernommen.");
+        return { saved: true };
       } catch (submitError) {
-        setError(formatSubmitErrorMessage(submitError, "Rezept konnte nicht hochgeladen werden."));
+        if (saved) {
+          setNotice("Rezept wurde gespeichert. Die Ansicht konnte nicht neu geladen werden – bitte aktualisieren, nicht erneut hochladen.");
+          return { saved: true };
+        }
+        const message = formatSubmitErrorMessage(submitError, "Rezept konnte nicht hochgeladen werden.");
+        if (!review) setError(message);
+        return { saved: false, message };
       } finally {
         setSubmitting(false);
       }

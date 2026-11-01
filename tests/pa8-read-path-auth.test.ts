@@ -101,19 +101,22 @@ describe("PA8 read-path auth hardening", () => {
       expect(seedResponse.statusCode).toBe(201);
       const [{ draftId }] = seedResponse.json<{ seeded: Array<{ draftId: string }> }>().seeded;
 
+      const text = [
+            "PA8 Test Rezept",
+            "8 Portionen",
+            "Zutaten",
+            "500 g Wasser",
+            "Zubereitung",
+            "1. Wasser kochen."
+          ].join("\n");
       const recipeResponse = await app.inject({
         method: "POST",
         url: "/v1/offers/recipes/import-text",
         headers: trustedHeaders("Angebots-Mitarbeiter"),
         payload: {
           recipeName: "PA8 Test Rezept",
-          text: [
-            "PA8 Test Rezept",
-            "Zutaten",
-            "500 g Wasser",
-            "Zubereitung",
-            "1. Wasser kochen."
-          ].join("\n")
+          text: text,
+          review: { text, servings: 8, confirmed: true }
         }
       });
       expect(recipeResponse.statusCode).toBe(201);

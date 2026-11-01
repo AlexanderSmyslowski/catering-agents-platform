@@ -328,7 +328,7 @@ function tokensSpecificallyMatch(left: string, right: string): boolean {
 
 function normalizeUnit(unit?: string): string {
   if (!unit) {
-    return "pcs";
+    throw recipeInputError("Eine Zutat hat keine Einheit. Bitte g, kg, ml, l, Stück, EL oder TL ausdrücklich angeben.");
   }
 
   return unitNormalization[unit.toLowerCase()] ?? unit.toLowerCase();
@@ -341,7 +341,7 @@ function recipeInputError(message: string): Error & { statusCode: number } {
 }
 
 function parseAmount(token?: string, numberFormat?: RecipeNumberFormat): number {
-  if (!token) return 1;
+  if (!token) throw recipeInputError("Eine Zutat hat keine feste Planmenge. Bitte die Menge ausdrücklich angeben.");
   let value = token.trim();
   const invalid = () => recipeInputError(`Menge „${value}“ ist nicht eindeutig. Bitte das Zahlenformat wählen oder die Menge ohne Tausendertrennzeichen schreiben.`);
   if (/\s/u.test(value)) {
@@ -403,18 +403,7 @@ function parseIngredientLine(line: string, index: number, numberFormat?: RecipeN
   );
 
   if (!match) {
-    if (/\d/u.test(cleaned)) throw recipeInputError(`Menge in „${cleaned}“ ist nicht eindeutig. Bitte jede Zutat mit einer festen Planmenge in einer eigenen Zeile angeben.`);
-    return {
-      ingredientId: `${slugify(cleaned)}-${index + 1}`,
-      name: cleaned,
-      quantity: {
-        amount: 1,
-        unit: "pcs"
-      },
-      group: ingredientGroupFor(cleaned),
-      purchaseUnit: "pcs",
-      normalizedUnit: "pcs"
-    };
+    throw recipeInputError(`Menge in „${cleaned}“ ist nicht eindeutig. Bitte jede Zutat mit einer festen Planmenge und Einheit in einer eigenen Zeile angeben.`);
   }
 
   const amount = parseAmount(match[1], numberFormat);
@@ -439,6 +428,7 @@ function parseIngredientLine(line: string, index: number, numberFormat?: RecipeN
 
 function isIngredientLine(line: string): boolean {
   const cleaned = line.trim();
+  if (/^(?:\d+\s*(?:portionen?|portions?|servings?|personen|gaeste|gäste|people|pax|yield)\b|(?:portionen?|portions?|servings?|personen|gaeste|gäste|people|pax|yield)\s*:?\s*\d)/iu.test(cleaned)) return false;
   return !isInstructionLine(cleaned) &&
     /^[•*-\s]*[\d.,/]+\s*(kg|g|ml|l|pcs|stück|stueck|el|tl)?\s+\S+/i.test(cleaned);
 }
@@ -616,7 +606,7 @@ function servingsFromText(text: string): number {
   const hasYieldHint = hintLines.length > 0;
 
   if (!hasYieldHint) {
-    return 8;
+    throw recipeInputError("Originalportionen fehlen. Bitte die Anzahl der Portionen aus der Vorlage ausdrücklich bestätigen.");
   }
 
   if (candidates.length === 0 || candidates.some((candidate) => !Number.isSafeInteger(candidate) || candidate <= 0)) {
@@ -682,6 +672,52 @@ function detectDietTags(text: string): string[] {
   return [...tags];
 }
 
+export type RecipeImportReview = {
+  text: string;
+  servings: number;
+  confirmed: boolean;
+};
+
+export type RecipeImportPreview = {
+  text: string;
+  servings?: number;
+  issue?: string;
+};
+
+function validateRecipeImportReview(value: unknown): RecipeImportReview {
+  const review = value as Partial<RecipeImportReview> | null;
+  if (!review || typeof review !== "object" || review.confirmed !== true) {
+    throw recipeInputError("Bitte Mengen, Einheiten und Originalportionen mit der Vorlage vergleichen und bestätigen.");
+  }
+  if (typeof review.text !== "string" || !review.text.trim() || Buffer.byteLength(review.text, "utf8") > 64 * 1024) {
+    throw recipeInputError("Der korrigierte Rezepttext muss ausgefüllt sein und darf höchstens 64 KB groß sein.");
+  }
+  if (!Number.isSafeInteger(review.servings) || review.servings! < 1 || review.servings! > 9999) {
+    throw recipeInputError("Bitte eine ganze Anzahl Originalportionen zwischen 1 und 9999 angeben.");
+  }
+  return review as RecipeImportReview;
+}
+
+export function parseRecipeUploadReview(value: string | undefined): RecipeImportReview | undefined {
+  if (value === undefined) return undefined;
+  let parsed: unknown;
+  try { parsed = JSON.parse(value); } catch { throw recipeInputError("Die Rezeptkorrektur ist unvollständig. Bitte erneut prüfen."); }
+  return validateRecipeImportReview(parsed);
+}
+
+/** Preview deliberately returns the extracted source, even when parsing needs
+ * correction. Nothing here creates a recipe with an invented base yield. */
+export function prepareRecipeImportPreview(input: {
+  text: string;
+  numberFormat?: RecipeNumberFormat;
+}): RecipeImportPreview {
+  const preview: RecipeImportPreview = { text: input.text };
+  try { preview.servings = servingsFromText(input.text); } catch { /* Missing/ambiguous yield stays unset. */ }
+  try { parseUploadedRecipeText(input); }
+  catch (error) { preview.issue = error instanceof Error ? error.message : "Bitte den Rezepttext prüfen."; }
+  return preview;
+}
+
 export function parseUploadedRecipeText(input: {
   text: string;
   filename?: string;
@@ -689,6 +725,7 @@ export function parseUploadedRecipeText(input: {
   sourceRef?: string;
   sourceMetadata?: UploadSourceMetadata;
   numberFormat?: RecipeNumberFormat;
+  review?: RecipeImportReview;
 }): Recipe {
   if (typeof input?.text !== "string" || !input.text.trim()) {
     throw recipeInputError("Rezepttext fehlt. Bitte eine Datei mit Zutaten, Mengen und Zubereitung auswählen.");
@@ -696,11 +733,13 @@ export function parseUploadedRecipeText(input: {
   if (input.numberFormat !== undefined && input.numberFormat !== "de" && input.numberFormat !== "en") {
     throw recipeInputError("Zahlenformat ist ungültig. Bitte Deutsch oder Englisch wählen.");
   }
-  const text = input.text.trim();
+  const review = input.review === undefined ? undefined : validateRecipeImportReview(input.review);
+  const text = (review?.text ?? input.text).trim();
 
   const sections = splitSections(text);
   const name = recipeNameFromText(text, input.filename, input.recipeName);
-  const servings = servingsFromText(text);
+  // An explicit reviewed count is an operator correction, not inferred yield.
+  const servings = review?.servings ?? servingsFromText(text);
   const ingredientsSource =
     sections.ingredients.length > 0 ? sections.ingredients : sections.notes.filter(isIngredientLine);
   const ingredients = ingredientsSource
@@ -739,7 +778,7 @@ export function parseUploadedRecipeText(input: {
 
   return validateRecipe({
     schemaVersion: SCHEMA_VERSION,
-    recipeId: `upload-${slugify(name)}-${createHash("sha1").update(`${input.filename ?? ""}:${input.numberFormat ? input.numberFormat + ":" : ""}${text}`).digest("hex").slice(0, 10)}`,
+    recipeId: `upload-${slugify(name)}-${createHash("sha1").update(`${input.filename ?? ""}:${input.numberFormat ? input.numberFormat + ":" : ""}${review ? `reviewed-${servings}:${createHash("sha256").update(input.text).digest("hex")}:${input.sourceMetadata?.sha256 ?? ""}:${input.sourceRef ?? ""}:` : ""}${text}`).digest("hex").slice(0, 10)}`,
     name,
     source: {
       tier: "internal_approved",
@@ -751,7 +790,7 @@ export function parseUploadedRecipeText(input: {
       fitScore: 1,
       extractionCompleteness: coverageScore,
       licenseNote:
-        "Menschlich hochgeladene interne Rezeptquelle. Automatisch extrahierte Zutaten, Allergene und Diet-Tags erfordern Review vor operativer Nutzung." + (input.numberFormat ? ` Gewähltes Zahlenformat: ${input.numberFormat}.` : ""),
+        "Menschlich hochgeladene interne Rezeptquelle. Automatisch extrahierte Zutaten, Allergene und Diet-Tags erfordern Review vor operativer Nutzung." + (input.numberFormat ? ` Gewähltes Zahlenformat: ${input.numberFormat}.` : "") + (review ? ` Originalportionen nach Sichtprüfung: ${servings}. Rezepttext vor Übernahme korrigiert/bestätigt.` : ""),
       ...(input.sourceMetadata ? { sourceMetadata: input.sourceMetadata } : {})
     },
     baseYield: {
@@ -765,7 +804,7 @@ export function parseUploadedRecipeText(input: {
       batchSize: servings
     },
     allergens: [
-      ...new Set([...detectAllergens(text), ...detectAllergens(sections.allergens.join(" "))])
+      ...new Set([...detectAllergens(input.text), ...detectAllergens(text), ...detectAllergens(sections.allergens.join(" "))])
     ],
     dietTags: [
       ...new Set([...detectDietTags(text), ...detectDietTags(sections.diets.join(" "))])

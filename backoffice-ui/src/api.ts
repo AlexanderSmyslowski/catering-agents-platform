@@ -1,4 +1,4 @@
-import type { RecipeNumberFormat } from "../../shared-core/src/recipe-library.js";
+import type { RecipeNumberFormat, RecipeImportReview, RecipeImportPreview } from "../../shared-core/src/recipe-library.js";
 import type { PurchasedQuantity } from "../../shared-core/src/purchased-quantities.js";
 import type {
   ApprovedOffer,
@@ -1201,13 +1201,16 @@ export async function createProductionClarificationFollowup(draftId: string, inp
   );
 }
 
-export async function uploadRecipeFile(
+async function requestRecipeFile(
   target: RecipeUploadTarget,
   file: File,
   recipeName?: string,
-  numberFormat?: RecipeNumberFormat
+  numberFormat?: RecipeNumberFormat,
+  review?: RecipeImportReview,
+  preview = false
 ) {
   const formData = new FormData();
+  if (review) formData.append("review", JSON.stringify(review));
   if (numberFormat) formData.append("numberFormat", numberFormat);
   if (recipeName?.trim()) {
     formData.append("recipeName", recipeName.trim());
@@ -1223,14 +1226,26 @@ export async function uploadRecipeFile(
     method: "POST",
     body: formData
   }, { sessionBound: true });
-  const response = await fetch(endpoint, requestInit);
+  const response = await fetch(preview ? `${endpoint}?preview=true` : endpoint, requestInit);
   assertCateringSessionBoundResponse(response, requestInit.signal);
 
   if (!response.ok) {
     throw new Error(await responseErrorMessage(response));
   }
 
-  return (await response.json()) as { recipe: Record<string, unknown> };
+  return (await response.json()) as { recipe?: Record<string, unknown>; preview?: RecipeImportPreview };
+}
+
+export async function uploadRecipeFile(target: RecipeUploadTarget, file: File, recipeName?: string, numberFormat?: RecipeNumberFormat, review?: RecipeImportReview): Promise<{ recipe: Record<string, unknown> }> {
+  const result = await requestRecipeFile(target, file, recipeName, numberFormat, review);
+  if (!result.recipe) throw new Error("Der gespeicherte Rezeptstand konnte nicht gelesen werden. Bitte die Bibliothek prüfen, bevor du erneut hochlädst.");
+  return { recipe: result.recipe };
+}
+
+export async function previewRecipeFile(file: File, recipeName?: string, numberFormat?: RecipeNumberFormat): Promise<RecipeImportPreview> {
+  const result = await requestRecipeFile("production", file, recipeName, numberFormat, undefined, true);
+  if (!result.preview || typeof result.preview.text !== "string") throw new Error("Die Rezeptvorschau konnte nicht gelesen werden. Bitte erneut versuchen.");
+  return result.preview;
 }
 
 export function readMiniPilotRawResult(): string {

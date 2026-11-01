@@ -4,6 +4,9 @@ import {
   extractTextFromDocument,
   multipartLimitsForUpload,
   parseUploadedRecipeText,
+  parseRecipeUploadReview,
+  prepareRecipeImportPreview,
+  type RecipeImportReview,
   readLimitedUploadBuffer,
   uploadErrorResponse,
   validateUploadedDocument,
@@ -20,6 +23,7 @@ interface RecipeTextImportBody {
   sourceRef?: string;
   sourceMetadata?: ReturnType<typeof createUploadSourceMetadata>;
   numberFormat?: "de" | "en";
+  review?: RecipeImportReview;
 }
 
 interface RecipeReviewBody {
@@ -104,6 +108,7 @@ async function recipeImportFromMultipart(
     recipeName: multipartFieldValue(file.fields, "recipeName"),
     numberFormat: multipartFieldValue(file.fields, "numberFormat") as "de" | "en" | undefined,
     sourceRef: multipartFieldValue(file.fields, "sourceRef"),
+    review: parseRecipeUploadReview(multipartFieldValue(file.fields, "review")),
     sourceMetadata: createUploadSourceMetadata({
       filename: file.filename,
       mimeType: file.mimetype,
@@ -164,6 +169,7 @@ export function registerProductionRecipeRoutes(
     }
 
     const recipe = parseUploadedRecipeText(request.body);
+    if (!request.body.review) return reply.code(422).send({ message: "Bitte Rezepttext, Mengen und Originalportionen vor dem Speichern prüfen und bestätigen." });
     const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
     await repository.save(actor, recipe);
     await auditLog.logFor(actor, {
@@ -189,8 +195,16 @@ export function registerProductionRecipeRoutes(
     }
 
     try {
+      const query = request.query as { preview?: string };
+      if (query.preview !== undefined && query.preview !== "true") {
+        return reply.code(422).send({ message: "Unbekannter Vorschauauftrag. Bitte die Datei erneut einlesen." });
+      }
       const payload = await recipeImportFromMultipart(request);
+      if (query.preview === "true") {
+        return reply.send({ preview: prepareRecipeImportPreview(payload) });
+      }
       const recipe = parseUploadedRecipeText(payload);
+      if (!payload.review) return reply.code(422).send({ message: "Bitte zuerst die Vorschau prüfen und Mengen sowie Originalportionen bestätigen." });
       const actor = actorForRequest(request, trustedActorSecret, allowDevActorHeader);
       await repository.save(actor, recipe);
       await auditLog.logFor(actor, {
