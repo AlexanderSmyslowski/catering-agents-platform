@@ -21,7 +21,7 @@ npm run build
 `npm test` ist der primaere Regressionslauf fuer den aktuellen MVP-Kern.  
 `npm run build` ist der Build-/TypeScript-/Frontend-Build-Gate, besonders nach Aenderungen an TypeScript, UI oder Package-Konfiguration.
 
-### GitHub-CI: gezielte Operationsregression
+### GitHub-CI: Produkt- und Operationsregression
 
 Die vier bestehenden CI-Jobs bleiben Pflicht: Build/Test, Linux- und macOS-
 Operatorpruefungen, Browser-Rehearsal und Compose-Paritaet (Linux-Operator im
@@ -32,9 +32,21 @@ Build/Test-Job). Nur der Umfang des Vitest-Schritts wird ausgewaehlt:
   laufen die fuenf bestehenden Python-Acceptance-Sets sowie alle acht
   `tests/catering-target-*.test.ts`-Vertraege. Die dort benannten vier
   Begleitdokumente duerfen gemeinsam mit einem solchen Operatorpatch wechseln.
-- Produktcode, Auth, Schema, Pakete, Shell-/JS-Runner, CI selbst und alle anderen
-  Pfade behalten `npm test` mit der vollstaendigen Suite. Reine Doku-Aenderungen,
-  neue/entfernte/verschobene Dateien und Typwechsel ebenfalls.
+- Bei ausschliesslichen Produkt-Aenderungen laufen alle Vitest-Tests ausser den
+  sechs explizit benannten historischen Infrastruktur-/Migrationssuiten in
+  `MIGRATION_TEST_FILES`. Dazu zaehlen TS/TSX/CSS unter den sechs Produkt-`src`-
+  Verzeichnissen, direkte `tests/*.test.ts(x)`, DOM-Rehearsals unter
+  `scripts/browser-rehearsal/*.js` und wenige namentlich erlaubte Begleitdokumente.
+  Mindestens eine solche Produkt-, Test- oder Rehearsaldatei muss betroffen sein;
+  Dokumentation allein reicht nicht. Neue regulaere Produktdateien sind
+  eingeschlossen, Symlinks und Gitlinks nicht. Auth-, Persistenz-, Mengen-, Export-
+  und Isolationstests bleiben Teil dieses Laufs. Dieser Zuschnitt behauptet keine
+  Schema-/Migrationskompatibilitaet und ersetzt keine Release-/Restoregates.
+- Aenderungen an Infrastruktur, den sechs ausgelassenen Suiten oder ihren
+  Helpern, Paketen, Testkonfiguration, CI selbst und unbekannten Pfaden behalten
+  `npm test`. Operationsdokumente sind keine pauschal erlaubte Begleitdoku.
+  Gemischte Produkt-/Operationspatches, reine Doku-Aenderungen, Loeschungen,
+  Verschiebungen und Typwechsel waehlen ebenfalls die volle Suite.
 - PRs werden gegen die tatsaechlich ausgecheckte GitHub-Mergefassung und deren
   im Event gebundene Eltern geprueft. Normale Main-Pushes vergleichen den
   vollstaendigen `before`/`after`-Diff. Tags, fehlende Gitobjekte oder unklare
@@ -42,7 +54,8 @@ Build/Test-Job). Nur der Umfang des Vitest-Schritts wird ausgewaehlt:
   den Volltest nicht ueberspringen.
 
 Der Lauf zeigt die Auswahl und ihren Grund im GitHub-Step-Summary. Ein gruenes
-Operations-CI ist kein behaupteter Volltest der Fachlogik. Build, Browserprobe,
+Operations-CI ist kein behaupteter Volltest der Fachlogik. `npm test` bleibt auch
+lokal der unveraenderte Volltest. Build, Browserprobe,
 Compose und beide Plattformpruefungen werden dadurch nicht uebersprungen.
 Der bisher eng begrenzte synthetische Backup-Integrationsjob behaelt seinen
 eigenen Branch-/Draft-Vertrag; `skipped` bleibt kein Ausfuehrungsnachweis.
