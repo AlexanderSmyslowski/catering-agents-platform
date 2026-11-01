@@ -24,6 +24,7 @@ function createDataRoot(): string {
 function recipeText(name: string): string {
   return [
     name,
+    "8 Portionen",
     "Zutaten",
     "500 g Kichererbsen",
     "150 ml Olivenoel",
@@ -34,8 +35,9 @@ function recipeText(name: string): string {
   ].join("\n");
 }
 
-async function postMultipart(address: string, path: string, file: Blob, filename: string): Promise<Response> {
+async function postMultipart(address: string, path: string, file: Blob, filename: string, review?: { text: string; servings: number; confirmed: boolean }): Promise<Response> {
   const formData = new FormData();
+  if (review) formData.append("review", JSON.stringify(review));
   formData.append("file", file, filename);
   return await fetch(`${address}${path}`, {
     method: "POST",
@@ -192,7 +194,8 @@ describe("upload security limits", () => {
       address,
       "/v1/production/recipes/upload",
       new Blob([recipeText("Tomatensalsa")], { type: "text/plain" }),
-      "tomatensalsa.txt"
+      "tomatensalsa.txt",
+      { text: recipeText("Tomatensalsa"), servings: 8, confirmed: true }
     );
 
     expect(response.status).toBe(201);

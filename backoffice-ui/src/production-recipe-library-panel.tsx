@@ -1,5 +1,7 @@
-import { useRef, useState, type ChangeEvent } from "react";
-import type { RecipeNumberFormat } from "../../shared-core/src/recipe-library.js";
+import { useRef, useState } from "react";
+import type { RecipeImportSaveResult } from "./production-recipe-submission-actions.js";
+import { RecipeImportReviewPanel } from "./recipe-import-review-panel.js";
+import type { RecipeNumberFormat, RecipeImportReview } from "../../shared-core/src/recipe-library.js";
 import type { RecipeReviewCounts } from "./production-recipe-review-state.js";
 
 export type { RecipeReviewCounts } from "./production-recipe-review-state.js";
@@ -23,7 +25,7 @@ export type ProductionRecipeLibraryState = {
 export type ProductionRecipeActions = {
   setRecipeName: (value: string) => void;
   setRecipeFile: (file: File | null) => void;
-  uploadRecipe: (target: "offer" | "production", numberFormat?: RecipeNumberFormat) => Promise<void>;
+  uploadRecipe: (target: "offer" | "production", numberFormat?: RecipeNumberFormat, review?: RecipeImportReview) => Promise<RecipeImportSaveResult | boolean | void>;
   reviewRecipe: (
     target: "offer" | "production",
     recipeId: string,
@@ -82,7 +84,6 @@ export function ProductionRecipeLibraryPanel({
   const [decisionTarget, setDecisionTarget] = useState<{ recipeId: string; decision: LibraryDecision }>();
   const [deciding, setDeciding] = useState(false);
   const decidingRef = useRef(false);
-  const [numberFormat, setNumberFormat] = useState<RecipeNumberFormat | "">("");
   const { filteredRecipes } = libraryState;
   const { setRecipeName, setRecipeFile, uploadRecipe, reviewRecipe } = recipeActions;
 
@@ -109,39 +110,11 @@ export function ProductionRecipeLibraryPanel({
           </span>
         </summary>
         <div className="secondary-rail-details__content form-panel">
-          <header>
-            <p className="eyebrow">Rezeptupload</p>
-            <h3>Zusätzliche Rezepte in die Küchenbibliothek übernehmen</h3>
-          </header>
-          <label className="field-block"><span>Rezeptname (optional)</span><input
-            value={recipeName}
-            onChange={(event) => setRecipeName(event.target.value)}
-            placeholder="Optionaler Rezeptname"
-          /></label>
-          <label className="field-block"><span>Rezeptdatei</span><input
-            className="file-input"
-            type="file"
-            accept=".pdf,.txt,.md,text/plain,application/pdf"
-            onChange={(event: ChangeEvent<HTMLInputElement>) => { setRecipeFile(event.target.files?.[0] ?? null); setNumberFormat(""); }}
-          /></label>
-          <label className="field-block">
-            <span>Zahlenformat der Rezeptdatei</span>
-            <select value={numberFormat} disabled={submitting || !recipeFile} onChange={event => setNumberFormat(event.target.value as RecipeNumberFormat | "")}>
-              <option value="">Nicht festgelegt</option>
-              <option value="de">Deutsch · 1.234,5</option>
-              <option value="en">Englisch · 1,234.5</option>
-            </select>
-            <span className="helper-text">Wähle das Format aus deiner Datei. Ohne Auswahl werden mehrdeutige Mengen nicht übernommen.</span>
-          </label>
-          <div className="action-row">
-            <button disabled={submitting || !recipeFile} onClick={() => void uploadRecipe("offer", numberFormat || undefined)}>
-              Für Angebote speichern
-            </button>
-            <button disabled={submitting || !recipeFile} onClick={() => void uploadRecipe("production", numberFormat || undefined)}>
-              Für Produktion speichern
-            </button>
-          </div>
-          {recipeFile ? <p className="helper-text">Ausgewählt: {recipeFile.name}</p> : null}
+          <RecipeImportReviewPanel
+            recipeName={recipeName} recipeFile={recipeFile}
+            setRecipeName={setRecipeName} setRecipeFile={setRecipeFile}
+            uploadRecipe={uploadRecipe} submitting={submitting}
+          />
           <div className="divider" />
           <header>
             <p className="eyebrow">Rezeptbestand</p>

@@ -19,6 +19,7 @@ function uploadedRecipe() {
     sourceRef: "test:unverified-upload-eligibility",
     text: [
       "Vegan Coconut Bowl",
+      "8 Portionen", // Synthetic fixture yield; not a product default.
       "Zutaten",
       "1 kg Kokosreis",
       "500 g Brokkoli",

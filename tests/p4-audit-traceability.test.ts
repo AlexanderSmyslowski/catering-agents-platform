@@ -63,19 +63,22 @@ describe("P4 audit and review traceability", () => {
     const app = buildProductionApp({ dataRoot });
 
     try {
+      const text = [
+            "P4 Audit Trace Recipe",
+            "8 Portionen",
+            "Ingredients",
+            "1 pcs apple",
+            "Instructions",
+            "1. Chop the apple.",
+            "2. Serve immediately."
+          ].join("\n");
       const importResponse = await app.inject({
         method: "POST",
         url: "/v1/production/recipes/import-text",
         payload: {
           recipeName: "P4 Audit Trace Recipe",
-          text: [
-            "P4 Audit Trace Recipe",
-            "Ingredients",
-            "1 apple",
-            "Instructions",
-            "1. Chop the apple.",
-            "2. Serve immediately."
-          ].join("\n")
+          text: text,
+          review: { text, servings: 8, confirmed: true }
         }
       });
 
@@ -170,19 +173,22 @@ describe("P4 audit and review traceability", () => {
     const app = buildOfferApp({ store: offerStore, recipeLibrary, auditLog });
 
     try {
+      const text = [
+            "P4 Offer Audit Trace Recipe",
+            "8 Portionen",
+            "Ingredients",
+            "1 pcs pear",
+            "Instructions",
+            "1. Slice the pear.",
+            "2. Serve chilled."
+          ].join("\n");
       const importResponse = await app.inject({
         method: "POST",
         url: "/v1/offers/recipes/import-text",
         payload: {
           recipeName: "P4 Offer Audit Trace Recipe",
-          text: [
-            "P4 Offer Audit Trace Recipe",
-            "Ingredients",
-            "1 pear",
-            "Instructions",
-            "1. Slice the pear.",
-            "2. Serve chilled."
-          ].join("\n")
+          text: text,
+          review: { text, servings: 8, confirmed: true }
         }
       });
 

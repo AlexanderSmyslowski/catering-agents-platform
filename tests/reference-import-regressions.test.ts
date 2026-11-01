@@ -67,7 +67,7 @@ describe("historical reference import regressions", () => {
       const response=await app.inject({method:"POST",url:`/v1/${target}/recipes/import-text`,headers,payload:{text:text("2.500","Mischen.")}});
       expect(response.statusCode,response.body).toBe(422);
       expect(response.json().message).toMatch(/Zahlenformat|Menge/);
-      const valid=await app.inject({method:"POST",url:`/v1/${target}/recipes/import-text`,headers,payload:{text:text("2.500"),numberFormat:"de"}});
+      const valid=await app.inject({method:"POST",url:`/v1/${target}/recipes/import-text`,headers,payload:{text:text("2.500"),numberFormat:"de",review:{text:text("2.500"),servings:50,confirmed:true}}});
       expect(valid.statusCode,valid.body).toBe(201);
       expect(valid.json().recipe.ingredients[0].quantity.amount).toBe(2500);
     } finally { await app.close(); }
@@ -76,7 +76,7 @@ describe("historical reference import regressions", () => {
     const app=build(mkdtempSync(path.join(tmpdir(),"reference-multipart-")));
     try {
       const url=await app.listen({host:"127.0.0.1",port:0});
-      const form = new FormData(); form.append("numberFormat", "de"); form.append("file",new Blob([text("2.500")],{type:"text/plain"}),"synthetic-reference.txt");
+      const form = new FormData(); form.append("numberFormat", "de"); form.append("review",JSON.stringify({text:text("2.500"),servings:50,confirmed:true})); form.append("file",new Blob([text("2.500")],{type:"text/plain"}),"synthetic-reference.txt");
       const response = await fetch(`${url}/v1/${target}/recipes/upload`,{method:"POST",body:form,headers:Object.fromEntries(Object.entries(headers).filter(([key])=>key!=="Content-Type"))});
       expect(response.status).toBe(201);
       const result=await response.json(); expect(result.recipe.ingredients[0].quantity.amount).toBe(2500);

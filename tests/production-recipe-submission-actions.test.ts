@@ -81,6 +81,24 @@ describe("production recipe submission actions", () => {
     ]);
   });
 
+  it("reports a saved recipe when only dashboard refresh fails, without inviting another upload", async()=>{
+    const state=input({refreshDashboard:vi.fn(async()=>{throw new Error("Reload failed");})});
+    const actions=buildProductionRecipeSubmissionActions(state);
+    expect(await actions.handleRecipeUpload("production")).toEqual({saved:true});
+    expect(state.uploadRecipeFile).toHaveBeenCalledTimes(1);
+    expect(state.clearRecipeUploadDraft).toHaveBeenCalledTimes(1);
+    expect(state.setError).not.toHaveBeenCalled();
+    expect(state.setNotice).toHaveBeenCalledWith(expect.stringContaining("gespeichert"));
+  });
+
+  it("returns a review input error to the local editor without a stale global error", async()=>{
+    const state=input({uploadRecipeFile:vi.fn(async()=>{throw new Error("Menge prüfen");})});
+    const r=await buildProductionRecipeSubmissionActions(state).handleRecipeUpload("production",undefined,{text:"synthetic",servings:4,confirmed:true});
+    expect(r).toEqual({saved:false,message:"Menge prüfen"});
+    expect(state.setError).not.toHaveBeenCalled();
+    expect(state.clearRecipeUploadDraft).not.toHaveBeenCalled();
+  });
+
   it("surfaces recipe upload failures and always exits submitting state", async () => {
     const actionsInput = input({
       uploadRecipeFile: vi.fn(async () => {

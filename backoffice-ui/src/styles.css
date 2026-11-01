@@ -2727,3 +2727,32 @@ label:has(> input[type="file"]:focus-visible) { outline: 3px solid #0066cc; outl
 .action-reason { margin: 0; max-width: 40ch; font-size: 0.9rem; color: #55555a; }
 .action-reason a { display: inline-flex; align-items: center; min-height: 44px; color: #0066cc; text-underline-offset: 3px; }
 .field-block input, .field-block textarea, .field-block select { min-height: 44px; }
+
+.recipe-import__comparison {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.25rem;
+}
+
+.recipe-import__comparison textarea {
+  width: 100%;
+  min-width: 0;
+  max-height: 24rem;
+  resize: vertical;
+}
+
+.recipe-import__confirmation {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  min-height: 44px;
+}
+
+.recipe-import__confirmation input {
+  flex: 0 0 auto;
+  width: auto;
+}
+
+@media (max-width: 720px) {
+  .recipe-import__comparison { grid-template-columns: minmax(0, 1fr); }
+}

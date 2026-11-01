@@ -29,18 +29,16 @@ describe("recipe yield integrity", () => {
     });
   });
 
-  it("keeps the existing number-before-label form and only defaults when there is no yield hint", () => {
+  it("keeps explicit eight portions and rejects a completely missing yield", () => {
     const eightPortions = parseUploadedRecipeText({
       filename: "eight.txt",
       text: recipeText(["8 Portionen", "500 g Roastbeef"])
     });
-    const noYieldHint = parseUploadedRecipeText({
+    expect(eightPortions.baseYield.servings).toBe(8);
+    expect(() => parseUploadedRecipeText({
       filename: "without-yield.txt",
       text: recipeText(["500 g Roastbeef"])
-    });
-
-    expect(eightPortions.baseYield.servings).toBe(8);
-    expect(noYieldHint.baseYield.servings).toBe(8);
+    })).toThrow(/Portionen/);
   });
 
   it("preserves the compact historical number-before-label yield form", () => {
@@ -405,7 +403,7 @@ describe("recipe allergen integrity", () => {
     });
     const mustard = parseUploadedRecipeText({
       filename: "mustard.txt",
-      text: recipeText(["8 Portionen", "500 g Roastbeef", "1 tsp Mustard"])
+      text: recipeText(["8 Portionen", "500 g Roastbeef", "1 TL Mustard"])
     });
     const noFalseEgg = parseUploadedRecipeText({
       filename: "temperature.txt",
