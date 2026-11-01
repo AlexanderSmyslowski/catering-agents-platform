@@ -20,7 +20,7 @@ describe("app shell state helpers", () => {
     expect(getRouteTitle("production")).toBe("CateringOS · Produktion");
     expect(getRouteTitle("home")).toBe("CateringOS");
     expect(getRouteSubtitle("home")).toBe(
-      "Zwei spezialisierte Arbeitsflächen mit gemeinsamem Regelkern und klar getrennten Zuständigkeiten."
+      "Kundenangebote erstellen und die Küche mit Rezepten, Mengen und Einkaufslisten vorbereiten."
     );
   });
 

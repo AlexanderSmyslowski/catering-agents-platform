@@ -82,7 +82,7 @@ export function OfferMenuEditor({ draftId, revision, menuPlan, onSaved, disabled
         <label>Ernährungsart {index + 1}<select className="operator-input" value={row.menuCategory ?? ""} disabled={frozen} onChange={(event) => {
           const category = event.target.value as Row["menuCategory"];
           update(index, { menuCategory: category || undefined, dietaryTags: category === "vegan" ? ["vegan"] : category === "vegetarian" ? ["vegetarian"] : [] });
-        }}><option value="">Noch zu prüfen</option><option value="classic">Mit Fleisch / klassisch</option><option value="vegetarian">Vegetarisch</option><option value="vegan">Vegan</option></select></label>
+        }}><option value="">Noch zu prüfen</option><option value="classic">Mit Fleisch / klassisch</option><option value="vegetarian">Vegetarisch (Angabe, am Rezept prüfen)</option><option value="vegan">Vegan (Angabe, am Rezept prüfen)</option></select></label>
         <button type="button" className="secondary-button" disabled={frozen} onClick={() => setRows(rows.filter((_, at) => at !== index))}>Gericht {index + 1} entfernen</button>
       </div>)}
       <div className="quiet-action-row">
@@ -96,7 +96,8 @@ export function OfferMenuEditor({ draftId, revision, menuPlan, onSaved, disabled
         </>}
       </div>
     </> : <>
-      <ul className="item-list compact">{menuPlan.map((item, index) => <li key={String(item.componentId ?? index)}>{String(item.label ?? "")} · {item.servings === undefined ? "Portionen offen" : String(item.servings) + " Portionen"}{item.menuCategory === "vegan" ? " · vegan" : item.menuCategory === "vegetarian" ? " · vegetarisch" : item.menuCategory === "classic" ? " · klassisch" : ""}</li>)}</ul>
+      <ul className="item-list compact">{menuPlan.map((item, index) => <li key={String(item.componentId ?? index)}>{String(item.label ?? "")} · {item.servings === undefined ? "Portionen offen" : String(item.servings) + " Portionen"}{item.menuCategory === "vegan" ? " · vegan (Angabe, ungeprüft)" : item.menuCategory === "vegetarian" ? " · vegetarisch (Angabe, ungeprüft)" : item.menuCategory === "classic" ? " · klassisch" : " · Ernährungsart offen"}</li>)}</ul>
+      {menuPlan.some(item => item.menuCategory === "vegan" || item.menuCategory === "vegetarian") ? <p className="helper-text">Vegan oder vegetarisch stammt aus Anfrage oder Bearbeitung. Das ist keine geprüfte Rezept- oder Allergenaussage; vor der Freigabe am Rezept bestätigen.</p> : null}
       <button type="button" className="secondary-button" disabled={disabled} onClick={begin}>Menü bearbeiten</button>
     </>}
     {error ? <p role="alert">{error}</p> : null}

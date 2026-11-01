@@ -70,7 +70,7 @@ function formatMoney(value?: { amount: number; currency: string }): string | und
     return undefined;
   }
 
-  return `${formatNumber(value.amount)} ${value.currency}`;
+  return value.amount.toLocaleString("de-DE", { style: "currency", currency: value.currency });
 }
 
 function row(label: string, value: string | undefined): string {
@@ -525,6 +525,12 @@ th { background: #f4f7fa; font-weight: 700; }
 .coverage-cell { border-bottom: 1px solid #d9e2ec; border-right: 1px solid #d9e2ec; padding: 5px 6px; }
 .coverage-head .coverage-cell { background: #f4f7fa; border-top: 1px solid #d9e2ec; font-weight: 700; }
 footer { border-top: 1px solid #cbd5df; color: #52616f; margin-top: 24px; padding-top: 8px; }
+@media screen and (max-width: 640px) {
+  body { padding: 12px; overflow-wrap: anywhere; }
+  table { table-layout: fixed; }
+  th, td { overflow-wrap: anywhere; padding: 4px; }
+  .coverage-row { grid-template-columns: minmax(0, .7fr) minmax(0, 1fr) minmax(0, 1fr); }
+}
 @media print {
   body { font-size: 11px; }
   h2, h3, .recipe-card > h3, .recipe-card > h3 + p { break-after: avoid-page; }
@@ -537,7 +543,6 @@ footer { border-top: 1px solid #cbd5df; color: #52616f; margin-top: 24px; paddin
   .purchase-group { break-after: page; page-break-after: always; }
 }
 </style></head><body><header class="document-header"><h1>Produktionsmappe – Rezeptkarten und aufsummierte Einkaufsliste</h1><p>${escapeHtml(headerMeta(input.spec))}</p></header>${[
-    renderAppliedProductionContext(input.appliedSnapshot),
     renderSection1(input.spec),
     renderSection2(input, recipeById),
     renderSection3(input),
@@ -548,5 +553,5 @@ footer { border-top: 1px solid #cbd5df; color: #52616f; margin-top: 24px; paddin
     renderProductionKitchenSheets(input.plan, input.appliedSnapshot?.approvedSpec.artifacts.eventSpec ?? input.spec),
     renderSection8(purchaseList, recipeById, input.spec),
     renderSection9(input.plan, purchaseList, input.spec.event.date)
-  ].join("")}<footer>Arbeitsdokument – Mengen, Allergene und Preise vor Produktion prüfen.</footer></body></html>`;
+  ].join("")}<footer>${renderAppliedProductionContext(input.appliedSnapshot)}Arbeitsdokument – Mengen, Allergene und Preise vor Produktion prüfen.</footer></body></html>`;
 }

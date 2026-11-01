@@ -266,9 +266,13 @@ describe("Gate B print-export commercial confidentiality", () => {
         expect(body).not.toContain("Speisenpreis gesamt");
         expect(body).not.toContain("Zielbudget");
         expect(body).not.toContain("8.192,44 EUR");
+        expect(body).not.toContain("8.192,44\u00a0€");
         expect(body).not.toContain("913,57 EUR");
+        expect(body).not.toContain("913,57\u00a0€");
         expect(body).not.toContain("7.314,29 EUR");
+        expect(body).not.toContain("7.314,29\u00a0€");
         expect(body).not.toContain("5.555,55 EUR");
+        expect(body).not.toContain("5.555,55\u00a0€");
         expect(body).not.toContain("COMMERCIAL_SENTINEL");
       }
 
@@ -277,9 +281,9 @@ describe("Gate B print-export commercial confidentiality", () => {
       expect(adminFolder.body).toContain("Speisenpreis pro Person");
       expect(adminFolder.body).toContain("Speisenpreis gesamt");
       expect(adminFolder.body).toContain("Zielbudget");
-      expect(adminFolder.body).toContain("8.192,44 EUR");
-      expect(adminFolder.body).toContain("913,57 EUR");
-      expect(adminFolder.body).toContain("7.314,29 EUR");
+      expect(adminFolder.body).toContain("8.192,44\u00a0€");
+      expect(adminFolder.body).toContain("913,57\u00a0€");
+      expect(adminFolder.body).toContain("7.314,29\u00a0€");
     } finally {
       await app.close();
     }

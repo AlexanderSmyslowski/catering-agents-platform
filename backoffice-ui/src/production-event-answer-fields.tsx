@@ -53,7 +53,7 @@ export function ProductionEventAnswerFields({
             aria-label="Datum"
             value={editingEventDate}
             onChange={(event) => setEditingEventDate(event.target.value)}
-            placeholder="2026-06-18"
+            placeholder="JJJJ-MM-TT"
           />
         </label>
         <label className="field-block">
@@ -62,16 +62,17 @@ export function ProductionEventAnswerFields({
             aria-label="Zeitfenster"
             value={editingEventSchedule}
             onChange={(event) => setEditingEventSchedule?.(event.target.value)}
-            placeholder="16:30-23:00"
+            placeholder="z. B. Service 18:00–22:00"
           />
         </label>
         <label className="field-block">
           <span>Teilnehmerzahl</span>
           <input
+            aria-label="Teilnehmerzahl"
             value={editingAttendeeCount}
             onChange={(event) => setEditingAttendeeCount(event.target.value)}
             inputMode="numeric"
-            placeholder="120"
+            placeholder="Anzahl Gäste"
           />
         </label>
         <label className="field-block">

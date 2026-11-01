@@ -14,8 +14,8 @@ export function ProductionIntakeOriginCard({ intakeRequestDetail }: ProductionIn
   const state = buildProductionIntakeOriginCardState(intakeRequestDetail);
 
   return (
-    <div className="component-answer-card">
-      <p className="eyebrow">Ursprüngliche Intake-Anfrage</p>
+    <details className="component-answer-card technical-context-details">
+      <summary>Herkunft der Anfrage und technische Angaben</summary>
       <p className="helper-text">{state.requestSummaryLabel}</p>
       <ul className="item-list compact">
         {state.rawInputs.map((rawInput) => (
@@ -31,6 +31,6 @@ export function ProductionIntakeOriginCard({ intakeRequestDetail }: ProductionIn
           </li>
         ))}
       </ul>
-    </div>
+    </details>
   );
 }

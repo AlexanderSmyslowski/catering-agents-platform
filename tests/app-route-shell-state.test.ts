@@ -22,7 +22,7 @@ describe("app route shell state", () => {
   it("maps route-dependent shell chrome out of App without changing labels", () => {
     expect(buildAppRouteShellState(buildInput("home")).shell).toEqual({
       title: "CateringOS",
-      subtitle: "Zwei spezialisierte Arbeitsflächen mit gemeinsamem Regelkern und klar getrennten Zuständigkeiten.",
+      subtitle: "Kundenangebote erstellen und die Küche mit Rezepten, Mengen und Einkaufslisten vorbereiten.",
       hideKicker: false,
       className: undefined
     });

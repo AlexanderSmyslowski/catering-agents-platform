@@ -223,7 +223,7 @@ export function getRouteSubtitle(route: AppRoute): string {
   if (route === "production") {
     return "Ruhige Arbeitsfläche für Rezepte, Produktionspläne und Einkaufslisten.";
   }
-  return "Zwei spezialisierte Arbeitsflächen mit gemeinsamem Regelkern und klar getrennten Zuständigkeiten.";
+  return "Kundenangebote erstellen und die Küche mit Rezepten, Mengen und Einkaufslisten vorbereiten.";
 }
 
 export function compareNewestRecordsBy(key: string) {

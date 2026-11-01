@@ -14,7 +14,8 @@ export type OfferApprovalBinding = {
  * action contract. The source draft remains the authority after a reload. */
 export function buildOfferApprovalBinding(
   approvedOffer?: Pick<ApprovedOffer, "approvedOfferId" | "sourceDraft">,
-  handoff?: Pick<ProductionHandoff, "handoffId" | "source" | "approvedOfferId">
+  handoff?: Pick<ProductionHandoff, "handoffId" | "source" | "approvedOfferId">,
+  caseApprovedOfferId?: string
 ): OfferApprovalBinding | undefined {
   const validSource = (source: unknown): source is { draftId: string; revision: number } => {
     if (!source || typeof source !== "object") return false;
@@ -38,6 +39,7 @@ export function buildOfferApprovalBinding(
   )) {
     return undefined;
   }
+  if (caseApprovedOfferId && (!approvedOffer || approvedOffer.approvedOfferId !== caseApprovedOfferId)) return undefined;
   const source = approvedOffer?.sourceDraft ?? handoff?.source;
   const approvedOfferId = approvedOffer?.approvedOfferId ?? handoff?.approvedOfferId;
   if (!source || !approvedOfferId || !source.draftId || !Number.isInteger(source.revision) || source.revision < 1) {

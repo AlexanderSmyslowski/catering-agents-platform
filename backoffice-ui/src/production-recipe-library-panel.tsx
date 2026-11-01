@@ -1,4 +1,4 @@
-import { useState, type ChangeEvent } from "react";
+import { useRef, useState, type ChangeEvent } from "react";
 import type { RecipeNumberFormat } from "../../shared-core/src/recipe-library.js";
 import type { RecipeReviewCounts } from "./production-recipe-review-state.js";
 
@@ -68,6 +68,9 @@ export function ProductionRecipeLibraryPanel({
 }: ProductionRecipeLibraryPanelProps) {
   const { recipeReviewStatusLabel, recipeUsageStatusLabel, recipeReviewCounts, recipeCount } = statusState;
   const { recipeName, recipeFile } = uploadState;
+  const [decisionTarget, setDecisionTarget] = useState<{ recipeId: string; decision: "approve" | "reject" }>();
+  const [deciding, setDeciding] = useState(false);
+  const decidingRef = useRef(false);
   const [numberFormat, setNumberFormat] = useState<RecipeNumberFormat | "">("");
   const { filteredRecipes } = libraryState;
   const { setRecipeName, setRecipeFile, uploadRecipe, reviewRecipe } = recipeActions;
@@ -81,8 +84,8 @@ export function ProductionRecipeLibraryPanel({
           <p className="helper-text">{recipeUsageStatusLabel}</p>
         </div>
         <p className="helper-text">
-          {recipeReviewCounts.rejected} abgelehnt · {recipeCount} Rezepte insgesamt · Review-Actions bleiben in der
-          Bibliothek unverändert.
+          {recipeReviewCounts.rejected} abgelehnt · {recipeCount} Rezepte insgesamt ·
+          Bibliotheksfreigaben gelten unabhängig von der Freigabe für einen Auftrag.
         </p>
       </article>
 
@@ -99,17 +102,17 @@ export function ProductionRecipeLibraryPanel({
             <p className="eyebrow">Rezeptupload</p>
             <h3>Zusätzliche Rezepte in die Küchenbibliothek übernehmen</h3>
           </header>
-          <input
+          <label className="field-block"><span>Rezeptname (optional)</span><input
             value={recipeName}
             onChange={(event) => setRecipeName(event.target.value)}
             placeholder="Optionaler Rezeptname"
-          />
-          <input
+          /></label>
+          <label className="field-block"><span>Rezeptdatei</span><input
             className="file-input"
             type="file"
             accept=".pdf,.txt,.md,text/plain,application/pdf"
             onChange={(event: ChangeEvent<HTMLInputElement>) => { setRecipeFile(event.target.files?.[0] ?? null); setNumberFormat(""); }}
-          />
+          /></label>
           <label className="field-block">
             <span>Zahlenformat der Rezeptdatei</span>
             <select value={numberFormat} disabled={submitting || !recipeFile} onChange={event => setNumberFormat(event.target.value as RecipeNumberFormat | "")}>
@@ -120,11 +123,11 @@ export function ProductionRecipeLibraryPanel({
             <span className="helper-text">Wähle das Format aus deiner Datei. Ohne Auswahl werden mehrdeutige Mengen nicht übernommen.</span>
           </label>
           <div className="action-row">
-            <button disabled={submitting} onClick={() => void uploadRecipe("offer", numberFormat || undefined)}>
-              Über Angebotsagent speichern
+            <button disabled={submitting || !recipeFile} onClick={() => void uploadRecipe("offer", numberFormat || undefined)}>
+              Für Angebote speichern
             </button>
-            <button disabled={submitting} onClick={() => void uploadRecipe("production", numberFormat || undefined)}>
-              Über Produktionsagent speichern
+            <button disabled={submitting || !recipeFile} onClick={() => void uploadRecipe("production", numberFormat || undefined)}>
+              Für Produktion speichern
             </button>
           </div>
           {recipeFile ? <p className="helper-text">Ausgewählt: {recipeFile.name}</p> : null}
@@ -139,13 +142,13 @@ export function ProductionRecipeLibraryPanel({
                 <strong>{String(recipe.name)}</strong>
                 <p>
                   {translateRecipeTier(String((recipe.source as Record<string, unknown>)?.tier ?? "-"))} ·{" "}
-                  {translateApprovalState(String((recipe.source as Record<string, unknown>)?.approvalState ?? "-"))}
+                  Bibliotheksstatus: {translateApprovalState(String((recipe.source as Record<string, unknown>)?.approvalState ?? "-"))}
                 </p>
                 <div className="action-row">
                   <button
                     className="secondary-button"
                     disabled={submitting}
-                    onClick={() => void reviewRecipe("production", String(recipe.recipeId), "approve")}
+                    onClick={() => setDecisionTarget({ recipeId: String(recipe.recipeId), decision: "approve" })}
                   >
                     Freigeben
                   </button>
@@ -159,11 +162,20 @@ export function ProductionRecipeLibraryPanel({
                   <button
                     className="secondary-button destructive-button"
                     disabled={submitting}
-                    onClick={() => void reviewRecipe("production", String(recipe.recipeId), "reject")}
+                    onClick={() => setDecisionTarget({ recipeId: String(recipe.recipeId), decision: "reject" })}
                   >
                     Ablehnen
                   </button>
                 </div>
+                {decisionTarget?.recipeId === String(recipe.recipeId) ? <div className="production-discard-confirmation" role="group" aria-label="Bibliotheksentscheidung bestätigen">
+                  <p>„{String(recipe.name)}“ in der Bibliothek {decisionTarget.decision === "approve" ? "freigeben" : "ablehnen"}?</p>
+                  <button type="button" disabled={submitting || deciding} onClick={() => {
+                    if (decidingRef.current) return;
+                    decidingRef.current = true; setDeciding(true);
+                    void reviewRecipe("production", decisionTarget.recipeId, decisionTarget.decision).finally(() => { decidingRef.current = false; setDeciding(false); setDecisionTarget(undefined); });
+                  }}>Bestätigen</button>
+                  <button type="button" className="secondary-button" disabled={submitting || deciding} onClick={() => setDecisionTarget(undefined)}>Abbrechen</button>
+                </div> : null}
               </li>
             ))}
             {filteredRecipes.length === 0 ? <li>Noch keine Rezepte vorhanden.</li> : null}

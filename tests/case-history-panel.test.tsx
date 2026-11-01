@@ -20,7 +20,7 @@ afterEach(() => {
 });
 
 describe("case history panel", () => {
-  it("shows existing orders immediately before a case has been selected", async () => {
+  it("keeps earlier orders available without opening the history before the new-request action", async () => {
     const onSearchChange = vi.fn();
     const onOpen = vi.fn();
     const onCopy = vi.fn(async () => undefined);
@@ -41,10 +41,10 @@ describe("case history panel", () => {
     });
 
     const details = container.querySelector("details");
-    expect(details?.open).toBe(true);
+    expect(details?.open).toBe(false);
     expect(container.textContent).toContain("Bestehenden Auftrag öffnen");
     expect(container.textContent).toContain("Fall A - Sommerfest");
-    expect(container.textContent).toContain("Neuen Auftrag anlegen");
+    expect(container.textContent).toContain("Neuen Auftrag mit diesem Namen anlegen");
     expect(container.textContent).toContain("Anfrage, Leistungen und Freigaben werden nicht kopiert.");
 
     await act(async () => {

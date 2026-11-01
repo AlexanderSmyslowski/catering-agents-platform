@@ -105,7 +105,7 @@ function buildProductionSummaryFacts(input: {
       value: input.approvalState === "applied"
         ? input.openVisibleQuestionCount > 0
           ? `Plan übernommen · ${input.openVisibleQuestionCount} fachliche ${input.openVisibleQuestionCount === 1 ? "Rückfrage offen" : "Rückfragen offen"}`
-          : `Plan übernommen · fachliche Prüfung: ${formatOperatorReadiness(input.readinessLabel)}`
+          : `Plan übernommen · Angaben: ${formatOperatorReadiness(input.readinessLabel)}`
         : formatOperatorReadiness(input.readinessLabel)
     },
     {
@@ -125,7 +125,7 @@ function buildProductionSummaryFacts(input: {
       value: formatOperatorProductionObjects(input.productionObjectStatusLabel)
     },
     {
-      label: "Interne Produktionsfreigabe",
+      label: "Freigabe für diesen Auftrag",
       value: input.approvalState === "applied" ? "erteilt · übernommen"
         : input.approvalState === "approved" ? "erteilt · Übernahme ausstehend" : "nicht erteilt"
     }

@@ -15,6 +15,16 @@ const confirmationLabels: Record<keyof RecipeEventUseReview["confirmations"], st
   allergensAndDiet: "Allergene und Ernährungsanforderungen für dieses Event geprüft",
   holdingAndRegeneration: "Warmhaltung und Regeneration für dieses Event geprüft"
 };
+function planningLabel(value: unknown): string {
+  const labels: Record<string, string> = {
+    servings: "Portionen", pieces: "Stück", servings_per_person: "Portionen pro Person",
+    pieces_per_person: "Stück pro Person", per_person_weight: "Gewicht pro Person", fixed_total: "Feste Gesamtmenge",
+    other: "Sonstiges", main: "Hauptgericht", side: "Beilage", starter: "Vorspeise", dessert: "Dessert",
+    snack: "Snack", fingerfood: "Fingerfood", condiment: "Würze / Sauce", beverage_food_component: "Getränkebestandteil",
+    review_required: "Prüfung nötig", approved_internal: "Intern freigegeben", auto_usable: "Automatisch nutzbar", rejected: "Abgelehnt"
+  };
+  return labels[String(value)] ?? String(value ?? "offen");
+}
 function currentDraft(data: ProductionDraftListResponse) {
   return [...data.items].sort((a, b) => (b.revision ?? 0) - (a.revision ?? 0))[0];
 }
@@ -63,7 +73,7 @@ function CaseEvidencePanel({ caseId, userId, submitting, onChanged }: Props & { 
       setData(fresh); setLibrary(candidates.items); setError("");
     } catch (cause) {
       if (generation.current !== version) return;
-      setError(cause instanceof Error ? cause.message : "Planungs-Evidenz konnte nicht geladen werden.");
+      setError(cause instanceof Error ? cause.message : "Planungsnachweise konnten nicht geladen werden.");
       throw cause;
     } finally { if (generation.current === version) setLoading(false); }
   }
@@ -85,7 +95,7 @@ function CaseEvidencePanel({ caseId, userId, submitting, onChanged }: Props & { 
     <p>Nach einem Rezeptupload „Planungsstand neu laden“ wählen, um die neue Bibliotheksgrundlage auszuwählen.</p>
     {error && <p role="alert">{error}</p>}
     <button type="button" className="secondary-button" disabled={loading} onClick={() => void reload().catch(() => undefined)}>Planungsstand neu laden</button>
-    {draft && spec && <p>Revision {draft.revision} · {draft.draftId}</p>}
+    {draft && spec && <><p>Prüffassung {draft.revision}</p><details className="technical-context-details"><summary>Technische Fassung anzeigen</summary><p>{draft.draftId}</p></details></>}
     {draft && spec && components.map(component => {
       const evidence = data?.planningEvidence?.find(item => exactEvidence(item, caseId, draft, component, spec));
       const predecessor = data?.planningEvidence?.filter(item => item.caseId === caseId && item.componentId === component.componentId && item.draftId !== draft.draftId) ?? [];
@@ -97,7 +107,7 @@ function CaseEvidencePanel({ caseId, userId, submitting, onChanged }: Props & { 
         evidence={evidence} predecessor={predecessor} disabled={submitting || loading || Boolean(error)}
         reload={reload} onChanged={onChanged} />;
     })}
-    {components.length === 0 && <p>Keine Eigenproduktions- oder Hybridkomponente benötigt Rezept-Evidenz.</p>}
+    {components.length === 0 && <p>Keine Eigenproduktions- oder Hybridkomponente benötigt einen Rezeptnachweis.</p>}
   </section>;
 }
 
@@ -221,23 +231,23 @@ function ComponentEvidence({ caseId, userId, draft, spec, component, recipes, re
   return <article className="form-panel" aria-label={`Rezeptplanung ${component.label}`}>
     <h4>{component.label}</h4>
     {message && <p role="alert">{message}</p>}
-    {predecessor.length > 0 && <p>Vorgänger-Evidenz vorhanden: {predecessor.map(item => `Revision ${item.draftRevision}`).join(", ")}. Nur Herkunft, keine gültige Prüfung dieser Revision.</p>}
+    {predecessor.length > 0 && <p>Frühere Prüfnachweise vorhanden: {predecessor.map(item => `Revision ${item.draftRevision}`).join(", ")}. Nur Herkunft, keine gültige Prüfung dieser Revision.</p>}
     {evidence ? <div role="status">
-      <strong>Planungs-Evidenz kanonisch gespeichert · Revision {evidence.draftRevision}</strong>
+      <strong>Planungsnachweis gespeichert · Prüffassung {evidence.draftRevision}</strong>
       {evidence.recipeSnapshotHash !== recipeSnapshotHash && <p role="alert">Rezeptstand geändert oder nicht verfügbar: Diese Evidenz ist für die Vorbereitung nicht mehr gültig. Neue Entwurfsrevision und erneute Prüfung erforderlich.</p>}
-      <p>{evidence.quantityDecision.targetAmount} {evidence.quantityDecision.targetUnit} · {evidence.quantityDecision.rationale}</p>
-      <p>Mengenbasis: {evidence.quantityDecision.basis} · pro Person: {evidence.quantityDecision.perUnitAmount ?? "nicht angewendet"} {evidence.quantityDecision.perUnitUnit} · {evidence.quantityDecision.guestCount} Gäste · {evidence.quantityDecision.serviceFormat}</p>
-      <p>Herkunft: {evidence.quantityDecision.evidence.reference} · Prüfung: {evidence.recipeEventUseReview.reviewedBy} · {evidence.recipeEventUseReview.reviewedAt}</p>
-      <p>Rezept: {evidence.recipeId} · Snapshot: {evidence.recipeSnapshotHash}</p>
+      <p>{evidence.quantityDecision.targetAmount} {planningLabel(evidence.quantityDecision.targetUnit)} · {evidence.quantityDecision.rationale}</p>
+      <p>Mengenbasis: {planningLabel(evidence.quantityDecision.basis)} · pro Person: {evidence.quantityDecision.perUnitAmount ?? "nicht angewendet"} {planningLabel(evidence.quantityDecision.perUnitUnit)} · {evidence.quantityDecision.guestCount} Gäste · {evidence.quantityDecision.serviceFormat}</p>
+      <p>Herkunft: {evidence.quantityDecision.evidence.reference}</p>
+      <details className="technical-context-details"><summary>Technischen Prüfbeleg anzeigen</summary><p>Prüfung: {evidence.recipeEventUseReview.reviewedBy} · {evidence.recipeEventUseReview.reviewedAt}</p><p>Rezept: {evidence.recipeId} · Snapshot: {evidence.recipeSnapshotHash}</p></details>
     </div> : <>
       <label className="field-block">Rezeptgrundlage
         <select aria-label="Rezeptgrundlage" value={selected} disabled={locked} onChange={event => { setSelected(event.target.value); resetConfirmations(); }}>
           <option value="">Rezeptkandidat auswählen</option>
-          {recipes.map(item => <option key={String(item.recipeId)} value={String(item.recipeId)}>{String(item.name)} · {String((item.source as Record<string, unknown> | undefined)?.approvalState ?? "ungeprüft")}</option>)}
+          {recipes.map(item => <option key={String(item.recipeId)} value={String(item.recipeId)}>{String(item.name)} · {planningLabel((item.source as Record<string, unknown> | undefined)?.approvalState ?? "ungeprüft")}</option>)}
         </select>
       </label>
       {!recipes.length && <p>Eine ausdrücklich gekennzeichnete Rezeptgrundlage über „Rezepte verwalten“ hochladen.</p>}
-      {recipe && <details><summary>Rezeptgrundlage prüfen: {String(recipe.name)} · {String(source?.approvalState)}</summary>
+      {recipe && <details><summary>Rezeptgrundlage prüfen: {String(recipe.name)} · {planningLabel(source?.approvalState)}</summary>
         <p>Herkunft: {String(source?.reference ?? "nicht angegeben")}</p>
         <RecipeDetails value={recipe} />
       </details>}
@@ -257,17 +267,17 @@ function ComponentEvidence({ caseId, userId, draft, spec, component, recipes, re
           <option value="per_person_weight">Gewicht pro Person</option><option value="fixed_total">Feste Gesamtmenge</option>
         </select></label>
         <label>Rolle <select aria-label="Rolle der Komponente" value={role} onChange={event => setRole(event.target.value as QuantityDecisionInput["dishRole"])}>
-          {(["other", "main", "side", "starter", "dessert", "snack", "fingerfood", "condiment", "beverage_food_component"] as const).map(value => <option key={value} value={value}>{value}</option>)}
+          {(["other", "main", "side", "starter", "dessert", "snack", "fingerfood", "condiment", "beverage_food_component"] as const).map(value => <option key={value} value={value}>{planningLabel(value)}</option>)}
         </select></label>
         {basis === "fixed_total" ? <label>Zielmenge <input aria-label="Zielmenge" type="number" min="0" step="any" value={total} onChange={event => setTotal(event.target.value)} /></label>
           : <label>Menge pro Person <input aria-label="Menge pro Person" type="number" min="0" step="any" value={perUnit} onChange={event => setPerUnit(event.target.value)} /></label>}
         {(basis === "per_person_weight" || basis === "fixed_total") && <label>Einheit <select aria-label="Mengeneinheit" value={unit} onChange={event => setUnit(event.target.value)}>
           <option value="servings">Portionen</option><option value="pieces">Stück</option><option value="kg">kg</option><option value="g">g</option><option value="l">l</option>
         </select></label>}
-        <p>Zielmenge: {Number.isFinite(quantity.targetAmount) ? quantity.targetAmount : "offen"} {targetUnit}</p>
+        <p>Zielmenge: {Number.isFinite(quantity.targetAmount) ? quantity.targetAmount : "offen"} {planningLabel(targetUnit)}</p>
         <label>Begründung <textarea aria-label="Mengenbegründung" value={rationale} onChange={event => setRationale(event.target.value)} /></label>
         <label>Herkunft der Mengenentscheidung <input aria-label="Mengenherkunft" value={reference} onChange={event => setReference(event.target.value)} /></label>
-        {targetUnit !== "servings" && <div><p>Geprüfte Rezept-Ausgabemenge: Wie viele {targetUnit} entsprechen wie vielen Rezeptportionen?</p>
+        {targetUnit !== "servings" && <div><p>Geprüfte Rezept-Ausgabemenge: Wie viele {planningLabel(targetUnit)} entsprechen wie vielen Rezeptportionen?</p>
           <label>Ausgabemenge <input aria-label="Rezept-Ausgabemenge" type="number" step="any" value={mappingAmount} onChange={event => setMappingAmount(event.target.value)} /></label>
           <label>Rezeptportionen <input aria-label="Rezeptportionen" type="number" step="any" value={mappingServings} onChange={event => setMappingServings(event.target.value)} /></label>
         </div>}
@@ -275,7 +285,7 @@ function ComponentEvidence({ caseId, userId, draft, spec, component, recipes, re
           <input type="checkbox" checked={confirmations[key as keyof typeof confirmations]} onChange={event =>
             setConfirmations(current => ({ ...current, [key]: event.target.checked }))} />{label}
         </label>)}
-        <p>Mit dem Speichern bestätigst du die konkrete Mengenentscheidung und diese Eventprüfung als angemeldeter Operator ({userId}).</p>
+        <p>Mit dem Speichern bestätigst du die konkrete Mengenentscheidung und diese Eventprüfung mit deinem angemeldeten Benutzerkonto.</p>
       </fieldset>}
       {assigned && <button type="button" disabled={disabled || busy || draft.status !== "pending_review" || (!pending && !canSave)} onClick={() => void save()}>
         {pending ? "Identisch erneut senden" : "Menge und Eventprüfung speichern"}

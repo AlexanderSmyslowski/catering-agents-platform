@@ -1517,7 +1517,7 @@ function ProductWorkspaceView({
         />
       )}
 
-      {route === "offer" ? <OfferConversationalWorkbench {...offerWorkbenchState} refreshRequired={offerCaseNotReady || offerCaseNeedsRefresh} /> : null}
+      {route === "offer" ? <OfferConversationalWorkbench {...offerWorkbenchState} refreshRequired={offerCaseNotReady || offerCaseNeedsRefresh} approvalBindingState={approvalBindingState} /> : null}
       {route === "production" ? <ProductionRouteMainLayout {...productionRouteMainLayoutState}
         currentDraft={currentProductionDraft} currentApplied={currentProductionApprovalApplied} lastApplied={lastAppliedProduction}
         questionState={{ ...productionRouteMainLayoutState.questionState, currentDraft: currentProductionDraft }}
@@ -1600,9 +1600,9 @@ function ProductRouteController({ route, shell, masthead }: ProductRouteControll
             setActiveProductionSpecId={setActiveProductionSpecId}
             setActiveProductionCaseId={setActiveProductionCaseId}
             availableCases={product.data.cases}
-            currentOfferApprovedOfferId={product.data.approvedOffer?.approvedOfferId}
+            currentOfferApprovedOfferId={product.data.approvedOffer?.approvedOfferId ?? product.data.activeCase?.approvedOfferId}
             currentOfferHandoffId={product.data.handoff?.handoffId}
-            currentOfferApprovalBinding={buildOfferApprovalBinding(product.data.approvedOffer, product.data.handoff)}
+            currentOfferApprovalBinding={buildOfferApprovalBinding(product.data.approvedOffer, product.data.handoff, product.data.activeCase?.approvedOfferId)}
             resolveProductionCaseFromHandoff={async (handoffId) =>
               (await createProductionCaseFromHandoff(handoffId)).case}
           />

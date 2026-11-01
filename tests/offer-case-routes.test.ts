@@ -523,6 +523,53 @@ describe("offer case routes", () => {
       .filter((event) => event.kind === "draft_created" && event.artifactId === first.json().draftId)).toHaveLength(1);
   });
 
+  it("projects the persisted internal approval when the case is reopened, and drops it for a newer draft", async () => {
+    const { app, store } = buildHarness("alpha");
+    const offerCase = await createOfferCase(app);
+    const draft = await createOfferDraft(app, offerCase.caseId);
+    const before = await app.inject({ method: "GET", url: `/v1/offers/cases/${offerCase.caseId}`, headers: alphaHeaders });
+    expect(before.statusCode, before.body).toBe(200);
+    expect(before.json()).not.toHaveProperty("approvedOffer");
+    const decision = await app.inject({
+      method: "POST",
+      url: `/v1/offers/drafts/${draft.draftId}/decision`,
+      headers: alphaHeaders,
+      payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
+    });
+    expect(decision.statusCode, decision.body).toBe(201);
+    const approvedOfferId = decision.json<{ approvedOffer: { approvedOfferId: string } }>().approvedOffer.approvedOfferId;
+
+    // A fresh load (reload or reopening the case) must see the same approval.
+    const reopened = await app.inject({ method: "GET", url: `/v1/offers/cases/${offerCase.caseId}`, headers: alphaHeaders });
+    expect(reopened.statusCode, reopened.body).toBe(200);
+    expect(reopened.json().case.approvedOfferId).toBe(approvedOfferId);
+    expect(reopened.json().approvedOffer).toEqual({
+      approvedOfferId,
+      sourceDraft: { draftId: draft.draftId, revision: 1 },
+      selectedVariantId: draft.variantSet[0]!.variantId,
+      approvedAt: expect.any(String)
+    });
+    // Only the binding identity is projected, not the pricing snapshot.
+    expect(reopened.json().approvedOffer).not.toHaveProperty("pricingSummary");
+    expect(reopened.json().approvedOffer).not.toHaveProperty("selectedVariant");
+
+    const foreign = await app.inject({ method: "GET", url: `/v1/offers/cases/${offerCase.caseId}`, headers: betaHeaders });
+    expect(foreign.statusCode).toBe(403);
+    expect(foreign.body).not.toContain(approvedOfferId);
+
+    const continuation = await app.inject({
+      method: "POST",
+      url: "/v1/offers/from-text",
+      headers: alphaHeaders,
+      payload: { caseId: offerCase.caseId, requestId: "request-after-approval", text: "Bitte für 50 Personen neu berechnen." }
+    });
+    expect(continuation.statusCode, continuation.body).toBe(201);
+    const afterNewDraft = await app.inject({ method: "GET", url: `/v1/offers/cases/${offerCase.caseId}`, headers: alphaHeaders });
+    expect(afterNewDraft.json().case).not.toHaveProperty("approvedOfferId");
+    expect(afterNewDraft.json()).not.toHaveProperty("approvedOffer");
+    expect(await store.getApprovedOffer({ businessId: "alpha" }, approvedOfferId)).toBeDefined();
+  });
+
   it("reopens a completed case after a new structured draft", async () => {
     const { app, store } = buildHarness("alpha");
     const offerCase = await createOfferCase(app);

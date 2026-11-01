@@ -269,7 +269,7 @@ describe("backoffice intake request detail", () => {
       await Promise.resolve();
     });
 
-    expect(document.body.textContent).toContain("Ursprüngliche Intake-Anfrage");
+    expect(document.body.textContent).toContain("Herkunft der Anfrage und technische Angaben");
     expect(document.body.textContent).not.toContain("requestId: request-detail-1");
     expect(document.body.textContent).not.toContain("channel: text");
     expect(document.body.textContent).toContain("Herkunft und Übergabe");

@@ -22,6 +22,24 @@ function fieldErrors(event: EventInput): FieldErrors {
   return errors;
 }
 
+const UNVERIFIED_TIME_PREFIX = "Zeit-/Logistikangabe aus Anfrage (ungeprüft): ";
+
+/** Parsed clock times stay unverified; show them as source hints, never as schedule. */
+export function unverifiedRequestTimeHints(spec: Pick<AcceptedEventSpec, "productionConstraints">): string[] {
+  return [...new Set((spec.productionConstraints ?? [])
+    .filter(item => typeof item === "string" && item.startsWith(UNVERIFIED_TIME_PREFIX))
+    .map(item => item.slice(UNVERIFIED_TIME_PREFIX.length).trim())
+    .filter(Boolean))];
+}
+
+function UnverifiedTimeHints({ hints }: { hints: string[] }) {
+  if (!hints.length) return null;
+  return <div className="event-editor__source-times" aria-label="Uhrzeiten aus der Anfrage">
+    <p className="helper-text">Uhrzeiten aus der Anfrage – ungeprüft und noch nicht in den Zeitplan übernommen:</p>
+    <ul className="item-list compact">{hints.map(hint => <li key={hint}>{hint}</li>)}</ul>
+  </div>;
+}
+
 export function OfferEventEditor({ draftId, revision, spec, disabled, onSaved, onEditingChange }: {
   draftId: string; revision: number; spec: AcceptedEventSpec; disabled: boolean;
   onSaved: (draftId: string) => Promise<void>; onEditingChange: (editing: boolean) => void;
@@ -40,6 +58,7 @@ export function OfferEventEditor({ draftId, revision, spec, disabled, onSaved, o
   const [error, setError] = useState("");
   const [errors, setErrors] = useState<FieldErrors>({});
   const [notice, setNotice] = useState("");
+  const timeHints = unverifiedRequestTimeHints(spec);
   useEffect(() => {
     setEvent(undefined); setError(""); setErrors({}); setPendingSavedDraft(undefined);
     if (savedDraft.current !== draftId || awaitingSavedReload.current) setNotice("");
@@ -120,6 +139,7 @@ export function OfferEventEditor({ draftId, revision, spec, disabled, onSaved, o
       </div>
       <h4>Zeitplan</h4>
       {!event.eventSchedule.length ? <p className="helper-text">Keine Uhrzeiten eingetragen. Bitte vor der Produktion klären.</p> : null}
+      <UnverifiedTimeHints hints={timeHints} />
       {event.eventSchedule.map((slot, index) => <fieldset className="event-editor__slot" key={index} disabled={frozen}>
         <legend>Zeitabschnitt {index + 1}</legend>
         <div className="event-editor__times">
@@ -146,6 +166,8 @@ export function OfferEventEditor({ draftId, revision, spec, disabled, onSaved, o
       <p>{spec.customer?.name ?? "Kunde offen"}</p>
       <p>{formatEventTypeLabel(spec.event.type) ?? "Veranstaltung"} · {spec.event.date ? spec.event.date.split("-").reverse().join(".") : "Datum offen"} · {spec.attendees.expected ?? "offene"} Gäste · {formatServiceFormLabel(spec.event.serviceForm ?? spec.servicePlan.serviceForm)}</p>
       {spec.event.schedule?.map((slot, index) => <p key={index}>{slot.label}: {slot.start ?? "offen"}–{slot.end ?? "offen"}</p>)}
+      {!spec.event.schedule?.length ? <p className="helper-text">Zeitplan: noch keine bestätigten Uhrzeiten.</p> : null}
+      <UnverifiedTimeHints hints={timeHints} />
       <button type="button" className="secondary-button" disabled={disabled} onClick={begin}>Veranstaltungsdaten bearbeiten</button>
     </>}
   </section>;

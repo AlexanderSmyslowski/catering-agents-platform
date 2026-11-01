@@ -21,7 +21,7 @@ export function LoginView({ busy, error, onSubmit }: LoginViewProps) {
 
   return (
     <main className="app-shell" aria-label="Catering-Anmeldung">
-      <section className="masthead-card">
+      <section className="masthead-card login-card">
         <p className="eyebrow">CateringOS</p>
         <h1>Anmelden</h1>
         <form onSubmit={(event) => void submit(event)}>
@@ -47,7 +47,7 @@ export function LoginView({ busy, error, onSubmit }: LoginViewProps) {
               disabled={busy}
             />
           </label>
-          {error ? <p role="alert">{error}</p> : null}
+          {error ? <p className="form-error" role="alert">{error} Bitte Kennung und PIN prüfen und erneut versuchen.</p> : null}
           <button type="submit" disabled={busy || !loginCode.trim() || !pin}>
             {busy ? "Anmeldung läuft …" : "Anmelden"}
           </button>

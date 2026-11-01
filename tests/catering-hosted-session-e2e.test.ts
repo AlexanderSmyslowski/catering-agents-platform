@@ -617,7 +617,7 @@ describe("Hosted Session E2E mit drei echten Catering-Rollen", () => {
     expect(plan.body).toContain("9876.54");
     expect(purchase.body).toContain(commercialSentinel);
     expect(productionFolder.body).toContain("Preisrahmen");
-    expect(productionFolder.body).toContain("8.192,44 EUR");
+    expect(productionFolder.body).toContain("8.192,44\u00a0€");
     expect(audit.json<{ items: Array<{ actor?: { name?: string } }> }>().items)
       .toEqual(expect.arrayContaining([
         expect.objectContaining({ actor: expect.objectContaining({ name: users.admin.userId }) })

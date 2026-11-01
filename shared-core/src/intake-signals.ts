@@ -295,7 +295,7 @@ export function analyzeIntakeText(text: string): IntakeSignals {
   // Splitting "Linsenragout: 20 Portionen, vegan" at the comma would otherwise
   // turn the isolated word "vegan" into a requirement for the entire event.
   const segmentedText = eventText.replace(/^([^\r\n:]+:[ \t]*\d{1,5}[ \t]+Portion(?:en)?)[ \t]*,[ \t]*(vegan|vegetarisch|klassisch)([ \t]*\.?[ \t]*)$/gim, "$1 $2$3");
-  const segments = segmentedText.split(/(?<!\d),|,(?!\d)|[;\n]+|(?<!\b[cC][aA]\.)(?<=[.!?])\s+(?=[A-ZÄÖÜ]|\d+\s+(?:Gäste|Gaeste|Personen|Teilnehmer)\s+(?:(?:benötigen|benoetigen|brauchen|wünschen|wuenschen|müssen|muessen)\s+)?(?:(?:gluten|laktose|milch|nuss)frei|[Ss]chalenfrucht))/).map(normalizeSegment).filter(Boolean);
+  const segments = segmentedText.split(/(?<!\d),|,(?!\d)|[;\n]+|(?<!\b[cC][aA]\.)(?<=[.!?])\s+(?=[A-ZÄÖÜ]|\d+\s+Portion(?:en)?\s|\d+\s+(?:Gäste|Gaeste|Personen|Teilnehmer)\s+(?:(?:benötigen|benoetigen|brauchen|wünschen|wuenschen|müssen|muessen|vermeiden)\s+)?(?:(?:gluten|laktose|milch|nuss)frei|[Ss]chalenfr(?:u|ü|ue)cht))/).map(normalizeSegment).filter(Boolean);
   // A day followed by a written month is one date, not two sentences.
   for (let index = 1; index < segments.length;) {
     const day = segments[index - 1].match(/\b(\d{1,2}\.)$/)?.[1];
@@ -381,7 +381,8 @@ export function analyzeIntakeText(text: string): IntakeSignals {
     }
 
     const subsetDietary = DIETARY_PATTERNS.some(pattern => isGuestSubsetDietarySegment(segment, pattern.canonical));
-    if (subsetDietary || /schalenfrucht(?:vermeidung|allergie|frei)?/i.test(segment)) {
+    // "Schalenfrüchte" (plural umlaut) is the same nut-allergen group.
+    if (subsetDietary || /schalenfr(?:u|ü|ue)cht/i.test(segment)) {
       // A subset request is not a free-from claim for the complete menu.
       addUniqueString(constraints, `Sonderkost angefragt; separat klären: ${segment}`);
       addUniqueUncertainty(uncertainties, {

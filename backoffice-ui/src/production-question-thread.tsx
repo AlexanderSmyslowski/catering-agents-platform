@@ -86,7 +86,6 @@ export function ProductionQuestionThread({
         <h4>Quelle prüfen</h4>
         {warnings.map(message => <p key={message.messageId}>{message.text}</p>)}
       </section> : null}
-      {answerEditor}
       {questions.length > 0 ? <ol className="production-question-list" aria-label="Rückfragen zum Auftrag">
         {questions.map((message, index) => {
           const answers = messages.filter(answer => answer.type === "user_structured_answer" &&
@@ -110,6 +109,8 @@ export function ProductionQuestionThread({
           </li>;
         })}
       </ol> : null}
+      {/* Questions first, then the matching answer form with its save action. */}
+      {answerEditor}
       <details className="question-context-details">
         <summary><span>Datenstand anzeigen</span><strong>{specLabel}</strong></summary>
         <ReadOnlyWorkbenchProjection specLabel={specLabel} facts={facts} questionCount={questionCount} readinessLabel={readinessLabel} />

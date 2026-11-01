@@ -172,11 +172,11 @@ async () => {
     (button.textContent ?? "").replace(/\s+/g, " ").trim() === "Speichern und Berechnung starten"
   );
   const answerEditor = [...document.querySelectorAll("section, article, form")].find((element) =>
-    (element.textContent ?? "").includes("Antwort direkt zur Agentenfrage") &&
+    (element.textContent ?? "").includes("Antworten zu den Rückfragen") &&
     (element.textContent ?? "").includes("Antworten speichern")
   );
   const attendeeInput = answerEditor
-    ? [...answerEditor.querySelectorAll("input")].find((input) => input.getAttribute("placeholder") === "120")
+    ? [...answerEditor.querySelectorAll("input")].find((input) => input.getAttribute("aria-label") === "Teilnehmerzahl")
     : undefined;
 
   if (!answerSaveButton) {

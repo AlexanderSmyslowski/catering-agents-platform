@@ -1873,6 +1873,21 @@ describe("Linux browser rehearsal governance", () => {
     ).not.toBe(0);
   });
 
+  it("reads navigation-aborted GETs while keeping mutations and network failures fail-closed", () => {
+    const run = (lines: string[]) => spawnSync("bash", ["-c", 'source "$1"; require_nonempty_request_report "$2"',
+      "browser-contract", shellPath, JSON.stringify({ result: lines.join("\n") })], { cwd: root, encoding: "utf8" });
+    const completed = "600. [GET] http://127.0.0.1:3200/api/offers/cases => [200] OK";
+    const aborted = "609. [GET] http://127.0.0.1:3200/api/offers/cases => [FAILED] net::ERR_ABORTED";
+    expect(run([completed, aborted]).status).toBe(0);
+    expect(run([aborted]).status).not.toBe(0);
+    for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
+      expect(run([completed, aborted.replace("[GET]", `[${method}]`)]).status).not.toBe(0);
+    }
+    expect(run([completed, aborted.replace("ERR_ABORTED", "ERR_CONNECTION_REFUSED")]).status).not.toBe(0);
+    expect(run([completed, aborted + " unexpected diagnostic"]).status).not.toBe(0);
+    expect(run([completed, "not a request"]).status).not.toBe(0);
+  });
+
   it("accepts only the exact final static-request completion marker", () => {
     const run = (report: string) =>
       spawnSync(

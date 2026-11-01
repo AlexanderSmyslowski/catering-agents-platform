@@ -83,6 +83,8 @@ export type OfferWorkbenchProps = {
   onMenuEditingChange?: (editing: boolean) => void;
   onMenuSaved?: (draftId: string) => Promise<void>;
   approvalBinding?: OfferApprovalBinding;
+  /** "invalid": the case links an approval whose binding could not be verified. */
+  approvalBindingState?: "valid" | "invalid" | "absent";
   openProductionHandoff?: (handoffId: string) => Promise<void>;
   createHandoff?: (offerDraftId: string, offerDraftRevision: number, approvedOfferId: string) => Promise<void>;
   filteredSpecs: Array<Record<string, unknown>>;
@@ -110,8 +112,24 @@ function getReadinessLabel(spec?: Record<string, unknown>): string {
   return translateReadiness(String((spec?.readiness as Record<string, unknown> | undefined)?.status ?? "-"));
 }
 
+/** The same question may arise from several source passages; the passages stay
+ * in the draft's uncertainties, the operator answers each question once. */
+function visibleOpenQuestions(draft?: Record<string, unknown>): string[] {
+  if (!Array.isArray(draft?.openQuestions)) return [];
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const entry of draft.openQuestions) {
+    const question = String(entry);
+    const key = question.replace(/\s+/g, " ").trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    result.push(question);
+  }
+  return result;
+}
+
 function countDraftOpenQuestions(draft?: Record<string, unknown>): number {
-  return Array.isArray(draft?.openQuestions) ? draft.openQuestions.length : 0;
+  return visibleOpenQuestions(draft).length;
 }
 
 function getDraftVariants(draft?: Record<string, unknown>): Array<Record<string, unknown>> {
@@ -201,6 +219,7 @@ export function OfferConversationalWorkbench({
   setSelectedVariantId = () => undefined,
   approveDraft,
   approvalBinding,
+  approvalBindingState,
   openProductionHandoff,
   onMenuSaved,
   onMenuEditingChange,
@@ -235,9 +254,18 @@ export function OfferConversationalWorkbench({
   const focusedVariants = getDraftVariants(focusedDraft);
   const focusedPricing = focusedDraft?.pricingSummary as PricingSummary | undefined;
   const incompletePricingTax = Boolean(focusedPricing?.calculationRequired || (focusedPricing?.calculation && focusedPricing.calculation.grossCents === undefined));
-  const focusedOpenQuestions = Array.isArray(focusedDraft?.openQuestions)
-    ? (focusedDraft.openQuestions as string[])
-    : [];
+  const focusedOpenQuestions = visibleOpenQuestions(focusedDraft);
+  // A case link without a verifiable binding is not "not approved": another
+  // approval would conflict. Only a verified binding or none at all is definite.
+  const anotherApprovedFassung = Boolean(approvalBinding && !focusedApprovalBinding && approvalBindingState === "valid");
+  const approvalUnclear = !focusedApprovalBinding && approvalBindingState === "invalid";
+  const approvalStatusLabel = focusedApprovalBinding
+    ? "Intern freigegeben – diese Fassung"
+    : anotherApprovedFassung
+      ? "Andere Fassung für diesen Auftrag freigegeben"
+      : approvalUnclear
+      ? "Freigabestand nicht eindeutig – Auftrag neu laden"
+      : "Noch nicht freigegeben";
   const [editingMenu, setEditingMenu] = useState(false);
   const [editingEvent, setEditingEvent] = useState(false);
   const [editingPricing, setEditingPricing] = useState(false);
@@ -324,7 +352,7 @@ export function OfferConversationalWorkbench({
             <h3>Auftragsstand</h3>
             <strong>{renderDraftSummary(focusedDraft)}</strong>
             <dl className="order-status-facts" role="status">
-              <div><dt>Angebot</dt><dd>{focusedApprovalBinding ? "Intern freigegeben" : "Noch nicht freigegeben"}</dd></div>
+              <div><dt>Angebot</dt><dd>{approvalStatusLabel}</dd></div>
               <div><dt>Küche</dt><dd>{focusedHandoffId ? "Übergeben – Planung im Produktionsauftrag" : "Noch nicht übergeben"}</dd></div>
               <div><dt>Unterlagen</dt><dd>{refreshRequired ? "Nach erfolgreichem Aktualisieren verfügbar" : editingMenu || editingPricing || editingEvent ? "Nach dem Speichern verfügbar" : !focusedPricing?.calculation ? "Interne Prüfunterlage; Kalkulation unvollständig" : incompletePricingTax ? "Interne Prüfunterlage und Kundenentwurf; Steuer offen" : "Interne Prüfunterlage und Kundenentwurf verfügbar"}</dd></div>
             </dl>
@@ -464,8 +492,19 @@ export function OfferConversationalWorkbench({
                   ) : null}
                 </div>
               ) : null}
+              {anotherApprovedFassung ? (
+                <p className="helper-text">Für diesen Auftrag ist bereits eine andere Angebotsfassung intern freigegeben. Eine weitere Freigabe für denselben Auftrag ist nicht möglich.</p>
+              ) : approvalUnclear ? (
+                <p className="form-error" role="alert">
+                  Für diesen Auftrag ist eine Freigabe gespeichert, die nicht eindeutig dieser Fassung zugeordnet werden kann. Bitte den Auftrag erneut laden, bevor du erneut freigibst.
+                </p>
+              ) : !focusedApprovalBinding && focusedVariants.length > 0 ? (
+                <p className="helper-text offer-approval-scope">
+                  Die Freigabe gilt intern für diese Angebotsfassung und ermöglicht die Übergabe an die Küche. Sie ist kein Versand an den Kunden; Verkaufspreis und Kundenentwurf werden gesondert über die Preisaufstellung geprüft.
+                </p>
+              ) : null}
               <div className="quiet-action-row">
-                {!focusedApprovalBinding && focusedVariants.map((variant) => {
+                {!focusedApprovalBinding && !approvalUnclear && !anotherApprovedFassung && focusedVariants.map((variant) => {
                   const variantId = String(variant.variantId);
                   return (
                     <button

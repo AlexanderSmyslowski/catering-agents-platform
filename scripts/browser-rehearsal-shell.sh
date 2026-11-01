@@ -172,7 +172,11 @@ require_nonempty_request_report() {
       if (lines.length < 3 || lines[lines.length - 2] !== "") process.exit(1);
       requestLines = lines.slice(0, -2);
     }
-    if (requestLines.length === 0 || requestLines.some((line) => !requestLine.test(line))) process.exit(1);
+    // Leaving a page can cancel read-only fetches. They remain part of the
+    // report; an aborted mutation or another network failure is never accepted.
+    const abortedRead = /^\d+\. \[(GET|HEAD|OPTIONS)\] https?:\/\/\S+ => \[FAILED\] net::ERR_ABORTED$/;
+    if (!requestLines.some((line) => requestLine.test(line)) ||
+        requestLines.some((line) => !requestLine.test(line) && !abortedRead.test(line))) process.exit(1);
   ' "$1"
 }
 
