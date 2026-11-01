@@ -1,4 +1,5 @@
-import Fastify from "fastify";
+import Fastify, { type FastifyRequest } from "fastify";
+import { createHmac } from "node:crypto";
 import multipart from "@fastify/multipart";
 import {
   AuditLogStore,
@@ -6,6 +7,7 @@ import {
   BoundaryGuardedLlmAdapter,
   buildBoundaryGuardedLlmAdapterFromEnv,
   CateringUserStore,
+  CATERING_SESSION_COOKIE,
   classifyCateringRouteAuth,
   loadByoLlmExternalProcessingApprovalFromEnv,
   createTrustedActorResolver,
@@ -412,6 +414,14 @@ export function buildProductionApp(options: ProductionAppOptions = {}) {
     repository,
     auditLog,
     trustedActorSecret,
+    visionEnv: {...env,CATERING_TRUSTED_ACTOR_SECRET:trustedActorSecret},
+    previewActorBinding: (request:FastifyRequest) => {
+      const actor=actorForRequest(request);
+      if (!actor.trusted || !trustedActorSecret) throw Object.assign(new Error("Vertrauenswürdige Sitzung erforderlich."),{statusCode:403});
+      const cookie=sessionMode ? request.cookies?.[CATERING_SESSION_COOKIE] : undefined;
+      if (sessionMode && (actor.source!=="authenticated-session" || !cookie)) throw Object.assign(new Error("Vertrauenswürdige Sitzung erforderlich."),{statusCode:403});
+      return createHmac("sha256",trustedActorSecret).update("catering-recipe-preview-actor-v1\0").update(JSON.stringify([actor.businessId,actor.name,actor.source,cookie ?? "local-trusted-actor"])).digest("hex");
+    },
     allowDevActorHeader,
     isProductionOperator,
     requireProductionOperator,

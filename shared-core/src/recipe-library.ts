@@ -673,12 +673,14 @@ function detectDietTags(text: string): string[] {
 }
 
 export type RecipeImportReview = {
+  previewToken?: string;
   text: string;
   servings: number;
   confirmed: boolean;
 };
 
 export type RecipeImportPreview = {
+  previewToken?: string;
   text: string;
   servings?: number;
   issue?: string;

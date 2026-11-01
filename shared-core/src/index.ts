@@ -14,6 +14,8 @@ export * from "./catering-user-store.js";
 // Applications receive a boundary-guarded adapter from the public surface.
 // The raw transport factory stays module-private to low-level transport tests.
 export {
+  recipeVisionCapability,
+  transcribeRecipeVision,
   BoundaryGuardedLlmAdapter,
   buildBoundaryGuardedLlmAdapterFromEnv,
   byoLlmProviderDescriptorFromEnv,

@@ -3,9 +3,9 @@ import {
   type CodexCliExec
 } from "./byo-llm-codex-cli-transport.js";
 import {
-  createOpenAiSyntheticLiveTransportFromEnv
+  createOpenAiSyntheticLiveTransportFromEnv, requestRecipeImageTranscription
 } from "./llm-readiness-openai-transport.js";
-import { validateByoLlmProviderRunBoundary } from "./byo-llm-boundary.js";
+import { isByoLlmProviderOptInEnabled, validateByoLlmProviderRunBoundary } from "./byo-llm-boundary.js";
 import {
   createByoLlmProviderDescriptor,
   evaluateByoLlmProviderDataGate,
@@ -286,7 +286,7 @@ function providerCapabilityFromEnv(
 ): ByoLlmProviderDescriptor["capability"] {
   if (provider === "fixture") return "structured_output";
   const configured = env.CATERING_LLM_PROVIDER_CAPABILITY?.trim();
-  if (configured === "structured_output" || configured === "document_understanding" || configured === "text_generation") {
+  if (configured === "recipe_image_understanding" || configured === "structured_output" || configured === "document_understanding" || configured === "text_generation") {
     return configured;
   }
   return "structured_output";
@@ -294,7 +294,7 @@ function providerCapabilityFromEnv(
 
 function hasVerifiedProviderCapability(value: string | undefined): boolean {
   const configured = value?.trim();
-  return configured === "structured_output" || configured === "document_understanding" || configured === "text_generation";
+  return configured === "recipe_image_understanding" || configured === "structured_output" || configured === "document_understanding" || configured === "text_generation";
 }
 
 function hasConcreteProviderMetadata(value: string | undefined): boolean {
@@ -516,4 +516,48 @@ export function buildByoLlmAdapterFromEnv(
       options.providerRunIdPrefix ?? "byo-llm"
     )
   );
+}
+
+/** Conservative ceiling for one GPT-5.4 high-detail image plus the fixed prompt and 4096 output tokens.
+ * Rates: https://developers.openai.com/api/docs/models/gpt-5.4; image patch budget:
+ * https://developers.openai.com/api/docs/guides/images-vision. Reverify before activation. */
+export function recipeImageCostBound(env:Record<string,string|undefined>,width:number,height:number):number|undefined {
+  const until=Date.parse(env.CATERING_RECIPE_VISION_TARIFF_VERIFIED_UNTIL ?? '');
+  const now=Date.now(), fx=Number(env.CATERING_RECIPE_VISION_USD_EUR_BOUND), limit=Number(env.CATERING_RECIPE_VISION_MAX_COST_EUR);
+  if (env.CATERING_LLM_MODEL !== 'gpt-5.4-2026-03-05' || env.CATERING_RECIPE_VISION_TARIFF_PROFILE !== 'openai-gpt-5.4-high-v1' || !Number.isFinite(until) || until<=now || until>now+31*86400000 || !Number.isFinite(fx) || fx<1 || fx>10 || !Number.isFinite(limit) || limit<=0 || !Number.isInteger(width) || !Number.isInteger(height) || width<1 || height<1 || width>10000 || height>10000 || width*height>24000000) return undefined;
+  const patches=Math.min(2500,Math.ceil(width/32)*Math.ceil(height/32));
+  const imageTokens=Math.ceil(patches*1.2)+1;
+  const upper=(imageTokens+2000)*2.5/1_000_000 + 4096*15/1_000_000;
+  const euros=upper*1.1*fx;
+  return Number.isFinite(euros) && euros>0 && euros<=limit ? euros : undefined;
+}
+
+/** Check server-owned image approval separately from text extraction approval. */
+export function recipeVisionCapability(env: Record<string,string | undefined>, businessId:string): {available:boolean; provider?:string; model?:string} {
+  try {
+    if (env.CATERING_RECIPE_VISION_CAPABILITY !== "recipe_image_understanding" || env.CATERING_RECIPE_VISION_DATA_MODE !== "pseudonymized_approved") return {available:false};
+    const cost=recipeImageCostBound(env,10000,2400);
+    if (!cost) return {available:false};
+    const visionEnv={...env,CATERING_LLM_PROVIDER_CAPABILITY:"recipe_image_understanding",CATERING_LLM_MAX_ESTIMATED_COST_EUR:String(cost)};
+    const descriptor=byoLlmProviderDescriptorFromEnv(visionEnv);
+    const endpoint=new URL(descriptor.endpoint);
+    if (endpoint.protocol!=="https:" || endpoint.username || endpoint.password || endpoint.hash || endpoint.search || endpoint.hostname!=="api.openai.com" || endpoint.port || endpoint.pathname!=="/v1/responses") return {available:false};
+    if (descriptor.providerKind !== "openai" || descriptor.capability !== "recipe_image_understanding" || !isByoLlmProviderOptInEnabled(env) || !(env.CATERING_LLM_API_KEY ?? env.OPENAI_API_KEY)?.trim() || Buffer.byteLength(env.CATERING_TRUSTED_ACTOR_SECRET ?? "","utf8") < 32) return {available:false};
+    const boundary=validateByoLlmProviderRunBoundary({providerKind:descriptor.providerKind,env,input:{contractVersion:"llm-readiness-v0",inputId:"recipe-image-capability",kind:"production_draft_request",sourceRefs:[{objectType:"safe_source_anchor",objectId:"recipe-image"}],policy:{providerCalls:"disabled",dataMode:"pseudonymized_approved",allowedToolEffects:["read","draft"]}}});
+    if (!boundary.valid) return {available:false};
+    const approval=loadByoLlmExternalProcessingApprovalFromEnv(env);
+    const gate=evaluateByoLlmProviderDataGate({provider:descriptor,context:{businessId,dataClass:"personal_confidential",purpose:"recipe_image_extraction"},approval});
+    return gate.allowed ? {available:true,provider:"OpenAI",model:descriptor.providerModel} : {available:false};
+  } catch { return {available:false}; }
+}
+
+/** Fail closed before transmitting any bytes; approval lookup is server-owned. */
+export async function transcribeRecipeVision(input:{content:Buffer;mimeType:"image/png"|"image/jpeg";businessId:string;width:number;height:number},env:Record<string,string|undefined>,fetchImpl?:typeof fetch):Promise<string> {
+  const capability=recipeVisionCapability(env,input.businessId);
+  const cost=recipeImageCostBound(env,input.width,input.height);
+  if (!capability.available || !cost) throw new Error("Bildverarbeitung ist für diesen Betrieb nicht freigegeben. Bitte Rezepttext manuell eingeben.");
+  const descriptor=byoLlmProviderDescriptorFromEnv({...env,CATERING_LLM_PROVIDER_CAPABILITY:"recipe_image_understanding",CATERING_LLM_MAX_ESTIMATED_COST_EUR:String(cost)});
+  const approval=loadByoLlmExternalProcessingApprovalFromEnv(env);
+  if (!evaluateByoLlmProviderDataGate({provider:descriptor,context:{businessId:input.businessId,dataClass:"personal_confidential",purpose:"recipe_image_extraction"},approval}).allowed) throw new Error("Bildverarbeitung ist nicht freigegeben.");
+  return requestRecipeImageTranscription({apiKey:(env.CATERING_LLM_API_KEY ?? env.OPENAI_API_KEY)!,model:descriptor.providerModel,endpoint:descriptor.endpoint,content:input.content,mimeType:input.mimeType,fetchImpl});
 }

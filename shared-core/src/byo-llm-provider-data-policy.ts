@@ -5,6 +5,7 @@ import type { ByoLlmProviderKind } from "./byo-llm-boundary.js";
 import type { ByoLlmDataClass } from "./data-classification.js";
 
 export type ByoLlmProcessingPurpose =
+  | "recipe_image_extraction"
   | "production_draft_extraction"
   | "production_draft_revision"
   | "clarification_draft"
@@ -12,6 +13,7 @@ export type ByoLlmProcessingPurpose =
   | "offer_package_classification";
 
 export type ByoLlmProviderCapability =
+  | "recipe_image_understanding"
   | "structured_output"
   | "document_understanding"
   | "text_generation";
@@ -171,6 +173,7 @@ const dataClasses = new Set<ByoLlmDataClass>([
   "personal_confidential"
 ]);
 const purposes = new Set<ByoLlmProcessingPurpose>([
+  "recipe_image_extraction",
   "production_draft_extraction",
   "production_draft_revision",
   "clarification_draft",
@@ -178,6 +181,7 @@ const purposes = new Set<ByoLlmProcessingPurpose>([
   "offer_package_classification"
 ]);
 const capabilities = new Set<ByoLlmProviderCapability>([
+  "recipe_image_understanding",
   "structured_output",
   "document_understanding",
   "text_generation"
