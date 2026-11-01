@@ -436,7 +436,7 @@ describe("production input panel upload transition", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
-    expect(container.textContent).toContain("Offenen KI-Entwurf weiter prüfen");
+    expect(container.textContent).toContain("Offenen Produktionsentwurf weiter prüfen");
     expect(container.textContent).toContain("Flying Buffet · 45 Personen");
     expect(container.textContent).toContain("Kokos-Cheesecake | Brombeere");
     expect(container.querySelector<HTMLDetailsElement>(".production-source-entry")?.open).toBe(false);

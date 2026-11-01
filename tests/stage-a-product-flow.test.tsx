@@ -134,7 +134,7 @@ describe("Stage A product route flow", () => {
       onCopy: async () => undefined
     }));
     expect(historyMarkup).toContain('aria-label="Frühere Angebotsaufträge"');
-    expect(historyMarkup).toContain("Neuen Auftrag anlegen");
+    expect(historyMarkup).toContain("Neuen Auftrag mit diesem Namen anlegen");
 
     const action = buildCaseNextAction({
       product: "offer",

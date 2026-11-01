@@ -1247,7 +1247,7 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Berechnungshinweise:");
     expect(content).toContain("Glutenfrei-Konflikt bleibt ungelöst.");
     expect(content).toContain("Klassifikation für Brot-Baguette fehlt.");
-    expect(content).toContain("Ursprüngliche Intake-Anfrage");
+    expect(content).toContain("Herkunft der Anfrage und technische Angaben");
     expect(content).toContain("Intake-Ursprung: manuelle Eingabe · erhalten 2026-05-21T08:02:00.000Z");
     expect(content).not.toContain("requestId: request-production-fallback-1");
     expect(content).toContain(
@@ -2120,16 +2120,17 @@ describe("backoffice production acceptance smoke", () => {
     expect(content).toContain("Rezeptprüfung");
     expect(content).toContain("1 zu prüfen");
     expect(content).toContain("Freigegebene Rezepte bleiben verwendbar");
-    expect(content).toContain("1 abgelehnt · 3 Rezepte insgesamt · Review-Actions bleiben in der");
+    expect(content).toContain("1 abgelehnt · 3 Rezepte insgesamt");
+    expect(content).toContain("Bibliotheksfreigaben gelten unabhängig von der Freigabe für einen Auftrag.");
     expect(content).toContain("Rezeptbibliothek");
     expect(content).toContain("Rezepte verwalten");
     expect(content).toContain("3 Rezepte · 1 freigegeben · 1 Prüfung nötig");
     expect(content).toContain("Freigegebenes Baguette");
-    expect(content).toContain("intern verifiziert · intern freigegeben");
+    expect(content).toContain("intern verifiziert · Bibliotheksstatus: intern freigegeben");
     expect(content).toContain("Baguette in Prüfung");
-    expect(content).toContain("digitalisiertes Kochbuch · Prüfung nötig");
+    expect(content).toContain("digitalisiertes Kochbuch · Bibliotheksstatus: Prüfung nötig");
     expect(content).toContain("Abgelehnte Baguette-Variante");
-    expect(content).toContain("Internet-Ausweichquelle · abgelehnt");
+    expect(content).toContain("Internet-Ausweichquelle · Bibliotheksstatus: abgelehnt");
     expect(content).toContain("Freigeben");
     expect(content).toContain("Verifizieren");
     expect(content).toContain("Ablehnen");

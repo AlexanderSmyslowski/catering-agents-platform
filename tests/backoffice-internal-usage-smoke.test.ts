@@ -684,7 +684,7 @@ describe("backoffice internal usage smoke", () => {
       await flush(6);
     });
 
-    expect(document.body.textContent ?? "").toContain("Ursprüngliche Intake-Anfrage");
+    expect(document.body.textContent ?? "").toContain("Herkunft der Anfrage und technische Angaben");
     expect(document.body.textContent ?? "").toContain("Intake-Ursprung: manuelle Eingabe");
     expect(document.body.textContent ?? "").not.toContain("requestId: usage-manual-1");
     expect(document.body.textContent ?? "").not.toContain("channel: manual_form");
