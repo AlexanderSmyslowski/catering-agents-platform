@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+import re
 from unittest.mock import patch
 
 
@@ -17,6 +18,62 @@ OPERATOR = "platform-infra/scripts/catering_target_nue_image_update.py"
 
 
 class ScopeTests(unittest.TestCase):
+    def test_product_scope_keeps_application_security_and_data_tests(self):
+        changes = [("M", "backoffice-ui/src/App.tsx"),
+                   ("M", "shared-core/src/rules/scaling.ts"),
+                   ("M", "production-service/src/routes/recipe-routes.ts"),
+                   ("A", "tests/recipe-photo-review.test.tsx"),
+                   ("M", "scripts/browser-rehearsal/open-offer-history-item.js"),
+                   ("M", "memory.md")]
+        self.assertTrue(scope.product_only(changes))
+        command = scope.regression_command("product")
+        self.assertEqual(command[:4], ["npx", "--no-install", "vitest", "run"])
+        self.assertEqual(command[4::2], ["--exclude"] * len(scope.MIGRATION_TEST_FILES))
+        self.assertEqual(set(command[5::2]), set(scope.MIGRATION_TEST_FILES))
+        self.assertNotIn("--passWithNoTests", command)
+
+    def test_product_scope_requires_a_product_change(self):
+        self.assertFalse(scope.product_only([]))
+        self.assertFalse(scope.product_only([("M", "memory.md")]))
+
+    def test_infrastructure_config_helpers_and_unknown_changes_require_full(self):
+        for path in [OPERATOR, ".github/workflows/ci.yml", "scripts/ci-test-scope.py",
+                     "tests/ci_test_scope_test.py", "package.json", "package-lock.json",
+                     "vitest.config.ts", "tests/setup-react-act.ts", "AGENTS.md", "TESTING.md",
+                     "docs/operations/CATERING_BACKUP_RESTORE.md",
+                     "tests/phase3-latest-p1-review-helpers.ts",
+                     "tests/catering-backup-collector-fixture.ts", "unknown.ts",
+                     "scripts/check-browser-rehearsal.sh", "tests/fixtures/unknown.ts"]:
+            with self.subTest(path=path):
+                self.assertFalse(scope.product_only([("M", "backoffice-ui/src/App.tsx"), ("M", path)]))
+        for path in scope.MIGRATION_TEST_FILES:
+            self.assertTrue((ROOT / path).is_file())
+            self.assertFalse(scope.product_only([("M", "backoffice-ui/src/App.tsx"), ("M", path)]))
+
+    def test_only_modified_or_added_product_files_can_select_product(self):
+        for status in ["D", "R100", "T", "U", "?"]:
+            self.assertFalse(scope.product_only([(status, "backoffice-ui/src/App.tsx")]))
+        for path in ["backoffice-ui/package.json", "backoffice-ui/src/../package.json",
+                     "scripts/browser-rehearsal/nested/unknown.js", "tests/nested/unknown.test.ts"]:
+            self.assertFalse(scope.product_only([("M", path)]))
+
+    def test_full_command_is_unchanged_and_unknown_scope_cannot_run_tests(self):
+        self.assertEqual(scope.regression_command("full"), ["npm", "test"])
+        for value in ["", "operator", "unknown", "product --passWithNoTests"]:
+            with self.assertRaises(ValueError):
+                scope.regression_command(value)
+
+    def test_omitted_contracts_keep_the_reviewed_infrastructure_dependency_boundary(self):
+        helpers = {"tests/phase3-latest-p1-review-helpers.ts", "tests/catering-backup-collector-fixture.ts"}
+        for name in [*scope.MIGRATION_TEST_FILES, *helpers]:
+            source = (ROOT / name).read_text()
+            with self.subTest(file=name):
+                self.assertNotIn("@catering/", source)
+                self.assertNotRegex(source, r"(?:backoffice-ui|shared-core|intake-service|offer-service|production-service|print-export)/src")
+                for module in re.findall(r'''\bfrom\s+["'](\.[^"']+)["']''', source):
+                    resolved = (ROOT / name).parent / module.replace(".js", ".ts")
+                    self.assertIn(resolved.resolve().relative_to(ROOT).as_posix(), helpers)
+
     def test_every_allowed_operator_file_has_a_scoped_path(self):
         for path in scope.OPERATOR_FILES:
             with self.subTest(path=path):
@@ -129,6 +186,50 @@ class GitBindingTests(unittest.TestCase):
         self.head = self.save("rename")
         self.assertEqual(self.classify_push(), "full")
 
+    def test_product_scope_uses_the_complete_real_main_diff(self):
+        self.run_git("switch", "--detach", self.base)
+        self.write("backoffice-ui/src/new-panel.tsx", "export const panel = 1;")
+        self.head = self.save("product")
+        self.assertEqual(self.classify_push(), "product")
+        self.write("platform-infra/unknown.sh", "exit 0")
+        self.head = self.save("mixed infrastructure")
+        self.assertEqual(self.classify_push(), "full")
+
+    def test_product_pr_merge_keeps_exact_parent_and_deletion_guards(self):
+        self.run_git("switch", "--detach", self.base)
+        self.write("backoffice-ui/src/panel.tsx", "export const panel = 1;")
+        self.head = self.save("product")
+        self.run_git("switch", "-qc", "product-pr", self.head)
+        self.run_git("switch", "-qc", "product-merge", self.base)
+        self.run_git("merge", "--no-ff", "-qm", "product merge", "product-pr")
+        merged = self.run_git("rev-parse", "HEAD")
+        event = {"pull_request": {"base": {"ref": "main", "sha": self.base},
+                                  "head": {"sha": self.head}}}
+        self.assertEqual(scope.select_scope("pull_request", event, merged, "refs/pull/1/merge")[0], "product")
+        event["pull_request"]["head"]["sha"] = self.base
+        self.assertEqual(scope.select_scope("pull_request", event, merged, "refs/pull/1/merge")[0], "full")
+
+        self.run_git("switch", "--detach", self.head)
+        self.base = self.head
+        self.run_git("mv", "backoffice-ui/src/panel.tsx", "backoffice-ui/src/renamed.tsx")
+        self.head = self.save("rename product source")
+        self.assertEqual(self.classify_push(), "full")
+
+    def test_added_product_symlink_keeps_the_full_suite(self):
+        self.run_git("switch", "--detach", self.base)
+        link = self.root / "backoffice-ui/src/link.ts"
+        link.parent.mkdir(parents=True)
+        link.symlink_to("../../app.ts")
+        self.head = self.save("product-shaped symlink")
+        self.assertEqual(self.classify_push(), "full")
+
+    def test_added_product_gitlink_keeps_the_full_suite(self):
+        self.run_git("switch", "--detach", self.base)
+        self.run_git("update-index", "--add", "--cacheinfo", f"160000,{self.base},backoffice-ui/src/submodule.ts")
+        self.run_git("commit", "-qm", "product-shaped gitlink")
+        self.head = self.run_git("rev-parse", "HEAD")
+        self.assertEqual(self.classify_push(), "full")
+
 
 class WorkflowTests(unittest.TestCase):
     def test_required_jobs_and_scoped_acceptance_remain_unconditional(self):
@@ -136,7 +237,7 @@ class WorkflowTests(unittest.TestCase):
         build = text.split("  build-and-test:\n", 1)[1].split("  catering-target-operator-macos:", 1)[0]
         self.assertIn("fetch-depth: 0", build)
         self.assertLess(build.index("python3 -B tests/ci_test_scope_test.py"), build.index("id: test_scope"))
-        self.assertIn("if: steps.test_scope.outputs.scope != 'operator'\n        run: npm test", build)
+        self.assertIn("if: steps.test_scope.outputs.scope != 'operator'\n        run: python3 -B scripts/ci-test-scope.py --run-tests \"${{ steps.test_scope.outputs.scope || 'full' }}\"", build)
         self.assertIn("if: steps.test_scope.outputs.scope == 'operator'\n        run: npx --no-install vitest run tests/catering-target-*.test.ts", build)
         gates = build.split("- name: Catering target operator acceptance gates", 1)[1]
         self.assertNotIn("if:", gates)

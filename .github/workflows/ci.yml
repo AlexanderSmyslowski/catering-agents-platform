@@ -50,7 +50,7 @@ jobs:
 
       - name: Test
         if: steps.test_scope.outputs.scope != 'operator'
-        run: npm test
+        run: python3 -B scripts/ci-test-scope.py --run-tests "${{ steps.test_scope.outputs.scope || 'full' }}"
 
       - name: Operator regression contracts
         if: steps.test_scope.outputs.scope == 'operator'
