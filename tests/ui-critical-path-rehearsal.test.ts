@@ -515,6 +515,12 @@ describe("UI critical path rehearsal", () => {
         findButtonByText("Variante freigeben: Ausgewogener Lunch").click();
         await flush(6);
       });
+      expect(fetchCalls.some((call) => call.method === "POST" && call.url.endsWith("/decision"))).toBe(false);
+      await act(async () => {
+        Array.from(document.querySelectorAll<HTMLButtonElement>("#offer-approval-confirmation button"))
+          .find((button) => button.textContent === "Bestätigen")!.click();
+        await flush(6);
+      });
 
       expect(fetchCalls).toEqual(
         expect.arrayContaining([

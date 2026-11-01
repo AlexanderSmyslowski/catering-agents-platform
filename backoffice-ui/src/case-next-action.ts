@@ -23,7 +23,8 @@ export type CaseNextAction =
   | { kind: "add_source"; label: "Quelle hinzufügen" }
   | { kind: "review_draft"; label: "Nächsten Prüfpunkt öffnen"; targetId: string }
   | { kind: "request_revision"; label: "Überarbeitung erstellen"; draftId: string }
-  | { kind: "approve_offer"; label: "Angebot freigeben"; draftId: string; variantId: string }
+  /** Navigation only: leads to the workbench's variant confirmation, never posts. */
+  | { kind: "approve_offer"; label: "Freigabe prüfen"; draftId: string; variantId: string }
   | { kind: "send_handoff"; label: "An Produktion übergeben"; approvedOfferId: string }
   | { kind: "inspect_handoff"; label: "Übergabe öffnen"; handoffId: string }
   | { kind: "approve_production"; label: "Produktionsstand freigeben"; draftId: string }
@@ -95,7 +96,7 @@ export function buildCaseNextAction(input: CaseNextActionInput): CaseNextAction 
       nonEmpty(input.currentDraftId) && nonEmpty(input.selectedVariantId)) {
     return {
       kind: "approve_offer",
-      label: "Angebot freigeben",
+      label: "Freigabe prüfen",
       draftId: input.currentDraftId,
       variantId: input.selectedVariantId
     };

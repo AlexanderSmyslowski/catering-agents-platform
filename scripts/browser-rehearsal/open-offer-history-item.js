@@ -77,7 +77,17 @@ async () => {
     (button.textContent ?? "").replace(/\s+/gu, " ").trim().startsWith("Variante freigeben:")
   );
   if (!approvalButton) throw new Error("Synthetischer Angebotsentwurf bietet keine explizite Freigabevariante an");
+  // The variant button only opens the inline confirmation; the approval is
+  // requested exclusively by its scoped "Bestätigen" action.
   approvalButton.click();
+  const confirmButton = await waitFor("Freigabebestätigung", () => {
+    const confirmation = document.querySelector("#offer-approval-confirmation");
+    if (!confirmation) return undefined;
+    return [...confirmation.querySelectorAll("button")].find((button) =>
+      (button.textContent ?? "").replace(/\s+/gu, " ").trim() === "Bestätigen" && button.disabled !== true
+    );
+  });
+  confirmButton.click();
 
   const approvedCasePayload = await waitFor("Freigabezustand", async () => {
     const payload = await readOfferCase();

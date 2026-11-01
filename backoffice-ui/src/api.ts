@@ -1021,14 +1021,14 @@ export async function createOfferDraftFromRequest(
 }
 
 export async function decideOfferDraft(draftId: string, revision: number, variantId: string) {
-  return fetchJson<{ approval: Record<string, unknown>; approvedOffer?: { approvedOfferId: string } }>(`/api/offers/v1/offers/drafts/${draftId}/decision`, {
+  return fetchJson<{ approval: Record<string, unknown>; approvedOffer?: { approvedOfferId: string; selectedVariantId?: string } }>(`/api/offers/v1/offers/drafts/${draftId}/decision`, {
     method: "POST",
     body: JSON.stringify({ decision: "approved", revision, variantId })
   });
 }
 
 export async function createProductionHandoff(approvedOfferId: string) {
-  return fetchJson<{ handoff?: { handoffId: string } }>(`/api/offers/v1/offers/approved/${approvedOfferId}/handoffs`, {
+  return fetchJson<{ handoff?: { handoffId: string; source?: { selectedVariantId?: string } } }>(`/api/offers/v1/offers/approved/${approvedOfferId}/handoffs`, {
     method: "POST", body: "{}"
   });
 }

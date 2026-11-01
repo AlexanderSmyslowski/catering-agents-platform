@@ -65,6 +65,22 @@ describe("safe event editing", () => {
     expect(container.textContent).not.toContain("Bitte den Auftrag später erneut laden");
   });
 
+  it("shows a confirmed request time once and keeps the other request time unverified", async () => {
+    const timed = structuredClone(spec);
+    timed.event.date = "2026-11-13";
+    timed.productionConstraints = [...(timed.productionConstraints ?? []),
+      "Zeit-/Logistikangabe aus Anfrage (ungeprüft): Empfang 18:00–19:00",
+      "Zeit-/Logistikangabe aus Anfrage (ungeprüft): Abendbuffet 19:00–21:00."];
+    container = document.createElement("div"); document.body.append(container); root = createRoot(container);
+    await act(async () => root.render(createElement(OfferEventEditor, { draftId: "timed", revision: 1, spec: timed, disabled: false, onSaved, onEditingChange })));
+    expect(container.textContent).toContain("13.11.2026");
+    expect(container.textContent?.match(/18:00/g)).toHaveLength(1);
+    expect(container.textContent).toContain("Empfang: 18:00–19:00 · im Zeitplan, wie in der Anfrage");
+    const hints = container.querySelector('[aria-label="Uhrzeiten aus der Anfrage"]')!;
+    expect([...hints.querySelectorAll("li")].map(item => item.textContent)).toEqual(["Abendbuffet 19:00–21:00."]);
+    expect(hints.textContent).toContain("ungeprüft");
+  });
+
   it("stores a selected German event label as its existing key", async () => {
     await mount();await click("Veranstaltungsdaten bearbeiten");
     const input=container.querySelector('input[list]') as HTMLInputElement;

@@ -192,8 +192,119 @@ describe("global action integration contracts", () => {
     ) as HTMLButtonElement | undefined;
     expect(variantButton).toBeDefined();
     await act(async () => variantButton?.click());
+    // The variant button only opens the named confirmation.
+    expect(decideOfferDraft).not.toHaveBeenCalled();
+    expect(setSelectedVariantId).not.toHaveBeenCalled();
+    const confirm = Array.from(container.querySelectorAll("#offer-approval-confirmation button")).find((button) =>
+      button.textContent === "Bestätigen"
+    ) as HTMLButtonElement | undefined;
+    expect(confirm).toBeDefined();
+    await act(async () => confirm?.click());
     expect(setSelectedVariantId).toHaveBeenCalledWith("variant-1");
-    expect(decideOfferDraft).toHaveBeenCalledWith("offer-draft-1", 2, "variant-1");
+    expect(decideOfferDraft).toHaveBeenCalledExactlyOnceWith("offer-draft-1", 2, "variant-1");
+    await act(async () => root.unmount());
+  });
+
+  it("never approves from the global bar after a failed confirmed request; the workbench confirmation is required again", async () => {
+    const readyDraft = {
+      draftId: "offer-draft-1",
+      revision: 2,
+      eventSummary: "Business Lunch",
+      variantSet: [{ variantId: "variant-1", label: "Ausgewogen" }],
+      openQuestions: [],
+      proposedEventSpec: {},
+      reviewStatus: {
+        priceReviewStatus: "verified",
+        taxReviewStatus: "verified",
+        allergenReviewStatus: "verified",
+        hygieneTemperatureReviewStatus: "verified",
+        sourceSecured: true,
+        publishApproved: true
+      }
+    };
+    const setSelectedVariantId = vi.fn();
+    const setError = vi.fn();
+    const decideOfferDraft = vi.fn()
+      .mockRejectedValueOnce(new Error("Freigabe fehlgeschlagen"))
+      .mockResolvedValue({ approvedOffer: { approvedOfferId: "approved-1" } });
+    const boundary = buildAppOfferRouteAppBoundary(boundaryInput({
+      activeDraft: readyDraft,
+      selectedDraft: readyDraft,
+      setSelectedVariantId,
+      setError,
+      decideOfferDraft
+    }) as never);
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    await act(async () => root.render(createElement(OfferConversationalWorkbench, boundary.offerWorkbenchState)));
+    const variantButton = () => Array.from(container.querySelectorAll<HTMLButtonElement>("#offer-approval-variants button"))
+      .find((button) => button.textContent === "Variante freigeben: Ausgewogen");
+    const confirmButton = () => Array.from(container.querySelectorAll<HTMLButtonElement>("#offer-approval-confirmation button"))
+      .find((button) => button.textContent === "Bestätigen");
+
+    await act(async () => variantButton()?.click());
+    await act(async () => confirmButton()?.click());
+    expect(decideOfferDraft).toHaveBeenCalledTimes(1);
+    expect(setError).toHaveBeenCalled();
+    expect(setSelectedVariantId).toHaveBeenCalledWith("variant-1");
+    expect(document.getElementById("offer-approval-confirmation")).toBeNull();
+
+    // App state retains the selected variant, so the bar offers the approval step again.
+    const action = buildOfferNextAction({
+      product: "offer",
+      caseStatus: "open",
+      hasSource: true,
+      currentDraftId: readyDraft.draftId,
+      selectedVariantId: "variant-1",
+      draft: readyDraft as never
+    });
+    expect(action).toEqual({ kind: "approve_offer", label: "Freigabe prüfen", draftId: "offer-draft-1", variantId: "variant-1" });
+    if (action.kind !== "approve_offer") throw new Error("Expected the offer approval review action.");
+
+    const approveDraft = vi.fn(boundary.offerWorkbenchState.approveDraft);
+    const setNotice = vi.fn();
+    const focus = vi.fn((selector: string) => document.querySelector<HTMLElement>(selector)?.focus());
+    await runProductWorkspaceNextAction({
+      route: "offer",
+      action,
+      offerWorkbenchState: { ...boundary.offerWorkbenchState, approveDraft },
+      activeOfferDraft: readyDraft as never,
+      setNotice,
+      focus
+    });
+    expect(approveDraft).not.toHaveBeenCalled();
+    expect(decideOfferDraft).toHaveBeenCalledTimes(1);
+    expect(focus).toHaveBeenCalledWith("#offer-approval-variants");
+    expect(document.activeElement?.id).toBe("offer-approval-variants");
+    expect(setNotice).toHaveBeenCalledWith(expect.stringContaining("Rückfrage bestätigen"));
+
+    // A stale or foreign draft binding fails closed without any request.
+    await expect(runProductWorkspaceNextAction({
+      route: "offer",
+      action: { ...action, draftId: "other-draft" },
+      offerWorkbenchState: { ...boundary.offerWorkbenchState, approveDraft },
+      activeOfferDraft: readyDraft as never,
+      setNotice,
+      focus
+    })).rejects.toThrow("Angebotsfreigabe ist ohne den aktiven Entwurf nicht zulässig.");
+    await expect(runProductWorkspaceNextAction({
+      route: "production",
+      action,
+      offerWorkbenchState: { ...boundary.offerWorkbenchState, approveDraft },
+      activeOfferDraft: readyDraft as never,
+      setNotice,
+      focus
+    })).rejects.toThrow("Angebotsfreigabe ist ohne den aktiven Entwurf nicht zulässig.");
+    expect(approveDraft).not.toHaveBeenCalled();
+    expect(decideOfferDraft).toHaveBeenCalledTimes(1);
+
+    // Only the workbench confirmation sends the approval again.
+    await act(async () => variantButton()?.click());
+    expect(decideOfferDraft).toHaveBeenCalledTimes(1);
+    await act(async () => confirmButton()?.click());
+    expect(decideOfferDraft).toHaveBeenCalledTimes(2);
+    expect(decideOfferDraft).toHaveBeenLastCalledWith("offer-draft-1", 2, "variant-1");
     await act(async () => root.unmount());
   });
 
@@ -430,7 +541,9 @@ describe("global action integration contracts", () => {
       focus: vi.fn()
     });
 
-    expect(createHandoff).toHaveBeenCalledWith(binding.offerDraftId, binding.offerDraftRevision, binding.approvedOfferId);
+    // The persisted variant identity travels with the handoff update.
+    expect(binding.selectedVariantId).toBe("variant-1");
+    expect(createHandoff).toHaveBeenCalledWith(binding.offerDraftId, binding.offerDraftRevision, binding.approvedOfferId, "variant-1");
   });
 
   it("rejects a persisted approval whose handoff provenance does not match", () => {

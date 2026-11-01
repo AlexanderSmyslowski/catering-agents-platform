@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import type { AcceptedEventSpec } from "@catering/shared-core";
 import { eventTypeLabels, formatEventTypeLabel, formatServiceFormLabel, serviceFormLabels } from "../../shared-core/src/taxonomies/labels.js";
 import { reviseOfferMenu } from "./api.js";
+import { UNVERIFIED_TIME_PREFIX, partitionTimeHints } from "./schedule-time-hints.js";
 
 type EventInput = { eventDate: string; eventType: string; serviceForm: string; attendeeCount: string; eventSchedule: NonNullable<AcceptedEventSpec["event"]["schedule"]> };
 type FieldErrors = Record<string, string>;
@@ -21,8 +22,6 @@ function fieldErrors(event: EventInput): FieldErrors {
   });
   return errors;
 }
-
-const UNVERIFIED_TIME_PREFIX = "Zeit-/Logistikangabe aus Anfrage (ungeprüft): ";
 
 /** Parsed clock times stay unverified; show them as source hints, never as schedule. */
 export function unverifiedRequestTimeHints(spec: Pick<AcceptedEventSpec, "productionConstraints">): string[] {
@@ -58,7 +57,9 @@ export function OfferEventEditor({ draftId, revision, spec, disabled, onSaved, o
   const [error, setError] = useState("");
   const [errors, setErrors] = useState<FieldErrors>({});
   const [notice, setNotice] = useState("");
-  const timeHints = unverifiedRequestTimeHints(spec);
+  // A request time that exactly equals a saved (confirmed) slot is shown once,
+  // as the slot; differing or unparseable request times stay unverified hints.
+  const { openHints: timeHints, matchedSlotIndexes } = partitionTimeHints(unverifiedRequestTimeHints(spec), spec.event.schedule);
   useEffect(() => {
     setEvent(undefined); setError(""); setErrors({}); setPendingSavedDraft(undefined);
     if (savedDraft.current !== draftId || awaitingSavedReload.current) setNotice("");
@@ -165,7 +166,7 @@ export function OfferEventEditor({ draftId, revision, spec, disabled, onSaved, o
     </form> : <>
       <p>{spec.customer?.name ?? "Kunde offen"}</p>
       <p>{formatEventTypeLabel(spec.event.type) ?? "Veranstaltung"} · {spec.event.date ? spec.event.date.split("-").reverse().join(".") : "Datum offen"} · {spec.attendees.expected ?? "offene"} Gäste · {formatServiceFormLabel(spec.event.serviceForm ?? spec.servicePlan.serviceForm)}</p>
-      {spec.event.schedule?.map((slot, index) => <p key={index}>{slot.label}: {slot.start ?? "offen"}–{slot.end ?? "offen"}</p>)}
+      {spec.event.schedule?.map((slot, index) => <p key={index}>{slot.label}: {slot.start ?? "offen"}–{slot.end ?? "offen"}{matchedSlotIndexes.has(index) ? <span className="helper-text"> · im Zeitplan, wie in der Anfrage</span> : null}</p>)}
       {!spec.event.schedule?.length ? <p className="helper-text">Zeitplan: noch keine bestätigten Uhrzeiten.</p> : null}
       <UnverifiedTimeHints hints={timeHints} />
       <button type="button" className="secondary-button" disabled={disabled} onClick={begin}>Veranstaltungsdaten bearbeiten</button>

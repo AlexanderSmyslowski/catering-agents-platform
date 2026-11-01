@@ -2,7 +2,7 @@ import { OfferEventEditor } from "./offer-event-editor.js";
 import { OfferPricingEditor } from "./offer-pricing-editor.js";
 import type { PricingSummary } from "@catering/shared-core";
 import { OfferMenuEditor } from "./offer-menu-editor.js";
-import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { offerExportUrl, type IntakeDocumentChannel } from "./api.js";
 import { MiniPilotCheckPanel } from "./mini-pilot-check-panel.js";
 import type { MiniPilotCheckReportState } from "./mini-pilot-check-report-state.js";
@@ -85,8 +85,11 @@ export type OfferWorkbenchProps = {
   approvalBinding?: OfferApprovalBinding;
   /** "invalid": the case links an approval whose binding could not be verified. */
   approvalBindingState?: "valid" | "invalid" | "absent";
+  /** Identity of the opened case/draft/approval context. A pending approval
+   * confirmation is discarded as soon as it changes. */
+  approvalContextKey?: string;
   openProductionHandoff?: (handoffId: string) => Promise<void>;
-  createHandoff?: (offerDraftId: string, offerDraftRevision: number, approvedOfferId: string) => Promise<void>;
+  createHandoff?: (offerDraftId: string, offerDraftRevision: number, approvedOfferId: string, approvedVariantId?: string) => Promise<void>;
   filteredSpecs: Array<Record<string, unknown>>;
   activeSpec?: Record<string, unknown>;
   completeSpecCount: number;
@@ -188,6 +191,29 @@ function renderDraftFocusLabel(draft?: Record<string, unknown>): string {
     : String(draft.eventSummary ?? "Unbenannter Entwurf");
 }
 
+function getVariantLabel(variant: Record<string, unknown>): string {
+  const label = typeof variant.label === "string" ? variant.label.trim() : "";
+  return label || String(variant.variantId ?? "Variante");
+}
+
+function getVariantGuests(variant: Record<string, unknown>): number | undefined {
+  const expected = (variant.proposedEventSpec as { attendees?: { expected?: unknown } } | undefined)?.attendees?.expected;
+  return typeof expected === "number" && Number.isFinite(expected) && expected > 0 ? expected : undefined;
+}
+
+/** Status of a verified approval of the focused draft. The variant name comes
+ * only from the persisted identity; a legacy record without it stays neutral. */
+export function formatApprovedVariantStatus(
+  selectedVariantId: string | undefined,
+  variants: Array<Record<string, unknown>>
+): string {
+  if (!selectedVariantId) return "Intern freigegeben – diese Fassung (Variantenname nicht verfügbar)";
+  const variant = variants.find((candidate) => String(candidate.variantId) === selectedVariantId);
+  return variant
+    ? `Intern freigegeben – diese Fassung · Variante: ${getVariantLabel(variant)}`
+    : "Intern freigegeben – diese Fassung (Variante in dieser Ansicht nicht auffindbar)";
+}
+
 function getSpecRequestId(spec: Record<string, unknown>): string {
   const requestId = spec.requestId;
   return typeof requestId === "string" && requestId.trim() ? requestId.trim() : "-";
@@ -215,11 +241,11 @@ export function OfferConversationalWorkbench({
   activeDraft,
   selectedDraft,
   setSelectedDraftId,
-  selectedVariantId,
   setSelectedVariantId = () => undefined,
   approveDraft,
   approvalBinding,
   approvalBindingState,
+  approvalContextKey,
   openProductionHandoff,
   onMenuSaved,
   onMenuEditingChange,
@@ -260,7 +286,7 @@ export function OfferConversationalWorkbench({
   const anotherApprovedFassung = Boolean(approvalBinding && !focusedApprovalBinding && approvalBindingState === "valid");
   const approvalUnclear = !focusedApprovalBinding && approvalBindingState === "invalid";
   const approvalStatusLabel = focusedApprovalBinding
-    ? "Intern freigegeben – diese Fassung"
+    ? formatApprovedVariantStatus(focusedApprovalBinding.selectedVariantId, focusedVariants)
     : anotherApprovedFassung
       ? "Andere Fassung für diesen Auftrag freigegeben"
       : approvalUnclear
@@ -270,6 +296,69 @@ export function OfferConversationalWorkbench({
   const [editingEvent, setEditingEvent] = useState(false);
   const [editingPricing, setEditingPricing] = useState(false);
   useEffect(() => { setEditingMenu(false); setEditingPricing(false); setEditingEvent(false); onMenuEditingChange?.(false); }, [focusedDraftId]);
+  const anyEditing = editingMenu || editingPricing || editingEvent;
+  // Two-step internal approval: the variant button only opens a named inline
+  // confirmation; approveDraft runs solely from "Bestätigen". The pending
+  // confirmation belongs to exactly one case/draft/revision/variant context.
+  const [pendingApproval, setPendingApproval] = useState<{ variantId: string; contextKey: string }>();
+  const [approvalInFlight, setApprovalInFlight] = useState(false);
+  const approvalInFlightRef = useRef(false);
+  const approvalConfirmationRef = useRef<HTMLDivElement>(null);
+  const variantButtonRefs = useRef(new Map<string, HTMLButtonElement>());
+  const approvalActionsBlocked = submitting || approvalInFlight || anyEditing || incompletePricingTax || focusedDraftRevision === undefined;
+  const approvalConfirmationKey = JSON.stringify([
+    approvalContextKey ?? null,
+    focusedDraftId,
+    focusedDraftRevision ?? null,
+    focusedVariants.map((variant) => [String(variant.variantId), getVariantLabel(variant), getVariantGuests(variant) ?? null]),
+    approvalBinding?.approvedOfferId ?? null,
+    approvalBinding?.offerDraftId ?? null,
+    approvalBinding?.offerDraftRevision ?? null,
+    approvalBindingState ?? null
+  ]);
+  const approvalConfirmationKeyRef = useRef(approvalConfirmationKey);
+  approvalConfirmationKeyRef.current = approvalConfirmationKey;
+  const approvalOffered = !focusedApprovalBinding && !approvalUnclear && !anotherApprovedFassung;
+  const activePendingApproval = pendingApproval &&
+    pendingApproval.contextKey === approvalConfirmationKey &&
+    approvalOffered && !approvalActionsBlocked
+    ? pendingApproval
+    : undefined;
+  const pendingVariant = activePendingApproval
+    ? focusedVariants.find((variant) => String(variant.variantId) === activePendingApproval.variantId)
+    : undefined;
+  useEffect(() => { setPendingApproval(undefined); }, [approvalConfirmationKey]);
+  useEffect(() => { if (approvalActionsBlocked) setPendingApproval(undefined); }, [approvalActionsBlocked]);
+  const pendingVariantId = pendingVariant ? String(pendingVariant.variantId) : undefined;
+  useEffect(() => {
+    if (pendingVariantId) approvalConfirmationRef.current?.focus();
+  }, [pendingVariantId]);
+  const cancelPendingApproval = () => {
+    const variantId = activePendingApproval?.variantId;
+    setPendingApproval(undefined);
+    if (variantId) variantButtonRefs.current.get(variantId)?.focus();
+  };
+  const confirmPendingApproval = async () => {
+    const pending = activePendingApproval;
+    const revision = focusedDraftRevision;
+    const draftId = focusedDraftId;
+    if (!pending || !pendingVariant || revision === undefined || approvalInFlightRef.current) return;
+    // Never approve a context that changed after the confirmation opened.
+    if (pending.contextKey !== approvalConfirmationKeyRef.current) {
+      setPendingApproval(undefined);
+      return;
+    }
+    approvalInFlightRef.current = true;
+    setApprovalInFlight(true);
+    setPendingApproval(undefined);
+    setSelectedVariantId(pending.variantId);
+    try {
+      await approveDraft(draftId, revision, pending.variantId);
+    } finally {
+      approvalInFlightRef.current = false;
+      setApprovalInFlight(false);
+    }
+  };
   const [historySearch, setHistorySearch] = useState("");
   const visibleOfferDrafts = useMemo(() => {
     const query = historySearch.trim().toLowerCase();
@@ -503,26 +592,61 @@ export function OfferConversationalWorkbench({
                   Die Freigabe gilt intern für diese Angebotsfassung und ermöglicht die Übergabe an die Küche. Sie ist kein Versand an den Kunden; Verkaufspreis und Kundenentwurf werden gesondert über die Preisaufstellung geprüft.
                 </p>
               ) : null}
-              <div className="quiet-action-row">
-                {!focusedApprovalBinding && !approvalUnclear && !anotherApprovedFassung && focusedVariants.map((variant) => {
-                  const variantId = String(variant.variantId);
-                  return (
-                    <button
-                      key={variantId}
-                      className="secondary-button"
-                      aria-pressed={selectedVariantId === variantId}
-                      disabled={submitting || editingMenu || editingPricing || editingEvent || incompletePricingTax || focusedDraftRevision === undefined}
-                      onClick={() => {
-                        setSelectedVariantId(variantId);
-                        if (focusedDraftRevision !== undefined) {
-                          void approveDraft(focusedDraftId, focusedDraftRevision, variantId);
-                        }
-                      }}
-                    >
-                      {`Variante freigeben: ${String(variant.label ?? variantId)}`}
+              {approvalOffered && focusedVariants.length > 0 ? (
+                <div id="offer-approval-variants" className="quiet-action-row offer-approval-variants" role="group" aria-label="Variante zur internen Freigabe wählen" tabIndex={-1}>
+                  {focusedVariants.map((variant) => {
+                    const variantId = String(variant.variantId);
+                    return (
+                      <button
+                        key={variantId}
+                        type="button"
+                        className="secondary-button"
+                        ref={(element) => {
+                          if (element) variantButtonRefs.current.set(variantId, element);
+                          else variantButtonRefs.current.delete(variantId);
+                        }}
+                        aria-pressed={pendingVariantId === variantId}
+                        aria-controls={pendingVariantId === variantId ? "offer-approval-confirmation" : undefined}
+                        disabled={approvalActionsBlocked}
+                        onClick={() => {
+                          if (approvalInFlightRef.current) return;
+                          setPendingApproval({ variantId, contextKey: approvalConfirmationKey });
+                        }}
+                      >
+                        {`Variante freigeben: ${getVariantLabel(variant)}`}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+              {pendingVariant && activePendingApproval ? (
+                <div
+                  id="offer-approval-confirmation"
+                  ref={approvalConfirmationRef}
+                  className="inline-confirmation offer-approval-confirmation"
+                  role="group"
+                  aria-labelledby="offer-approval-confirmation-question"
+                  aria-describedby="offer-approval-confirmation-scope"
+                  tabIndex={-1}
+                >
+                  <p id="offer-approval-confirmation-question">
+                    <strong>{`Variante „${getVariantLabel(pendingVariant)}“${getVariantGuests(pendingVariant) ? ` (${getVariantGuests(pendingVariant)} Gäste)` : ""} intern freigeben?`}</strong>
+                  </p>
+                  <p id="offer-approval-confirmation-scope" className="helper-text">
+                    {`Auftrag: ${renderDraftFocusLabel(focusedDraft)} · Fassung ${focusedDraftRevision}. `}
+                    Die Freigabe gilt intern für genau diese Fassung und ist kein Versand an den Kunden. Danach ist für diesen Auftrag keine Freigabe einer anderen Variante vorgesehen.
+                  </p>
+                  <div className="quiet-action-row">
+                    <button type="button" disabled={approvalActionsBlocked} onClick={() => void confirmPendingApproval()}>
+                      Bestätigen
                     </button>
-                  );
-                })}
+                    <button type="button" className="secondary-button" onClick={cancelPendingApproval}>
+                      Abbrechen
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              <div className="quiet-action-row">
                 {editingMenu || editingPricing || editingEvent ? (
                   <span className="helper-text">Vor dem Export Änderungen speichern oder verwerfen.</span>
                 ) : refreshRequired ? (
@@ -543,7 +667,7 @@ export function OfferConversationalWorkbench({
                   <button
                     className="secondary-button"
                     disabled={submitting || editingMenu || editingPricing || editingEvent}
-                    onClick={() => void createHandoff(focusedDraftId, focusedApprovalBinding.offerDraftRevision, focusedApprovalBinding.approvedOfferId)}
+                    onClick={() => void createHandoff(focusedDraftId, focusedApprovalBinding.offerDraftRevision, focusedApprovalBinding.approvedOfferId, focusedApprovalBinding.selectedVariantId)}
                   >
                     An Produktion übergeben
                   </button>
@@ -657,14 +781,14 @@ export function OfferConversationalWorkbench({
             <section>
               <h3>Veranstaltungsdaten manuell eingeben</h3>
               <p className="helper-text">Nur nutzen, wenn keine Kundenanfrage als Text oder Datei vorliegt.</p>
-              <input value={manualInput.eventType} onChange={(event) => manualActions.setEventType(event.target.value)} placeholder="Veranstaltungstyp" />
-              <input value={manualInput.eventDate} onChange={(event) => manualActions.setEventDate(event.target.value)} placeholder="Datum" />
-              <input value={manualInput.attendeeCount} onChange={(event) => manualActions.setAttendeeCount(event.target.value)} placeholder="Teilnehmerzahl" />
-              <input value={manualInput.serviceForm} onChange={(event) => manualActions.setServiceForm(event.target.value)} placeholder="Serviceform" />
-              <input value={manualInput.menuItems} onChange={(event) => manualActions.setMenuItems(event.target.value)} placeholder="Menüpunkte" />
-              <input value={manualInput.customerName} onChange={(event) => manualActions.setCustomerName(event.target.value)} placeholder="Kundenname" />
-              <input value={manualInput.venueName} onChange={(event) => manualActions.setVenueName(event.target.value)} placeholder="Ort" />
-              <textarea value={manualInput.notes} onChange={(event) => manualActions.setNotes(event.target.value)} placeholder="Interne Notizen" />
+              <label className="field-block"><span>Veranstaltungstyp</span><input value={manualInput.eventType} onChange={(event) => manualActions.setEventType(event.target.value)} /></label>
+              <label className="field-block"><span>Datum</span><input value={manualInput.eventDate} onChange={(event) => manualActions.setEventDate(event.target.value)} /></label>
+              <label className="field-block"><span>Teilnehmerzahl</span><input inputMode="numeric" value={manualInput.attendeeCount} onChange={(event) => manualActions.setAttendeeCount(event.target.value)} /></label>
+              <label className="field-block"><span>Serviceform</span><input value={manualInput.serviceForm} onChange={(event) => manualActions.setServiceForm(event.target.value)} /></label>
+              <label className="field-block"><span>Menüpunkte</span><input value={manualInput.menuItems} onChange={(event) => manualActions.setMenuItems(event.target.value)} /></label>
+              <label className="field-block"><span>Kundenname</span><input value={manualInput.customerName} onChange={(event) => manualActions.setCustomerName(event.target.value)} /></label>
+              <label className="field-block"><span>Ort</span><input value={manualInput.venueName} onChange={(event) => manualActions.setVenueName(event.target.value)} /></label>
+              <label className="field-block"><span>Interne Notizen</span><textarea value={manualInput.notes} onChange={(event) => manualActions.setNotes(event.target.value)} /></label>
               <button disabled={submitting || editingMenu || editingPricing || editingEvent} onClick={() => void manualActions.submitManualSpec()}>
                 Angaben übernehmen
               </button>
@@ -703,11 +827,11 @@ export function OfferConversationalWorkbench({
           {!focusedDraft && specEdit.editingSpecId ? (
             <div className="compact-edit-form">
               <h3>Veranstaltungsdaten bearbeiten</h3>
-              <input value={specEdit.eventType} onChange={(event) => specEditActions.setEventType(event.target.value)} placeholder="Veranstaltungstyp" />
-              <input value={specEdit.eventDate} onChange={(event) => specEditActions.setEventDate(event.target.value)} placeholder="Datum" />
-              <input value={specEdit.attendeeCount} onChange={(event) => specEditActions.setAttendeeCount(event.target.value)} placeholder="Teilnehmerzahl" />
-              <input value={specEdit.serviceForm} onChange={(event) => specEditActions.setServiceForm(event.target.value)} placeholder="Serviceform" />
-              <textarea value={specEdit.menuItems} onChange={(event) => specEditActions.setMenuItems(event.target.value)} placeholder="Menüpunkte" />
+              <label className="field-block"><span>Veranstaltungstyp</span><input value={specEdit.eventType} onChange={(event) => specEditActions.setEventType(event.target.value)} /></label>
+              <label className="field-block"><span>Datum</span><input value={specEdit.eventDate} onChange={(event) => specEditActions.setEventDate(event.target.value)} /></label>
+              <label className="field-block"><span>Teilnehmerzahl</span><input inputMode="numeric" value={specEdit.attendeeCount} onChange={(event) => specEditActions.setAttendeeCount(event.target.value)} /></label>
+              <label className="field-block"><span>Serviceform</span><input value={specEdit.serviceForm} onChange={(event) => specEditActions.setServiceForm(event.target.value)} /></label>
+              <label className="field-block"><span>Menüpunkte</span><textarea value={specEdit.menuItems} onChange={(event) => specEditActions.setMenuItems(event.target.value)} /></label>
               <div className="quiet-action-row">
                 <button disabled={submitting || editingMenu || editingPricing || editingEvent} onClick={() => void specEditActions.saveSpecEdit()}>
                   Änderungen speichern

@@ -2711,3 +2711,19 @@ label:has(> input[type="file"]:focus-visible) { outline: 3px solid #0066cc; outl
 .login-card > .eyebrow { font-size: 1rem; font-weight: 600; letter-spacing: 0; text-transform: none; color: #55555a; }
 .login-card .form-error { color: #9b1c1c; background: #fff1f0; border: 1px solid #f2b6b1; border-radius: 8px; padding: 12px; }
 .login-card button:disabled { color: #6e6e73; background: #f5f5f7; box-shadow: none; }
+
+/* Feedback stays where the operator acted: inline confirmation, row preview,
+   action reasons next to the disabled action. */
+.inline-confirmation { margin-top: 0.75rem; padding: 1rem; border: 1px solid #c8c8ce; border-radius: 12px; background: #fff; }
+.inline-confirmation p { margin: 0 0 0.75rem; max-width: 65ch; line-height: 1.5; }
+.inline-confirmation .quiet-action-row { margin: 0; }
+.inline-confirmation:focus-visible,
+.quantity-row-feedback:focus-visible,
+.action-reason:focus-visible { outline: 3px solid #0066cc; outline-offset: 3px; }
+.inline-confirmation button { min-height: 44px; }
+.quantity-row-feedback { margin-top: 0.5rem; padding: 0.75rem; border: 1px solid #d2d2d7; border-radius: 12px; background: #fff; scroll-margin-block: 96px; }
+.quantity-row-feedback p { margin: 0 0 0.5rem; }
+.action-with-reason { display: grid; gap: 0.35rem; justify-items: start; }
+.action-reason { margin: 0; max-width: 40ch; font-size: 0.9rem; color: #55555a; }
+.action-reason a { display: inline-flex; align-items: center; min-height: 44px; color: #0066cc; text-underline-offset: 3px; }
+.field-block input, .field-block textarea, .field-block select { min-height: 44px; }

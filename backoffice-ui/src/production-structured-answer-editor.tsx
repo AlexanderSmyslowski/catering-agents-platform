@@ -63,7 +63,7 @@ export function ProductionStructuredAnswerEditor({
   const componentSectionOpen = openFields.length === 0 || openFields.some(field => !isEventField(field));
   const componentCount = Array.isArray(focusedProductionSpec.menuPlan) ? focusedProductionSpec.menuPlan.length : 0;
   return (
-    <article className="structured-chat-message structured-chat-message--user">
+    <article id="production-answer-editor" tabIndex={-1} className="structured-chat-message structured-chat-message--user">
       <div className="structured-chat-avatar structured-chat-avatar--user" aria-hidden="true">
         Du
       </div>

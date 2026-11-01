@@ -1114,6 +1114,14 @@ describe("backoffice route smoke", () => {
       findButtonByText("Variante freigeben: Klassisch").click();
       await flush();
     });
+    // Choosing the variant sends nothing; only the named confirmation approves.
+    expect(approvalBodies).toEqual([]);
+    expect(document.getElementById("offer-approval-confirmation")?.textContent).toContain("Variante „Klassisch“");
+    await act(async () => {
+      Array.from(document.querySelectorAll<HTMLButtonElement>("#offer-approval-confirmation button"))
+        .find((button) => button.textContent === "Bestätigen")!.click();
+      await flush();
+    });
 
     const approvedText = document.body.textContent ?? "";
     expect(approvalBodies).toEqual([{ decision: "approved", revision: 1, variantId: "classic" }]);

@@ -32,7 +32,9 @@ describe("production question panel action state", () => {
       saveAnswersDisabled: true,
       primaryActionLabel: "Berechnung starten",
       primaryActionDisabled: false,
-      sourceReviewHelperText: undefined
+      sourceReviewHelperText: undefined,
+      primaryActionReason: undefined,
+      sourceReviewBlocking: false
     });
   });
 
@@ -52,7 +54,9 @@ describe("production question panel action state", () => {
       saveAnswersDisabled: false,
       primaryActionLabel: "Speichern und Berechnung starten",
       primaryActionDisabled: false,
-      sourceReviewHelperText: undefined
+      sourceReviewHelperText: undefined,
+      primaryActionReason: undefined,
+      sourceReviewBlocking: false
     });
   });
 
@@ -91,7 +95,9 @@ describe("production question panel action state", () => {
       saveAnswersDisabled: false,
       primaryActionLabel: "Berechnung starten",
       primaryActionDisabled: false,
-      sourceReviewHelperText: undefined
+      sourceReviewHelperText: undefined,
+      primaryActionReason: undefined,
+      sourceReviewBlocking: false
     });
   });
 
@@ -160,7 +166,23 @@ describe("production question panel action state", () => {
     ).toMatchObject({
       primaryActionLabel: "Speichern und Berechnung starten",
       primaryActionDisabled: true,
-      sourceReviewHelperText: "Rückfragen beantworten, bevor Mengen, Rezepte und Einkaufsliste berechnet werden."
+      sourceReviewHelperText: "Rückfragen beantworten, bevor Mengen, Rezepte und Einkaufsliste berechnet werden.",
+      // The fields are already open: the reason beside the action names what to do there.
+      primaryActionReason: "Ändere zuerst eine Angabe in den geöffneten Antwortfeldern."
     });
+  });
+
+  it("puts the reason for a disabled calculation next to the action", () => {
+    expect(buildProductionQuestionPanelActionState({
+      focusedProductionSpec: { specId: "spec-1" }, submitting: false, hasFocusedSpecEditChanges: false,
+      openQuestionCount: 2, sourceReviewRequired: true
+    })).toMatchObject({
+      primaryActionDisabled: true,
+      sourceReviewBlocking: true,
+      primaryActionReason: "Quellenprüfung bestätigen, bevor Mengen, Rezepte und Einkaufsliste berechnet werden. Rückfragen beantworten, bevor Mengen, Rezepte und Einkaufsliste berechnet werden."
+    });
+    expect(buildProductionQuestionPanelActionState({
+      focusedProductionSpec: { specId: "spec-1" }, submitting: true, hasFocusedSpecEditChanges: true
+    }).primaryActionReason).toBe("Aktion läuft …");
   });
 });

@@ -52,6 +52,32 @@ const browserIdentityHeaders = (init?: RequestInit) =>
     /(?:actor|subject|role|business|identity)/u.test(name)
   );
 
+/** Mirror the rendered inline approval: the variant button only opens
+ * #offer-approval-confirmation; only its scoped "Bestätigen" runs onConfirm. */
+const fakeApprovalConfirmation = (onConfirm: () => void = () => undefined, opens = true) => {
+  let open = false;
+  let variantClicks = 0;
+  let confirmClicks = 0;
+  const confirmButton = {
+    textContent: "Bestätigen",
+    disabled: false,
+    click: () => { confirmClicks += 1; onConfirm(); },
+  };
+  const cancelButton = { textContent: "Abbrechen", disabled: false, click: () => { open = false; } };
+  const confirmation = {
+    querySelectorAll: (selector: string) => selector === "button" ? [cancelButton, confirmButton] : [],
+  };
+  return {
+    approvalButton: {
+      textContent: "Variante freigeben: Standard",
+      click: () => { variantClicks += 1; if (opens) open = true; },
+    },
+    query: (selector: string) => selector === "#offer-approval-confirmation" && open ? confirmation : null,
+    get variantClicks() { return variantClicks; },
+    get confirmClicks() { return confirmClicks; },
+  };
+};
+
 const runMarkerContract = (mode: "eventual" | "permanent") =>
   spawnSync(
     "bash",
@@ -580,10 +606,8 @@ describe("Linux browser rehearsal governance", () => {
           : null,
       querySelectorAll: () => [],
     };
-    const approvalButton = {
-      textContent: "Variante freigeben: Standard",
-      click: () => undefined,
-    };
+    const approval = fakeApprovalConfirmation();
+    const approvalButton = approval.approvalButton;
     const handoffLink = {
       offsetParent: {},
       textContent: "Zur Produktion",
@@ -599,7 +623,7 @@ describe("Linux browser rehearsal governance", () => {
         return [];
       },
       querySelector: (selector: string) =>
-        selector === "[aria-label='Kompakte Ergebniszusammenfassung']" ? {} : null,
+        selector === "[aria-label='Kompakte Ergebniszusammenfassung']" ? {} : approval.query(selector),
     };
     const fetch = async (path: string) => ({
       ok: true,
@@ -630,6 +654,65 @@ describe("Linux browser rehearsal governance", () => {
 
     await expect(openCase()).rejects.toThrow("Freigabezustand");
     expect(clicks).toBe(1);
+    expect(approval.variantClicks).toBe(1);
+    expect(approval.confirmClicks).toBe(1);
+  });
+
+  it("never treats the variant button alone as an approval without the inline confirmation", async () => {
+    const decisionRequests: string[] = [];
+    const approval = fakeApprovalConfirmation(() => undefined, false);
+    const selectedCaseButton = {
+      textContent: "Browser-Rehearsal - Besprechung - 06.11.2026 - 35 Personen",
+      getAttribute: (name: string) => name === "aria-pressed" ? "true" : null,
+      click: () => undefined,
+    };
+    const historyDetails = {
+      open: false,
+      querySelector: (selector: string) => selector === "summary"
+        ? { textContent: "Bestehenden Auftrag öffnen · 1 Auftrag" }
+        : null,
+      querySelectorAll: (selector: string) => selector === "button[data-action='open-case']"
+        ? [selectedCaseButton]
+        : [],
+    };
+    const handoffDetails = {
+      open: false,
+      querySelector: (selector: string) => selector === "summary"
+        ? { textContent: "Erfasste Veranstaltungsdaten" }
+        : null,
+      querySelectorAll: () => [],
+    };
+    const document = {
+      body: { innerText: "Besprechung für 35 Teilnehmer als Kaffeepause." },
+      querySelectorAll: (selector: string) => {
+        if (selector === "details") return [historyDetails, handoffDetails];
+        if (selector === "button") return [approval.approvalButton];
+        return [];
+      },
+      querySelector: (selector: string) =>
+        selector === "[aria-label='Kompakte Ergebniszusammenfassung']" ? {} : approval.query(selector),
+    };
+    const fetch = async (path: string) => {
+      if (path.endsWith("/decision")) decisionRequests.push(path);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => path.includes("/cases/")
+          ? {
+              case: { caseId: "offer-case-browser-rehearsal", product: "offer", displayName: "Browser-Rehearsal - Besprechung - 06.11.2026 - 35 Personen" },
+              events: [{ revisionRef: { artifactType: "OfferDraft", artifactId: "draft-browser-rehearsal" } }],
+            }
+          : { draftId: "draft-browser-rehearsal", eventSummary: "Besprechung für 35 Teilnehmer als Kaffeepause.", proposedEventSpec: { specId: "spec-browser-rehearsal-offer-case" } },
+      };
+    };
+    const openCase = new Function(
+      "document", "fetch", "sessionStorage", "location", `return (${openOfferHistoryItem});`,
+    )(document, fetch, { getItem: () => "offer-case-browser-rehearsal" }, { pathname: "/angebot" }) as () => Promise<unknown>;
+
+    await expect(openCase()).rejects.toThrow("Freigabebestätigung");
+    expect(approval.variantClicks).toBe(1);
+    expect(approval.confirmClicks).toBe(0);
+    expect(decisionRequests).toEqual([]);
   });
 
   it("rejects a generic production link when the server-side approval state is absent", async () => {
@@ -654,7 +737,8 @@ describe("Linux browser rehearsal governance", () => {
         : null,
       querySelectorAll: () => [],
     };
-    const approvalButton = { textContent: "Variante freigeben: Standard", click: () => undefined };
+    const approval = fakeApprovalConfirmation();
+    const approvalButton = approval.approvalButton;
     const document = {
       body: { innerText: "Besprechung für 35 Teilnehmer als Kaffeepause. Angebotsvariante wurde freigegeben." },
       querySelectorAll: (selector: string) => {
@@ -663,7 +747,7 @@ describe("Linux browser rehearsal governance", () => {
         if (selector === "a[href='/produktion']") return [{ offsetParent: {}, textContent: "Zur Produktion" }];
         return [];
       },
-      querySelector: (selector: string) => selector === "[aria-label='Kompakte Ergebniszusammenfassung']" ? {} : null,
+      querySelector: (selector: string) => selector === "[aria-label='Kompakte Ergebniszusammenfassung']" ? {} : approval.query(selector),
     };
     const fetch = async (path: string) => ({
       ok: true,
@@ -693,10 +777,10 @@ describe("Linux browser rehearsal governance", () => {
       getAttribute: (name: string) => name === "aria-pressed" ? String(caseSelected) : null,
       click: () => { caseSelected = true; },
     };
-    const approvalButton = {
-      textContent: "Variante freigeben: Standard",
-      click: () => { void fetch("/api/offers/v1/offers/drafts/draft-browser-rehearsal/decision", { method: "POST" }); },
-    };
+    const approval = fakeApprovalConfirmation(() => {
+      void fetch("/api/offers/v1/offers/drafts/draft-browser-rehearsal/decision", { method: "POST" });
+    });
+    const approvalButton = approval.approvalButton;
     const handoffButton = {
       textContent: "An Produktion übergeben",
       getAttribute: () => null,
@@ -732,7 +816,7 @@ describe("Linux browser rehearsal governance", () => {
         if (selector === "a[href='/produktion']") return handoffCreated ? [{ offsetParent: {}, textContent: "Zur Produktion" }] : [];
         return [];
       },
-      querySelector: (selector: string) => selector === "[aria-label='Kompakte Ergebniszusammenfassung']" ? {} : null,
+      querySelector: (selector: string) => selector === "[aria-label='Kompakte Ergebniszusammenfassung']" ? {} : approval.query(selector),
     };
     const session = new Map([["catering.browser-rehearsal.offer-case-id", "offer-case-browser-rehearsal"]]);
     const sessionStorage = { getItem: (key: string) => session.get(key) ?? null, setItem: (key: string, value: string) => session.set(key, value) };
@@ -779,6 +863,9 @@ describe("Linux browser rehearsal governance", () => {
       draftId: "draft-browser-rehearsal",
       approvedOfferId: "approved-offer-browser-rehearsal",
     });
+    expect(approval.variantClicks).toBe(1);
+    expect(approval.confirmClicks).toBe(1);
+    expect(calls.filter(({ path }) => path.endsWith("/decision"))).toHaveLength(1);
     expect(productionCaseCreated).toBe(false);
     expect(calls.some(({ path }) => path.includes("/offers/approved/approved-offer-browser-rehearsal/handoffs"))).toBe(false);
     expect(calls.every(({ init }) => browserIdentityHeaders(init).length === 0)).toBe(true);
@@ -1106,13 +1193,11 @@ describe("Linux browser rehearsal governance", () => {
         : null,
       querySelectorAll: () => [],
     };
-    const approvalButton = {
-      textContent: "Variante freigeben: Standard",
-      click: () => {
-        approved = true;
-        setTimeout(() => { handoffButton.disabled = false; }, 20);
-      },
-    };
+    const approval = fakeApprovalConfirmation(() => {
+      approved = true;
+      setTimeout(() => { handoffButton.disabled = false; }, 20);
+    });
+    const approvalButton = approval.approvalButton;
     const document = {
       body: {
         get innerText() {
@@ -1129,7 +1214,7 @@ describe("Linux browser rehearsal governance", () => {
         if (selector === "a[href='/produktion']") return handoffCreated ? [{ offsetParent: {}, textContent: "Zur Produktion" }] : [];
         return [];
       },
-      querySelector: (selector: string) => selector === "[aria-label='Kompakte Ergebniszusammenfassung']" ? {} : null,
+      querySelector: (selector: string) => selector === "[aria-label='Kompakte Ergebniszusammenfassung']" ? {} : approval.query(selector),
     };
     const session = new Map([["catering.browser-rehearsal.offer-case-id", "offer-case-browser-rehearsal"]]);
     const sessionStorage = {
@@ -1296,16 +1381,14 @@ describe("Linux browser rehearsal governance", () => {
         caseSelected = true;
       },
     };
-    const approvalButton = {
-      textContent: "Variante freigeben: Standard",
-      click: () => {
-        approvalClicks += 1;
-        void fetch("/api/offers/v1/offers/drafts/draft-browser-rehearsal/decision", {
-          method: "POST",
-          body: JSON.stringify({ decision: "approved" })
-        });
-      },
-    };
+    const approval = fakeApprovalConfirmation(() => {
+      approvalClicks += 1;
+      void fetch("/api/offers/v1/offers/drafts/draft-browser-rehearsal/decision", {
+        method: "POST",
+        body: JSON.stringify({ decision: "approved" })
+      });
+    });
+    const approvalButton = approval.approvalButton;
     const handoffLink = {
       offsetParent: {},
       textContent: "Zur Produktion",
@@ -1342,7 +1425,7 @@ describe("Linux browser rehearsal governance", () => {
         return [];
       },
       querySelector: (selector: string) =>
-        selector === "[aria-label='Kompakte Ergebniszusammenfassung']" ? {} : null,
+        selector === "[aria-label='Kompakte Ergebniszusammenfassung']" ? {} : approval.query(selector),
     };
     const fetch = async (path: string, _init?: unknown) => {
       if (path.endsWith("/decision")) {
@@ -1378,6 +1461,7 @@ describe("Linux browser rehearsal governance", () => {
     )(document, fetch, sessionStorage, { pathname: "/angebot" }) as () => Promise<unknown>;
 
     await expect(openCase()).rejects.toThrow("Freigabezustand");
+    expect(approval.variantClicks).toBe(1);
     expect(approvalClicks).toBe(1);
     expect(approvalRequests).toEqual([
       "/api/offers/v1/offers/drafts/draft-browser-rehearsal/decision"

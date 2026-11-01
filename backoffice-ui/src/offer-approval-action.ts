@@ -6,14 +6,29 @@ export type OfferApprovalBinding = {
   offerDraftId: string;
   offerDraftRevision: number;
   approvedOfferId: string;
+  /** Variant identity as persisted in the ApprovedOffer / handoff source.
+   * Absent for legacy projections; never inferred from a UI selection. */
+  selectedVariantId?: string;
   handoffId?: string;
   productionDraftId?: string;
 };
 
+function persistedVariantId(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+}
+
+/** Combine persisted variant identities. Contradictory records yield no
+ * identity, so the UI stays neutral instead of naming a wrong variant. */
+export function resolvePersistedVariantId(...candidates: unknown[]): string | undefined {
+  const known = candidates.map(persistedVariantId).filter((value): value is string => value !== undefined);
+  if (known.length === 0) return undefined;
+  return known.every((value) => value === known[0]) ? known[0] : undefined;
+}
+
 /** Project the complete persisted approval/handoff records into the browser
  * action contract. The source draft remains the authority after a reload. */
 export function buildOfferApprovalBinding(
-  approvedOffer?: Pick<ApprovedOffer, "approvedOfferId" | "sourceDraft">,
+  approvedOffer?: Pick<ApprovedOffer, "approvedOfferId" | "sourceDraft"> & Partial<Pick<ApprovedOffer, "selectedVariantId">>,
   handoff?: Pick<ProductionHandoff, "handoffId" | "source" | "approvedOfferId">,
   caseApprovedOfferId?: string
 ): OfferApprovalBinding | undefined {
@@ -52,18 +67,23 @@ export function buildOfferApprovalBinding(
   )) {
     return undefined;
   }
+  const selectedVariantId = resolvePersistedVariantId(
+    approvedOffer?.selectedVariantId,
+    (handoff?.source as { selectedVariantId?: unknown } | undefined)?.selectedVariantId
+  );
   return {
     offerDraftId: source.draftId,
     offerDraftRevision: source.revision,
     approvedOfferId,
+    ...(selectedVariantId ? { selectedVariantId } : {}),
     ...(handoff?.handoffId ? { handoffId: handoff.handoffId } : {}),
     ...(handoff?.handoffId ? { productionDraftId: productionDraftIdForHandoff(handoff.handoffId) } : {})
   };
 }
 
 export type OfferApprovalActionInput = {
-  decideOfferDraft: (draftId: string, revision: number, variantId: string) => Promise<{ approvedOffer?: { approvedOfferId: string } }>;
-  createProductionHandoff: (approvedOfferId: string) => Promise<{ handoff?: { handoffId: string } }>;
+  decideOfferDraft: (draftId: string, revision: number, variantId: string) => Promise<{ approvedOffer?: { approvedOfferId: string; selectedVariantId?: string } }>;
+  createProductionHandoff: (approvedOfferId: string) => Promise<{ handoff?: { handoffId: string; source?: { selectedVariantId?: string } } }>;
   createProductionCaseFromHandoff: (handoffId: string) => Promise<{ case: { caseId: string } }>;
   createProductionDraftFromHandoff: (caseId: string, handoffId: string) => Promise<{ draft?: { draftId: string } }>;
   setActiveProductionCaseId: (caseId: string) => void;
@@ -88,14 +108,18 @@ export function buildOfferApprovalAction(input: OfferApprovalActionInput) {
     approve: async (draftId: string, revision: number, variantId: string) => run(async () => {
       const result = await input.decideOfferDraft(draftId, revision, variantId);
       if (!result.approvedOffer?.approvedOfferId) throw new Error("Freigegebenes Angebot fehlt.");
+      // Only the server-persisted identity is shown later; the requested
+      // variant is never substituted for a missing response field.
+      const selectedVariantId = resolvePersistedVariantId(result.approvedOffer.selectedVariantId);
       input.setApprovalBinding?.({
         offerDraftId: draftId,
         offerDraftRevision: revision,
-        approvedOfferId: result.approvedOffer.approvedOfferId
+        approvedOfferId: result.approvedOffer.approvedOfferId,
+        ...(selectedVariantId ? { selectedVariantId } : {})
       });
       input.setNotice("Angebotsvariante wurde freigegeben.");
     }, "Angebotsvariante konnte nicht freigegeben werden."),
-    createHandoff: async (offerDraftId: string, offerDraftRevision: number, approvedOfferId: string) => run(async () => {
+    createHandoff: async (offerDraftId: string, offerDraftRevision: number, approvedOfferId: string, approvedVariantId?: string) => run(async () => {
       const result = await input.createProductionHandoff(approvedOfferId);
       if (!result.handoff?.handoffId) throw new Error("Produktionsübergabe fehlt.");
       const productionCase = await input.createProductionCaseFromHandoff(result.handoff.handoffId);
@@ -105,10 +129,12 @@ export function buildOfferApprovalAction(input: OfferApprovalActionInput) {
         result.handoff.handoffId
       );
       if (!productionResult.draft?.draftId) throw new Error("Produktionsentwurf fehlt.");
+      const selectedVariantId = resolvePersistedVariantId(approvedVariantId, result.handoff.source?.selectedVariantId);
       input.setApprovalBinding?.({
         offerDraftId,
         offerDraftRevision,
         approvedOfferId,
+        ...(selectedVariantId ? { selectedVariantId } : {}),
         handoffId: result.handoff.handoffId,
         productionDraftId: productionResult.draft.draftId
       });

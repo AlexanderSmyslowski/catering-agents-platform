@@ -184,6 +184,17 @@ export function ProductionQuestionPanel({
   const questionCountLabel =
     productionQuestions.length === 1 ? "1 Rückfrage beantworten" : `${productionQuestions.length} Rückfragen beantworten`;
 
+  // Lead to a control that is actually rendered; collapsed sections open first.
+  const revealAndFocus = (elementId: string) => {
+    const element = document.getElementById(elementId);
+    for (let parent = element?.parentElement; parent; parent = parent.parentElement) {
+      if (parent instanceof HTMLDetailsElement) parent.open = true;
+    }
+    element?.focus({ preventScroll: true });
+    element?.scrollIntoView?.({ block: "start", inline: "nearest", behavior: "auto" });
+  };
+  const showSourceReviewLink = answersEditable && sourceReviewRequired && actionState.sourceReviewBlocking;
+
   return (
     <article tabIndex={-1} id="production-question-panel" className="panel form-panel question-panel production-step-card">
       <header>
@@ -214,7 +225,9 @@ export function ProductionQuestionPanel({
             <div>
               <strong>{productionQuestions.length > 0 ? questionCountLabel : "Keine offenen Rückfragen"}</strong>
               <p className="helper-text">
-                {productionQuestions.length > 0
+                {productionQuestions.length > 0 && actionState.isFocusedSpecEditing
+                  ? "Trage die fehlenden Angaben in die Antwortfelder ein und speichere sie dort."
+                  : productionQuestions.length > 0
                   ? hasExistingPlan
                     ? "Öffne die Antwortfelder und ergänze fehlende Angaben vor einer Neuberechnung."
                     : "Öffne die Antwortfelder, ergänze fehlende Angaben und starte danach die Berechnung."
@@ -222,19 +235,42 @@ export function ProductionQuestionPanel({
               </p>
             </div>
             <div className="action-row">
-              <button
-                className="secondary-button"
-                disabled={actionState.editAnswersDisabled}
-                onClick={() => beginSpecEdit(focusedProductionSpec)}
-              >
-                {productionQuestions.length > 0 ? "Rückfragen beantworten" : "Angaben prüfen"}
-              </button>
-              {!continuationEditorOnly ? <button
-                disabled={actionState.primaryActionDisabled}
-                onClick={() => void createPlan(focusedProductionSpec, { sourceReviewConfirmed })}
-              >
-                {actionState.primaryActionLabel}
-              </button> : null}
+              {actionState.isFocusedSpecEditing ? (
+                <p className="action-reason" role="status">
+                  Antwortfelder sind geöffnet.{" "}
+                  <a href="#production-answer-editor" onClick={(event) => { event.preventDefault(); revealAndFocus("production-answer-editor"); }}>
+                    Zu den Antwortfeldern
+                  </a>
+                </p>
+              ) : (
+                <button
+                  className="secondary-button"
+                  disabled={actionState.editAnswersDisabled}
+                  onClick={() => beginSpecEdit(focusedProductionSpec)}
+                >
+                  {productionQuestions.length > 0 ? "Rückfragen beantworten" : "Angaben prüfen"}
+                </button>
+              )}
+              {!continuationEditorOnly ? <div className="action-with-reason">
+                <button
+                  disabled={actionState.primaryActionDisabled}
+                  aria-describedby={actionState.primaryActionReason ? "production-primary-action-reason" : undefined}
+                  onClick={() => void createPlan(focusedProductionSpec, { sourceReviewConfirmed })}
+                >
+                  {actionState.primaryActionLabel}
+                </button>
+                {actionState.primaryActionReason ? (
+                  <p id="production-primary-action-reason" className="action-reason" role="status">
+                    {actionState.primaryActionReason}
+                    {showSourceReviewLink ? <>
+                      {" "}
+                      <a href="#production-source-review-confirmation" onClick={(event) => { event.preventDefault(); revealAndFocus("production-source-review-confirmation"); }}>
+                        Zur Quellenprüfung
+                      </a>
+                    </> : null}
+                  </p>
+                ) : null}
+              </div> : null}
             </div>
           </div> : null}
           {answersEditable && allDietaryAnswered && questionState.currentDraft?.draftId ? <button type="button" className="secondary-button" onClick={() => {
@@ -307,6 +343,7 @@ export function ProductionQuestionPanel({
             {answersEditable && sourceReviewRequired ? (
               <label className="component-answer-card">
                 <input
+                  id="production-source-review-confirmation"
                   type="checkbox"
                   checked={sourceReviewConfirmed}
                   disabled={submitting}
@@ -321,7 +358,7 @@ export function ProductionQuestionPanel({
               onDraftChanged={refreshAfterDraftDecision}
             /> : null}
           </div>
-          {answersEditable && !hasDietaryReview && actionState.sourceReviewHelperText ? (
+          {answersEditable && !hasDietaryReview && continuationEditorOnly && actionState.sourceReviewHelperText ? (
             <p className="helper-text" role="status">
               {actionState.sourceReviewHelperText}
             </p>

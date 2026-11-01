@@ -367,6 +367,13 @@ describe("offer workbench approval binding", () => {
       approveButton?.click();
       await flushPromises();
     });
+    const confirmButton = Array.from(document.querySelectorAll("button")).find((button) =>
+      button.textContent === "Bestätigen"
+    );
+    await act(async () => {
+      confirmButton?.click();
+      await flushPromises();
+    });
     expect(Array.from(document.querySelectorAll("button")).some((button) =>
       button.textContent === "An Produktion übergeben"
     )).toBe(true);
@@ -426,6 +433,173 @@ describe("offer workbench approval binding", () => {
     expect(markup).toContain("Für diesen Auftrag ist bereits eine andere Angebotsfassung intern freigegeben");
     expect(markup).not.toContain("Variante freigeben: Klassisch");
   });
+});
+
+function twoVariantDraft(revision = 1) {
+  return {
+    ...draft("draft-a", "Angebot A", revision),
+    variantSet: [
+      { variantId: "lower", label: "Unteres Arbeitsband", proposedEventSpec: { attendees: { expected: 80 } } },
+      { variantId: "middle", label: "Mitte", proposedEventSpec: { attendees: { expected: 100 } } }
+    ]
+  };
+}
+
+function buttonWithText(scope: ParentNode, text: string): HTMLButtonElement {
+  const button = Array.from(scope.querySelectorAll("button")).find((candidate) => candidate.textContent === text);
+  if (!button) throw new Error(`Button fehlt: ${text}`);
+  return button;
+}
+
+const approvalConfirmation = () => document.getElementById("offer-approval-confirmation");
+
+describe("two-step internal offer approval", () => {
+  it("asks for a named confirmation and approves exactly once only after confirming", async () => {
+    const approveDraft = vi.fn(async (_draftId: string, _revision: number, _variantId: string) => undefined);
+    const setSelectedVariantId = vi.fn();
+    const offer = twoVariantDraft();
+    const root = createRoot(document.body.appendChild(document.createElement("div")));
+    await act(async () => root.render(createElement(OfferConversationalWorkbench, props({
+      activeDraft: offer, selectedDraft: offer, approveDraft, setSelectedVariantId
+    }))));
+
+    await act(async () => buttonWithText(document, "Variante freigeben: Mitte").click());
+    const confirmation = approvalConfirmation()!;
+    expect(confirmation.textContent).toContain("Variante „Mitte“ (100 Gäste) intern freigeben?");
+    expect(confirmation.textContent).toContain("Auftrag: Angebot A · Fassung 1");
+    expect(confirmation.textContent).toContain("kein Versand an den Kunden");
+    expect(document.activeElement).toBe(confirmation);
+    expect(approveDraft).not.toHaveBeenCalled();
+    expect(setSelectedVariantId).not.toHaveBeenCalled();
+
+    await act(async () => buttonWithText(confirmation, "Abbrechen").click());
+    expect(approvalConfirmation()).toBeNull();
+    expect(approveDraft).not.toHaveBeenCalled();
+    expect(document.activeElement?.textContent).toBe("Variante freigeben: Mitte");
+
+    await act(async () => buttonWithText(document, "Variante freigeben: Mitte").click());
+    const confirm = buttonWithText(approvalConfirmation()!, "Bestätigen");
+    await act(async () => {
+      confirm.click();
+      confirm.click();
+      await flushPromises();
+    });
+    expect(approveDraft).toHaveBeenCalledExactlyOnceWith("draft-a", 1, "middle");
+    expect(setSelectedVariantId).toHaveBeenCalledWith("middle");
+    await act(async () => root.unmount());
+  });
+
+  it("blocks a second confirmation while the approval request is still running", async () => {
+    let finish: () => void = () => undefined;
+    const approveDraft = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
+    const offer = twoVariantDraft();
+    const root = createRoot(document.body.appendChild(document.createElement("div")));
+    await act(async () => root.render(createElement(OfferConversationalWorkbench, props({ activeDraft: offer, selectedDraft: offer, approveDraft }))));
+    await act(async () => buttonWithText(document, "Variante freigeben: Mitte").click());
+    await act(async () => buttonWithText(approvalConfirmation()!, "Bestätigen").click());
+    expect(buttonWithText(document, "Variante freigeben: Unteres Arbeitsband").disabled).toBe(true);
+    await act(async () => buttonWithText(document, "Variante freigeben: Unteres Arbeitsband").click());
+    expect(approvalConfirmation()).toBeNull();
+    expect(approveDraft).toHaveBeenCalledTimes(1);
+    await act(async () => { finish(); await flushPromises(); });
+    expect(approveDraft).toHaveBeenCalledTimes(1);
+    await act(async () => root.unmount());
+  });
+
+  it("discards a pending confirmation when the revision, case context or editing changes", async () => {
+    const approveDraft = vi.fn(async () => undefined);
+    const root = createRoot(document.body.appendChild(document.createElement("div")));
+    const render = (offer: ReturnType<typeof twoVariantDraft>, approvalContextKey: string) => act(async () => root.render(
+      createElement(OfferConversationalWorkbench, props({
+        activeDraft: offer, selectedDraft: offer, approveDraft, approvalContextKey, onMenuSaved: async () => undefined
+      }))
+    ));
+    const revisionOne = twoVariantDraft(1);
+    await render(revisionOne, "case-a");
+    await act(async () => buttonWithText(document, "Variante freigeben: Mitte").click());
+    expect(approvalConfirmation()).not.toBeNull();
+
+    await render(twoVariantDraft(2), "case-a");
+    expect(approvalConfirmation()).toBeNull();
+    // Returning to the old revision never resurrects the old confirmation.
+    await render(revisionOne, "case-a");
+    expect(approvalConfirmation()).toBeNull();
+
+    await act(async () => buttonWithText(document, "Variante freigeben: Mitte").click());
+    expect(approvalConfirmation()).not.toBeNull();
+    await render(revisionOne, "case-b");
+    expect(approvalConfirmation()).toBeNull();
+
+    await act(async () => buttonWithText(document, "Variante freigeben: Mitte").click());
+    expect(approvalConfirmation()).not.toBeNull();
+    await act(async () => buttonWithText(document, "Preisaufstellung erfassen").click());
+    expect(approvalConfirmation()).toBeNull();
+    expect(buttonWithText(document, "Variante freigeben: Mitte").disabled).toBe(true);
+    expect(approveDraft).not.toHaveBeenCalled();
+    await act(async () => root.unmount());
+  });
+
+  it("names the persisted approved variant after a reload and never the current UI selection", () => {
+    const offer = twoVariantDraft();
+    const statusFor = (approvalBinding?: OfferApprovalBinding) => new DOMParser().parseFromString(
+      renderToStaticMarkup(createElement(OfferConversationalWorkbench, props({
+        activeDraft: offer, selectedDraft: offer, approvalBinding, approvalBindingState: "valid", selectedVariantId: "lower"
+      }))),
+      "text/html"
+    ).querySelector('[role="status"]')?.textContent ?? "";
+
+    const reloaded = buildOfferApprovalBinding({
+      approvedOfferId: "approved-a", sourceDraft: { draftId: "draft-a", revision: 1 }, selectedVariantId: "middle"
+    });
+    expect(reloaded?.selectedVariantId).toBe("middle");
+    expect(statusFor(reloaded)).toContain("Intern freigegeben – diese Fassung · Variante: Mitte");
+    expect(statusFor(reloaded)).not.toContain("Unteres Arbeitsband");
+
+    const legacy = buildOfferApprovalBinding({ approvedOfferId: "approved-a", sourceDraft: { draftId: "draft-a", revision: 1 } });
+    expect(legacy?.selectedVariantId).toBeUndefined();
+    expect(statusFor(legacy)).toContain("Intern freigegeben – diese Fassung (Variantenname nicht verfügbar)");
+    expect(statusFor(legacy)).not.toContain("Unteres Arbeitsband");
+
+    const contradictory = buildOfferApprovalBinding(
+      { approvedOfferId: "approved-a", sourceDraft: { draftId: "draft-a", revision: 1 }, selectedVariantId: "middle" },
+      { handoffId: "handoff-a", approvedOfferId: "approved-a", source: { draftId: "draft-a", revision: 1, selectedVariantId: "lower" } }
+    );
+    expect(contradictory?.handoffId).toBe("handoff-a");
+    expect(contradictory?.selectedVariantId).toBeUndefined();
+  });
+
+  it("passes the persisted variant identity on when handing the approval to production", async () => {
+    const createHandoff = vi.fn(async () => undefined);
+    const offer = twoVariantDraft();
+    const approvalBinding = buildOfferApprovalBinding({
+      approvedOfferId: "approved-a", sourceDraft: { draftId: "draft-a", revision: 1 }, selectedVariantId: "middle"
+    });
+    const root = createRoot(document.body.appendChild(document.createElement("div")));
+    await act(async () => root.render(createElement(OfferConversationalWorkbench, props({
+      activeDraft: offer, selectedDraft: offer, approvalBinding, approvalBindingState: "valid", createHandoff
+    }))));
+    await act(async () => { buttonWithText(document, "An Produktion übergeben").click(); await flushPromises(); });
+    expect(createHandoff).toHaveBeenCalledExactlyOnceWith("draft-a", 1, "approved-a", "middle");
+    await act(async () => root.unmount());
+  });
+});
+
+it("labels every manual intake field permanently", () => {
+  const container = document.createElement("div");
+  container.innerHTML = renderToStaticMarkup(createElement(OfferConversationalWorkbench, props({
+    manualInput: {
+      eventType: "Firmenfeier", eventDate: "13.11.2026", attendeeCount: "100", serviceForm: "Buffet",
+      menuItems: "Suppe", customerName: "SYNTHETISCH", venueName: "Halle", notes: "Test"
+    }
+  })));
+  const section = Array.from(container.querySelectorAll("section")).find((candidate) =>
+    candidate.querySelector("h3")?.textContent === "Veranstaltungsdaten manuell eingeben")!;
+  const fields = Array.from(section.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("input, textarea"));
+  // Labels stay visible after values were entered; no placeholder-only naming.
+  expect(fields.map((field) => field.closest("label")?.querySelector("span")?.textContent)).toEqual([
+    "Veranstaltungstyp", "Datum", "Teilnehmerzahl", "Serviceform", "Menüpunkte", "Kundenname", "Ort", "Interne Notizen"
+  ]);
+  expect(fields.every((field) => !field.hasAttribute("placeholder"))).toBe(true);
 });
 
 it("removes all repeated extraction questions when a revised offer answers them", async () => {

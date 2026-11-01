@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCaseHistoryState, completedCaseLabel, formatCaseStatus } from "../backoffice-ui/src/case-history-state.js";
+import { buildCaseHistoryState, completedCaseLabel, formatCaseHeaderStatus, formatCaseStatus } from "../backoffice-ui/src/case-history-state.js";
 import type { CaseSummary } from "@catering/shared-core";
 
 const cases: CaseSummary[] = [
@@ -62,4 +62,10 @@ it("names completed workflow steps without claiming that the catering work is fi
   expect(formatCaseStatus("production", "completed")).toBe("Plan übernommen");
   expect(formatCaseStatus("offer", "completed")).toBe("An Produktion übergeben");
   expect(formatCaseStatus("production", "archived")).toBe("Archiviert");
+});
+
+it("names the opened case header status as the case, separate from approval states", () => {
+  expect(formatCaseHeaderStatus("offer", "open")).toBe("Auftrag: offen");
+  expect(formatCaseHeaderStatus("offer", "completed")).toBe("Auftrag: An Produktion übergeben");
+  expect(formatCaseHeaderStatus("production", "archived")).toBe("Auftrag: archiviert");
 });
