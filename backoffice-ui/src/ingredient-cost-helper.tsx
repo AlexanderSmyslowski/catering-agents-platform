@@ -148,7 +148,7 @@ export function IngredientCostHelper({ existingCost, onApply, onInvalidate }: {
           update(row.id, { name: candidate.article, reference: candidate.quantity, unit: candidate.unit, price: candidate.lineNetEur, supplierOriginalPrice: undefined, supplierOriginalName: undefined, supplierOriginalSource: undefined, invoiceOriginal: { article: candidate.article, reference: candidate.quantity, unit: candidate.unit, price: candidate.lineNetEur, supplier: candidate.supplier, invoiceId: candidate.invoiceId, invoiceDate: candidate.invoiceDate, lineId: candidate.lineId },
             source: "Rechnungsposition, ungeprüft" });
         }}>{candidate.article} · {candidate.supplier} · Rechnung {candidate.invoiceId} vom {candidate.invoiceDate.split("-").reverse().join(".")} · Position {candidate.lineId} · {candidate.quantity} {candidate.unit} · {candidate.lineNetEur} € netto · ungeprüft</button>)}
-        <p className="helper-text">Auswahl und Preisbezug anhand des Belegs prüfen. Bei abweichender Qualität oder Ware nicht übernehmen. Preise mit mehr als vier Nachkommastellen müssen vor einer Berechnung geprüft und angepasst werden.</p>
+        <p className="helper-text">Auswahl und Preisbezug anhand des Belegs prüfen. „Stück“ kann auch ein Gebinde bezeichnen. Bei abweichender Qualität oder Ware nicht übernehmen. Preise mit mehr als vier Nachkommastellen müssen vor einer Berechnung geprüft und angepasst werden.</p>
       </div> : null}
       <label>Benötigte Menge<input inputMode="decimal" value={row.used} onChange={event => update(row.id, { used: event.target.value })} /></label>
       <label>Menge im Preisbezug<input inputMode="decimal" value={row.reference} onChange={event => update(row.id, { reference: event.target.value })} /></label>

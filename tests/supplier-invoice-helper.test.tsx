@@ -31,6 +31,7 @@ it("shows unreviewed evidence and transfers a position only on explicit selectio
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   await act(async () => root.render(createElement(IngredientCostHelper, { onApply: apply, onInvalidate: vi.fn() })));
   await selectFile(label("E-Rechnung (XML)").querySelector("input")!, fileWithContent("invoice.xml", "<test/>"));
+  expect(document.body.textContent).toContain("„Stück“ kann auch ein Gebinde bezeichnen");
   expect(preview).toHaveBeenCalledWith("<test/>");
   expect(label("Menge im Preisbezug").querySelector("input")!.value).toBe("");
   const button = Array.from(document.querySelectorAll("button")).find(b => b.textContent?.includes("INV-1"))!;
