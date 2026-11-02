@@ -8,7 +8,8 @@ describe("supplier UBL candidates", () => {
   });
   it.each([
     xml.replace("</Invoice>", "<cac:AllowanceCharge/></Invoice>"),
-    xml.replace(">380<", ">381<"), xml.replace("KGM", "BOX"), xml.replace('currencyID="EUR"', 'currencyID="USD"'),
+    xml.replace(">380<", ">381<"), xml.replace("KGM", "BOX"),
+    ...["constructor", "toString", "__proto__"].map((code) => xml.replace("KGM", code)), xml.replace('currencyID="EUR"', 'currencyID="USD"'),
     xml.replace("2026-10-01", "2026-02-30"), xml.replace("2.5", "-2"),
     xml.replace("<cbc:ID>INV-1</cbc:ID>", "<cbc:ID>1</cbc:ID><cbc:ID>2</cbc:ID>"),
     '<!DOCTYPE Invoice [<!ENTITY x "x">]>' + xml,

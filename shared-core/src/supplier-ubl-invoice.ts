@@ -3,7 +3,7 @@ import { JSDOM } from "jsdom";
 const INVOICE = "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2";
 const CAC = "urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2";
 const CBC = "urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2";
-const UNITS: Record<string, string> = { KGM: "kg", GRM: "g", LTR: "l", MLT: "ml", C62: "Stück" };
+const UNITS = new Map([["KGM", "kg"], ["GRM", "g"], ["LTR", "l"], ["MLT", "ml"], ["C62", "Stück"]]);
 
 export interface SupplierInvoiceCandidate {
   supplier: string;
@@ -64,7 +64,7 @@ export function parseSupplierUblInvoice(xml: string): SupplierInvoiceCandidate[]
     ids.add(lineId);
     const quantityElement = one(line, CBC, "InvoicedQuantity");
     const quantity = value(line, CBC, "InvoicedQuantity");
-    const unit = UNITS[quantityElement.getAttribute("unitCode") ?? ""];
+    const unit = UNITS.get(quantityElement.getAttribute("unitCode") ?? "");
     if (!unit || !decimal(quantity)) throw new Error("UBL_UNSUPPORTED_QUANTITY");
     const amount = one(line, CBC, "LineExtensionAmount");
     const lineNetEur = value(line, CBC, "LineExtensionAmount");
