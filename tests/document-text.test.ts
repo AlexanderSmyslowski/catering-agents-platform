@@ -7,7 +7,7 @@ vi.mock("pdf-parse", () => ({
 }));
 
 describe("document text extraction", () => {
-  it("falls back instead of hanging forever on problematic PDFs", async () => {
+  it("returns empty instead of hanging forever on problematic PDFs", async () => {
     vi.mocked(pdf).mockImplementation(
       () =>
         new Promise(() => {
@@ -24,10 +24,10 @@ describe("document text extraction", () => {
     const elapsed = Date.now() - startedAt;
 
     expect(elapsed).toBeLessThan(7000);
-    expect(text).toContain("Lunch Buffet");
+    expect(text).toBe("");
   });
 
-  it("drops PDF extraction output that is dominated by control characters and falls back to printable text", async () => {
+  it("returns empty for corrupted PDF extraction output", async () => {
     vi.mocked(pdf).mockResolvedValue({
       text: "\u0000\u0001\u0002\u0003binary\u0004\u0005fragment\u0006\u0007\u0008"
     } as Awaited<ReturnType<typeof pdf>>);
@@ -41,7 +41,7 @@ describe("document text extraction", () => {
       )
     });
 
-    expect(text).toContain("Conference Getraenke Kaffee Tee Saft Wasser Kekse Obst");
+    expect(text).toBe("");
     expect(text).not.toContain("binary");
     expect(text).not.toContain("fragment");
   });
