@@ -54,6 +54,7 @@ it("requires a list date and a separate price basis for a selected supplier arti
   const transfer = Array.from(document.querySelectorAll("button")).find(b => b.textContent === "Kostensumme als Schätzung übernehmen")!;
   await act(async () => transfer.click());
   expect(apply).toHaveBeenCalledWith("26.00", expect.stringContaining("Preis manuell geändert"));
+  expect(apply).toHaveBeenCalledWith("26.00", expect.stringContaining("Schwan Preisliste 2026-11-02"));
   expect(apply).toHaveBeenCalledWith("26.00", expect.stringContaining("Listenartikel Beispielreis"));
   expect(apply).toHaveBeenCalledWith("26.00", expect.stringContaining("Listenartikel manuell geändert"));
   await act(async () => root.unmount());
