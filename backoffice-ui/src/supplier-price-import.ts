@@ -22,15 +22,21 @@ export function readSchwanPriceList(data: Uint8Array): SupplierPriceCandidate[] 
     throw new Error("Die Excel-Datei konnte nicht sicher gelesen werden. Bitte die ursprüngliche Preisliste wählen.");
   }
   if (!parts["xl/worksheets/sheet1.xml"]) throw new Error("Die Preisliste enthält kein lesbares Tabellenblatt.");
+  return readSchwanPriceParts(parts["xl/worksheets/sheet1.xml"], parts["xl/sharedStrings.xml"]);
+}
+
+/** Interprets bounded worksheet parts; the caller remains responsible for source authorization and provenance. */
+export function readSchwanPriceParts(sheet: Uint8Array, strings?: Uint8Array): SupplierPriceCandidate[] {
+  if (sheet.length + (strings?.length ?? 0) > 8_000_000) throw new Error("Die Preisliste enthält zu viele Daten.");
   const parse = (bytes: Uint8Array) => {
     const xml = strFromU8(bytes);
-    if (/<!DOCTYPE/i.test(xml)) throw new Error("Die Preisliste enthält ungültige Tabellendaten.");
+    if (/<!DOCTYPE|<!ENTITY/i.test(xml)) throw new Error("Die Preisliste enthält ungültige Tabellendaten.");
     const document = new DOMParser().parseFromString(xml, "application/xml");
     if (document.querySelector("parsererror")) throw new Error("Die Preisliste enthält ungültige Tabellendaten.");
     return document;
   };
-  const shared = parts["xl/sharedStrings.xml"] ? Array.from(parse(parts["xl/sharedStrings.xml"]).getElementsByTagName("si"), node => node.textContent ?? "") : [];
-  const document = parse(parts["xl/worksheets/sheet1.xml"]);
+  const shared = strings ? Array.from(parse(strings).getElementsByTagName("si"), node => node.textContent ?? "") : [];
+  const document = parse(sheet);
   const rows = Array.from(document.getElementsByTagName("row"));
   function values(row: Element): Map<string, string> {
     const result = new Map<string, string>();

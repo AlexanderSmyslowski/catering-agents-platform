@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import { strToU8, zipSync } from "fflate";
-import { readSchwanPriceList } from "../backoffice-ui/src/supplier-price-import.js";
+import { readSchwanPriceList, readSchwanPriceParts } from "../backoffice-ui/src/supplier-price-import.js";
 
 const xml = (rows: string) => `<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${rows}</sheetData></worksheet>`;
 const text = (ref: string, value: string) => `<c r="${ref}" t="inlineStr"><is><t>${value}</t></is></c>`;
@@ -55,6 +55,12 @@ describe("Schwan price list import", () => {
   it("rejects XML document types and malformed XML", () => {
     expect(() => readSchwanPriceList(archive(`<!DOCTYPE worksheet>${xml(headers)}`))).toThrow();
     expect(() => readSchwanPriceList(archive("<broken>"))).toThrow();
+  });
+  it("accepts the same candidate from bounded worksheet parts and rejects entity declarations", () => {
+    const row = `<row r="13">${text("D13", "Beispielreis")}<c r="P13"><v>12.5</v></c></row>`;
+    expect(readSchwanPriceParts(strToU8(xml(headers + row)))).toEqual(readSchwanPriceList(archive(xml(headers + row))));
+    expect(() => readSchwanPriceParts(strToU8(`<!ENTITY test 'value'>${xml(headers + row)}`))).toThrow();
+    expect(() => readSchwanPriceParts(new Uint8Array(8_000_001))).toThrow();
   });
   it("rejects oversized expanded spreadsheet parts before parsing", () => {
     const data = zipSync({ "xl/worksheets/sheet1.xml": new Uint8Array(8_000_001) });
