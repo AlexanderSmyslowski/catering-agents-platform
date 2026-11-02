@@ -56,6 +56,7 @@ export function readSchwanPriceList(data: Uint8Array): SupplierPriceCandidate[] 
   if (headerIndex < 0) throw new Error("Das Format der Schwan-Preisliste wurde nicht erkannt. Bitte die Liste prüfen.");
   const candidates: SupplierPriceCandidate[] = [];
   for (const row of rows.slice(headerIndex + 1)) {
+    if (["1", "true"].includes(row.getAttribute("hidden") ?? "")) continue;
     const cells = values(row);
     const product = cells.get("D") ?? "", priceText = cells.get("P") ?? "";
     const priceCell = Array.from(row.getElementsByTagName("c")).find(cell => /^P\d+$/.test(cell.getAttribute("r") ?? ""));

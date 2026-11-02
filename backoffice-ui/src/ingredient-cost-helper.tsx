@@ -1,9 +1,10 @@
 import { useRef, useState } from "react";
 import { readSchwanPriceList, type SupplierPriceCandidate } from "./supplier-price-import.js";
 
-type IngredientCostRow = { id: number; name: string; used: string; reference: string; unit: string; price: string; source: string };
+type IngredientCostRow = { id: number; name: string; used: string; reference: string; unit: string; price: string; source: string; supplierOriginalPrice?: string };
 const ingredientCostSourcePrefix = "Zutaten- und Kostenansätze: ";
 const emptyRow = (id: number): IngredientCostRow => ({ id, name: "", used: "", reference: "", unit: "", price: "", source: "" });
+const supplierPriceChanged = (row: IngredientCostRow) => row.supplierOriginalPrice !== undefined && row.price.replace(",", ".") !== row.supplierOriginalPrice.replace(",", ".");
 // The editor accepts at most eight digits before the decimal point.
 const maximumCents = 9_999_999_999n;
 
@@ -46,7 +47,7 @@ export function IngredientCostHelper({ existingCost, onApply, onInvalidate }: {
   const totals = rows.map(ingredientTotal);
   const complete = totals.every((value): value is bigint => value !== undefined);
   const total = complete ? totals.reduce((sum, value) => sum + value, 0n) : undefined;
-  const sources = [...new Set(rows.map(row => row.source.trim()))].join("; ");
+  const sources = [...new Set(rows.map(row => row.source.trim() + (supplierPriceChanged(row) ? "; Preis manuell geändert" : "")))].join("; ");
   const source = ingredientCostSourcePrefix + sources;
   const ready = complete && total !== undefined && total <= maximumCents && source.length <= 500;
   const existingCents = editorCents(existingCost);
@@ -90,7 +91,7 @@ export function IngredientCostHelper({ existingCost, onApply, onInvalidate }: {
       {prices.length > 0 && row.name.trim().length >= 2 ? <div>
         <p>Passende Artikel aus der Preisliste {priceDate ? `vom ${priceDate.split("-").reverse().join(".")}` : "– bitte Preisstand eintragen"}:</p>
         {prices.filter(candidate => candidate.product.toLocaleLowerCase("de-DE").includes(row.name.trim().toLocaleLowerCase("de-DE"))).slice(0, 8).map(candidate => <button type="button" className="secondary-button" key={candidate.row} disabled={!priceDate} onClick={() => {
-          update(row.id, { name: candidate.product, reference: "", unit: "", price: candidate.price,
+          update(row.id, { name: candidate.product, reference: "", unit: "", price: candidate.price, supplierOriginalPrice: candidate.price,
             source: `Schwan Preisliste ${priceDate}, Artikel ${candidate.article || "ohne Nummer"}, Zeile ${candidate.row}; ${candidate.unit || "Einheit offen"}, Inhalt ${candidate.content || "offen"}; ungeprüft` });
         }}>{candidate.product} · {candidate.content || "Inhalt offen"} · {candidate.unit || "Einheit offen"} · {candidate.price.replace(".", ",")} €</button>)}
         <p className="helper-text">Nach der Auswahl Nettopreis, Preisbezug und Einheit anhand der Preisliste prüfen und eintragen. Der Treffer ist keine automatische Gleichsetzung mit der Zutat.</p>
@@ -101,6 +102,7 @@ export function IngredientCostHelper({ existingCost, onApply, onInvalidate }: {
         <option value="">Bitte wählen</option><option value="g">g</option><option value="kg">kg</option><option value="ml">ml</option><option value="l">l</option><option value="Stück">Stück</option>
       </select></label>
       <label>Preis des Preisbezugs netto · EUR<input inputMode="decimal" value={row.price} onChange={event => update(row.id, { price: event.target.value })} /></label>
+      {supplierPriceChanged(row) ? <p role="status">Preis manuell geändert; der ursprüngliche Listenpreis war {row.supplierOriginalPrice?.replace(".", ",")} €.</p> : null}
       <label>Quelle oder Schätzgrund<input value={row.source} onChange={event => update(row.id, { source: event.target.value })} /></label>
       {rows.length > 1 ? <button type="button" className="secondary-button" onClick={() => { changed(); setRows(current => current.filter(item => item.id !== row.id)); }}>Ansatz {index + 1} entfernen</button> : null}
     </fieldset>)}

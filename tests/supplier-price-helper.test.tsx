@@ -36,7 +36,20 @@ it("requires a list date and a separate price basis for a selected supplier arti
   expect(label("Menge im Preisbezug").querySelector("input")!.value).toBe("");
   expect(label("Einheit für beide Mengen").querySelector("select")!.value).toBe("");
   expect(label("Quelle oder Schätzgrund").querySelector("input")!.value).toContain("2026-11-02");
+  await setInput(label("Quelle oder Schätzgrund").querySelector("input")!, "Bearbeiteter Quellenhinweis");
+  await setInput(label("Preis des Preisbezugs netto").querySelector("input")!, "13,00");
+  expect(document.body.textContent).toContain("Preis manuell geändert");
+  await setInput(label("Quelle oder Schätzgrund").querySelector("input")!, "Nochmals bearbeitete Quelle");
+  expect(document.body.textContent).toContain("Preis manuell geändert");
   expect(apply).not.toHaveBeenCalled();
+  await setInput(label("Benötigte Menge").querySelector("input")!, "2");
+  await setInput(label("Menge im Preisbezug").querySelector("input")!, "1");
+  const unit = label("Einheit für beide Mengen").querySelector("select")!;
+  await act(async () => { unit.value = "kg"; unit.dispatchEvent(new Event("change", { bubbles: true })); });
+  await act(async () => label("Alle direkten Kosten").querySelector("input")!.click());
+  const transfer = Array.from(document.querySelectorAll("button")).find(b => b.textContent === "Kostensumme als Schätzung übernehmen")!;
+  await act(async () => transfer.click());
+  expect(apply).toHaveBeenCalledWith("26.00", expect.stringContaining("Preis manuell geändert"));
   await act(async () => root.unmount());
 });
 

@@ -21,6 +21,12 @@ describe("Schwan price list import", () => {
     const rows = `<row r="13">${text("D13", "Beispielreis")}<c r="P13"><f>2+2</f><v>4</v></c></row><row r="14">${text("D14", "Beispiel")}<c r="P14"><v>0</v></c></row>`;
     expect(readSchwanPriceList(archive(xml(headers + rows)))).toEqual([]);
   });
+  it("does not suggest hidden supplier rows", () => {
+    for (const hidden of ["1", "true"]) {
+      const row = `<row r="13" hidden="${hidden}">${text("D13", "Beispielreis")}<c r="P13"><v>12.5</v></c></row>`;
+      expect(readSchwanPriceList(archive(xml(headers + row)))).toEqual([]);
+    }
+  });
   it("starts only after the complete matching header, never a preceding partial header", () => {
     const partial = `<row r="1">${text("A1", "Artikel-Nr")}${text("P1", "Preis neu")}</row><row r="2">${text("D2", "Falscher Eintrag")}<c r="P2"><v>5</v></c></row>`;
     const real = `<row r="13">${text("D13", "Beispielreis")}<c r="P13"><v>12.5</v></c></row>`;
