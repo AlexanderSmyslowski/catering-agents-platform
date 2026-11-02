@@ -1,4 +1,4 @@
-import { JSDOM } from "jsdom";
+import { SaxesParser } from "saxes";
 
 const INVOICE = "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2";
 const CAC = "urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2";
@@ -19,15 +19,22 @@ export interface SupplierInvoiceCandidate {
   limitations: string[];
 }
 
-function children(parent: Element, namespace: string, name: string): Element[] {
-  return Array.from(parent.children).filter((item) => item.namespaceURI === namespace && item.localName === name);
+interface XmlElement {
+  namespaceURI: string;
+  localName: string;
+  children: XmlElement[];
+  textContent: string;
+  attributes: Map<string, string>;
 }
-function one(parent: Element, namespace: string, name: string): Element {
+function children(parent: XmlElement, namespace: string, name: string): XmlElement[] {
+  return parent.children.filter((item) => item.namespaceURI === namespace && item.localName === name);
+}
+function one(parent: XmlElement, namespace: string, name: string): XmlElement {
   const found = children(parent, namespace, name);
   if (found.length !== 1) throw new Error("UBL_MISSING_OR_AMBIGUOUS_FIELD");
   return found[0]!;
 }
-function value(parent: Element, namespace: string, name: string): string {
+function value(parent: XmlElement, namespace: string, name: string): string {
   const element = one(parent, namespace, name);
   if (element.children.length) throw new Error("UBL_INVALID_FIELD");
   const result = element.textContent?.trim() ?? "";
@@ -43,23 +50,53 @@ function amountMicros(text: string): bigint {
   const [whole, fraction = ""] = text.split(".");
   return BigInt(whole!) * 1_000_000n + BigInt(fraction.padEnd(6, "0"));
 }
-function monetary(parent: Element, name: string): bigint {
+function monetary(parent: XmlElement, name: string): bigint {
   const element = one(parent, CBC, name);
-  if (element.getAttribute("currencyID") !== "EUR") throw new Error("UBL_INVALID_TOTAL_CURRENCY");
+  if (element.attributes.get("currencyID") !== "EUR") throw new Error("UBL_INVALID_TOTAL_CURRENCY");
   return amountMicros(value(parent, CBC, name));
 }
 
 /** UBL Invoice only; no CII, issuer verification or price approval. A future adapter must bind the actual voucher and file IDs. */
 export function parseSupplierUblInvoice(xml: string): SupplierInvoiceCandidate[] {
   if (Buffer.byteLength(xml, "utf8") > 2_000_000 || /<!DOCTYPE|<!ENTITY/i.test(xml)) throw new Error("UBL_UNSAFE_DOCUMENT");
-  let doc: Document;
-  try { doc = new JSDOM(xml, { contentType: "text/xml" }).window.document; }
-  catch { throw new Error("UBL_INVALID_XML"); }
-  const root = doc.documentElement;
-  if (root.namespaceURI !== INVOICE || root.localName !== "Invoice") throw new Error("UBL_NOT_INVOICE");
-  if (doc.getElementsByTagNameNS(CAC, "SubInvoiceLine").length) throw new Error("UBL_SUB_INVOICE_LINE_UNSUPPORTED");
-  // Reject adjustments rather than silently assigning an invoice-level discount to lines.
-  if (doc.getElementsByTagNameNS(CAC, "AllowanceCharge").length) throw new Error("UBL_ADJUSTMENTS_REQUIRE_REVIEW");
+  const parser = new SaxesParser({ xmlns: true });
+  const stack: XmlElement[] = [];
+  let root: XmlElement | undefined;
+  let nodeCount = 0;
+  parser.on("doctype", () => { throw new Error("UBL_UNSAFE_DOCUMENT"); });
+  parser.on("opentag", (tag) => {
+    if (++nodeCount > 30_000 || stack.length >= 64) throw new Error("UBL_STRUCTURE_LIMIT");
+    if (tag.uri === CAC && tag.local === "SubInvoiceLine") throw new Error("UBL_SUB_INVOICE_LINE_UNSUPPORTED");
+    if (tag.uri === CAC && tag.local === "AllowanceCharge") throw new Error("UBL_ADJUSTMENTS_REQUIRE_REVIEW");
+    if (tag.name.length > 256 || Object.keys(tag.attributes).length > 64) throw new Error("UBL_STRUCTURE_LIMIT");
+    const attributes = new Map<string, string>();
+    for (const attr of Object.values(tag.attributes)) {
+      if (attr.name.length > 256 || attr.value.length > 500) throw new Error("UBL_STRUCTURE_LIMIT");
+      if (!attr.uri) attributes.set(attr.local, attr.value);
+    }
+    const element: XmlElement = { namespaceURI: tag.uri, localName: tag.local, children: [], textContent: "", attributes };
+    if (stack.length) stack[stack.length - 1]!.children.push(element);
+    else root = element;
+    stack.push(element);
+  });
+  const appendText = (text: string) => {
+    if (!stack.length) return;
+    const current = stack[stack.length - 1]!;
+    current.textContent += text;
+    if (current.textContent.length > 500) throw new Error("UBL_STRUCTURE_LIMIT");
+  };
+  parser.on("text", appendText);
+  parser.on("cdata", appendText);
+  parser.on("closetag", () => { stack.pop(); });
+  try {
+    for (let offset = 0; offset < xml.length; offset += 8192) parser.write(xml.slice(offset, offset + 8192));
+    parser.close();
+  }
+  catch (error) {
+    if (error instanceof Error && error.message.startsWith("UBL_")) throw error;
+    throw new Error("UBL_INVALID_XML");
+  }
+  if (!root || root.namespaceURI !== INVOICE || root.localName !== "Invoice") throw new Error("UBL_NOT_INVOICE");
   if (value(root, CBC, "InvoiceTypeCode") !== "380") throw new Error("UBL_UNSUPPORTED_INVOICE_TYPE");
   if (value(root, CBC, "DocumentCurrencyCode") !== "EUR") throw new Error("UBL_UNSUPPORTED_CURRENCY");
   const invoiceId = value(root, CBC, "ID");
@@ -88,11 +125,11 @@ export function parseSupplierUblInvoice(xml: string): SupplierInvoiceCandidate[]
     ids.add(lineId);
     const quantityElement = one(line, CBC, "InvoicedQuantity");
     const quantity = value(line, CBC, "InvoicedQuantity");
-    const unit = UNITS.get(quantityElement.getAttribute("unitCode") ?? "");
+    const unit = UNITS.get(quantityElement.attributes.get("unitCode") ?? "");
     if (!unit || !decimal(quantity)) throw new Error("UBL_UNSUPPORTED_QUANTITY");
     const amount = one(line, CBC, "LineExtensionAmount");
     const lineNetEur = value(line, CBC, "LineExtensionAmount");
-    if (amount.getAttribute("currencyID") !== "EUR" || !decimal(lineNetEur)) throw new Error("UBL_UNSUPPORTED_AMOUNT");
+    if (amount.attributes.get("currencyID") !== "EUR" || !decimal(lineNetEur)) throw new Error("UBL_UNSUPPORTED_AMOUNT");
     sum += amountMicros(lineNetEur);
     const article = value(one(line, CAC, "Item"), CBC, "Name");
     return { supplier, ...(supplierTaxId ? { supplierTaxId } : {}), invoiceId, invoiceDate, lineId, article, quantity, unit, lineNetEur, reviewRequired: true as const,

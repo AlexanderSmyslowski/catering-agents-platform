@@ -6,6 +6,20 @@ describe("supplier UBL candidates", () => {
   it("preserves the stated quantity and line net as reviewable evidence", () => {
     expect(parseSupplierUblInvoice(xml)).toMatchObject([{ supplier: "Testlieferant", invoiceId: "INV-1", invoiceDate: "2026-10-01", lineId: "1", article: "Testware", quantity: "2.5", unit: "kg", lineNetEur: "10.00", reviewRequired: true }]);
   });
+  it("bounds XML structure and rejects external or undeclared entities", () => {
+    const insert = (fragment: string) => xml.replace("</Invoice>", fragment + "</Invoice>");
+    expect(() => parseSupplierUblInvoice(insert("<x>".repeat(65) + "</x>".repeat(65)))).toThrow("UBL_STRUCTURE_LIMIT");
+    expect(() => parseSupplierUblInvoice(insert("<x/>".repeat(30_001)))).toThrow("UBL_STRUCTURE_LIMIT");
+    expect(() => parseSupplierUblInvoice(insert("<x>" + "z".repeat(501) + "</x>"))).toThrow("UBL_STRUCTURE_LIMIT");
+    expect(() => parseSupplierUblInvoice(insert("<x " + Array.from({ length: 65 }, (_, i) => `a${i}="v"`).join(" ") + "/>"))).toThrow("UBL_STRUCTURE_LIMIT");
+    expect(() => parseSupplierUblInvoice('<!DOCTYPE Invoice SYSTEM "file:///etc/passwd">' + xml)).toThrow("UBL_UNSAFE_DOCUMENT");
+    expect(() => parseSupplierUblInvoice(xml.replace("Testware", "&unknown;"))).toThrow("UBL_INVALID_XML");
+    expect(() => parseSupplierUblInvoice(" ".repeat(2_000_001))).toThrow("UBL_UNSAFE_DOCUMENT");
+  });
+  it("checks namespaces and rejects malformed XML", () => {
+    expect(() => parseSupplierUblInvoice(xml.replace("urn:oasis:names:specification:ubl:schema:xsd:Invoice-2", "urn:wrong"))).toThrow("UBL_NOT_INVOICE");
+    expect(() => parseSupplierUblInvoice(xml.replace("</Invoice>", ""))).toThrow("UBL_INVALID_XML");
+  });
   it("adds multiple positions exactly and checks both document totals", () => {
     const line = xml.match(/<cac:InvoiceLine>.*<\/cac:InvoiceLine>/)![0];
     const second = line.replace("<cbc:ID>1</cbc:ID>", "<cbc:ID>2</cbc:ID>").replace(">10.00<", ">0.20<");
