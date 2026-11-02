@@ -22,7 +22,7 @@ function positiveDecimal(input: string, decimals: number): { value: bigint; scal
 }
 
 function ingredientTotal(row: IngredientCostRow): bigint | undefined {
-  const used = positiveDecimal(row.used, 6), reference = positiveDecimal(row.reference, 6), price = positiveDecimal(row.price, 2);
+  const used = positiveDecimal(row.used, 6), reference = positiveDecimal(row.reference, 6), price = positiveDecimal(row.price, 4);
   if (!row.name.trim() || !row.source.trim() || !["g", "kg", "ml", "l", "Stück"].includes(row.unit) || !used || !reference || !price) return undefined;
   const numerator = used.value * reference.scale * price.value * 100n;
   const denominator = used.scale * reference.value * price.scale;
@@ -58,7 +58,7 @@ export function IngredientCostHelper({ existingCost, onApply, onInvalidate }: {
   }
   return <details className="offer-pricing__ingredient-helper">
     <summary>Zutatenkosten berechnen</summary>
-    <p className="helper-text">Mengen und Nettopreise eingeben. Benötigte Menge und Preisbezug müssen dieselbe Einheit haben. Die Rechnung zeigt Verbrauchskosten, nicht den Kauf ganzer Gebinde.</p>
+    <p className="helper-text">Mengen und Nettopreise eingeben. Preise dürfen bis zu vier Nachkommastellen haben. Benötigte Menge und Preisbezug müssen dieselbe Einheit haben. Die Rechnung zeigt Verbrauchskosten, nicht den Kauf ganzer Gebinde.</p>
     <p className="helper-text">Einzelne Ansätze werden nicht gespeichert. Bitte Rechenweg und Belege separat festhalten; gespeichert werden nur Gesamtsumme und Quellenhinweis.</p>
     {rows.map((row, index) => <fieldset className="offer-pricing__ingredient-row offer-pricing__cost-fields" key={row.id}>
       <legend>Ansatz {index + 1}</legend>

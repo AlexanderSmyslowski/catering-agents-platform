@@ -147,6 +147,19 @@ describe("offer pricing editor", () => {
     expect(field("Kosten gesamt netto").value).toBe("12,00");
     await act(async () => root.unmount());
   });
+  it("preserves four-place price precision before rounding the ingredient result to cents", async () => {
+    const { root } = await mount();
+    await act(async () => button("Preisaufstellung bearbeiten").click());
+    await change(field("Zutat oder Kostenbestandteil"), "Synthetische Zutat");
+    await change(field("Benötigte Menge"), "5");
+    await change(field("Menge im Preisbezug"), "1");
+    await change(field("Preis des Preisbezugs netto"), "2,2050");
+    await change(field("Quelle oder Schätzgrund"), "Historischer Testansatz");
+    const unit = Array.from(document.querySelectorAll("label")).find(label => label.textContent?.startsWith("Einheit für beide Mengen"))!.querySelector("select")!;
+    await act(async () => { unit.value = "kg"; unit.dispatchEvent(new Event("change", { bubbles: true })); });
+    expect(document.querySelector(".offer-pricing__ingredient-helper")?.textContent).toContain("11,03");
+    await act(async () => root.unmount());
+  });
   it("does not offer a total beyond the existing cost editor's numeric limit", async () => {
     const { root } = await mount();
     await act(async () => button("Preisaufstellung bearbeiten").click());
