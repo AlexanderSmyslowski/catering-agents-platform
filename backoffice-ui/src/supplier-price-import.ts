@@ -23,7 +23,9 @@ export function readSchwanPriceList(data: Uint8Array): SupplierPriceCandidate[] 
   }
   if (!parts["xl/worksheets/sheet1.xml"]) throw new Error("Die Preisliste enthält kein lesbares Tabellenblatt.");
   const parse = (bytes: Uint8Array) => {
-    const document = new DOMParser().parseFromString(strFromU8(bytes), "application/xml");
+    const xml = strFromU8(bytes);
+    if (/<!DOCTYPE/i.test(xml)) throw new Error("Die Preisliste enthält ungültige Tabellendaten.");
+    const document = new DOMParser().parseFromString(xml, "application/xml");
     if (document.querySelector("parsererror")) throw new Error("Die Preisliste enthält ungültige Tabellendaten.");
     return document;
   };
@@ -32,9 +34,14 @@ export function readSchwanPriceList(data: Uint8Array): SupplierPriceCandidate[] 
   const rows = Array.from(document.getElementsByTagName("row"));
   function values(row: Element): Map<string, string> {
     const result = new Map<string, string>();
+    const columns = new Set<string>();
     for (const cell of Array.from(row.getElementsByTagName("c"))) {
-      const column = cell.getAttribute("r")?.match(/^[A-Z]+/)?.[0];
-      if (!column || cell.getElementsByTagName("f").length) continue;
+      const reference = cell.getAttribute("r")?.match(/^([A-Z]+)([1-9]\d*)$/);
+      if (!reference || reference[2] !== row.getAttribute("r")) throw new Error("Die Preisliste enthält ungültige Zellbezüge. Bitte die Datei prüfen.");
+      const column = reference[1]!;
+      if (columns.has(column)) throw new Error("Die Preisliste enthält doppelte Tabellenspalten. Bitte die Datei prüfen.");
+      columns.add(column);
+      if (cell.getElementsByTagName("f").length) continue;
       const type = cell.getAttribute("t");
       const raw = type === "inlineStr" ? cell.getElementsByTagName("is")[0]?.textContent : cell.getElementsByTagName("v")[0]?.textContent;
       const value = type === "s" && /^\d+$/.test(raw ?? "") ? shared[Number(raw)] : raw;
@@ -50,7 +57,13 @@ export function readSchwanPriceList(data: Uint8Array): SupplierPriceCandidate[] 
   const candidates: SupplierPriceCandidate[] = [];
   for (const row of rows.slice(headerIndex + 1)) {
     const cells = values(row);
-    const product = cells.get("D") ?? "", price = (cells.get("P") ?? "").replace(",", ".");
+    const product = cells.get("D") ?? "", priceText = cells.get("P") ?? "";
+    const priceCell = Array.from(row.getElementsByTagName("c")).find(cell => /^P\d+$/.test(cell.getAttribute("r") ?? ""));
+    const type = priceCell?.getAttribute("t");
+    // Excel numeric cells use locale-free decimals; text with a dot can be a
+    // German thousands separator and must not silently become a smaller price.
+    if (type && type !== "n" && !/^\d{1,6}(?:,\d{1,4})?$/.test(priceText)) continue;
+    const price = priceText.replace(",", ".");
     const rowNumber = Number(row.getAttribute("r"));
     if (!product || !/^\d{1,6}(?:\.\d{1,4})?$/.test(price) || Number(price) <= 0 || !Number.isSafeInteger(rowNumber)) continue;
     candidates.push({ article: cells.get("A") ?? "", product, content: cells.get("G") ?? "", unit: cells.get("N") ?? "", price, row: rowNumber });

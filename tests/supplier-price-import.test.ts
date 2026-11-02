@@ -26,4 +26,32 @@ describe("Schwan price list import", () => {
     const real = `<row r="13">${text("D13", "Beispielreis")}<c r="P13"><v>12.5</v></c></row>`;
     expect(readSchwanPriceList(archive(xml(partial + headers + real))).map(item => item.product)).toEqual(["Beispielreis"]);
   });
+  it("rejects ambiguous German text with a thousands dot but accepts an unambiguous comma price", () => {
+    const rows = `<row r="13">${text("D13", "Falsch")} ${text("P13", "1.250")}</row><row r="14">${text("D14", "Richtig")} ${text("P14", "12,50")}</row>`;
+    expect(readSchwanPriceList(archive(xml(headers + rows))).map(item => [item.product, item.price])).toEqual([["Richtig", "12.50"]]);
+  });
+  it("rejects duplicate price cells instead of mixing value and cell type", () => {
+    const row = `<row r="13">${text("D13", "Beispiel")}<c r="P13"><v>1</v></c>${text("P13", "1.250")}</row>`;
+    expect(() => readSchwanPriceList(archive(xml(headers + row)))).toThrow();
+  });
+  it("rejects malformed or mismatched cell references before interpreting a price", () => {
+    for (const ref of ["P", "P13junk", "P14"]) {
+      const row = `<row r="13">${text("D13", "Beispiel")}${text(ref, "1.250")}</row>`;
+      expect(() => readSchwanPriceList(archive(xml(headers + row)))).toThrow();
+    }
+  });
+  it("reads shared and rich strings without changing their text", () => {
+    const shared = `<?xml version="1.0"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><si><r><t>Beispiel</t></r><r><t>reis</t></r></si></sst>`;
+    const row = `<row r="13"><c r="D13" t="s"><v>0</v></c><c r="P13"><v>12.5</v></c></row>`;
+    const data = zipSync({ "xl/worksheets/sheet1.xml": new Uint8Array(strToU8(xml(headers + row))), "xl/sharedStrings.xml": new Uint8Array(strToU8(shared)) });
+    expect(readSchwanPriceList(data)[0]?.product).toBe("Beispielreis");
+  });
+  it("rejects XML document types and malformed XML", () => {
+    expect(() => readSchwanPriceList(archive(`<!DOCTYPE worksheet>${xml(headers)}`))).toThrow();
+    expect(() => readSchwanPriceList(archive("<broken>"))).toThrow();
+  });
+  it("rejects oversized expanded spreadsheet parts before parsing", () => {
+    const data = zipSync({ "xl/worksheets/sheet1.xml": new Uint8Array(8_000_001) });
+    expect(() => readSchwanPriceList(data)).toThrow();
+  });
 });

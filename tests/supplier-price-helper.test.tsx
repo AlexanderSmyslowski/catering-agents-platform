@@ -4,8 +4,8 @@ import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { IngredientCostHelper } from "../backoffice-ui/src/ingredient-cost-helper.js";
 
-vi.mock("../backoffice-ui/src/supplier-price-import.js", () => ({ readSchwanPriceList: () => [
-  { article: "TEST-1", product: "Beispielreis", content: "5 kg", unit: "Kolli", price: "12.50", row: 13 }
+vi.mock("../backoffice-ui/src/supplier-price-import.js", () => ({ readSchwanPriceList: (bytes: Uint8Array) => [
+  { article: "TEST-1", product: bytes[0] === 2 ? "Alter Reis" : "Beispielreis", content: "5 kg", unit: "Kolli", price: "12.50", row: 13 }
 ] }));
 afterEach(() => { document.body.innerHTML = ""; });
 const label = (name: string) => Array.from(document.querySelectorAll("label")).find(x => x.textContent?.startsWith(name))!;
@@ -58,5 +58,26 @@ it("ignores a late failed read of an older file and clears the date for a new li
   await act(async () => rejectOld(new Error("veralteter Fehler")));
   expect(document.body.textContent).toContain("1 Preisvorschläge gelesen");
   expect(document.body.textContent).not.toContain("veralteter Fehler");
+  await act(async () => root.unmount());
+});
+
+it("does not replace a newer list when an older successful read finishes late", async () => {
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  await act(async () => root.render(createElement(IngredientCostHelper, { onApply: vi.fn(), onInvalidate: vi.fn() })));
+  const input = label("Schwan-Exceldatei").querySelector("input")!;
+  const first = new File(["first"], "first.xlsx");
+  let resolveOld!: (buffer: ArrayBuffer) => void;
+  Object.defineProperty(first, "arrayBuffer", { value: () => new Promise(resolve => { resolveOld = resolve; }) });
+  Object.defineProperty(input, "files", { value: [first], configurable: true });
+  await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
+  const second = new File(["second"], "second.xlsx");
+  Object.defineProperty(second, "arrayBuffer", { value: async () => new Uint8Array([1]).buffer });
+  Object.defineProperty(input, "files", { value: [second], configurable: true });
+  await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
+  await setInput(label("Preisstand der Liste").querySelector("input")!, "2026-11-02");
+  await act(async () => resolveOld(new Uint8Array([2]).buffer));
+  await setInput(label("Zutat oder Kostenbestandteil").querySelector("input")!, "Reis");
+  expect(document.body.textContent).toContain("Beispielreis");
+  expect(document.body.textContent).not.toContain("Alter Reis");
   await act(async () => root.unmount());
 });
