@@ -24,6 +24,7 @@ interface XmlElement {
   localName: string;
   children: XmlElement[];
   textContent: string;
+  oversized: boolean;
   attributes: Map<string, string>;
 }
 function children(parent: XmlElement, namespace: string, name: string): XmlElement[] {
@@ -36,7 +37,7 @@ function one(parent: XmlElement, namespace: string, name: string): XmlElement {
 }
 function value(parent: XmlElement, namespace: string, name: string): string {
   const element = one(parent, namespace, name);
-  if (element.children.length) throw new Error("UBL_INVALID_FIELD");
+  if (element.children.length || element.oversized) throw new Error("UBL_INVALID_FIELD");
   const result = element.textContent?.trim() ?? "";
   if (!result || result.length > 500) throw new Error("UBL_INVALID_FIELD");
   return result;
@@ -74,16 +75,21 @@ export function parseSupplierUblInvoice(xml: string): SupplierInvoiceCandidate[]
       if (attr.name.length > 256 || attr.value.length > 500) throw new Error("UBL_STRUCTURE_LIMIT");
       if (!attr.uri) attributes.set(attr.local, attr.value);
     }
-    const element: XmlElement = { namespaceURI: tag.uri, localName: tag.local, children: [], textContent: "", attributes };
-    if (stack.length) stack[stack.length - 1]!.children.push(element);
+    const element: XmlElement = { namespaceURI: tag.uri, localName: tag.local, children: [], textContent: "", oversized: false, attributes };
+    if (stack.length) {
+      const parent = stack[stack.length - 1]!;
+      parent.textContent = "";
+      parent.children.push(element);
+    }
     else root = element;
     stack.push(element);
   });
   const appendText = (text: string) => {
     if (!stack.length) return;
     const current = stack[stack.length - 1]!;
+    if (current.children.length || current.oversized) return;
+    if (current.textContent.length + text.length > 500) { current.oversized = true; current.textContent = ""; return; }
     current.textContent += text;
-    if (current.textContent.length > 500) throw new Error("UBL_STRUCTURE_LIMIT");
   };
   parser.on("text", appendText);
   parser.on("cdata", appendText);
@@ -105,8 +111,13 @@ export function parseSupplierUblInvoice(xml: string): SupplierInvoiceCandidate[]
   const supplierParty = one(one(root, CAC, "AccountingSupplierParty"), CAC, "Party");
   const legal = one(supplierParty, CAC, "PartyLegalEntity");
   const supplier = value(legal, CBC, "RegistrationName");
-  const taxIds = children(supplierParty, CAC, "PartyTaxScheme").flatMap((scheme) => children(scheme, CBC, "CompanyID"));
-  if (taxIds.length > 1 || (taxIds.length === 1 && (taxIds[0]!.children.length > 0 || !taxIds[0]!.textContent?.trim() || taxIds[0]!.textContent!.trim().length > 500))) throw new Error("UBL_AMBIGUOUS_TAX_ID");
+  const vatSchemes = children(supplierParty, CAC, "PartyTaxScheme").filter((scheme) => {
+    const schemes = children(scheme, CAC, "TaxScheme");
+    return schemes.length === 1 && value(schemes[0]!, CBC, "ID") === "VAT";
+  });
+  if (vatSchemes.length > 1) throw new Error("UBL_AMBIGUOUS_TAX_ID");
+  const taxIds = vatSchemes.flatMap((scheme) => children(scheme, CBC, "CompanyID"));
+  if (taxIds.length > 1 || (taxIds.length === 1 && (taxIds[0]!.children.length > 0 || taxIds[0]!.oversized || !taxIds[0]!.textContent?.trim()))) throw new Error("UBL_AMBIGUOUS_TAX_ID");
   const supplierTaxId = taxIds.length ? { value: taxIds[0]!.textContent!.trim(), verified: false as const } : undefined;
   const totals = one(root, CAC, "LegalMonetaryTotal");
   for (const field of ["AllowanceTotalAmount", "ChargeTotalAmount"]) {

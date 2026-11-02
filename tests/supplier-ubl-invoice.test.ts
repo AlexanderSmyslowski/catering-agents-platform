@@ -10,7 +10,7 @@ describe("supplier UBL candidates", () => {
     const insert = (fragment: string) => xml.replace("</Invoice>", fragment + "</Invoice>");
     expect(() => parseSupplierUblInvoice(insert("<x>".repeat(65) + "</x>".repeat(65)))).toThrow("UBL_STRUCTURE_LIMIT");
     expect(() => parseSupplierUblInvoice(insert("<x/>".repeat(30_001)))).toThrow("UBL_STRUCTURE_LIMIT");
-    expect(() => parseSupplierUblInvoice(insert("<x>" + "z".repeat(501) + "</x>"))).toThrow("UBL_STRUCTURE_LIMIT");
+    expect(parseSupplierUblInvoice(insert("<x>" + "z".repeat(501) + "</x>"))).toHaveLength(1);
     expect(() => parseSupplierUblInvoice(insert("<x " + Array.from({ length: 65 }, (_, i) => `a${i}="v"`).join(" ") + "/>"))).toThrow("UBL_STRUCTURE_LIMIT");
     expect(() => parseSupplierUblInvoice('<!DOCTYPE Invoice SYSTEM "file:///etc/passwd">' + xml)).toThrow("UBL_UNSAFE_DOCUMENT");
     expect(() => parseSupplierUblInvoice(xml.replace("Testware", "&unknown;"))).toThrow("UBL_INVALID_XML");
@@ -23,6 +23,22 @@ describe("supplier UBL candidates", () => {
     expect(parseSupplierUblInvoice(xml.replace("Testware", "<![CDATA[Testware]]>"))[0]?.article).toBe("Testware");
     const padding = " ".repeat(8192 - xml.indexOf("Testware") - 3);
     expect(parseSupplierUblInvoice(padding + xml.replace("Testware", "Test&amp;ware"))[0]?.article).toBe("Test&ware");
+  });
+  it("ignores bounded unused text and formatted container whitespace", () => {
+    const line = xml.match(/<cac:InvoiceLine>.*<\/cac:InvoiceLine>/)![0];
+    const lines = Array.from({ length: 300 }, (_, i) => line.replace("<cbc:ID>1</cbc:ID>", `<cbc:ID>${i + 1}</cbc:ID>`)).join("\n    ");
+    const formatted = xml.replace(line, lines).replaceAll(">10.00</cbc:LineExtensionAmount>", ">3000.00</cbc:LineExtensionAmount>").replace(">10.00</cbc:TaxExclusiveAmount>", ">3000.00</cbc:TaxExclusiveAmount>").replaceAll(">3000.00</cbc:LineExtensionAmount><cac:Item>", ">10.00</cbc:LineExtensionAmount><cac:Item>");
+    expect(parseSupplierUblInvoice(formatted)).toHaveLength(300);
+    const extra = '<cbc:Note>' + 'n'.repeat(5000) + '</cbc:Note><cac:AdditionalDocumentReference><cbc:EmbeddedDocumentBinaryObject>' + 'A'.repeat(100000) + '</cbc:EmbeddedDocumentBinaryObject></cac:AdditionalDocumentReference>';
+    expect(parseSupplierUblInvoice(xml.replace("</Invoice>", extra + "</Invoice>"))).toHaveLength(1);
+    expect(() => parseSupplierUblInvoice(xml.replace("Testware", "n".repeat(501)))).toThrow("UBL_INVALID_FIELD");
+  });
+  it("selects only an unambiguous VAT tax identifier", () => {
+    const tax = (kind: string, id: string) => `<cac:PartyTaxScheme><cbc:CompanyID>${id}</cbc:CompanyID><cac:TaxScheme><cbc:ID>${kind}</cbc:ID></cac:TaxScheme></cac:PartyTaxScheme>`;
+    const invoice = (schemes: string) => xml.replace("</cac:Party>", schemes + "</cac:Party>");
+    expect(parseSupplierUblInvoice(invoice(tax("FC", "local") + tax("VAT", "DE123")))[0]?.supplierTaxId).toEqual({ value: "DE123", verified: false });
+    expect(parseSupplierUblInvoice(invoice(tax("FC", "local")))[0]?.supplierTaxId).toBeUndefined();
+    expect(() => parseSupplierUblInvoice(invoice(tax("VAT", "a") + tax("VAT", "b")))).toThrow("UBL_AMBIGUOUS_TAX_ID");
   });
   it("checks namespaces and rejects malformed XML", () => {
     expect(() => parseSupplierUblInvoice(xml.replace("urn:oasis:names:specification:ubl:schema:xsd:Invoice-2", "urn:wrong"))).toThrow("UBL_NOT_INVOICE");
@@ -52,7 +68,7 @@ describe("supplier UBL candidates", () => {
     expect(() => parseSupplierUblInvoice(xml.replace(">10.00</cbc:TaxExclusiveAmount>", ">NaN</cbc:TaxExclusiveAmount>"))).toThrow("UBL_INVALID_TOTAL");
   });
   it("marks a single supplier tax identifier as unverified", () => {
-    const tax = '<cac:PartyTaxScheme><cbc:CompanyID>DE123</cbc:CompanyID></cac:PartyTaxScheme>';
+    const tax = '<cac:PartyTaxScheme><cbc:CompanyID>DE123</cbc:CompanyID><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:PartyTaxScheme>';
     expect(parseSupplierUblInvoice(xml.replace("</cac:Party>", tax + "</cac:Party>"))[0]?.supplierTaxId).toEqual({ value: "DE123", verified: false });
     expect(() => parseSupplierUblInvoice(xml.replace("</cac:Party>", tax + tax + "</cac:Party>"))).toThrow("UBL_AMBIGUOUS_TAX_ID");
   });
