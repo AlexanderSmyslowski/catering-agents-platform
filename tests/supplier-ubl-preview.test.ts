@@ -34,7 +34,9 @@ describe("supplier invoice preview", () => {
     const app = buildOfferApp({ rootDir, userStore, trustedActorSecret: secret, env: { CATERING_DEFAULT_BUSINESS_ID: "alpha", CATERING_TRUSTED_ACTOR_SECRET: secret } });
     try {
       const send = (headers: Record<string, string>, payload: Record<string, string> = { xml }) => app.inject({ method: "POST", url, headers, payload });
-      expect((await send(sameOrigin)).statusCode).toBe(403);
+      const noSession = await send(sameOrigin);
+      expect(noSession.statusCode).toBe(403);
+      expect(noSession.headers["cache-control"]).toBe("private, no-store");
       expect((await send({ ...sameOrigin, cookie: prodCookie })).statusCode).toBe(403);
       expect((await send({ ...sameOrigin, cookie: otherCookie })).statusCode).toBe(403);
       expect((await send({ ...sameOrigin, origin: "https://other.test", cookie: offerCookie })).statusCode).toBe(403);
@@ -46,7 +48,21 @@ describe("supplier invoice preview", () => {
       expect(invalid.statusCode).toBe(422);
       expect(invalid.body).not.toContain("synthetic-private-marker");
       expect((await send({ ...sameOrigin, cookie: offerCookie }, { xml, unexpected: "x" })).statusCode).toBe(400);
-      expect((await send({ ...sameOrigin, cookie: offerCookie }, { xml: "x".repeat(64001) })).statusCode).toBe(413);
+      const large = await send({ ...sameOrigin, cookie: offerCookie }, { xml: "x".repeat(64001) });
+      expect(large.statusCode).toBe(413);
+      expect(large.headers["cache-control"]).toBe("private, no-store");
+      for (let i = 0; i < 7; i++) expect((await send({ ...sameOrigin, cookie: offerCookie }, { xml: "<bad/>" })).statusCode).toBe(422);
+      const limited = await send({ ...sameOrigin, cookie: offerCookie });
+      expect(limited.statusCode).toBe(429);
+      expect(limited.headers["cache-control"]).toBe("private, no-store");
     } finally { await app.close(); }
   }, 15000);
+  it("rejects the legacy shared proxy actor even with commercial privileges", async () => {
+    const app = buildOfferApp({ rootDir: mkdtempSync(path.join(tmpdir(), "ubl-legacy-")), trustedActorSecret: secret, env: { CATERING_DEV_AUTH: "1", CATERING_DEFAULT_BUSINESS_ID: "alpha", CATERING_TRUSTED_ACTOR_SECRET: secret } });
+    try {
+      const response = await app.inject({ method: "POST", url, headers: { "x-catering-trusted-secret": secret, "x-catering-actor-name": "Angebots-Mitarbeiter", "x-catering-business-id": "alpha" }, payload: { xml } });
+      expect(response.statusCode).toBe(403);
+      expect(response.headers["cache-control"]).toBe("private, no-store");
+    } finally { await app.close(); }
+  });
 });

@@ -212,6 +212,10 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
     logger: false
   });
 
+  app.addHook("onRequest", async (request, reply) => {
+    if (request.url.split("?", 1)[0] === "/v1/offers/supplier-invoices/preview") reply.header("cache-control", "private, no-store");
+  });
+
   const authKeys = sessionMode ? deriveCateringAuthKeys(trustedActorSecret ?? "") : undefined;
   const internalServiceActorForRequest = sessionMode
     ? createCateringInternalServiceActorResolver({
