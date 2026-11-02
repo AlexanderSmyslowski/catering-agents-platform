@@ -58,7 +58,7 @@ export function IngredientCostHelper({ existingCost, onApply, onInvalidate }: {
   }
   return <details className="offer-pricing__ingredient-helper">
     <summary>Zutatenkosten berechnen</summary>
-    <p className="helper-text">Mengen und Nettopreise eingeben. Preise dürfen bis zu vier Nachkommastellen haben. Benötigte Menge und Preisbezug müssen dieselbe Einheit haben. Die Rechnung zeigt Verbrauchskosten, nicht den Kauf ganzer Gebinde.</p>
+    <p className="helper-text">Mengen und Nettopreise eingeben. Beispiel: 5 kg benötigt, 1 kg kostet 2,20 €. Beide Mengen brauchen dieselbe Einheit. Preise dürfen bis zu vier Nachkommastellen haben. Die Rechnung zeigt Verbrauchskosten, nicht den Kauf ganzer Gebinde.</p>
     <p className="helper-text">Einzelne Ansätze werden nicht gespeichert. Bitte Rechenweg und Belege separat festhalten; gespeichert werden nur Gesamtsumme und Quellenhinweis.</p>
     {rows.map((row, index) => <fieldset className="offer-pricing__ingredient-row offer-pricing__cost-fields" key={row.id}>
       <legend>Ansatz {index + 1}</legend>
