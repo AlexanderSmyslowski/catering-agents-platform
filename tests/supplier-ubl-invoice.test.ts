@@ -16,6 +16,14 @@ describe("supplier UBL candidates", () => {
     expect(() => parseSupplierUblInvoice(xml.replace("Testware", "&unknown;"))).toThrow("UBL_INVALID_XML");
     expect(() => parseSupplierUblInvoice(" ".repeat(2_000_001))).toThrow("UBL_UNSAFE_DOCUMENT");
   });
+  it("handles namespace aliases, rebindings, CDATA and input chunk boundaries", () => {
+    const alias = xml.replaceAll("cac:", "a:").replace("xmlns:cac=", "xmlns:a=");
+    expect(parseSupplierUblInvoice(alias)[0]?.article).toBe("Testware");
+    expect(() => parseSupplierUblInvoice(xml.replace("<cac:InvoiceLine>", '<cac:InvoiceLine xmlns:cac="urn:wrong">'))).toThrow("UBL_INVALID_LINES");
+    expect(parseSupplierUblInvoice(xml.replace("Testware", "<![CDATA[Testware]]>"))[0]?.article).toBe("Testware");
+    const padding = " ".repeat(8192 - xml.indexOf("Testware") - 3);
+    expect(parseSupplierUblInvoice(padding + xml.replace("Testware", "Test&amp;ware"))[0]?.article).toBe("Test&ware");
+  });
   it("checks namespaces and rejects malformed XML", () => {
     expect(() => parseSupplierUblInvoice(xml.replace("urn:oasis:names:specification:ubl:schema:xsd:Invoice-2", "urn:wrong"))).toThrow("UBL_NOT_INVOICE");
     expect(() => parseSupplierUblInvoice(xml.replace("</Invoice>", ""))).toThrow("UBL_INVALID_XML");
