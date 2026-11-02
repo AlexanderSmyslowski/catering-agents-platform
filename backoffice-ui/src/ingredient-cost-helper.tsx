@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { ApiResponseError, previewSupplierInvoice, type SupplierInvoicePreviewCandidate } from "./api.js";
 import { readSchwanPriceList, type SupplierPriceCandidate } from "./supplier-price-import.js";
 
 type IngredientCostRow = { id: number; name: string; used: string; reference: string; unit: string; price: string; source: string; supplierOriginalPrice?: string };
@@ -43,6 +44,9 @@ export function IngredientCostHelper({ existingCost, onApply, onInvalidate }: {
   const [rows, setRows] = useState<IngredientCostRow[]>([emptyRow(1)]);
   const [confirmed, setConfirmed] = useState(false);
   const [prices, setPrices] = useState<SupplierPriceCandidate[]>([]);
+  const [invoiceCandidates, setInvoiceCandidates] = useState<SupplierInvoicePreviewCandidate[]>([]);
+  const [invoiceMessage, setInvoiceMessage] = useState("");
+  const invoiceLoad = useRef(0);
   const [priceDate, setPriceDate] = useState("");
   const [priceMessage, setPriceMessage] = useState("");
   const priceLoad = useRef(0);
@@ -89,6 +93,31 @@ export function IngredientCostHelper({ existingCost, onApply, onInvalidate }: {
       <label>Preisstand der Liste<input type="date" value={priceDate} onChange={event => setPriceDate(event.target.value)} /></label>
       <p role="status">{priceMessage}</p>
     </details>
+    <details>
+      <summary>UBL-Rechnung verwenden</summary>
+      <p className="helper-text">Eine UBL-XML-Rechnung auswählen. Sie wird zur Vorschau an den Angebotsdienst gesendet, nicht gespeichert. Alle Positionen sind ungeprüft; Lieferant, Beleg und Eignung bitte kontrollieren. CII und PDF werden nicht unterstützt.</p>
+      <label>UBL-XML-Datei<input type="file" accept=".xml,application/xml,text/xml" onChange={async event => {
+        const load = ++invoiceLoad.current;
+        const file = event.currentTarget.files?.[0];
+        setInvoiceCandidates([]); setInvoiceMessage("");
+        if (!file) return;
+        if (!file.name.toLowerCase().endsWith(".xml") || file.size > 60_000) { setInvoiceMessage("Bitte eine XML-Datei bis 60 KB auswählen."); return; }
+        setInvoiceMessage("Rechnung wird geprüft …");
+        try {
+          const xml = new TextDecoder("utf-8", { fatal: true }).decode(await file.arrayBuffer());
+          if (load !== invoiceLoad.current) return;
+          if (new TextEncoder().encode(JSON.stringify({ xml })).length > 64_000) throw new Error("size");
+          const result = await previewSupplierInvoice(xml);
+          if (load !== invoiceLoad.current) return;
+          setInvoiceCandidates(result.candidates);
+          setInvoiceMessage(result.candidates.length ? `${result.candidates.length} ungeprüfte Positionen gelesen. Bei einem Ansatz eine Position auswählen.` : "Keine Positionen gefunden.");
+        } catch (error) {
+          if (load !== invoiceLoad.current) return;
+          setInvoiceMessage(error instanceof ApiResponseError && error.status === 403 ? "Für diese Vorschau ist eine persönliche Anmeldung mit kaufmännischer Berechtigung erforderlich." : error instanceof ApiResponseError && error.status === 429 ? "Zu viele Prüfungen. Bitte später erneut versuchen." : error instanceof Error && error.message === "size" ? "Die Datei ist für die Vorschau zu groß." : "Die Rechnung konnte nicht gelesen werden. Bitte Format und Inhalt prüfen.");
+        }
+      }} /></label>
+      <p role="status">{invoiceMessage}</p>
+    </details>
     {rows.map((row, index) => <fieldset className="offer-pricing__ingredient-row offer-pricing__cost-fields" key={row.id}>
       <legend>Ansatz {index + 1}</legend>
       <label>Zutat oder Kostenbestandteil<input value={row.name} onChange={event => update(row.id, { name: event.target.value })} /></label>
@@ -99,6 +128,14 @@ export function IngredientCostHelper({ existingCost, onApply, onInvalidate }: {
             source: `Schwan Preisliste ${priceDate}, Artikel ${candidate.article || "ohne Nummer"}, Zeile ${candidate.row}; ${candidate.unit || "Einheit offen"}, Inhalt ${candidate.content || "offen"}; ungeprüft` });
         }}>{candidate.product} · {candidate.content || "Inhalt offen"} · {candidate.unit || "Einheit offen"} · {candidate.price.replace(".", ",")} €</button>)}
         <p className="helper-text">Nach der Auswahl Nettopreis, Preisbezug und Einheit anhand der Preisliste prüfen und eintragen. Der Treffer ist keine automatische Gleichsetzung mit der Zutat.</p>
+      </div> : null}
+      {invoiceCandidates.length > 0 ? <div>
+        <p>Ungeprüfte Rechnungspositionen:</p>
+        {invoiceCandidates.filter(candidate => !row.name.trim() || candidate.article.toLocaleLowerCase("de-DE").includes(row.name.trim().toLocaleLowerCase("de-DE"))).slice(0, 8).map(candidate => <button type="button" className="secondary-button" key={candidate.lineId} onClick={() => {
+          update(row.id, { name: candidate.article, reference: candidate.quantity, unit: candidate.unit, price: candidate.lineNetEur, supplierOriginalPrice: undefined,
+            source: `${candidate.supplier}, Rechnung ${candidate.invoiceId} vom ${candidate.invoiceDate}, Position ${candidate.lineId}: ${candidate.quantity} ${candidate.unit}, ${candidate.lineNetEur} EUR netto; ungeprüft` });
+        }}>{candidate.article} · {candidate.supplier} · Rechnung {candidate.invoiceId} vom {candidate.invoiceDate} · Position {candidate.lineId} · {candidate.quantity} {candidate.unit} · {candidate.lineNetEur} € netto · ungeprüft</button>)}
+        <p className="helper-text">Auswahl und Preisbezug anhand des Belegs prüfen. Bei abweichender Qualität oder Ware nicht übernehmen. Preise mit mehr als vier Nachkommastellen müssen vor einer Berechnung geprüft und angepasst werden.</p>
       </div> : null}
       <label>Benötigte Menge<input inputMode="decimal" value={row.used} onChange={event => update(row.id, { used: event.target.value })} /></label>
       <label>Menge im Preisbezug<input inputMode="decimal" value={row.reference} onChange={event => update(row.id, { reference: event.target.value })} /></label>

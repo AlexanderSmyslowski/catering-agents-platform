@@ -343,6 +343,25 @@ async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+export interface SupplierInvoicePreviewCandidate {
+  supplier: string;
+  invoiceId: string;
+  invoiceDate: string;
+  lineId: string;
+  article: string;
+  quantity: string;
+  unit: string;
+  lineNetEur: string;
+  reviewRequired: true;
+}
+
+export function previewSupplierInvoice(xml: string): Promise<{ candidates: SupplierInvoicePreviewCandidate[] }> {
+  return fetchJson("/api/offers/v1/offers/supplier-invoices/preview", {
+    method: "POST",
+    body: JSON.stringify({ xml })
+  });
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
