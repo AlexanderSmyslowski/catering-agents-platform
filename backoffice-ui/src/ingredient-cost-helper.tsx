@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { ApiResponseError, previewSupplierInvoice, type SupplierInvoicePreviewCandidate } from "./api.js";
 import { readSchwanPriceList, type SupplierPriceCandidate } from "./supplier-price-import.js";
 
-type IngredientCostRow = { id: number; name: string; used: string; reference: string; unit: string; price: string; source: string; supplierOriginalPrice?: string; invoiceOriginal?: { reference: string; unit: string; price: string; supplier: string; invoiceId: string; invoiceDate: string; lineId: string } };
+type IngredientCostRow = { id: number; name: string; used: string; reference: string; unit: string; price: string; source: string; supplierOriginalPrice?: string; invoiceOriginal?: { article: string; reference: string; unit: string; price: string; supplier: string; invoiceId: string; invoiceDate: string; lineId: string } };
 const ingredientCostSourcePrefix = "Zutaten- und Kostenansätze: ";
 const emptyRow = (id: number): IngredientCostRow => ({ id, name: "", used: "", reference: "", unit: "", price: "", source: "" });
 const supplierPriceChanged = (row: IngredientCostRow) => {
@@ -16,7 +16,7 @@ function sameDecimal(a: string, b: string): boolean {
 }
 function invoiceBasisChanged(row: IngredientCostRow): boolean {
   const original = row.invoiceOriginal;
-  return Boolean(original && (!sameDecimal(row.reference, original.reference) || row.unit !== original.unit || !sameDecimal(row.price, original.price)));
+  return Boolean(original && (row.name.trim() !== original.article || !sameDecimal(row.reference, original.reference) || row.unit !== original.unit || !sameDecimal(row.price, original.price)));
 }
 // The editor accepts at most eight digits before the decimal point.
 const maximumCents = 9_999_999_999n;
@@ -63,7 +63,7 @@ export function IngredientCostHelper({ existingCost, onApply, onInvalidate }: {
   const totals = rows.map(ingredientTotal);
   const complete = totals.every((value): value is bigint => value !== undefined);
   const total = complete ? totals.reduce((sum, value) => sum + value, 0n) : undefined;
-  const sources = [...new Set(rows.map(row => row.source.trim() + (row.invoiceOriginal ? `; Rechnungsquelle ${row.invoiceOriginal.supplier}, Beleg ${row.invoiceOriginal.invoiceId} vom ${row.invoiceOriginal.invoiceDate}, Position ${row.invoiceOriginal.lineId}: ${row.invoiceOriginal.reference} ${row.invoiceOriginal.unit}, ${row.invoiceOriginal.price} EUR netto; ungeprüft` : "") + (supplierPriceChanged(row) ? "; Preis manuell geändert" : "") + (invoiceBasisChanged(row) ? "; Rechnungsbezug, Einheit oder Preis manuell geändert" : "")))].join("; ");
+  const sources = [...new Set(rows.map(row => row.source.trim() + (row.invoiceOriginal ? `; ${row.invoiceOriginal.supplier}, ${row.invoiceOriginal.invoiceId}, ${row.invoiceOriginal.invoiceDate}, Pos. ${row.invoiceOriginal.lineId}, ${row.invoiceOriginal.article}: ${row.invoiceOriginal.reference} ${row.invoiceOriginal.unit}, ${row.invoiceOriginal.price} EUR netto, ungeprüft` : "") + (supplierPriceChanged(row) ? "; Preis manuell geändert" : "") + (invoiceBasisChanged(row) ? "; Rechnungsartikel, Bezug, Einheit oder Preis manuell geändert" : "")))].join("; ");
   const source = ingredientCostSourcePrefix + sources;
   const ready = complete && total !== undefined && total <= maximumCents && source.length <= 500;
   const existingCents = editorCents(existingCost);
@@ -107,12 +107,16 @@ export function IngredientCostHelper({ existingCost, onApply, onInvalidate }: {
       <label>E-Rechnung (XML)<input type="file" accept=".xml,application/xml,text/xml" onChange={async event => {
         const load = ++invoiceLoad.current;
         const file = event.currentTarget.files?.[0];
+        event.currentTarget.value = "";
         setInvoiceCandidates([]); setInvoiceMessage("");
         if (!file) return;
         if (!file.name.toLowerCase().endsWith(".xml") || file.size > 60_000) { setInvoiceMessage("Bitte eine XML-Datei bis 60 KB auswählen."); return; }
         setInvoiceMessage("Rechnung wird geprüft …");
         try {
-          const xml = new TextDecoder("utf-8", { fatal: true }).decode(await file.arrayBuffer());
+          const bytes = await file.arrayBuffer();
+          let xml: string;
+          try { xml = new TextDecoder("utf-8", { fatal: true }).decode(bytes); }
+          catch { throw new Error("invalid-utf8"); }
           if (load !== invoiceLoad.current) return;
           if (new TextEncoder().encode(JSON.stringify({ xml })).length > 64_000) throw new Error("size");
           const result = await previewSupplierInvoice(xml);
@@ -121,7 +125,7 @@ export function IngredientCostHelper({ existingCost, onApply, onInvalidate }: {
           setInvoiceMessage(result.candidates.length ? `${result.candidates.length} ungeprüfte Positionen gelesen. Bei einem Ansatz eine Position auswählen.` : "Keine Positionen gefunden.");
         } catch (error) {
           if (load !== invoiceLoad.current) return;
-          setInvoiceMessage(error instanceof ApiResponseError && error.status === 403 ? "Für diese Vorschau ist eine persönliche Anmeldung mit kaufmännischer Berechtigung erforderlich." : error instanceof ApiResponseError && error.status === 429 ? "Zu viele Prüfungen. Bitte später erneut versuchen." : error instanceof Error && error.message === "size" ? "Die Datei ist für die Vorschau zu groß." : "Die Rechnung konnte nicht gelesen werden. Bitte Format und Inhalt prüfen.");
+          setInvoiceMessage(error instanceof ApiResponseError && (error.status === 401 || error.status === 403) ? "Bitte persönlich anmelden und die kaufmännische Berechtigung prüfen." : error instanceof ApiResponseError && error.status === 413 ? "Die Datei ist für die Vorschau zu groß." : error instanceof ApiResponseError && error.status === 429 ? "Zu viele Prüfungen. Bitte später erneut versuchen." : error instanceof ApiResponseError && error.status >= 500 ? "Der Rechnungsdienst ist gerade nicht verfügbar. Bitte später erneut versuchen." : error instanceof ApiResponseError ? "Die Rechnung konnte nicht gelesen werden. Bitte Format und Inhalt prüfen." : error instanceof Error && error.message === "size" ? "Die Datei ist für die Vorschau zu groß." : error instanceof Error && error.message === "invalid-utf8" ? "Die XML-Datei muss UTF-8-kodiert sein." : "Die Verbindung zum Rechnungsdienst ist fehlgeschlagen. Bitte erneut versuchen.");
         }
       }} /></label>
       <p role="status">{invoiceMessage}</p>
@@ -140,9 +144,9 @@ export function IngredientCostHelper({ existingCost, onApply, onInvalidate }: {
       {invoiceCandidates.length > 0 ? <div>
         <p>Ungeprüfte Rechnungspositionen:</p>
         {invoiceCandidates.filter(candidate => !row.name.trim() || candidate.article.toLocaleLowerCase("de-DE").includes(row.name.trim().toLocaleLowerCase("de-DE"))).slice(0, 8).map(candidate => <button type="button" className="secondary-button" key={candidate.lineId} onClick={() => {
-          update(row.id, { name: candidate.article, reference: candidate.quantity, unit: candidate.unit, price: candidate.lineNetEur, supplierOriginalPrice: undefined, invoiceOriginal: { reference: candidate.quantity, unit: candidate.unit, price: candidate.lineNetEur, supplier: candidate.supplier, invoiceId: candidate.invoiceId, invoiceDate: candidate.invoiceDate, lineId: candidate.lineId },
+          update(row.id, { name: candidate.article, reference: candidate.quantity, unit: candidate.unit, price: candidate.lineNetEur, supplierOriginalPrice: undefined, invoiceOriginal: { article: candidate.article, reference: candidate.quantity, unit: candidate.unit, price: candidate.lineNetEur, supplier: candidate.supplier, invoiceId: candidate.invoiceId, invoiceDate: candidate.invoiceDate, lineId: candidate.lineId },
             source: "Rechnungsposition, ungeprüft" });
-        }}>{candidate.article} · {candidate.supplier} · Rechnung {candidate.invoiceId} vom {candidate.invoiceDate} · Position {candidate.lineId} · {candidate.quantity} {candidate.unit} · {candidate.lineNetEur} € netto · ungeprüft</button>)}
+        }}>{candidate.article} · {candidate.supplier} · Rechnung {candidate.invoiceId} vom {candidate.invoiceDate.split("-").reverse().join(".")} · Position {candidate.lineId} · {candidate.quantity} {candidate.unit} · {candidate.lineNetEur} € netto · ungeprüft</button>)}
         <p className="helper-text">Auswahl und Preisbezug anhand des Belegs prüfen. Bei abweichender Qualität oder Ware nicht übernehmen. Preise mit mehr als vier Nachkommastellen müssen vor einer Berechnung geprüft und angepasst werden.</p>
       </div> : null}
       <label>Benötigte Menge<input inputMode="decimal" value={row.used} onChange={event => update(row.id, { used: event.target.value })} /></label>
@@ -152,8 +156,8 @@ export function IngredientCostHelper({ existingCost, onApply, onInvalidate }: {
       </select></label>
       <label>Preis des Preisbezugs netto · EUR<input inputMode="decimal" value={row.price} onChange={event => update(row.id, { price: event.target.value })} /></label>
       {supplierPriceChanged(row) ? <p role="status">Preis manuell geändert; der ursprüngliche Listenpreis war {row.supplierOriginalPrice?.replace(".", ",")} €.</p> : null}
-      {row.invoiceOriginal ? <p className="helper-text">Rechnungsquelle: {row.invoiceOriginal.supplier}, Beleg {row.invoiceOriginal.invoiceId} vom {row.invoiceOriginal.invoiceDate}, Position {row.invoiceOriginal.lineId}: {row.invoiceOriginal.reference} {row.invoiceOriginal.unit}, {row.invoiceOriginal.price} € netto; ungeprüft.</p> : null}
-      {invoiceBasisChanged(row) ? <p role="status">Rechnungsbezug, Einheit oder Preis wurden manuell geändert.</p> : null}
+      {row.invoiceOriginal ? <p className="helper-text">Rechnungsquelle: {row.invoiceOriginal.supplier}, Beleg {row.invoiceOriginal.invoiceId} vom {row.invoiceOriginal.invoiceDate.split("-").reverse().join(".")}, Position {row.invoiceOriginal.lineId}: {row.invoiceOriginal.reference} {row.invoiceOriginal.unit}, {row.invoiceOriginal.price} € netto; ungeprüft.</p> : null}
+      {invoiceBasisChanged(row) ? <p role="status">Rechnungsartikel, Bezug, Einheit oder Preis wurden manuell geändert.</p> : null}
       <label>Quelle oder Schätzgrund<input value={row.source} onChange={event => update(row.id, { source: event.target.value })} /></label>
       {rows.length > 1 ? <button type="button" className="secondary-button" onClick={() => { changed(); setRows(current => current.filter(item => item.id !== row.id)); }}>Ansatz {index + 1} entfernen</button> : null}
     </fieldset>)}
