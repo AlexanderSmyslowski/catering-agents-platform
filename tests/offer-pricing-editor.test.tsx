@@ -55,6 +55,127 @@ describe("offer pricing editor", () => {
     expect(sourceHint?.textContent).toContain("Schätzung mit Quelle");
     await act(async () => root.unmount());
   });
+  it("requires a complete ingredient estimate and explicit confirmation before transferring it", async () => {
+    const { root } = await mount();
+    await act(async () => button("Preisaufstellung bearbeiten").click());
+    const transfer = button("Kostensumme als Schätzung übernehmen");
+    expect(transfer.disabled).toBe(true);
+    await change(field("Zutat oder Kostenbestandteil"), "Reis");
+    await change(field("Benötigte Menge"), "5");
+    await change(field("Menge im Preisbezug"), "1");
+    const unit = Array.from(document.querySelectorAll("label")).find(label => label.textContent?.startsWith("Einheit für beide Mengen"))!.querySelector("select")!;
+    await act(async () => { unit.value = "kg"; unit.dispatchEvent(new Event("change", { bubbles: true })); });
+    await change(field("Preis des Preisbezugs netto"), "2,20");
+    await change(field("Quelle oder Schätzgrund"), "Synthetischer Beispielpreis");
+    expect(document.body.textContent).toContain("11,00");
+    expect(transfer.disabled).toBe(true);
+    const confirm = Array.from(document.querySelectorAll("label")).find(label => label.textContent?.includes("Alle direkten Kosten dieser Position"))!.querySelector("input")!;
+    await act(async () => confirm.click());
+    expect(transfer.disabled).toBe(false);
+    await act(async () => transfer.click());
+    expect(field("Kosten gesamt netto").value).toBe("11.00");
+    expect(field("Beleg oder Schätzgrund").value).toContain("Synthetischer Beispielpreis");
+    expect(document.body.textContent).toContain("Einzelne Ansätze werden nicht gespeichert");
+    expect(document.querySelector('[aria-label="Interne Kosten und Deckungsbeitrag"]')?.textContent).toContain("nur Gesamtsumme und Quellenhinweis gespeichert");
+    await change(field("Benötigte Menge"), "6");
+    expect(field("Kosten gesamt netto").value).toBe("");
+    await act(async () => root.unmount());
+  });
+  it("rounds each small ingredient cost in cents and refuses an incomplete second ingredient", async () => {
+    const { root } = await mount();
+    await act(async () => button("Preisaufstellung bearbeiten").click());
+    const helper = document.querySelector(".offer-pricing__ingredient-helper")!;
+    const inputIn = (index: number) => Array.from(helper.querySelectorAll("fieldset"))[index]!
+      .querySelectorAll("label");
+    const setIngredient = async (index: number, name: string, used: string) => {
+      const labels = Array.from(inputIn(index));
+      const input = (name: string) => labels.find(label => label.textContent?.startsWith(name))!.querySelector("input")!;
+      await change(input("Zutat oder Kostenbestandteil"), name);
+      await change(input("Benötigte Menge"), used);
+      await change(input("Menge im Preisbezug"), "100");
+      await change(input("Preis des Preisbezugs netto"), "1,00");
+      await change(input("Quelle oder Schätzgrund"), "Testansatz");
+      const unit = labels.find(label => label.textContent?.startsWith("Einheit für beide Mengen"))!.querySelector("select")!;
+      await act(async () => { unit.value = "g"; unit.dispatchEvent(new Event("change", { bubbles: true })); });
+    };
+    await setIngredient(0, "Gewürz A", "0,5");
+    expect(helper.textContent).toContain("0,01");
+    await act(async () => button("Weiteren Ansatz hinzufügen").click());
+    expect(helper.textContent).toContain("Summe offen");
+    expect(button("Kostensumme als Schätzung übernehmen").disabled).toBe(true);
+    await setIngredient(1, "Gewürz B", "0,5");
+    expect(helper.textContent).toContain("0,02");
+    await act(async () => root.unmount());
+  });
+
+  it("clears the existing menu cost when switching to a different variant with the same guest count", async () => {
+    const priced = calculateOfferPricing({ lines: [{ ...input[0], unit: "flat", quantity: "1", directCost: {
+      totalNetCents: 24416, basis: "estimated", sourceReference: "SYNTHETISCH: vorherige Variante", estimateDate: "2026-10-25"
+    } }] }, 100);
+    const root = createRoot(document.body.appendChild(document.createElement("div")));
+    await act(async () => root.render(createElement(OfferPricingEditor, {
+      draftId: "draft-a", revision: 1, variants: [
+        { variantId: "a", label: "Variante A", guests: 100 },
+        { variantId: "b", label: "Variante B", guests: 100 }
+      ], menuPlan: [], pricingSummary: priced, disabled: false, onSaved: vi.fn(), onEditingChange: vi.fn()
+    })));
+    await act(async () => button("Preisaufstellung bearbeiten").click());
+    const select = Array.from(document.querySelectorAll("label")).find(label => label.textContent?.startsWith("Zu kalkulierende Variante"))!.querySelector("select")!;
+    await act(async () => { select.value = "a"; select.dispatchEvent(new Event("change", { bubbles: true })); });
+    await change(field("Kosten gesamt netto"), "244,16");
+    await change(field("Beleg oder Schätzgrund"), "SYNTHETISCH Variante A");
+    await act(async () => { select.value = "b"; select.dispatchEvent(new Event("change", { bubbles: true })); });
+    expect(field("Kosten gesamt netto").value).toBe("");
+    expect(document.body.textContent).toContain("Variante geändert – Kosten erneut eingeben");
+    await act(async () => root.unmount());
+  });
+  it("keeps a manually replaced cost when the former ingredient estimate is edited", async () => {
+    const { root } = await mount();
+    await act(async () => button("Preisaufstellung bearbeiten").click());
+    await change(field("Zutat oder Kostenbestandteil"), "Reis");
+    await change(field("Benötigte Menge"), "5");
+    await change(field("Menge im Preisbezug"), "1");
+    await change(field("Preis des Preisbezugs netto"), "2,20");
+    await change(field("Quelle oder Schätzgrund"), "Synthetischer Beispielpreis");
+    const unit = Array.from(document.querySelectorAll("label")).find(label => label.textContent?.startsWith("Einheit für beide Mengen"))!.querySelector("select")!;
+    await act(async () => { unit.value = "kg"; unit.dispatchEvent(new Event("change", { bubbles: true })); });
+    const confirm = Array.from(document.querySelectorAll("label")).find(label => label.textContent?.includes("Alle direkten Kosten dieser Position"))!.querySelector("input")!;
+    await act(async () => confirm.click());
+    await act(async () => button("Kostensumme als Schätzung übernehmen").click());
+    await change(field("Kosten gesamt netto"), "12,00");
+    await change(field("Benötigte Menge"), "6");
+    expect(field("Kosten gesamt netto").value).toBe("12,00");
+    await act(async () => root.unmount());
+  });
+  it("preserves four-place price precision before rounding the ingredient result to cents", async () => {
+    const { root } = await mount();
+    await act(async () => button("Preisaufstellung bearbeiten").click());
+    await change(field("Zutat oder Kostenbestandteil"), "Synthetische Zutat");
+    await change(field("Benötigte Menge"), "5");
+    await change(field("Menge im Preisbezug"), "1");
+    await change(field("Preis des Preisbezugs netto"), "2,2050");
+    await change(field("Quelle oder Schätzgrund"), "Historischer Testansatz");
+    const unit = Array.from(document.querySelectorAll("label")).find(label => label.textContent?.startsWith("Einheit für beide Mengen"))!.querySelector("select")!;
+    await act(async () => { unit.value = "kg"; unit.dispatchEvent(new Event("change", { bubbles: true })); });
+    expect(document.querySelector(".offer-pricing__ingredient-helper")?.textContent).toContain("11,03");
+    await act(async () => root.unmount());
+  });
+  it("does not offer a total beyond the existing cost editor's numeric limit", async () => {
+    const { root } = await mount();
+    await act(async () => button("Preisaufstellung bearbeiten").click());
+    await change(field("Zutat oder Kostenbestandteil"), "Synthetischer Großbetrag");
+    await change(field("Benötigte Menge"), "10000");
+    await change(field("Menge im Preisbezug"), "1");
+    await change(field("Preis des Preisbezugs netto"), "10000");
+    await change(field("Quelle oder Schätzgrund"), "Synthetisch");
+    const unit = Array.from(document.querySelectorAll("label")).find(label => label.textContent?.startsWith("Einheit für beide Mengen"))!.querySelector("select")!;
+    await act(async () => { unit.value = "kg"; unit.dispatchEvent(new Event("change", { bubbles: true })); });
+    const confirm = Array.from(document.querySelectorAll("label")).find(label => label.textContent?.includes("Alle direkten Kosten dieser Position"))!.querySelector("input")!;
+    await act(async () => confirm.click());
+    expect(button("Kostensumme als Schätzung übernehmen").disabled).toBe(true);
+    expect(document.body.textContent).toContain("zulässigen Betrag");
+    await act(async () => root.unmount());
+  });
   it("does not label an invalid or incomplete cost as an accepted estimate", async () => {
     const { root } = await mount();
     await act(async () => button("Preisaufstellung bearbeiten").click());
@@ -189,8 +310,16 @@ describe("offer pricing editor", () => {
     const staff = Array.from(document.querySelectorAll("fieldset")).find(x => x.querySelector("legend")?.textContent?.includes("Servicepersonal"))!;
     const quantity = Array.from(staff.querySelectorAll("label")).find(x => x.textContent?.startsWith("Personenstunden"))!.querySelector("input")!;
     await change(quantity, "12");
+    const cost = Array.from(staff.querySelectorAll("label")).find(x => x.textContent?.startsWith("Kosten gesamt netto"))!.querySelector("input")!;
+    expect(cost.value).toBe("");
+    expect(staff.textContent).toContain("Menge geändert");
+    expect(staff.textContent).toContain("Kosten erneut eingeben");
     const basis = Array.from(staff.querySelectorAll("label")).find(x => x.textContent?.startsWith("Kostengrundlage"))!.querySelector("select")!;
     expect(basis.value).toBe("estimated");
+    vi.mocked(reviseOfferPricing).mockResolvedValueOnce({ draftId: "cost-open" } as any);
+    await act(async () => button("Preisaufstellung als neue Fassung speichern").click());
+    const sentLines = vi.mocked(reviseOfferPricing).mock.calls[0]![3];
+    expect(sentLines.find(line => line.id === "staff")?.directCost).toBeUndefined();
     await act(async () => root.unmount());
   });
   it("keeps selling totals while an internal estimate is unfinished and names the affected position", async () => {
