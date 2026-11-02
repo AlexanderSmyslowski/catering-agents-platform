@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { ApiResponseError, previewSupplierInvoice, type SupplierInvoicePreviewCandidate } from "./api.js";
-import { readSchwanPriceList, type SupplierPriceCandidate } from "./supplier-price-import.js";
+import { readSchwanPriceListInfo, type SupplierPriceCandidate } from "./supplier-price-import.js";
 
 type IngredientCostRow = { id: number; name: string; used: string; reference: string; unit: string; price: string; source: string; supplierOriginalPrice?: string; supplierOriginalName?: string; supplierOriginalSource?: string; invoiceOriginal?: { article: string; reference: string; unit: string; price: string; supplier: string; invoiceId: string; invoiceDate: string; lineId: string } };
 const ingredientCostSourcePrefix = "Zutaten- und Kostenansätze: ";
@@ -57,6 +57,7 @@ export function IngredientCostHelper({ existingCost, onApply, onInvalidate }: {
   const [invoiceMessage, setInvoiceMessage] = useState("");
   const invoiceLoad = useRef(0);
   const [priceDate, setPriceDate] = useState("");
+  const [listValidFrom, setListValidFrom] = useState("");
   const [priceMessage, setPriceMessage] = useState("");
   const priceLoad = useRef(0);
   const nextId = useRef(2);
@@ -85,21 +86,23 @@ export function IngredientCostHelper({ existingCost, onApply, onInvalidate }: {
     <p className="helper-text">Einzelne Ansätze werden nicht gespeichert. Bitte Rechenweg und Belege separat festhalten; gespeichert werden nur Gesamtsumme und Quellenhinweis.</p>
     <details>
       <summary>Schwan-Preisliste verwenden</summary>
-      <p className="helper-text">Excel-Preisliste aus der E-Mail auswählen und danach den Preisstand eintragen. Die Datei wird nur in diesem Browser gelesen. Preisvorschläge sind ungeprüft und bleiben nicht gespeichert. Bereits ausgewählte Ansätze behalten ihren eingetragenen Preisstand.</p>
+      <p className="helper-text">Excel-Preisliste aus der E-Mail auswählen und den Preisstand prüfen. Wenn die Datei „gültig ab“ nennt, wird dieses Datum vorgeschlagen. Die Datei wird nur in diesem Browser gelesen. Preisvorschläge sind ungeprüft und bleiben nicht gespeichert. Bereits ausgewählte Ansätze behalten ihren eingetragenen Preisstand.</p>
       <label>Schwan-Exceldatei<input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={async event => {
         const load = ++priceLoad.current;
         const file = event.currentTarget.files?.[0];
-        setPrices([]); setPriceDate(""); setPriceMessage("");
+        setPrices([]); setPriceDate(""); setListValidFrom(""); setPriceMessage("");
         if (!file) return;
         if (file.size > 5_000_000) { setPriceMessage("Die Datei ist zu groß. Bitte eine Preisliste bis 5 MB wählen."); return; }
         try {
-          const candidates = readSchwanPriceList(new Uint8Array(await file.arrayBuffer()));
+          const { candidates, validFrom } = readSchwanPriceListInfo(new Uint8Array(await file.arrayBuffer()));
           if (load !== priceLoad.current) return;
+          setListValidFrom(validFrom ?? ""); setPriceDate(validFrom ?? "");
           setPrices(candidates);
           setPriceMessage(candidates.length ? `${candidates.length} Preisvorschläge gelesen. Zeilen ohne eindeutig lesbaren Preis werden ausgelassen. Eine Zutat eingeben und den passenden Artikel auswählen.` : "Keine verwendbaren Preise gefunden. Bitte die Preisliste prüfen.");
         } catch (error) { if (load === priceLoad.current) setPriceMessage(error instanceof Error ? error.message : "Die Preisliste konnte nicht gelesen werden."); }
       }} /></label>
       <label>Preisstand der Liste<input type="date" value={priceDate} onChange={event => setPriceDate(event.target.value)} /></label>
+      {listValidFrom ? <p className="helper-text">Laut Datei gültig ab {listValidFrom.split("-").reverse().join(".")}.{priceDate && priceDate !== listValidFrom ? " Der eingegebene Preisstand weicht davon ab." : ""}</p> : <p className="helper-text">Kein eindeutiges Gültigkeitsdatum aus der Datei erkannt. Bitte den Preisstand selbst prüfen.</p>}
       <p role="status">{priceMessage}</p>
     </details>
     <details>
@@ -137,7 +140,7 @@ export function IngredientCostHelper({ existingCost, onApply, onInvalidate }: {
       {prices.length > 0 && row.name.trim().length >= 2 ? <div>
         <p>Passende Artikel aus der Preisliste {priceDate ? `vom ${priceDate.split("-").reverse().join(".")}` : "– bitte Preisstand eintragen"}:</p>
         {prices.filter(candidate => candidate.product.toLocaleLowerCase("de-DE").includes(row.name.trim().toLocaleLowerCase("de-DE"))).slice(0, 8).map(candidate => <button type="button" className="secondary-button" key={candidate.row} disabled={!priceDate} onClick={() => {
-          const source = `Schwan Preisliste ${priceDate}, Artikel ${candidate.article || "ohne Nummer"}, Zeile ${candidate.row}; ${candidate.unit || "Einheit offen"}, Inhalt ${candidate.content || "offen"}; ungeprüft`;
+          const source = `Schwan Preisliste ${priceDate}${listValidFrom ? `, Datei gültig ab ${listValidFrom}${priceDate !== listValidFrom ? " (Preisstand manuell geändert)" : ""}` : ""}, Artikel ${candidate.article || "ohne Nummer"}, Zeile ${candidate.row}; ${candidate.unit || "Einheit offen"}, Inhalt ${candidate.content || "offen"}; ungeprüft`;
           update(row.id, { name: candidate.product, reference: "", unit: "", price: candidate.price, supplierOriginalPrice: candidate.price, supplierOriginalName: candidate.product, supplierOriginalSource: source, invoiceOriginal: undefined, source });
         }}>{candidate.product} · {candidate.content || "Inhalt offen"} · {candidate.unit || "Einheit offen"} · {candidate.price.replace(".", ",")} €</button>)}
         <p className="helper-text">Nach der Auswahl Nettopreis, Preisbezug und Einheit anhand der Preisliste prüfen und eintragen. Der Treffer ist keine automatische Gleichsetzung mit der Zutat.</p>

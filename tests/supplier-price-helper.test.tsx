@@ -4,9 +4,9 @@ import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { IngredientCostHelper } from "../backoffice-ui/src/ingredient-cost-helper.js";
 
-vi.mock("../backoffice-ui/src/supplier-price-import.js", () => ({ readSchwanPriceList: (bytes: Uint8Array) => [
+vi.mock("../backoffice-ui/src/supplier-price-import.js", () => ({ readSchwanPriceListInfo: (bytes: Uint8Array) => ({ candidates: [
   { article: "TEST-1", product: bytes[0] === 2 ? "Alter Reis" : "Beispielreis", content: "5 kg", unit: "Kolli", price: "12.50", row: 13 }
-] }));
+], ...(bytes[0] === 3 ? { validFrom: "2026-11-03" } : {}) }) }));
 afterEach(() => { document.body.innerHTML = ""; });
 const label = (name: string) => Array.from(document.querySelectorAll("label")).find(x => x.textContent?.startsWith(name))!;
 async function setInput(input: HTMLInputElement, value: string) {
@@ -57,6 +57,36 @@ it("requires a list date and a separate price basis for a selected supplier arti
   expect(apply).toHaveBeenCalledWith("26.00", expect.stringContaining("Schwan Preisliste 2026-11-02"));
   expect(apply).toHaveBeenCalledWith("26.00", expect.stringContaining("Listenartikel Beispielreis"));
   expect(apply).toHaveBeenCalledWith("26.00", expect.stringContaining("Listenartikel manuell geändert"));
+  await act(async () => root.unmount());
+});
+
+it("uses the validity date from the list and preserves it when the date is changed", async () => {
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  const apply = vi.fn();
+  await act(async () => root.render(createElement(IngredientCostHelper, { onApply: apply, onInvalidate: vi.fn() })));
+  const file = new File(["test"], "test.xlsx");
+  Object.defineProperty(file, "arrayBuffer", { value: async () => new Uint8Array([3]).buffer });
+  const input = label("Schwan-Exceldatei").querySelector("input")!;
+  Object.defineProperty(input, "files", { value: [file], configurable: true });
+  await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
+  expect(label("Preisstand der Liste").querySelector("input")!.value).toBe("2026-11-03");
+  expect(document.body.textContent).toContain("Laut Datei gültig ab");
+  await setInput(label("Preisstand der Liste").querySelector("input")!, "2026-11-04");
+  await setInput(label("Zutat oder Kostenbestandteil").querySelector("input")!, "Reis");
+  const candidate = Array.from(document.querySelectorAll("button")).find(b => b.textContent?.includes("Beispielreis ·"))!;
+  await act(async () => candidate.click());
+  const source = label("Quelle oder Schätzgrund").querySelector("input")!.value;
+  expect(source).toContain("2026-11-03");
+  expect(source).toContain("Preisstand manuell geändert");
+  await setInput(label("Benötigte Menge").querySelector("input")!, "2");
+  await setInput(label("Menge im Preisbezug").querySelector("input")!, "1");
+  const unit = label("Einheit für beide Mengen").querySelector("select")!;
+  await act(async () => { unit.value = "kg"; unit.dispatchEvent(new Event("change", { bubbles: true })); });
+  await act(async () => label("Alle direkten Kosten").querySelector("input")!.click());
+  const transfer = Array.from(document.querySelectorAll("button")).find(b => b.textContent === "Kostensumme als Schätzung übernehmen")!;
+  await act(async () => transfer.click());
+  expect(apply).toHaveBeenCalledWith("25.00", expect.stringContaining("2026-11-03"));
+  expect(apply).toHaveBeenCalledWith("25.00", expect.stringContaining("Preisstand manuell geändert"));
   await act(async () => root.unmount());
 });
 

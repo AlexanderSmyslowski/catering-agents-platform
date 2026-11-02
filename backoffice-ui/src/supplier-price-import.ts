@@ -1,10 +1,15 @@
 import { strFromU8, unzipSync } from "fflate";
 
 export type SupplierPriceCandidate = { article: string; product: string; content: string; unit: string; price: string; row: number };
+export type SupplierPriceListInfo = { candidates: SupplierPriceCandidate[]; validFrom?: string };
 
 // Supplier spreadsheets are untrusted input. Only the two XML parts needed for
 // the price list are expanded, with bounded archive and expanded sizes.
 export function readSchwanPriceList(data: Uint8Array): SupplierPriceCandidate[] {
+  return readSchwanPriceListInfo(data).candidates;
+}
+
+export function readSchwanPriceListInfo(data: Uint8Array): SupplierPriceListInfo {
   if (data.length > 5_000_000) throw new Error("Die Datei ist zu groß. Bitte eine Preisliste bis 5 MB wählen.");
   let parts: Record<string, Uint8Array>;
   let expanded = 0;
@@ -22,11 +27,15 @@ export function readSchwanPriceList(data: Uint8Array): SupplierPriceCandidate[] 
     throw new Error("Die Excel-Datei konnte nicht sicher gelesen werden. Bitte die ursprüngliche Preisliste wählen.");
   }
   if (!parts["xl/worksheets/sheet1.xml"]) throw new Error("Die Preisliste enthält kein lesbares Tabellenblatt.");
-  return readSchwanPriceParts(parts["xl/worksheets/sheet1.xml"], parts["xl/sharedStrings.xml"]);
+  return readSchwanPricePartsInfo(parts["xl/worksheets/sheet1.xml"], parts["xl/sharedStrings.xml"]);
 }
 
 /** Interprets bounded worksheet parts; the caller remains responsible for source authorization and provenance. */
 export function readSchwanPriceParts(sheet: Uint8Array, strings?: Uint8Array): SupplierPriceCandidate[] {
+  return readSchwanPricePartsInfo(sheet, strings).candidates;
+}
+
+export function readSchwanPricePartsInfo(sheet: Uint8Array, strings?: Uint8Array): SupplierPriceListInfo {
   if (sheet.length + (strings?.length ?? 0) > 8_000_000) throw new Error("Die Preisliste enthält zu viele Daten.");
   const parse = (bytes: Uint8Array) => {
     const xml = strFromU8(bytes);
@@ -60,6 +69,17 @@ export function readSchwanPriceParts(sheet: Uint8Array, strings?: Uint8Array): S
     return cells.get("A") === "Artikel-Nr" && cells.get("D") === "Produkt" && cells.get("G") === "Inhalt" && cells.get("N") === "Einheit" && cells.get("P") === "Preis neu";
   });
   if (headerIndex < 0) throw new Error("Das Format der Schwan-Preisliste wurde nicht erkannt. Bitte die Liste prüfen.");
+  const dateRows = rows.filter(row => row.getAttribute("r") === "3");
+  if (dateRows.length > 1) throw new Error("Die Preisliste enthält doppelte Datumszeilen. Bitte die Datei prüfen.");
+  const dateText = dateRows.length ? values(dateRows[0]!).get("H") ?? "" : "";
+  const match = dateText.match(/^gültig ab\s+(\d{2})\.(\d{2})\.(\d{4})$/iu);
+  let validFrom: string | undefined;
+  if (match) {
+    const [, day, month, year] = match;
+    const iso = `${year}-${month}-${day}`;
+    const parsed = new Date(`${iso}T00:00:00Z`);
+    if (Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === iso) validFrom = iso;
+  }
   const candidates: SupplierPriceCandidate[] = [];
   for (const row of rows.slice(headerIndex + 1)) {
     if (["1", "true"].includes(row.getAttribute("hidden") ?? "")) continue;
@@ -77,5 +97,5 @@ export function readSchwanPriceParts(sheet: Uint8Array, strings?: Uint8Array): S
     candidates.push({ article: cells.get("A") ?? "", product, content: cells.get("G") ?? "", unit: cells.get("N") ?? "", price, row: rowNumber });
     if (candidates.length > 10_000) throw new Error("Die Preisliste enthält zu viele Positionen.");
   }
-  return candidates;
+  return { candidates, ...(validFrom ? { validFrom } : {}) };
 }

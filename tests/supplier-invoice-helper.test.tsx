@@ -5,9 +5,9 @@ import { afterEach, expect, it, vi } from "vitest";
 import { IngredientCostHelper } from "../backoffice-ui/src/ingredient-cost-helper.js";
 import { ApiResponseError, previewSupplierInvoice } from "../backoffice-ui/src/api.js";
 
-vi.mock("../backoffice-ui/src/supplier-price-import.js", () => ({ readSchwanPriceList: () => [
+vi.mock("../backoffice-ui/src/supplier-price-import.js", () => ({ readSchwanPriceListInfo: () => ({ candidates: [
   { article: "TEST-1", product: "Beispielreis", content: "5 kg", unit: "Kolli", price: "12.50", row: 13 }
-] }));
+] }) }));
 vi.mock("../backoffice-ui/src/api.js", () => ({
   ApiResponseError: class extends Error { constructor(message: string, public status: number) { super(message); } },
   previewSupplierInvoice: vi.fn()

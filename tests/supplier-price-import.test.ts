@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import { strToU8, zipSync } from "fflate";
-import { readSchwanPriceList, readSchwanPriceParts } from "../backoffice-ui/src/supplier-price-import.js";
+import { readSchwanPriceList, readSchwanPriceListInfo, readSchwanPriceParts } from "../backoffice-ui/src/supplier-price-import.js";
 
 const xml = (rows: string) => `<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${rows}</sheetData></worksheet>`;
 const text = (ref: string, value: string) => `<c r="${ref}" t="inlineStr"><is><t>${value}</t></is></c>`;
@@ -65,6 +65,14 @@ describe("Schwan price list import", () => {
     expect(readSchwanPriceParts(strToU8(xml(headers + row)))).toEqual(readSchwanPriceList(archive(xml(headers + row))));
     expect(() => readSchwanPriceParts(strToU8(`<!ENTITY test 'value'>${xml(headers + row)}`))).toThrow();
     expect(() => readSchwanPriceParts(new Uint8Array(8_000_001))).toThrow();
+  });
+  it("uses the list's explicit valid-from date, never the mail or current date", () => {
+    const date = `<row r="3">${text("H3", "gültig ab 03.11.2026")}</row>`;
+    const result = readSchwanPriceListInfo(archive(xml(date + headers)));
+    expect(result.validFrom).toBe("2026-11-03");
+    const invalid = `<row r="3">${text("H3", "gültig ab 30.02.2026")}</row>`;
+    expect(readSchwanPriceListInfo(archive(xml(invalid + headers))).validFrom).toBeUndefined();
+    expect(readSchwanPriceListInfo(archive(xml(headers))).validFrom).toBeUndefined();
   });
   it("rejects oversized expanded spreadsheet parts before parsing", () => {
     const data = zipSync({ "xl/worksheets/sheet1.xml": new Uint8Array(8_000_001) });
