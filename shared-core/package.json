@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./upload-limits": "./src/upload-limits.ts"
+    "./upload-limits": "./src/upload-limits.ts",
+    "./supplier-ubl-invoice": "./src/supplier-ubl-invoice.ts"
   }
 }
