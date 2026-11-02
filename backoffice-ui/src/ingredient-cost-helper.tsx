@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { ApiResponseError, previewSupplierInvoice, type SupplierInvoicePreviewCandidate } from "./api.js";
 import { readSchwanPriceList, type SupplierPriceCandidate } from "./supplier-price-import.js";
 
-type IngredientCostRow = { id: number; name: string; used: string; reference: string; unit: string; price: string; source: string; supplierOriginalPrice?: string };
+type IngredientCostRow = { id: number; name: string; used: string; reference: string; unit: string; price: string; source: string; supplierOriginalPrice?: string; invoiceOriginal?: { reference: string; unit: string; price: string; supplier: string; invoiceId: string; invoiceDate: string; lineId: string } };
 const ingredientCostSourcePrefix = "Zutaten- und Kostenansätze: ";
 const emptyRow = (id: number): IngredientCostRow => ({ id, name: "", used: "", reference: "", unit: "", price: "", source: "" });
 const supplierPriceChanged = (row: IngredientCostRow) => {
@@ -10,6 +10,14 @@ const supplierPriceChanged = (row: IngredientCostRow) => {
   const current = positiveDecimal(row.price, 4), original = positiveDecimal(row.supplierOriginalPrice, 4);
   return !current || !original || current.value * original.scale !== original.value * current.scale;
 };
+function sameDecimal(a: string, b: string): boolean {
+  const first = positiveDecimal(a, 6), second = positiveDecimal(b, 6);
+  return Boolean(first && second && first.value * second.scale === second.value * first.scale);
+}
+function invoiceBasisChanged(row: IngredientCostRow): boolean {
+  const original = row.invoiceOriginal;
+  return Boolean(original && (!sameDecimal(row.reference, original.reference) || row.unit !== original.unit || !sameDecimal(row.price, original.price)));
+}
 // The editor accepts at most eight digits before the decimal point.
 const maximumCents = 9_999_999_999n;
 
@@ -55,7 +63,7 @@ export function IngredientCostHelper({ existingCost, onApply, onInvalidate }: {
   const totals = rows.map(ingredientTotal);
   const complete = totals.every((value): value is bigint => value !== undefined);
   const total = complete ? totals.reduce((sum, value) => sum + value, 0n) : undefined;
-  const sources = [...new Set(rows.map(row => row.source.trim() + (supplierPriceChanged(row) ? "; Preis manuell geändert" : "")))].join("; ");
+  const sources = [...new Set(rows.map(row => row.source.trim() + (row.invoiceOriginal ? `; Rechnungsquelle ${row.invoiceOriginal.supplier}, Beleg ${row.invoiceOriginal.invoiceId} vom ${row.invoiceOriginal.invoiceDate}, Position ${row.invoiceOriginal.lineId}: ${row.invoiceOriginal.reference} ${row.invoiceOriginal.unit}, ${row.invoiceOriginal.price} EUR netto; ungeprüft` : "") + (supplierPriceChanged(row) ? "; Preis manuell geändert" : "") + (invoiceBasisChanged(row) ? "; Rechnungsbezug, Einheit oder Preis manuell geändert" : "")))].join("; ");
   const source = ingredientCostSourcePrefix + sources;
   const ready = complete && total !== undefined && total <= maximumCents && source.length <= 500;
   const existingCents = editorCents(existingCost);
@@ -124,7 +132,7 @@ export function IngredientCostHelper({ existingCost, onApply, onInvalidate }: {
       {prices.length > 0 && row.name.trim().length >= 2 ? <div>
         <p>Passende Artikel aus der Preisliste {priceDate ? `vom ${priceDate.split("-").reverse().join(".")}` : "– bitte Preisstand eintragen"}:</p>
         {prices.filter(candidate => candidate.product.toLocaleLowerCase("de-DE").includes(row.name.trim().toLocaleLowerCase("de-DE"))).slice(0, 8).map(candidate => <button type="button" className="secondary-button" key={candidate.row} disabled={!priceDate} onClick={() => {
-          update(row.id, { name: candidate.product, reference: "", unit: "", price: candidate.price, supplierOriginalPrice: candidate.price,
+          update(row.id, { name: candidate.product, reference: "", unit: "", price: candidate.price, supplierOriginalPrice: candidate.price, invoiceOriginal: undefined,
             source: `Schwan Preisliste ${priceDate}, Artikel ${candidate.article || "ohne Nummer"}, Zeile ${candidate.row}; ${candidate.unit || "Einheit offen"}, Inhalt ${candidate.content || "offen"}; ungeprüft` });
         }}>{candidate.product} · {candidate.content || "Inhalt offen"} · {candidate.unit || "Einheit offen"} · {candidate.price.replace(".", ",")} €</button>)}
         <p className="helper-text">Nach der Auswahl Nettopreis, Preisbezug und Einheit anhand der Preisliste prüfen und eintragen. Der Treffer ist keine automatische Gleichsetzung mit der Zutat.</p>
@@ -132,8 +140,8 @@ export function IngredientCostHelper({ existingCost, onApply, onInvalidate }: {
       {invoiceCandidates.length > 0 ? <div>
         <p>Ungeprüfte Rechnungspositionen:</p>
         {invoiceCandidates.filter(candidate => !row.name.trim() || candidate.article.toLocaleLowerCase("de-DE").includes(row.name.trim().toLocaleLowerCase("de-DE"))).slice(0, 8).map(candidate => <button type="button" className="secondary-button" key={candidate.lineId} onClick={() => {
-          update(row.id, { name: candidate.article, reference: candidate.quantity, unit: candidate.unit, price: candidate.lineNetEur, supplierOriginalPrice: undefined,
-            source: `${candidate.supplier}, Rechnung ${candidate.invoiceId} vom ${candidate.invoiceDate}, Position ${candidate.lineId}: ${candidate.quantity} ${candidate.unit}, ${candidate.lineNetEur} EUR netto; ungeprüft` });
+          update(row.id, { name: candidate.article, reference: candidate.quantity, unit: candidate.unit, price: candidate.lineNetEur, supplierOriginalPrice: undefined, invoiceOriginal: { reference: candidate.quantity, unit: candidate.unit, price: candidate.lineNetEur, supplier: candidate.supplier, invoiceId: candidate.invoiceId, invoiceDate: candidate.invoiceDate, lineId: candidate.lineId },
+            source: "Rechnungsposition, ungeprüft" });
         }}>{candidate.article} · {candidate.supplier} · Rechnung {candidate.invoiceId} vom {candidate.invoiceDate} · Position {candidate.lineId} · {candidate.quantity} {candidate.unit} · {candidate.lineNetEur} € netto · ungeprüft</button>)}
         <p className="helper-text">Auswahl und Preisbezug anhand des Belegs prüfen. Bei abweichender Qualität oder Ware nicht übernehmen. Preise mit mehr als vier Nachkommastellen müssen vor einer Berechnung geprüft und angepasst werden.</p>
       </div> : null}
@@ -144,6 +152,8 @@ export function IngredientCostHelper({ existingCost, onApply, onInvalidate }: {
       </select></label>
       <label>Preis des Preisbezugs netto · EUR<input inputMode="decimal" value={row.price} onChange={event => update(row.id, { price: event.target.value })} /></label>
       {supplierPriceChanged(row) ? <p role="status">Preis manuell geändert; der ursprüngliche Listenpreis war {row.supplierOriginalPrice?.replace(".", ",")} €.</p> : null}
+      {row.invoiceOriginal ? <p className="helper-text">Rechnungsquelle: {row.invoiceOriginal.supplier}, Beleg {row.invoiceOriginal.invoiceId} vom {row.invoiceOriginal.invoiceDate}, Position {row.invoiceOriginal.lineId}: {row.invoiceOriginal.reference} {row.invoiceOriginal.unit}, {row.invoiceOriginal.price} € netto; ungeprüft.</p> : null}
+      {invoiceBasisChanged(row) ? <p role="status">Rechnungsbezug, Einheit oder Preis wurden manuell geändert.</p> : null}
       <label>Quelle oder Schätzgrund<input value={row.source} onChange={event => update(row.id, { source: event.target.value })} /></label>
       {rows.length > 1 ? <button type="button" className="secondary-button" onClick={() => { changed(); setRows(current => current.filter(item => item.id !== row.id)); }}>Ansatz {index + 1} entfernen</button> : null}
     </fieldset>)}

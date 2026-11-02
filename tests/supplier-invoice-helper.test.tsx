@@ -37,7 +37,7 @@ it("shows unreviewed evidence and transfers a position only on explicit selectio
   expect(label("Menge im Preisbezug").querySelector("input")!.value).toBe("2.5");
   expect(label("Einheit für beide Mengen").querySelector("select")!.value).toBe("kg");
   expect(label("Preis des Preisbezugs netto").querySelector("input")!.value).toBe("10.00");
-  expect(label("Quelle oder Schätzgrund").querySelector("input")!.value).toContain("Testlieferant, Rechnung INV-1 vom 2026-10-01, Position 1: 2.5 kg, 10.00 EUR netto; ungeprüft");
+  expect(document.body.textContent).toContain("Testlieferant, Beleg INV-1 vom 2026-10-01, Position 1: 2.5 kg, 10.00 € netto; ungeprüft");
   expect(apply).not.toHaveBeenCalled();
   await act(async () => root.unmount());
 });
@@ -55,5 +55,32 @@ it("reports a rejected legacy session and never sends an obsolete file", async (
   expect(preview).toHaveBeenCalledTimes(1);
   expect(preview).toHaveBeenCalledWith("new");
   expect(document.body.textContent).toContain("persönliche Anmeldung");
+  await act(async () => root.unmount());
+});
+
+it.each(["price", "reference", "unit"])("keeps a changed invoice %s marked after editing the source and on transfer", async (field) => {
+  preview.mockResolvedValue({ candidates: [candidate] });
+  const apply = vi.fn();
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  await act(async () => root.render(createElement(IngredientCostHelper, { onApply: apply, onInvalidate: vi.fn() })));
+  await selectFile(label("UBL-XML-Datei").querySelector("input")!, fileWithContent("invoice.xml", "<test/>"));
+  await act(async () => Array.from(document.querySelectorAll("button")).find(b => b.textContent?.includes("INV-1"))!.click());
+  const set = async (title: string, value: string) => {
+    const input = label(title).querySelector("input")!;
+    await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value); input.dispatchEvent(new Event("input", { bubbles: true })); });
+  };
+  if (field === "price") await set("Preis des Preisbezugs netto", "11");
+  if (field === "reference") await set("Menge im Preisbezug", "3");
+  if (field === "unit") {
+    const select = label("Einheit für beide Mengen").querySelector("select")!;
+    await act(async () => { select.value = "g"; select.dispatchEvent(new Event("change", { bubbles: true })); });
+  }
+  await set("Quelle oder Schätzgrund", "Manuell bearbeitete Quelle");
+  expect(document.body.textContent).toContain("Rechnungsbezug, Einheit oder Preis wurden manuell geändert");
+  await set("Benötigte Menge", "1");
+  await act(async () => label("Alle direkten Kosten").querySelector("input")!.click());
+  await act(async () => Array.from(document.querySelectorAll("button")).find(b => b.textContent === "Kostensumme als Schätzung übernehmen")!.click());
+  expect(apply).toHaveBeenCalledWith(expect.any(String), expect.stringContaining("Rechnungsbezug, Einheit oder Preis manuell geändert"));
+  expect(apply).toHaveBeenCalledWith(expect.any(String), expect.stringContaining("Testlieferant, Beleg INV-1 vom 2026-10-01, Position 1: 2.5 kg, 10.00 EUR netto; ungeprüft"));
   await act(async () => root.unmount());
 });
