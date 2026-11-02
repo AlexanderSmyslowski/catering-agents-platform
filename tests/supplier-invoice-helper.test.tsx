@@ -102,10 +102,13 @@ it("replaces the prior evidence when switching Schwan to UBL and back", async ()
   await set("Zutat oder Kostenbestandteil", "Reis");
   await act(async () => Array.from(document.querySelectorAll("button")).find(b => b.textContent?.includes("Beispielreis ·"))!.click());
   expect(label("Quelle oder Schätzgrund").querySelector("input")!.value).toContain("Schwan");
+  await set("Zutat oder Kostenbestandteil", "Anderer Artikel");
+  expect(document.body.textContent).toContain("Listenartikel manuell geändert");
   await selectFile(label("E-Rechnung (XML)").querySelector("input")!, fileWithContent("invoice.xml", "<test/>"));
   await set("Zutat oder Kostenbestandteil", "");
   await act(async () => Array.from(document.querySelectorAll("button")).find(b => b.textContent?.includes("INV-1"))!.click());
   expect(document.body.textContent).toContain("Rechnungsquelle: Testlieferant");
+  expect(document.body.textContent).not.toContain("Listenartikel manuell geändert");
   await set("Zutat oder Kostenbestandteil", "Reis");
   await act(async () => Array.from(document.querySelectorAll("button")).find(b => b.textContent?.includes("Beispielreis ·"))!.click());
   expect(label("Quelle oder Schätzgrund").querySelector("input")!.value).toContain("Schwan");

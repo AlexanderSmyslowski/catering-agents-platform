@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { ApiResponseError, previewSupplierInvoice, type SupplierInvoicePreviewCandidate } from "./api.js";
 import { readSchwanPriceList, type SupplierPriceCandidate } from "./supplier-price-import.js";
 
-type IngredientCostRow = { id: number; name: string; used: string; reference: string; unit: string; price: string; source: string; supplierOriginalPrice?: string; invoiceOriginal?: { article: string; reference: string; unit: string; price: string; supplier: string; invoiceId: string; invoiceDate: string; lineId: string } };
+type IngredientCostRow = { id: number; name: string; used: string; reference: string; unit: string; price: string; source: string; supplierOriginalPrice?: string; supplierOriginalName?: string; invoiceOriginal?: { article: string; reference: string; unit: string; price: string; supplier: string; invoiceId: string; invoiceDate: string; lineId: string } };
 const ingredientCostSourcePrefix = "Zutaten- und Kostenansätze: ";
 const emptyRow = (id: number): IngredientCostRow => ({ id, name: "", used: "", reference: "", unit: "", price: "", source: "" });
 const supplierPriceChanged = (row: IngredientCostRow) => {
@@ -10,6 +10,7 @@ const supplierPriceChanged = (row: IngredientCostRow) => {
   const current = positiveDecimal(row.price, 4), original = positiveDecimal(row.supplierOriginalPrice, 4);
   return !current || !original || current.value * original.scale !== original.value * current.scale;
 };
+const supplierNameChanged = (row: IngredientCostRow) => row.supplierOriginalName !== undefined && row.name.trim() !== row.supplierOriginalName;
 function sameDecimal(a: string, b: string): boolean {
   const first = positiveDecimal(a, 6), second = positiveDecimal(b, 6);
   return Boolean(first && second && first.value * second.scale === second.value * first.scale);
@@ -63,7 +64,7 @@ export function IngredientCostHelper({ existingCost, onApply, onInvalidate }: {
   const totals = rows.map(ingredientTotal);
   const complete = totals.every((value): value is bigint => value !== undefined);
   const total = complete ? totals.reduce((sum, value) => sum + value, 0n) : undefined;
-  const sources = [...new Set(rows.map(row => row.source.trim() + (row.invoiceOriginal ? `; ${row.invoiceOriginal.supplier}, ${row.invoiceOriginal.invoiceId}, ${row.invoiceOriginal.invoiceDate}, Pos. ${row.invoiceOriginal.lineId}, ${row.invoiceOriginal.article}: ${row.invoiceOriginal.reference} ${row.invoiceOriginal.unit}, ${row.invoiceOriginal.price} EUR netto, ungeprüft` : "") + (supplierPriceChanged(row) ? "; Preis manuell geändert" : "") + (invoiceBasisChanged(row) ? "; Rechnungsartikel, Bezug, Einheit oder Preis manuell geändert" : "")))].join("; ");
+  const sources = [...new Set(rows.map(row => row.source.trim() + (row.supplierOriginalName ? `; Listenartikel ${row.supplierOriginalName}` : "") + (row.invoiceOriginal ? `; ${row.invoiceOriginal.supplier}, ${row.invoiceOriginal.invoiceId}, ${row.invoiceOriginal.invoiceDate}, Pos. ${row.invoiceOriginal.lineId}, ${row.invoiceOriginal.article}: ${row.invoiceOriginal.reference} ${row.invoiceOriginal.unit}, ${row.invoiceOriginal.price} EUR netto, ungeprüft` : "") + (supplierPriceChanged(row) ? "; Preis manuell geändert" : "") + (supplierNameChanged(row) ? "; Listenartikel manuell geändert" : "") + (invoiceBasisChanged(row) ? "; Rechnungsartikel, Bezug, Einheit oder Preis manuell geändert" : "")))].join("; ");
   const source = ingredientCostSourcePrefix + sources;
   const ready = complete && total !== undefined && total <= maximumCents && source.length <= 500;
   const existingCents = editorCents(existingCost);
@@ -136,7 +137,7 @@ export function IngredientCostHelper({ existingCost, onApply, onInvalidate }: {
       {prices.length > 0 && row.name.trim().length >= 2 ? <div>
         <p>Passende Artikel aus der Preisliste {priceDate ? `vom ${priceDate.split("-").reverse().join(".")}` : "– bitte Preisstand eintragen"}:</p>
         {prices.filter(candidate => candidate.product.toLocaleLowerCase("de-DE").includes(row.name.trim().toLocaleLowerCase("de-DE"))).slice(0, 8).map(candidate => <button type="button" className="secondary-button" key={candidate.row} disabled={!priceDate} onClick={() => {
-          update(row.id, { name: candidate.product, reference: "", unit: "", price: candidate.price, supplierOriginalPrice: candidate.price, invoiceOriginal: undefined,
+          update(row.id, { name: candidate.product, reference: "", unit: "", price: candidate.price, supplierOriginalPrice: candidate.price, supplierOriginalName: candidate.product, invoiceOriginal: undefined,
             source: `Schwan Preisliste ${priceDate}, Artikel ${candidate.article || "ohne Nummer"}, Zeile ${candidate.row}; ${candidate.unit || "Einheit offen"}, Inhalt ${candidate.content || "offen"}; ungeprüft` });
         }}>{candidate.product} · {candidate.content || "Inhalt offen"} · {candidate.unit || "Einheit offen"} · {candidate.price.replace(".", ",")} €</button>)}
         <p className="helper-text">Nach der Auswahl Nettopreis, Preisbezug und Einheit anhand der Preisliste prüfen und eintragen. Der Treffer ist keine automatische Gleichsetzung mit der Zutat.</p>
@@ -144,7 +145,7 @@ export function IngredientCostHelper({ existingCost, onApply, onInvalidate }: {
       {invoiceCandidates.length > 0 ? <div>
         <p>Ungeprüfte Rechnungspositionen:</p>
         {invoiceCandidates.filter(candidate => !row.name.trim() || candidate.article.toLocaleLowerCase("de-DE").includes(row.name.trim().toLocaleLowerCase("de-DE"))).slice(0, 8).map(candidate => <button type="button" className="secondary-button" key={candidate.lineId} onClick={() => {
-          update(row.id, { name: candidate.article, reference: candidate.quantity, unit: candidate.unit, price: candidate.lineNetEur, supplierOriginalPrice: undefined, invoiceOriginal: { article: candidate.article, reference: candidate.quantity, unit: candidate.unit, price: candidate.lineNetEur, supplier: candidate.supplier, invoiceId: candidate.invoiceId, invoiceDate: candidate.invoiceDate, lineId: candidate.lineId },
+          update(row.id, { name: candidate.article, reference: candidate.quantity, unit: candidate.unit, price: candidate.lineNetEur, supplierOriginalPrice: undefined, supplierOriginalName: undefined, invoiceOriginal: { article: candidate.article, reference: candidate.quantity, unit: candidate.unit, price: candidate.lineNetEur, supplier: candidate.supplier, invoiceId: candidate.invoiceId, invoiceDate: candidate.invoiceDate, lineId: candidate.lineId },
             source: "Rechnungsposition, ungeprüft" });
         }}>{candidate.article} · {candidate.supplier} · Rechnung {candidate.invoiceId} vom {candidate.invoiceDate.split("-").reverse().join(".")} · Position {candidate.lineId} · {candidate.quantity} {candidate.unit} · {candidate.lineNetEur} € netto · ungeprüft</button>)}
         <p className="helper-text">Auswahl und Preisbezug anhand des Belegs prüfen. Bei abweichender Qualität oder Ware nicht übernehmen. Preise mit mehr als vier Nachkommastellen müssen vor einer Berechnung geprüft und angepasst werden.</p>
@@ -156,6 +157,7 @@ export function IngredientCostHelper({ existingCost, onApply, onInvalidate }: {
       </select></label>
       <label>Preis des Preisbezugs netto · EUR<input inputMode="decimal" value={row.price} onChange={event => update(row.id, { price: event.target.value })} /></label>
       {supplierPriceChanged(row) ? <p role="status">Preis manuell geändert; der ursprüngliche Listenpreis war {row.supplierOriginalPrice?.replace(".", ",")} €.</p> : null}
+      {supplierNameChanged(row) ? <p role="status">Listenartikel manuell geändert; ursprünglich ausgewählt: {row.supplierOriginalName}.</p> : null}
       {row.invoiceOriginal ? <p className="helper-text">Rechnungsquelle: {row.invoiceOriginal.supplier}, Beleg {row.invoiceOriginal.invoiceId} vom {row.invoiceOriginal.invoiceDate.split("-").reverse().join(".")}, Position {row.invoiceOriginal.lineId}: {row.invoiceOriginal.reference} {row.invoiceOriginal.unit}, {row.invoiceOriginal.price} € netto; ungeprüft.</p> : null}
       {invoiceBasisChanged(row) ? <p role="status">Rechnungsartikel, Bezug, Einheit oder Preis wurden manuell geändert.</p> : null}
       <label>Quelle oder Schätzgrund<input value={row.source} onChange={event => update(row.id, { source: event.target.value })} /></label>

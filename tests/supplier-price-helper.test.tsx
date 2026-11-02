@@ -43,6 +43,8 @@ it("requires a list date and a separate price basis for a selected supplier arti
   expect(document.body.textContent).toContain("Preis manuell geändert");
   await setInput(label("Quelle oder Schätzgrund").querySelector("input")!, "Nochmals bearbeitete Quelle");
   expect(document.body.textContent).toContain("Preis manuell geändert");
+  await setInput(label("Zutat oder Kostenbestandteil").querySelector("input")!, "Andere Zutat");
+  expect(document.body.textContent).toContain("Listenartikel manuell geändert");
   expect(apply).not.toHaveBeenCalled();
   await setInput(label("Benötigte Menge").querySelector("input")!, "2");
   await setInput(label("Menge im Preisbezug").querySelector("input")!, "1");
@@ -52,6 +54,8 @@ it("requires a list date and a separate price basis for a selected supplier arti
   const transfer = Array.from(document.querySelectorAll("button")).find(b => b.textContent === "Kostensumme als Schätzung übernehmen")!;
   await act(async () => transfer.click());
   expect(apply).toHaveBeenCalledWith("26.00", expect.stringContaining("Preis manuell geändert"));
+  expect(apply).toHaveBeenCalledWith("26.00", expect.stringContaining("Listenartikel Beispielreis"));
+  expect(apply).toHaveBeenCalledWith("26.00", expect.stringContaining("Listenartikel manuell geändert"));
   await act(async () => root.unmount());
 });
 
