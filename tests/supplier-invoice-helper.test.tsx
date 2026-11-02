@@ -5,6 +5,9 @@ import { afterEach, expect, it, vi } from "vitest";
 import { IngredientCostHelper } from "../backoffice-ui/src/ingredient-cost-helper.js";
 import { ApiResponseError, previewSupplierInvoice } from "../backoffice-ui/src/api.js";
 
+vi.mock("../backoffice-ui/src/supplier-price-import.js", () => ({ readSchwanPriceList: () => [
+  { article: "TEST-1", product: "Beispielreis", content: "5 kg", unit: "Kolli", price: "12.50", row: 13 }
+] }));
 vi.mock("../backoffice-ui/src/api.js", () => ({
   ApiResponseError: class extends Error { constructor(message: string, public status: number) { super(message); } },
   previewSupplierInvoice: vi.fn()
@@ -82,5 +85,30 @@ it.each(["price", "reference", "unit"])("keeps a changed invoice %s marked after
   await act(async () => Array.from(document.querySelectorAll("button")).find(b => b.textContent === "Kostensumme als Schätzung übernehmen")!.click());
   expect(apply).toHaveBeenCalledWith(expect.any(String), expect.stringContaining("Rechnungsbezug, Einheit oder Preis manuell geändert"));
   expect(apply).toHaveBeenCalledWith(expect.any(String), expect.stringContaining("Testlieferant, Beleg INV-1 vom 2026-10-01, Position 1: 2.5 kg, 10.00 EUR netto; ungeprüft"));
+  await act(async () => root.unmount());
+});
+
+it("replaces the prior evidence when switching Schwan to UBL and back", async () => {
+  preview.mockResolvedValue({ candidates: [candidate] });
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  await act(async () => root.render(createElement(IngredientCostHelper, { onApply: vi.fn(), onInvalidate: vi.fn() })));
+  const set = async (title: string, value: string) => {
+    const input = label(title).querySelector("input")!;
+    await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value); input.dispatchEvent(new Event("input", { bubbles: true })); });
+  };
+  await selectFile(label("Schwan-Exceldatei").querySelector("input")!, fileWithContent("prices.xlsx", "test"));
+  await set("Preisstand der Liste", "2026-11-02");
+  await set("Zutat oder Kostenbestandteil", "Reis");
+  await act(async () => Array.from(document.querySelectorAll("button")).find(b => b.textContent?.includes("Beispielreis ·"))!.click());
+  expect(label("Quelle oder Schätzgrund").querySelector("input")!.value).toContain("Schwan");
+  await selectFile(label("UBL-XML-Datei").querySelector("input")!, fileWithContent("invoice.xml", "<test/>"));
+  await set("Zutat oder Kostenbestandteil", "");
+  await act(async () => Array.from(document.querySelectorAll("button")).find(b => b.textContent?.includes("INV-1"))!.click());
+  expect(document.body.textContent).toContain("Rechnungsquelle: Testlieferant");
+  await set("Zutat oder Kostenbestandteil", "Reis");
+  await act(async () => Array.from(document.querySelectorAll("button")).find(b => b.textContent?.includes("Beispielreis ·"))!.click());
+  expect(label("Quelle oder Schätzgrund").querySelector("input")!.value).toContain("Schwan");
+  expect(document.body.textContent).not.toContain("Rechnungsquelle: Testlieferant");
+  expect(document.body.textContent).not.toContain("Rechnungsbezug, Einheit oder Preis wurden manuell geändert");
   await act(async () => root.unmount());
 });
