@@ -82,3 +82,7 @@ describe("supplier UBL candidates", () => {
     xml.replace("</Invoice>", "<cac:InvoiceLine/></Invoice>")
   ])("rejects unsafe or ambiguous inputs", (input) => expect(() => parseSupplierUblInvoice(input)).toThrow());
 });
+
+it.each([["KGM", "kg"], ["LTR", "l"], ["C62", "Stück"]])("maps UBL unit %s to %s", (code, unit) => {
+  expect(parseSupplierUblInvoice(xml.replace('unitCode="KGM"', `unitCode="${code}"`))[0]?.unit).toBe(unit);
+});
