@@ -33,6 +33,7 @@ import {
 import { OfferStore } from "./store.js";
 import { registerOfferApprovalRoutes } from "./routes/approval-routes.js";
 import { registerOfferCaseRoutes } from "./routes/case-routes.js";
+import { registerSupplierUblPreview } from "./supplier-ubl-preview.js";
 import { registerOfferDraftRoutes } from "./routes/draft-routes.js";
 import { HttpSourceDocumentMetadataReader } from "./gateways/http-source-document-metadata-reader.js";
 import type { SourceDocumentMetadataReader } from "./ports/source-document-reader.js";
@@ -211,6 +212,10 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
     logger: false
   });
 
+  app.addHook("onRequest", async (request, reply) => {
+    if (request.url.split("?", 1)[0] === "/v1/offers/supplier-invoices/preview") reply.header("cache-control", "private, no-store");
+  });
+
   const authKeys = sessionMode ? deriveCateringAuthKeys(trustedActorSecret ?? "") : undefined;
   const internalServiceActorForRequest = sessionMode
     ? createCateringInternalServiceActorResolver({
@@ -274,6 +279,8 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
       }
     });
   });
+
+  registerSupplierUblPreview(app, actorForRequest);
 
   registerOfferDraftRoutes(app, {
     store,
