@@ -2,9 +2,11 @@ import { useEffect, useId, useRef, useState } from "react";
 import type { OfferCalculationLineInput, PricingSummary } from "@catering/shared-core";
 import { calculateOfferPricing, parseOfferDirectCost, summarizeOfferDirectCosts } from "../../shared-core/src/offer-calculation.js";
 import { reviseOfferPricing } from "./api.js";
+import { IngredientCostHelper } from "./ingredient-cost-helper.js";
 
 type Row = Omit<OfferCalculationLineInput, "unitNetCents" | "taxRateBps" | "directCost"> & {
   net: string; tax: string; costNet?: string; costBasis?: "documented" | "estimated"; costReference?: string; costDate?: string; costEstimateDate?: string;
+  costResetReason?: "Menge geändert" | "Leistung geändert" | "Variante geändert" | "Ansätze geändert";
 };
 const reference = "App-Transfer Angebotsrechner 0.6 (2026-06-01), Arbeitswerte – prüfen";
 const confirmedServiceRateCents = 4555;
@@ -50,7 +52,7 @@ function costInputStatus(row: Row): string {
   }
 }
 function inputLines(rows: Row[], costErrors?: string[]): OfferCalculationLineInput[] {
-  return rows.map(({ net, tax, taxReason, zeroPriceReason, costNet, costBasis, costReference, costDate, costEstimateDate, ...row }) => {
+  return rows.map(({ net, tax, taxReason, zeroPriceReason, costNet, costBasis, costReference, costDate, costEstimateDate, costResetReason: _costResetReason, ...row }) => {
     let directCost: OfferCalculationLineInput["directCost"];
     try {
       directCost = parseRowDirectCost({ costNet, costBasis, costReference, costDate, costEstimateDate });
@@ -105,13 +107,15 @@ export function OfferPricingEditor({ draftId, revision, variants, menuPlan, pric
     setRows(current => current?.map((row, at) => {
       if (at !== index) return row;
       const next = { ...row, ...patch };
-      if (row.costBasis === "documented" && (
-        (patch.costNet !== undefined && patch.costNet !== row.costNet)
-        || (patch.quantity !== undefined && patch.quantity !== row.quantity)
-        || (patch.label !== undefined && patch.label !== row.label)
-      )) {
+      const quantityChanged = patch.quantity !== undefined && patch.quantity !== row.quantity;
+      const labelChanged = patch.label !== undefined && patch.label !== row.label;
+      if (row.costNet?.trim() && (quantityChanged || labelChanged)) {
+        Object.assign(next, { costNet: "", costBasis: "estimated", costReference: "", costDate: "", costEstimateDate: undefined,
+          costResetReason: quantityChanged ? "Menge geändert" : "Leistung geändert" });
+      } else if (row.costBasis === "documented" && patch.costNet !== undefined && patch.costNet !== row.costNet) {
         next.costBasis = "estimated";
       }
+      if (patch.costNet !== undefined && patch.costNet !== row.costNet && patch.costResetReason === undefined) next.costResetReason = undefined;
       if (next.costNet?.trim() && (next.costBasis ?? "estimated") === "estimated"
         && patch.costEstimateDate === undefined && ["costNet", "costBasis", "quantity", "label"]
           .some(key => key in patch && patch[key as keyof Row] !== row[key as keyof Row])) {
@@ -201,6 +205,7 @@ export function OfferPricingEditor({ draftId, revision, variants, menuPlan, pric
       <p className="helper-text">Verkauf netto minus direkte Kosten der erfassten Positionen. Weitere Gemeinkosten sind nicht berücksichtigt; der Betrag ist kein Gewinn.</p>
       {costs.missingLineIds.length ? <p role="status">Kosten offen: {c.lines.filter(line => costs.missingLineIds.includes(line.id)).map(line => line.label).join(", ")}. Fehlende Kosten werden nicht als null gerechnet.</p> : null}
       {costs.estimatedLineIds.length ? <p role="status">Enthält geschätzte Kosten – Preisstand prüfen.{costs.status === "estimated" ? " Deckungsbeitrag vorläufig." : ""}</p> : null}
+      {costs.enteredNetCents !== undefined ? <p className="helper-text">In dieser Fassung werden nur Gesamtsumme und Quellenhinweis gespeichert. Einzelne Zutatenansätze und Belege separat aufbewahren.</p> : null}
       {costs.status === "documented" ? <p className="helper-text">Belegpreise laut Eingabe. Preisstand und Gültigkeit für diesen Auftrag prüfen.</p> : null}
     </section>;
   }
@@ -210,11 +215,14 @@ export function OfferPricingEditor({ draftId, revision, variants, menuPlan, pric
     {rows ? <>
       <label>Zu kalkulierende Variante<select disabled={frozen} value={variantId} onChange={event => {
         const selected = variants.find(item => item.variantId === event.target.value);
+        const changedVariant = variantId !== event.target.value;
         setVariantId(event.target.value); setError("");
-        setRows(current => current?.map(row => row.unit === "guest" ? {
-          ...row, quantity: selected ? String(selected.guests) : "",
-          ...(row.costNet?.trim() && row.quantity !== (selected ? String(selected.guests) : "") ? { costBasis: "estimated" as const, costEstimateDate: localDate() } : {})
-        } : row));
+        setRows(current => current?.map(row => {
+          const quantity = row.unit === "guest" ? (selected ? String(selected.guests) : "") : row.quantity;
+          const invalidCost = row.costNet?.trim() && ((changedVariant && (row.category === "food" || row.unit === "guest")) || quantity !== row.quantity);
+          return { ...row, quantity,
+            ...(invalidCost ? { costNet: "", costBasis: "estimated" as const, costReference: "", costDate: "", costEstimateDate: undefined, costResetReason: "Variante geändert" as const } : {}) };
+        }));
       }}><option value="">Bitte wählen</option>{variants.map(item => <option key={item.variantId} value={item.variantId}>{item.label} · {item.guests} Gäste</option>)}</select></label>
       <p className="helper-text">Speisen-Grundpaket umfasst: {(variant?.menuPlan ?? menuPlan).map(item => String(item.label) + " (" + String(item.servings ?? "offen") + " Portionen)").join(", ")}.</p>
       {rows.map((row, index) => <fieldset className="offer-pricing__fields" key={row.id} disabled={frozen}>
@@ -234,7 +242,8 @@ export function OfferPricingEditor({ draftId, revision, variants, menuPlan, pric
         <label>Quellenreferenz<input value={row.sourceReference} onChange={event => update(index, { sourceReference: event.target.value })} /></label>
         <details className="offer-pricing__cost-input">
           <summary>Interne Kosten · {costInputStatus(row)}</summary>
-          <p className="helper-text" id={fieldId + "-cost-" + row.id}>Gesamtkosten dieser Position, nicht je Gast oder Stunde. {row.category === "food" ? "Zutaten und weitere zugehörige Kosten addieren; separate Leistungen nicht doppelt zählen. " : ""}Fehlende Beträge schätzen; ist keine Gesamtschätzung möglich, Feld leer lassen. Bei Mengenänderung werden die Kosten nicht automatisch angepasst.</p>
+          <p className="helper-text" id={fieldId + "-cost-" + row.id}>Gesamtkosten dieser Position, nicht je Gast oder Stunde. {row.category === "food" ? "Zutaten und weitere zugehörige Kosten addieren; separate Leistungen nicht doppelt zählen. " : ""}Fehlende Beträge schätzen; ist keine Gesamtschätzung möglich, Feld leer lassen. Bei Mengen- oder Leistungsänderung Kosten erneut eingeben.</p>
+          {row.costResetReason ? <p role="status">{row.costResetReason} – Kosten erneut eingeben.</p> : null}
           <div className="offer-pricing__cost-fields">
             <label>Kosten gesamt netto · EUR<input inputMode="decimal" value={row.costNet ?? ""} aria-describedby={fieldId + "-cost-" + row.id + " " + fieldId + "-cost-source-" + row.id} onChange={event => update(index, { costNet: event.target.value })} /></label>
             <label>Kostengrundlage<select value={row.costBasis ?? "estimated"} onChange={event => update(index, { costBasis: event.target.value as Row["costBasis"] })}>
@@ -249,6 +258,10 @@ export function OfferPricingEditor({ draftId, revision, variants, menuPlan, pric
             <label>Preisstand · Datum, falls bekannt<input type="date" value={row.costDate ?? ""} onChange={event => update(index, { costDate: event.target.value })} /></label>
           </div>
           {row.costBasis === "documented" ? <p className="helper-text">Nur wählen, wenn Beleg und Gültigkeit für diesen Auftrag geprüft sind. Ein Preisdatum ist dafür erforderlich.</p> : null}
+          {row.category === "food" ? <IngredientCostHelper key={row.id + ":" + variantId + ":" + row.quantity + ":" + row.label}
+            existingCost={row.costNet}
+            onApply={(amount, source) => update(index, { costNet: amount, costBasis: "estimated", costReference: source, costDate: "", costEstimateDate: localDate() })}
+            onInvalidate={() => update(index, { costNet: "", costReference: "", costDate: "", costEstimateDate: undefined, costResetReason: "Ansätze geändert" })} /> : null}
         </details>
         {row.tax.trim() && Number(row.tax.replace(",", ".")) === 0 ? <label>Begründung für 0 % Steuer<input value={row.taxReason ?? ""} onChange={event => update(index, { taxReason: event.target.value })} /></label> : null}
         {row.net.trim() && Number(row.net.replace(",", ".")) === 0 ? <label>Begründung für enthaltene/kostenfreie Leistung<input value={row.zeroPriceReason ?? ""} onChange={event => update(index, { zeroPriceReason: event.target.value })} /></label> : null}
