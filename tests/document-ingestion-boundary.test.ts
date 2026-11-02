@@ -60,7 +60,7 @@ describe("DocumentIngestion boundary", () => {
     expect(result.status).toBe("fallback");
     expect(result.sourceMetadata).toEqual(sourceMetadata);
     expect(result.ingestedAt).toBe("2026-05-21T11:00:00.000Z");
-    expect(result.warnings).toContain("document_text_extraction_fallback");
+    expect(result.warnings).toContain("document_text_extraction_empty");
     expect(result.extractedText).toBeUndefined();
     expect(result.extractedTextLength).toBe(0);
   });

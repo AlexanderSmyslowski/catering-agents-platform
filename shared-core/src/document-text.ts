@@ -70,7 +70,9 @@ function fallbackDocumentText(buffer: Buffer): string {
 
 async function parsePdfWithTimeout(buffer: Buffer): Promise<string> {
   return await Promise.race([
-    pdf(buffer).then((result) => result.text.trim()),
+    // pdf.js accepts Uint8Array, but the pdf-parse types only declare Buffer.
+    // A copy avoids Node 22 Buffer handling that can produce a bad XRef error.
+    pdf(new Uint8Array(buffer) as unknown as Buffer).then((result) => result.text.trim()),
     new Promise<string>((resolve) => {
       setTimeout(() => resolve(""), PDF_PARSE_TIMEOUT_MS);
     })
@@ -127,17 +129,17 @@ export async function extractTextFromDocument(document: DocumentInput): Promise<
     return fallbackDocumentText(document.content);
   }
 
-  if (document.mimeType.includes("pdf")) {
+  if (document.mimeType.toLowerCase().includes("pdf")) {
     try {
       const text = await parsePdfWithTimeout(document.content);
       if (text && !looksCorruptedText(text)) {
         return text;
       }
     } catch {
-      return fallbackDocumentText(document.content);
+      return "";
     }
 
-    return fallbackDocumentText(document.content);
+    return "";
   }
 
   return fallbackDocumentText(document.content);
