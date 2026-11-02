@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { readSchwanPriceList, type SupplierPriceCandidate } from "./supplier-price-import.js";
 
 type IngredientCostRow = { id: number; name: string; used: string; reference: string; unit: string; price: string; source: string };
 const ingredientCostSourcePrefix = "Zutaten- und Kostenansätze: ";
@@ -36,6 +37,10 @@ export function IngredientCostHelper({ existingCost, onApply, onInvalidate }: {
 }) {
   const [rows, setRows] = useState<IngredientCostRow[]>([emptyRow(1)]);
   const [confirmed, setConfirmed] = useState(false);
+  const [prices, setPrices] = useState<SupplierPriceCandidate[]>([]);
+  const [priceDate, setPriceDate] = useState("");
+  const [priceMessage, setPriceMessage] = useState("");
+  const priceLoad = useRef(0);
   const nextId = useRef(2);
   const appliedCents = useRef<bigint | undefined>(undefined);
   const totals = rows.map(ingredientTotal);
@@ -60,9 +65,36 @@ export function IngredientCostHelper({ existingCost, onApply, onInvalidate }: {
     <summary>Zutatenkosten berechnen</summary>
     <p className="helper-text">Mengen und Nettopreise eingeben. Beispiel: 5 kg benötigt, 1 kg kostet 2,20 €. Beide Mengen brauchen dieselbe Einheit. Preise dürfen bis zu vier Nachkommastellen haben. Die Rechnung zeigt Verbrauchskosten, nicht den Kauf ganzer Gebinde.</p>
     <p className="helper-text">Einzelne Ansätze werden nicht gespeichert. Bitte Rechenweg und Belege separat festhalten; gespeichert werden nur Gesamtsumme und Quellenhinweis.</p>
+    <details>
+      <summary>Schwan-Preisliste verwenden</summary>
+      <p className="helper-text">Excel-Preisliste aus der E-Mail auswählen und danach den Preisstand eintragen. Die Datei wird nur in diesem Browser gelesen. Preisvorschläge sind ungeprüft und bleiben nicht gespeichert. Bereits ausgewählte Ansätze behalten ihren eingetragenen Preisstand.</p>
+      <label>Schwan-Exceldatei<input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={async event => {
+        const load = ++priceLoad.current;
+        const file = event.currentTarget.files?.[0];
+        setPrices([]); setPriceDate(""); setPriceMessage("");
+        if (!file) return;
+        if (file.size > 5_000_000) { setPriceMessage("Die Datei ist zu groß. Bitte eine Preisliste bis 5 MB wählen."); return; }
+        try {
+          const candidates = readSchwanPriceList(new Uint8Array(await file.arrayBuffer()));
+          if (load !== priceLoad.current) return;
+          setPrices(candidates);
+          setPriceMessage(candidates.length ? `${candidates.length} Preisvorschläge gelesen. Eine Zutat eingeben und den passenden Artikel auswählen.` : "Keine verwendbaren Preise gefunden. Bitte die Preisliste prüfen.");
+        } catch (error) { if (load === priceLoad.current) setPriceMessage(error instanceof Error ? error.message : "Die Preisliste konnte nicht gelesen werden."); }
+      }} /></label>
+      <label>Preisstand der Liste<input type="date" value={priceDate} onChange={event => setPriceDate(event.target.value)} /></label>
+      <p role="status">{priceMessage}</p>
+    </details>
     {rows.map((row, index) => <fieldset className="offer-pricing__ingredient-row offer-pricing__cost-fields" key={row.id}>
       <legend>Ansatz {index + 1}</legend>
       <label>Zutat oder Kostenbestandteil<input value={row.name} onChange={event => update(row.id, { name: event.target.value })} /></label>
+      {prices.length > 0 && row.name.trim().length >= 2 ? <div>
+        <p>Passende Artikel aus der Preisliste {priceDate ? `vom ${priceDate.split("-").reverse().join(".")}` : "– bitte Preisstand eintragen"}:</p>
+        {prices.filter(candidate => candidate.product.toLocaleLowerCase("de-DE").includes(row.name.trim().toLocaleLowerCase("de-DE"))).slice(0, 8).map(candidate => <button type="button" className="secondary-button" key={candidate.row} disabled={!priceDate} onClick={() => {
+          update(row.id, { name: candidate.product, reference: "", unit: "", price: candidate.price,
+            source: `Schwan Preisliste ${priceDate}, Artikel ${candidate.article || "ohne Nummer"}, Zeile ${candidate.row}; ${candidate.unit || "Einheit offen"}, Inhalt ${candidate.content || "offen"}; ungeprüft` });
+        }}>{candidate.product} · {candidate.content || "Inhalt offen"} · {candidate.unit || "Einheit offen"} · {candidate.price.replace(".", ",")} €</button>)}
+        <p className="helper-text">Nach der Auswahl Nettopreis, Preisbezug und Einheit anhand der Preisliste prüfen und eintragen. Der Treffer ist keine automatische Gleichsetzung mit der Zutat.</p>
+      </div> : null}
       <label>Benötigte Menge<input inputMode="decimal" value={row.used} onChange={event => update(row.id, { used: event.target.value })} /></label>
       <label>Menge im Preisbezug<input inputMode="decimal" value={row.reference} onChange={event => update(row.id, { reference: event.target.value })} /></label>
       <label>Einheit für beide Mengen<select value={row.unit} onChange={event => update(row.id, { unit: event.target.value })}>
