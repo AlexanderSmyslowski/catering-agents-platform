@@ -102,9 +102,9 @@ export function IngredientCostHelper({ existingCost, onApply, onInvalidate }: {
       <p role="status">{priceMessage}</p>
     </details>
     <details>
-      <summary>UBL-Rechnung verwenden</summary>
-      <p className="helper-text">Eine UBL-XML-Rechnung auswählen. Sie wird zur Vorschau an den Angebotsdienst gesendet, nicht gespeichert. Alle Positionen sind ungeprüft; Lieferant, Beleg und Eignung bitte kontrollieren. CII und PDF werden nicht unterstützt.</p>
-      <label>UBL-XML-Datei<input type="file" accept=".xml,application/xml,text/xml" onChange={async event => {
+      <summary>E-Rechnung (XML) verwenden</summary>
+      <p className="helper-text">Eine XML-E-Rechnung auswählen. Sie wird zur Vorschau an den Angebotsdienst gesendet, nicht gespeichert. Nur unterstützte UBL-Rechnungen können gelesen werden; PDF und andere XML-Formate werden nicht unterstützt. Alle Positionen sind ungeprüft; Lieferant, Beleg und Eignung bitte kontrollieren.</p>
+      <label>E-Rechnung (XML)<input type="file" accept=".xml,application/xml,text/xml" onChange={async event => {
         const load = ++invoiceLoad.current;
         const file = event.currentTarget.files?.[0];
         setInvoiceCandidates([]); setInvoiceMessage("");

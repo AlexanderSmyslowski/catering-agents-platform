@@ -30,7 +30,7 @@ it("shows unreviewed evidence and transfers a position only on explicit selectio
   const apply = vi.fn();
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   await act(async () => root.render(createElement(IngredientCostHelper, { onApply: apply, onInvalidate: vi.fn() })));
-  await selectFile(label("UBL-XML-Datei").querySelector("input")!, fileWithContent("invoice.xml", "<test/>"));
+  await selectFile(label("E-Rechnung (XML)").querySelector("input")!, fileWithContent("invoice.xml", "<test/>"));
   expect(preview).toHaveBeenCalledWith("<test/>");
   expect(label("Menge im Preisbezug").querySelector("input")!.value).toBe("");
   const button = Array.from(document.querySelectorAll("button")).find(b => b.textContent?.includes("INV-1"))!;
@@ -47,7 +47,7 @@ it("shows unreviewed evidence and transfers a position only on explicit selectio
 it("reports a rejected legacy session and never sends an obsolete file", async () => {
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   await act(async () => root.render(createElement(IngredientCostHelper, { onApply: vi.fn(), onInvalidate: vi.fn() })));
-  const input = label("UBL-XML-Datei").querySelector("input")!;
+  const input = label("E-Rechnung (XML)").querySelector("input")!;
   let finish!: (buffer: ArrayBuffer) => void;
   const old = new File(["old"], "old.xml");
   Object.defineProperty(old, "arrayBuffer", { value: () => new Promise(resolve => { finish = resolve; }) });
@@ -66,7 +66,7 @@ it.each(["price", "reference", "unit"])("keeps a changed invoice %s marked after
   const apply = vi.fn();
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   await act(async () => root.render(createElement(IngredientCostHelper, { onApply: apply, onInvalidate: vi.fn() })));
-  await selectFile(label("UBL-XML-Datei").querySelector("input")!, fileWithContent("invoice.xml", "<test/>"));
+  await selectFile(label("E-Rechnung (XML)").querySelector("input")!, fileWithContent("invoice.xml", "<test/>"));
   await act(async () => Array.from(document.querySelectorAll("button")).find(b => b.textContent?.includes("INV-1"))!.click());
   const set = async (title: string, value: string) => {
     const input = label(title).querySelector("input")!;
@@ -101,7 +101,7 @@ it("replaces the prior evidence when switching Schwan to UBL and back", async ()
   await set("Zutat oder Kostenbestandteil", "Reis");
   await act(async () => Array.from(document.querySelectorAll("button")).find(b => b.textContent?.includes("Beispielreis ·"))!.click());
   expect(label("Quelle oder Schätzgrund").querySelector("input")!.value).toContain("Schwan");
-  await selectFile(label("UBL-XML-Datei").querySelector("input")!, fileWithContent("invoice.xml", "<test/>"));
+  await selectFile(label("E-Rechnung (XML)").querySelector("input")!, fileWithContent("invoice.xml", "<test/>"));
   await set("Zutat oder Kostenbestandteil", "");
   await act(async () => Array.from(document.querySelectorAll("button")).find(b => b.textContent?.includes("INV-1"))!.click());
   expect(document.body.textContent).toContain("Rechnungsquelle: Testlieferant");
