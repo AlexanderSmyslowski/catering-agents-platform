@@ -36,6 +36,10 @@ describe("Schwan price list import", () => {
     const rows = `<row r="13">${text("D13", "Falsch")} ${text("P13", "1.250")}</row><row r="14">${text("D14", "Richtig")} ${text("P14", "12,50")}</row>`;
     expect(readSchwanPriceList(archive(xml(headers + rows))).map(item => [item.product, item.price])).toEqual([["Richtig", "12.50"]]);
   });
+  it("never treats a boolean or broken shared-string reference as a price", () => {
+    const rows = `<row r="13">${text("D13", "Boolean")}<c r="P13" t="b"><v>1</v></c></row><row r="14">${text("D14", "Broken reference")}<c r="P14" t="s"><v>1</v></c></row><row r="15">${text("D15", "Empty type")}<c r="P15" t=""><v>1</v></c></row>`;
+    expect(readSchwanPriceList(archive(xml(headers + rows)))).toEqual([]);
+  });
   it("rejects duplicate price cells instead of mixing value and cell type", () => {
     const row = `<row r="13">${text("D13", "Beispiel")}<c r="P13"><v>1</v></c>${text("P13", "1.250")}</row>`;
     expect(() => readSchwanPriceList(archive(xml(headers + row)))).toThrow();

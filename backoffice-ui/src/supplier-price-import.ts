@@ -50,7 +50,7 @@ export function readSchwanPriceParts(sheet: Uint8Array, strings?: Uint8Array): S
       if (cell.getElementsByTagName("f").length) continue;
       const type = cell.getAttribute("t");
       const raw = type === "inlineStr" ? cell.getElementsByTagName("is")[0]?.textContent : cell.getElementsByTagName("v")[0]?.textContent;
-      const value = type === "s" && /^\d+$/.test(raw ?? "") ? shared[Number(raw)] : raw;
+      const value = type === "s" ? (/^\d+$/.test(raw ?? "") ? shared[Number(raw)] : undefined) : raw;
       if (value) result.set(column, value.trim());
     }
     return result;
@@ -67,6 +67,7 @@ export function readSchwanPriceParts(sheet: Uint8Array, strings?: Uint8Array): S
     const product = cells.get("D") ?? "", priceText = cells.get("P") ?? "";
     const priceCell = Array.from(row.getElementsByTagName("c")).find(cell => /^P\d+$/.test(cell.getAttribute("r") ?? ""));
     const type = priceCell?.getAttribute("t");
+    if (type !== null && type !== undefined && !["n", "s", "inlineStr", "str"].includes(type)) continue;
     // Excel numeric cells use locale-free decimals; text with a dot can be a
     // German thousands separator and must not silently become a smaller price.
     if (type && type !== "n" && !/^\d{1,6}(?:,\d{1,4})?$/.test(priceText)) continue;

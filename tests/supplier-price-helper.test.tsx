@@ -36,6 +36,8 @@ it("requires a list date and a separate price basis for a selected supplier arti
   expect(label("Menge im Preisbezug").querySelector("input")!.value).toBe("");
   expect(label("Einheit für beide Mengen").querySelector("select")!.value).toBe("");
   expect(label("Quelle oder Schätzgrund").querySelector("input")!.value).toContain("2026-11-02");
+  await setInput(label("Preis des Preisbezugs netto").querySelector("input")!, "12,5");
+  expect(document.body.textContent).not.toContain("Preis manuell geändert");
   await setInput(label("Quelle oder Schätzgrund").querySelector("input")!, "Bearbeiteter Quellenhinweis");
   await setInput(label("Preis des Preisbezugs netto").querySelector("input")!, "13,00");
   expect(document.body.textContent).toContain("Preis manuell geändert");

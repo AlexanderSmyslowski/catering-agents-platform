@@ -4,7 +4,11 @@ import { readSchwanPriceList, type SupplierPriceCandidate } from "./supplier-pri
 type IngredientCostRow = { id: number; name: string; used: string; reference: string; unit: string; price: string; source: string; supplierOriginalPrice?: string };
 const ingredientCostSourcePrefix = "Zutaten- und Kostenansätze: ";
 const emptyRow = (id: number): IngredientCostRow => ({ id, name: "", used: "", reference: "", unit: "", price: "", source: "" });
-const supplierPriceChanged = (row: IngredientCostRow) => row.supplierOriginalPrice !== undefined && row.price.replace(",", ".") !== row.supplierOriginalPrice.replace(",", ".");
+const supplierPriceChanged = (row: IngredientCostRow) => {
+  if (row.supplierOriginalPrice === undefined) return false;
+  const current = positiveDecimal(row.price, 4), original = positiveDecimal(row.supplierOriginalPrice, 4);
+  return !current || !original || current.value * original.scale !== original.value * current.scale;
+};
 // The editor accepts at most eight digits before the decimal point.
 const maximumCents = 9_999_999_999n;
 
@@ -79,7 +83,7 @@ export function IngredientCostHelper({ existingCost, onApply, onInvalidate }: {
           const candidates = readSchwanPriceList(new Uint8Array(await file.arrayBuffer()));
           if (load !== priceLoad.current) return;
           setPrices(candidates);
-          setPriceMessage(candidates.length ? `${candidates.length} Preisvorschläge gelesen. Eine Zutat eingeben und den passenden Artikel auswählen.` : "Keine verwendbaren Preise gefunden. Bitte die Preisliste prüfen.");
+          setPriceMessage(candidates.length ? `${candidates.length} Preisvorschläge gelesen. Zeilen ohne eindeutig lesbaren Preis werden ausgelassen. Eine Zutat eingeben und den passenden Artikel auswählen.` : "Keine verwendbaren Preise gefunden. Bitte die Preisliste prüfen.");
         } catch (error) { if (load === priceLoad.current) setPriceMessage(error instanceof Error ? error.message : "Die Preisliste konnte nicht gelesen werden."); }
       }} /></label>
       <label>Preisstand der Liste<input type="date" value={priceDate} onChange={event => setPriceDate(event.target.value)} /></label>
