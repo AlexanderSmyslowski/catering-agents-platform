@@ -336,7 +336,7 @@ describe("PA11 intake DocumentIngestion bridge", () => {
     await reloadedApp.close();
   });
 
-  it("returns an ingestion warning for PDF fallback instead of claiming extracted success", async () => {
+  it("reports empty text for an unreadable PDF without claiming extracted success", async () => {
     const app = buildIntakeApp({ rootDir: createDataRoot() });
 
     const response = await app.inject({
@@ -359,7 +359,7 @@ describe("PA11 intake DocumentIngestion bridge", () => {
     const body = response.json();
     expect(body.documentIngestion.documents[0]).toMatchObject({
       ingestionStatus: "fallback",
-      warnings: ["document_text_extraction_fallback"],
+      warnings: ["document_text_extraction_empty"],
       sourceMetadata: {
         filename: "angebot.pdf",
         mimeType: "application/pdf",
@@ -371,7 +371,7 @@ describe("PA11 intake DocumentIngestion bridge", () => {
     );
     expect(body.eventRequest.rawInputs[0].documentIngestion).toEqual({
       status: "fallback",
-      warnings: ["document_text_extraction_fallback"]
+      warnings: ["document_text_extraction_empty"]
     });
     expect(body.acceptedEventSpec.readiness.status).not.toBe("complete");
     expect(JSON.stringify(body.documentIngestion)).not.toContain("%PDF");
