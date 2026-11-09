@@ -38,6 +38,11 @@ CONFIG_ROOTS = ("/etc/catering-target", "/opt/catering-agents-platform/platform-
 RUNTIME_ROOTS = ("shared-core/src", "intake-service/src", "offer-service/src", "production-service/src", "print-export/src")
 COMPOSE = Path("/opt/catering-agents-platform/platform-infra/compose.json")
 ENV = Path("/etc/catering-target/runtime.env")
+MAIL_SETTINGS = Path("/etc/catering-supplier-mail/mail.json")
+MAIL_SCANNER_DIR = Path("/run/catering-supplier-scanner")
+MAIL_CONFIG_TARGET = "/run/catering-sources/mail.json"
+MAIL_SCANNER_TARGET = "/run/catering-scan"
+MAIL_ENV = "CATERING_SUPPLIER_MAIL_CONFIG"
 LOCK = Path("/opt/catering-target-update.lock")
 RELEASES = Path("/opt/catering-nue-image-updates")
 SHA = re.compile(r"^[0-9a-f]{64}$")
@@ -302,7 +307,12 @@ def runtime_schema(container, application_root="/app"):
 def verify_bundle(bundle, manifest_sha):
     bundle = Path(bundle)
     manifest = read_bound(bundle / "manifest.json", manifest_sha)
-    require(set(manifest) == {"schemaVersion", "mode", "repository", "targetId", "platform", "productCommit", "operationsCommit", "sourceTreeSha256", "schemaBinding", "bases", "images", "helpers"}, "NUE_MANIFEST_SHAPE")
+    require(set(manifest) - {"runtimeProfile", "mailActivation", "acceptedCurrentRelease"} == {"schemaVersion", "mode", "repository", "targetId", "platform", "productCommit", "operationsCommit", "sourceTreeSha256", "schemaBinding", "bases", "images", "helpers"}, "NUE_MANIFEST_SHAPE")
+    if "runtimeProfile" in manifest: require(manifest["runtimeProfile"] == "supplier-mail", "NUE_RUNTIME_PROFILE")
+    if "mailActivation" in manifest: require(manifest["mailActivation"] is True and manifest.get("runtimeProfile") == "supplier-mail", "NUE_MAIL_ACTIVATION_BINDING")
+    if "acceptedCurrentRelease" in manifest:
+        require(manifest.get("runtimeProfile") == "supplier-mail", "NUE_MAIL_PREDECESSOR_BINDING")
+        accepted_current_binding(manifest["acceptedCurrentRelease"])
     require(manifest["schemaVersion"] == 1 and manifest["mode"] == "nue-image-only" and manifest["targetId"] == "catering-prod-02" and manifest["repository"] == "AlexanderSmyslowski/catering-agents-platform" and manifest["platform"] == "linux/amd64", "NUE_MANIFEST_TARGET")
     for field in ("productCommit", "operationsCommit"):
         require(re.fullmatch(r"[0-9a-f]{40}", manifest[field]), "NUE_COMMIT_BINDING")
@@ -337,7 +347,9 @@ def accepted_current_binding(binding):
     return dict(binding)
 
 
-def prepare(operator, source, product, operations, output, *, accepted_current_release=None):
+def prepare(operator, source, product, operations, output, *, accepted_current_release=None, runtime_profile=None, mail_activation=False):
+    require(runtime_profile in (None, "supplier-mail"), "NUE_RUNTIME_PROFILE")
+    require(type(mail_activation) is bool and (not mail_activation or runtime_profile == "supplier-mail"), "NUE_MAIL_ACTIVATION_BINDING")
     binding = accepted_current_binding(accepted_current_release) if accepted_current_release is not None else None
     require(not os.path.lexists(output), "NUE_INPUT_ALREADY_EXISTS")
     output.mkdir(mode=0o755)
@@ -348,6 +360,8 @@ def prepare(operator, source, product, operations, output, *, accepted_current_r
         shutil.copyfile(Path(__file__).with_name(name), tools / name); (tools / name).chmod(0o644)
     request = {"schemaVersion": 1, "mode": "nue-image-only-build-input", "repository": operator.REPOSITORY, "targetId": "catering-prod-02", "productCommit": product, "operationsCommit": operations, "sourceTreeSha256": operator._source_tree_digest(output / "source"), "helpers": {path.name: digest(path) for path in tools.iterdir()}}
     if binding is not None: request["acceptedCurrentRelease"] = binding
+    if runtime_profile is not None: request["runtimeProfile"] = runtime_profile
+    if mail_activation: request["mailActivation"] = True
     (output / "build-input.json").write_bytes(canonical(request)); (output / "build-input.json").chmod(0o644)
     return digest(output / "build-input.json")
 
@@ -355,7 +369,7 @@ def prepare(operator, source, product, operations, output, *, accepted_current_r
 def build_prepared(directory, request_sha, output, node_base, caddy_base, *, base_mode="repository", runtime_base=None, web_base=None):
     host_identity(); directory = protected(directory, directory=True)
     request = read_bound(protected(directory / "build-input.json"), request_sha)
-    require(set(request) - {"acceptedCurrentRelease"} == {"schemaVersion", "mode", "repository", "targetId", "productCommit", "operationsCommit", "sourceTreeSha256", "helpers"}, "NUE_BUILD_REQUEST_SHAPE")
+    require(set(request) - {"acceptedCurrentRelease", "runtimeProfile", "mailActivation"} == {"schemaVersion", "mode", "repository", "targetId", "productCommit", "operationsCommit", "sourceTreeSha256", "helpers"}, "NUE_BUILD_REQUEST_SHAPE")
     require(request["schemaVersion"] == 1 and request["mode"] == "nue-image-only-build-input" and request["repository"] == "AlexanderSmyslowski/catering-agents-platform" and request["targetId"] == "catering-prod-02", "NUE_BUILD_REQUEST_TARGET")
     require(set(request["helpers"]) == {"catering-target-operator.py", "catering_target_oci.py", "catering_target_nue_image_update.py"}, "NUE_HELPER_SCOPE")
     for name, expected in request["helpers"].items(): require(digest(protected(directory / "tools" / name)) == expected, "NUE_BUILD_HELPER_BINDING")
@@ -363,11 +377,15 @@ def build_prepared(directory, request_sha, output, node_base, caddy_base, *, bas
     operator = load_module("nue_build_operator", directory / "tools/catering-target-operator.py")
     require(operator._source_tree_digest(directory / "source") == request["sourceTreeSha256"], "NUE_BUILD_FULL_SOURCE_BINDING")
     for field in ("productCommit", "operationsCommit"): require(re.fullmatch(r"[0-9a-f]{40}", request[field]), "NUE_BUILD_COMMIT")
+    runtime_profile = request.get("runtimeProfile")
+    require("runtimeProfile" not in request or runtime_profile == "supplier-mail", "NUE_RUNTIME_PROFILE")
+    mail_activation = request.get("mailActivation", False)
+    require(type(mail_activation) is bool and ("mailActivation" not in request or mail_activation is True) and (not mail_activation or runtime_profile == "supplier-mail"), "NUE_MAIL_ACTIVATION_BINDING")
     binding = accepted_current_binding(request["acceptedCurrentRelease"]) if "acceptedCurrentRelease" in request else None
     if binding is not None:
         require(base_mode == "local-current", "NUE_ACCEPTED_CURRENT_BASE_MODE")
     protected(output.parent, directory=True)
-    return create_bundle(operator, directory / "source", request["productCommit"], request["operationsCommit"], output, node_base, caddy_base, exported=True, base_mode=base_mode, runtime_base=runtime_base, web_base=web_base, accepted_current_release=binding)
+    return create_bundle(operator, directory / "source", request["productCommit"], request["operationsCommit"], output, node_base, caddy_base, exported=True, base_mode=base_mode, runtime_base=runtime_base, web_base=web_base, accepted_current_release=binding, runtime_profile=runtime_profile, mail_activation=mail_activation)
 
 
 
@@ -505,7 +523,7 @@ def accepted_pr735_bundle(oci):
     # Build already owns the update lock. Reuse the accepted read-only verifier
     # checks here; the public Verify entry point correctly refuses any live lock.
     predecessor.verify_runtime(baseline, images, candidate, candidate_oci=oci,
-                               candidate_layout=manifest["bases"], candidate_schema=manifest["schemaBinding"])
+                               candidate_layout=manifest["bases"], candidate_schema=manifest["schemaBinding"], **({"mail_activation": True} if manifest.get("mailActivation") else {}))
     return root, manifest
 
 
@@ -535,7 +553,7 @@ def accepted_3d287d8_bundle(oci):
     # Build already owns the update lock. Reuse the accepted read-only verifier
     # checks here; the public Verify entry point correctly refuses any live lock.
     predecessor.verify_runtime(baseline, images, candidate, candidate_oci=oci,
-                               candidate_layout=manifest["bases"], candidate_schema=manifest["schemaBinding"])
+                               candidate_layout=manifest["bases"], candidate_schema=manifest["schemaBinding"], **({"mail_activation": True} if manifest.get("mailActivation") else {}))
     return root, manifest
 
 
@@ -565,7 +583,7 @@ def accepted_681213b_bundle(oci):
     # Build already owns the update lock. Reuse the accepted read-only verifier
     # checks here; the public Verify entry point correctly refuses any live lock.
     predecessor.verify_runtime(baseline, images, candidate, candidate_oci=oci,
-                               candidate_layout=manifest["bases"], candidate_schema=manifest["schemaBinding"])
+                               candidate_layout=manifest["bases"], candidate_schema=manifest["schemaBinding"], **({"mail_activation": True} if manifest.get("mailActivation") else {}))
     return root, manifest
 
 
@@ -602,7 +620,7 @@ def accepted_current_bundle(oci, binding, *, before_lock=False):
         require(predecessor.verify(root, sha)["status"] == "NUE_IMAGE_ONLY_VERIFIED", "NUE_ACCEPTED_CURRENT_VERIFY")
     else:
         predecessor.verify_runtime(baseline, images, candidate, candidate_oci=oci,
-                                   candidate_layout=manifest["bases"], candidate_schema=manifest["schemaBinding"])
+                                   candidate_layout=manifest["bases"], candidate_schema=manifest["schemaBinding"], **({"mail_activation": True} if manifest.get("mailActivation") else {}))
     return root, manifest
 
 
@@ -757,10 +775,12 @@ def current_local_reference(role, identity):
     return "catering-nue-current-" + role + ":" + identity.removeprefix("sha256:")
 
 
-def create_bundle(operator, source, product, operations, output, node_base, caddy_base, *, exported=False, base_mode="repository", runtime_base=None, web_base=None, accepted_current_release=None):
+def create_bundle(operator, source, product, operations, output, node_base, caddy_base, *, exported=False, base_mode="repository", runtime_base=None, web_base=None, accepted_current_release=None, runtime_profile=None, mail_activation=False):
+    require(runtime_profile in (None, "supplier-mail"), "NUE_RUNTIME_PROFILE")
+    require(type(mail_activation) is bool and (not mail_activation or runtime_profile == "supplier-mail"), "NUE_MAIL_ACTIVATION_BINDING")
     binding = accepted_current_binding(accepted_current_release) if accepted_current_release is not None else None
     kwargs = dict(exported=exported, base_mode=base_mode, runtime_base=runtime_base, web_base=web_base,
-                  accepted_current_release=binding)
+                  accepted_current_release=binding, runtime_profile=runtime_profile, mail_activation=mail_activation)
     if binding is not None:
         require(exported and base_mode == "local-current", "NUE_ACCEPTED_CURRENT_BUILD_SCOPE")
         # Public Verify refuses any update lock; check the pinned release first.
@@ -774,8 +794,10 @@ def create_bundle(operator, source, product, operations, output, node_base, cadd
         if not isinstance(sys.exc_info()[1], UncertainDockerMutation): unlock(token)
 
 
-def _create_bundle(operator, source, product, operations, output, node_base, caddy_base, *, exported=False, base_mode="repository", runtime_base=None, web_base=None, accepted_current_release=None):
+def _create_bundle(operator, source, product, operations, output, node_base, caddy_base, *, exported=False, base_mode="repository", runtime_base=None, web_base=None, accepted_current_release=None, runtime_profile=None, mail_activation=False):
     """Build only with exact, already present base manifests; no floating FROM tags."""
+    require(runtime_profile in (None, "supplier-mail"), "NUE_RUNTIME_PROFILE")
+    require(type(mail_activation) is bool and (not mail_activation or runtime_profile == "supplier-mail"), "NUE_MAIL_ACTIVATION_BINDING")
     require(not output.exists() and not output.is_symlink(), "NUE_OUTPUT_EXISTS")
     binding = accepted_current_binding(accepted_current_release) if accepted_current_release is not None else None
     require(binding is None or (exported and base_mode == "local-current"), "NUE_ACCEPTED_CURRENT_BUILD_SCOPE")
@@ -809,12 +831,17 @@ def _create_bundle(operator, source, product, operations, output, node_base, cad
         (tools / name).chmod(0o644)
     images = {}
     for role in ("runtime", "web"):
-        original = (context / ("platform-infra/docker/Dockerfile." + role)).read_text()
+        docker_role = "supplier-mail" if role == "runtime" and runtime_profile == "supplier-mail" else role
+        original = (context / ("platform-infra/docker/Dockerfile." + docker_role)).read_text()
         if role == "runtime":
             require(original.count("FROM node:22-alpine") == 1 and original.count("FROM ") == 1, "NUE_RUNTIME_DOCKERFILE")
         else:
             require(original.count("FROM node:22-alpine AS build") == 1 and original.count("FROM caddy:2.10-alpine") == 1 and original.count("FROM ") == 2, "NUE_WEB_DOCKERFILE")
         rendered = local_current_dockerfile(role, runtime_base, web_base) if base_mode == "local-current" else original.replace("FROM node:22-alpine", "FROM " + node_base).replace("FROM caddy:2.10-alpine", "FROM " + caddy_base)
+        if base_mode == "local-current" and role == "runtime" and runtime_profile == "supplier-mail":
+            require(original.count("WORKDIR /app") == 1, "NUE_RUNTIME_DOCKERFILE")
+            rendered = original.replace("FROM node:22-alpine", "FROM " + current_local_reference("runtime", runtime_base)).replace(
+                "WORKDIR /app", "WORKDIR /\nRUN test ! -e /catering-product && test ! -L /catering-product\nWORKDIR /catering-product")
         dockerfile = output / ("Dockerfile." + role + ".bound")
         dockerfile.write_text(rendered); dockerfile.chmod(0o644)
         iid = output / (role + ".iid")
@@ -832,6 +859,9 @@ def _create_bundle(operator, source, product, operations, output, node_base, cad
         for kind, identity in (("runtime", runtime_base), ("web", web_base)):
             operator._oci().check_loaded_image(json.loads(command(["docker", "image", "inspect", current_local_reference(kind, identity)]))[0], identity)
     manifest = {"schemaVersion": 1, "mode": "nue-image-only", "repository": operator.REPOSITORY, "targetId": "catering-prod-02", "platform": "linux/amd64", "productCommit": product, "operationsCommit": operations, "sourceTreeSha256": operator._source_tree_digest(context), "schemaBinding": source_schema(context), "bases": bases, "images": images, "helpers": {path.name: digest(path) for path in tools.iterdir()}}
+    if runtime_profile is not None: manifest["runtimeProfile"] = runtime_profile
+    if mail_activation: manifest["mailActivation"] = True
+    if runtime_profile == "supplier-mail" and binding is not None: manifest["acceptedCurrentRelease"] = binding
     (output / "manifest.json").write_bytes(canonical(manifest)); (output / "manifest.json").chmod(0o644)
     value = digest(output / "manifest.json")
     verify_bundle(output, value)
@@ -1019,12 +1049,98 @@ def unlock(token):
     sync_guard_directory(LOCK.parent)
 
 
-def candidate_compose(old, images):
+def mail_is_configured(compose_bytes):
+    env = json.loads(compose_bytes)["services"]["offer"].get("environment", {})
+    if isinstance(env, dict):
+        values = [env[MAIL_ENV]] if MAIL_ENV in env else []
+    elif isinstance(env, list):
+        values = [item.partition("=")[2] for item in env if isinstance(item, str) and item.partition("=")[0] == MAIL_ENV]
+    else:
+        values = []
+    require(not values or values == [MAIL_CONFIG_TARGET], "NUE_MAIL_PROFILE_CONTINUITY")
+    return bool(values)
+
+
+def mail_mounted_digest():
+    output = command(["docker", "exec", "platform-infra-offer-1", "sha256sum", MAIL_CONFIG_TARGET], timeout=15).decode("ascii")
+    match = re.fullmatch(r"([0-9a-f]{64})  /run/catering-sources/mail\.json\n", output)
+    require(match is not None, "NUE_MAIL_MOUNT_CONTENT")
+    return match.group(1)
+
+
+def scanner_ping(path):
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+        client.settimeout(3)
+        client.connect(str(path)); client.sendall(b"zPING\0")
+        response = bytearray()
+        while len(response) < 32 and not response.endswith(b"\0"):
+            chunk = client.recv(32 - len(response))
+            require(bool(chunk), "NUE_MAIL_SCANNER_UNAVAILABLE")
+            response.extend(chunk)
+        require(response == b"PONG\0", "NUE_MAIL_SCANNER_UNAVAILABLE")
+
+
+def mail_prerequisites():
+    protected(MAIL_SETTINGS)
+    info = MAIL_SETTINGS.lstat()
+    require(info.st_uid == 0 and stat.S_IMODE(info.st_mode) == 0o600 and info.st_size <= 100000, "NUE_MAIL_SETTINGS_METADATA")
+    before = digest(MAIL_SETTINGS)
+    settings = json.loads(MAIL_SETTINGS.read_bytes())
+    require(settings.get("scannerSocket") == MAIL_SCANNER_TARGET + "/clamd.sock", "NUE_MAIL_SCANNER_BINDING")
+    protected(MAIL_SCANNER_DIR, directory=True)
+    scanner = MAIL_SCANNER_DIR / "clamd.sock"
+    info = scanner.lstat()
+    require(stat.S_ISSOCK(info.st_mode) and info.st_uid == 0 and not info.st_mode & 0o022, "NUE_MAIL_SCANNER_SOCKET")
+    scanner_ping(scanner)
+    require(digest(MAIL_SETTINGS) == before, "NUE_MAIL_SETTINGS_CHANGED")
+    return before
+
+
+def mail_mounts():
+    return [
+        {"type": "bind", "source": str(MAIL_SETTINGS), "target": MAIL_CONFIG_TARGET, "read_only": True, "bind": {"create_host_path": False}},
+        {"type": "bind", "source": str(MAIL_SCANNER_DIR), "target": MAIL_SCANNER_TARGET, "read_only": True, "bind": {"create_host_path": False}},
+    ]
+
+
+def without_mail_additions(row, binding):
+    mounts = []
+    expected = {MAIL_CONFIG_TARGET: str(MAIL_SETTINGS), MAIL_SCANNER_TARGET: str(MAIL_SCANNER_DIR)}
+    found = set()
+    for mount in binding["mounts"]:
+        target = mount.get("Destination")
+        if target not in expected:
+            mounts.append(mount); continue
+        require(target not in found and mount.get("Type") == "bind" and mount.get("Source") == expected[target] and
+                mount.get("RW") is False and mount.get("Propagation") == "rprivate" and mount.get("Mode") == "ro", "NUE_MAIL_MOUNT_BINDING")
+        found.add(target)
+    require(found == set(expected), "NUE_MAIL_MOUNT_BINDING")
+    env = row["Config"]["Env"]
+    matches = [item for item in env if item.startswith(MAIL_ENV + "=")]
+    require(matches == [MAIL_ENV + "=" + MAIL_CONFIG_TARGET], "NUE_MAIL_ENV_BINDING")
+    return dict(binding, mounts=mounts, environmentSha256=environment_binding([item for item in env if not item.startswith(MAIL_ENV + "=")]))
+
+
+def candidate_compose(old, images, mail_activation=False):
     value = json.loads(old)
     require(set(value["services"]) == set(SERVICES), "NUE_COMPOSE_SERVICE_SCOPE")
     for service in SERVICES:
         require("image" in value["services"][service] and "build" not in value["services"][service], "NUE_IMAGE_ONLY_SERVICE")
         value["services"][service]["image"] = images[service]
+    if mail_activation:
+        offer = value["services"]["offer"]
+        env = offer.setdefault("environment", {})
+        if isinstance(env, dict):
+            require(MAIL_ENV not in env, "NUE_MAIL_ENV_ALREADY_CONFIGURED")
+            env[MAIL_ENV] = MAIL_CONFIG_TARGET
+        elif isinstance(env, list):
+            require(all(isinstance(item, str) and item.partition("=")[0] != MAIL_ENV for item in env), "NUE_MAIL_ENV_ALREADY_CONFIGURED")
+            env.append(MAIL_ENV + "=" + MAIL_CONFIG_TARGET)
+        else:
+            require(False, "NUE_MAIL_ENV_FORMAT")
+        volumes = offer.setdefault("volumes", [])
+        require(isinstance(volumes, list) and all(isinstance(v, dict) and v.get("target") not in {MAIL_CONFIG_TARGET, MAIL_SCANNER_TARGET} for v in volumes), "NUE_MAIL_MOUNT_COLLISION")
+        volumes.extend(mail_mounts())
     return (json.dumps(value, indent=2) + "\n").encode()
 
 
@@ -1037,10 +1153,15 @@ def stage(bundle, manifest_sha, expected_path, expected_sha, proof_path, proof_s
     manifest = verify_bundle(bundle, manifest_sha)
     bind_admission_manifest(admission, manifest)
     expected = read_bound(protected(expected_path), expected_sha)
+    prior_mail = mail_is_configured(COMPOSE.read_bytes())
+    if prior_mail:
+        require(manifest.get("runtimeProfile") == "supplier-mail" and not manifest.get("mailActivation") and "acceptedCurrentRelease" in manifest, "NUE_MAIL_PROFILE_CONTINUITY")
+        accepted_current_bundle(load_module("nue_stage_operator", bundle / "tools/catering-target-operator.py")._oci(), manifest["acceptedCurrentRelease"], before_lock=True)
     proof = read_bound(protected(proof_path), proof_sha)
     token = own_lock()
     try:
         require_backup_service_idle(token)
+        require(mail_is_configured(COMPOSE.read_bytes()) == prior_mail, "NUE_MAIL_COMPOSE_CHANGED")
         baseline = snapshot()
         previous = {r["name"].lstrip("/"): r for r in expected["containers"]}
         require(set(previous) == set(NAMES), "NUE_EXPECTED_SCOPE")
@@ -1048,6 +1169,12 @@ def stage(bundle, manifest_sha, expected_path, expected_sha, proof_path, proof_s
             old = previous[name]
             require(all(row[key] == old[key] for key in ("id", "image", "mounts", "restart")), "NUE_CURRENT_BASELINE_MISMATCH")
         backup_gate(proof, baseline)
+        mail_settings_sha = mail_prerequisites() if manifest.get("mailActivation") or prior_mail else None
+        if prior_mail:
+            prior = protected(RELEASES / manifest["acceptedCurrentRelease"]["manifestSha256"] / "stage.json")
+            previous_stage = json.loads(prior.read_bytes())
+            require(SHA.fullmatch(previous_stage.get("mailSettingsSha256", "")) and
+                    mail_settings_sha == previous_stage["mailSettingsSha256"] == mail_mounted_digest(), "NUE_MAIL_PREDECESSOR_SETTINGS_BINDING")
         for service in SERVICES[:-1]:
             require(runtime_schema("platform-infra-" + service + "-1") == manifest["schemaBinding"], "NUE_RUNTIME_DDL_DRIFT_HOLD")
         protected(RELEASES.parent, directory=True)
@@ -1059,7 +1186,9 @@ def stage(bundle, manifest_sha, expected_path, expected_sha, proof_path, proof_s
         shutil.copytree(bundle, destination)
         put(destination / "baseline.json", baseline)
         put(destination / "backup-proof.json", Path(proof_path).read_bytes())
-        put(destination / "stage.json", {"manifestSha256": manifest_sha, "baselineSha256": digest(destination / "baseline.json"), "backupProofSha256": proof_sha, "expectedSha256": expected_sha, "mode": "nue-image-only", "observerInstalled": False})
+        stage_record = {"manifestSha256": manifest_sha, "baselineSha256": digest(destination / "baseline.json"), "backupProofSha256": proof_sha, "expectedSha256": expected_sha, "mode": "nue-image-only", "observerInstalled": False}
+        if mail_settings_sha is not None: stage_record["mailSettingsSha256"] = mail_settings_sha
+        put(destination / "stage.json", stage_record)
         require(digest(destination / "backup-proof.json") == proof_sha, "NUE_BACKUP_COPY_BINDING")
         require(snapshot() == baseline, "NUE_DRIFT_DURING_STAGE")
         return {"status": "NUE_IMAGE_ONLY_STAGED", "manifestSha256": manifest_sha, "path": str(destination)}
@@ -1104,7 +1233,7 @@ def settle_stops(pending):
         if pending: time.sleep(1)
 
 
-def pause_applications(baseline, allowed_images, pending, token):
+def pause_applications(baseline, allowed_images, pending, token, mail_activation=False):
     rows = inspect(["platform-infra-" + service + "-1" for service in SERVICES])
     require({row["Name"] for row in rows} == {"/platform-infra-" + service + "-1" for service in SERVICES}, "NUE_PAUSE_SCOPE")
     for row in rows:
@@ -1112,6 +1241,8 @@ def pause_applications(baseline, allowed_images, pending, token):
         current = container_binding(row)
         require(current["image"] in allowed_images, "NUE_PAUSE_IMAGE_NOT_OWNED")
         require(current["restart"] in (previous["restart"], {"Name": "no", "MaximumRetryCount": 0}), "NUE_PAUSE_POLICY_DRIFT")
+        if mail_activation and row["Name"] == "/platform-infra-offer-1" and current["mounts"] != previous["mounts"]:
+            current = without_mail_additions(row, current)
         for binding in (previous, current):
             for key in ("id", "image", "restart"): binding.pop(key)
         require(current == previous, "NUE_PAUSE_CONTAINER_DRIFT")
@@ -1160,7 +1291,7 @@ def health(baseline):
     return observed
 
 
-def verify_runtime(baseline, images, compose_bytes, candidate_oci=None, candidate_layout=None, candidate_schema=None):
+def verify_runtime(baseline, images, compose_bytes, candidate_oci=None, candidate_layout=None, candidate_schema=None, mail_activation=False):
     current = snapshot()
     require(COMPOSE.read_bytes() == compose_bytes, "NUE_COMPOSE_BYTES")
     for key in ("networks", "volumes", "catalogue"):
@@ -1171,6 +1302,10 @@ def verify_runtime(baseline, images, compose_bytes, candidate_oci=None, candidat
     require(files == baseline["files"], "NUE_CONFIG_BYTES_OR_METADATA_CHANGED")
     for name, previous in baseline["containers"].items():
         now = current["containers"][name]
+        if mail_activation and name == "platform-infra-offer-1":
+            row = inspect([name])[0]
+            require(row["Id"] == now["id"] and container_binding(row) == now, "NUE_MAIL_INSPECT_RACE")
+            now = without_mail_additions(row, now)
         if name in {"platform-infra-" + s + "-1" for s in SERVICES}:
             expected = dict(previous, image=images[name[len("platform-infra-"):-2]])
             expected.pop("id"); now = dict(now); now.pop("id")
@@ -1343,7 +1478,13 @@ def apply(bundle, manifest_sha, smoke, smoke_sha, admission_path=None, admission
         terminal = {"schemaVersion": 1, "runId": admission["nonce"], "manifestSha256": manifest_sha,
                     "attemptSha256": hashlib.sha256(canonical(attempt)).hexdigest()}
         old = COMPOSE.read_bytes()
+        prior_mail = mail_is_configured(old)
+        if prior_mail:
+            require(manifest.get("runtimeProfile") == "supplier-mail" and not manifest.get("mailActivation") and "acceptedCurrentRelease" in manifest, "NUE_MAIL_PROFILE_CONTINUITY")
         require(snapshot() == baseline, "NUE_BASELINE_CHANGED_SINCE_STAGE")
+        if manifest.get("mailActivation") or prior_mail:
+            require(SHA.fullmatch(receipt.get("mailSettingsSha256", "")) and mail_prerequisites() == receipt["mailSettingsSha256"], "NUE_MAIL_SETTINGS_STAGE_BINDING")
+            if prior_mail: require(mail_mounted_digest() == receipt["mailSettingsSha256"], "NUE_MAIL_MOUNT_CONTENT")
         for service in SERVICES[:-1]:
             require(runtime_schema("platform-infra-" + service + "-1") == manifest["schemaBinding"], "NUE_RUNTIME_DDL_DRIFT_HOLD")
         for role, binding in manifest["images"].items():
@@ -1362,7 +1503,7 @@ def apply(bundle, manifest_sha, smoke, smoke_sha, admission_path=None, admission
             actual = operator._inspect_archive(compressed)
             require(all(actual[key] == binding[key] for key in ("platformManifestDigest", "configDigest")), "NUE_LOADED_OCI_RELATION")
         images = {s: manifest["images"]["web" if s == "web" else "runtime"]["platformManifestDigest"] for s in SERVICES}
-        candidate = candidate_compose(old, images)
+        candidate = candidate_compose(old, images, manifest.get("mailActivation", False))
         put(bundle / "compose.before.json", old)
         put(bundle / "compose.candidate.json", candidate)
         # Disable autonomous restarts before the first writer stop. Never SIGKILL a
@@ -1374,10 +1515,16 @@ def apply(bundle, manifest_sha, smoke, smoke_sha, admission_path=None, admission
         active = command(["docker", "exec", "platform-infra-postgres-1", "psql", "-X", "-U", "catering", "-d", "catering_agents", "-Atc", "SELECT count(*) FROM pg_stat_activity WHERE backend_type='client backend' AND pid<>pg_backend_pid()"])
         require(active.strip() == b"0", "NUE_UNKNOWN_DATABASE_WRITER_HOLD")
         owned(token); require(COMPOSE.read_bytes() == old, "NUE_COMPOSE_CHANGED_BEFORE_REPLACE")
+        if manifest.get("mailActivation") or prior_mail:
+            require(mail_prerequisites() == receipt["mailSettingsSha256"], "NUE_MAIL_SETTINGS_STAGE_BINDING")
         replace_compose(candidate, baseline["files"][str(COMPOSE)], token)
         compose_up(); set_policies(baseline, token)
-        verify_runtime(baseline, images, candidate, candidate_oci=oci, candidate_layout=manifest["bases"], candidate_schema=manifest["schemaBinding"])
+        verify_runtime(baseline, images, candidate, candidate_oci=oci, candidate_layout=manifest["bases"], candidate_schema=manifest["schemaBinding"], mail_activation=manifest.get("mailActivation", False))
         command([str(smoke)], timeout=180)
+        if manifest.get("mailActivation") or prior_mail:
+            require(mail_prerequisites() == receipt["mailSettingsSha256"], "NUE_MAIL_SETTINGS_STAGE_BINDING")
+        if manifest.get("mailActivation") or prior_mail:
+            require(mail_mounted_digest() == receipt["mailSettingsSha256"], "NUE_MAIL_MOUNT_CONTENT")
         # Once success recording begins, an interrupted write/ack must retain the
         # guard. Rolling back here could contradict an already durable receipt.
         terminal_started = True
@@ -1402,7 +1549,7 @@ def apply(bundle, manifest_sha, smoke, smoke_sha, admission_path=None, admission
             require(terminal is not None, "NUE_APPLY_RESERVATION_UNCERTAIN_HOLD")
             if mutated:
                 settle_stops(pending)
-                pause_applications(baseline, {row["image"] for row in baseline["containers"].values()} | set(images.values()), pending, token)
+                pause_applications(baseline, {row["image"] for row in baseline["containers"].values()} | set(images.values()), pending, token, mail_activation=manifest.get("mailActivation", False))
                 replace_compose(old, baseline["files"][str(COMPOSE)], token)
                 compose_up(); set_policies(baseline, token)
                 previous = {s: baseline["containers"]["platform-infra-" + s + "-1"]["image"] for s in SERVICES}
@@ -1439,8 +1586,13 @@ def verify(bundle, manifest_sha):
     images = {s: manifest["images"]["web" if s == "web" else "runtime"]["platformManifestDigest"] for s in SERVICES}
     require(images == installed["images"] and installed["status"] == "NUE_IMAGE_ONLY_INSTALLED", "NUE_INSTALLED_IMAGE_BINDING")
     require_completed_apply(bundle, manifest_sha, manifest, stage_receipt, installed)
+    if mail_is_configured(candidate):
+        expected_mail = stage_receipt.get("mailSettingsSha256", "")
+        require(SHA.fullmatch(expected_mail) and mail_prerequisites() == expected_mail == mail_mounted_digest(), "NUE_MAIL_SETTINGS_STAGE_BINDING")
+    else:
+        require("mailSettingsSha256" not in stage_receipt, "NUE_MAIL_SETTINGS_STAGE_BINDING")
     oci = load_module("nue_verify_oci", bundle / "tools/catering_target_oci.py")
-    verify_runtime(baseline, images, candidate, candidate_oci=oci, candidate_layout=manifest["bases"], candidate_schema=manifest["schemaBinding"])
+    verify_runtime(baseline, images, candidate, candidate_oci=oci, candidate_layout=manifest["bases"], candidate_schema=manifest["schemaBinding"], mail_activation=manifest.get("mailActivation", False))
     return {"status": "NUE_IMAGE_ONLY_VERIFIED", "observerInstalled": False, "automaticBackupRestoreChainAccepted": False}
 
 
