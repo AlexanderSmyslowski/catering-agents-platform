@@ -2793,3 +2793,38 @@ label:has(> input[type="file"]:focus-visible) { outline: 3px solid #0066cc; outl
 .supplier-settings label input[type="checkbox"] { width: auto; }
 .supplier-settings li button { margin: 0.25rem 0.5rem 0.25rem 0; }
 .supplier-settings [role="alert"] { color: #92361b; }
+
+.production-stage-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.production-stage-nav button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid var(--border, #d7dce0);
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  padding: 0.5rem 0.8rem;
+  min-height: 44px;
+}
+.production-stage-nav button[aria-current="step"] {
+  background: #173e60;
+  border-color: #173e60;
+  color: #fff;
+}
+.production-stage-nav button:focus-visible,
+.production-stage-heading h3:focus-visible {
+  outline: 3px solid #3978b4;
+  outline-offset: 3px;
+}
+.production-stage-nav button span {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+.production-stage-heading h3 { margin: 0.25rem 0 0; }
+.production-stage-panel[hidden] { display: none; }
+.production-stage-panel { min-width: 0; }

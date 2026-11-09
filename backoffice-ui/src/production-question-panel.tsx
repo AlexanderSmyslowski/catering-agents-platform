@@ -276,10 +276,14 @@ export function ProductionQuestionPanel({
             </div>
           </div> : null}
           {answersEditable && allDietaryAnswered && questionState.currentDraft?.draftId ? <button type="button" className="secondary-button" onClick={() => {
-            const entry = document.getElementById(productionDraftEntryId(questionState.currentDraft!.draftId));
-            for (let parent = entry?.parentElement; parent; parent = parent.parentElement) if (parent instanceof HTMLDetailsElement) parent.open = true;
-            entry?.focus({ preventScroll: true });
-            entry?.scrollIntoView?.({ block: "start", inline: "nearest", behavior: "auto" });
+            const id = productionDraftEntryId(questionState.currentDraft!.draftId);
+            window.dispatchEvent(new CustomEvent("production:reveal", { detail: { id } }));
+            requestAnimationFrame(() => {
+              const entry = document.getElementById(id);
+              for (let parent = entry?.parentElement; parent; parent = parent.parentElement) if (parent instanceof HTMLDetailsElement) parent.open = true;
+              entry?.focus({ preventScroll: true });
+              entry?.scrollIntoView?.({ block: "start", inline: "nearest", behavior: "auto" });
+            });
           }}>Zu den Prüfpunkten</button> : null}
           {answersEditable && hasDietaryReview ? <div className="production-question-guidance">
             <button className="secondary-button" disabled={submitting || actionState.editAnswersDisabled} onClick={() => beginSpecEdit(focusedProductionSpec)}>Angaben oder Kennzeichnung ändern</button>
