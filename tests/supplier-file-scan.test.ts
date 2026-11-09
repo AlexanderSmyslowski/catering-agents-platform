@@ -32,7 +32,7 @@ it("requires fresh scanner, canary, archive and exact worksheet scans", async ()
   const path = join(directory, "clamd.sock"),
     scanned: Buffer[] = [];
   let badCanary = false;
-  const version = `ClamAV 1.4.0/123/${new Date().toUTCString().replace(/^(\w+), (\d+) (\w+) (\d+) (\d+:\d+:\d+) GMT$/, "$1 $3 $2 $5 $4")}`;
+  let version = `ClamAV 1.4.0/123/${new Date().toUTCString().replace(/^(\w+), (\d+) (\w+) (\d+) (\d+:\d+:\d+) GMT$/, "$1 $3 $2 $5 $4")}`;
   const server = createServer((socket) => {
     let data = Buffer.alloc(0);
     socket.on("data", (chunk) => {
@@ -85,6 +85,11 @@ it("requires fresh scanner, canary, archive and exact worksheet scans", async ()
     await expect(
       scanAndExtractSupplierWorkbook(workbook(), path),
     ).rejects.toThrow("canary");
+    badCanary = false;
+    version = "ClamAV 1.4.0/123/Mon Jan 01 00:00:00 2001";
+    await expect(
+      scanAndExtractSupplierWorkbook(workbook(), path),
+    ).rejects.toThrow("stale");
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
     rmdirSync(directory);

@@ -1,0 +1,13 @@
+[Unit]
+Description=CateringOS supplier scanner socket
+
+[Socket]
+ListenStream=/run/catering-supplier-scanner/clamd.sock
+SocketUser=root
+SocketGroup=root
+SocketMode=0600
+DirectoryMode=0700
+Service=catering-supplier-clamd.service
+
+[Install]
+WantedBy=sockets.target

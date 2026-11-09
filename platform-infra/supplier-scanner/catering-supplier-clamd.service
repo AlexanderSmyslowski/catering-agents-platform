@@ -1,0 +1,21 @@
+[Unit]
+Description=CateringOS supplier attachment scanner
+Requires=catering-supplier-clamd.socket
+After=catering-supplier-clamd.socket
+
+[Service]
+Type=simple
+User=clamav
+Group=clamav
+ExecStart=/usr/sbin/clamd --foreground=true --config-file=/etc/clamav/catering-supplier-clamd.conf
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+PrivateTmp=yes
+PrivateNetwork=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadOnlyPaths=/var/lib/clamav
+InaccessiblePaths=-/etc/catering-supplier-mail -/etc/catering-target -/etc/catering-backup -/var/lib/catering-backup -/var/run/postgresql -/run/credentials -/run/docker.sock
+RestrictAddressFamilies=AF_UNIX
+LimitCORE=0
+Restart=on-failure
