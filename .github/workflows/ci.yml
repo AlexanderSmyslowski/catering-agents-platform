@@ -10,52 +10,42 @@ on:
     branches:
       - main
 
-jobs:
-  build-and-test:
-    runs-on: ubuntu-latest
+concurrency:
+  group: ci-pr-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+jobs:
+  ci-scope:
+    runs-on: ubuntu-latest
+    outputs:
+      scope: ${{ steps.test_scope.outputs.scope }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
-
       - name: Verify CI scope selection
         run: python3 -B tests/ci_test_scope_test.py
-
       - name: Select regression scope
         id: test_scope
         run: python3 -B scripts/ci-test-scope.py
 
+  ci-build-and-gates:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
-
       - name: Install
         run: npm ci
-
       - name: Build
         run: npm run build
-
-      - name: Read-only process-tree tracer
-        if: steps.test_scope.outputs.scope != 'operator'
-        run: |
-          if ! command -v strace >/dev/null; then
-            sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update
-            sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 install --no-install-recommends -y strace
-          fi
-          strace --version
-
-      - name: Test
-        if: steps.test_scope.outputs.scope != 'operator'
-        run: python3 -B scripts/ci-test-scope.py --run-tests "${{ steps.test_scope.outputs.scope || 'full' }}"
-
-      - name: Operator regression contracts
-        if: steps.test_scope.outputs.scope == 'operator'
-        run: npx --no-install vitest run tests/catering-target-*.test.ts
-
       - name: Catering target operator acceptance gates
         run: |
           python3 -B tests/catering_target_operator_test.py
@@ -65,6 +55,108 @@ jobs:
           python3 -B tests/catering_infrastructure_oci_test.py
           bash -n platform-infra/scripts/catering-target-production-update.sh
           node --check platform-infra/scripts/catering-target-operator-smoke.mjs
+
+  full-regression:
+    needs: ci-scope
+    if: needs.ci-scope.outputs.scope == 'full'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Read-only process-tree tracer
+        run: |
+          if ! command -v strace >/dev/null; then
+            sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update
+            sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 install --no-install-recommends -y strace
+          fi
+          strace --version
+      - name: Full regression shard
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          set -eu
+          # The four longest files in CI run 42592793437 get separate runners.
+          case "$SHARD" in
+            1) long_test=tests/phase3-latest-p1-review-preexisting-and-legacy.test.ts ;;
+            2) long_test=tests/catering-phase3-pilot-contract.test.ts ;;
+            3) long_test=tests/phase3-latest-p1-review-rollback-and-recovery.test.ts ;;
+            4) long_test=tests/phase3-latest-p1-review-absent-and-compatibility.test.ts ;;
+            *) exit 1 ;;
+          esac
+          npx --no-install vitest run "$long_test"
+          npx --no-install vitest run --shard="$SHARD/4" \
+            --exclude tests/phase3-latest-p1-review-absent-and-compatibility.test.ts \
+            --exclude tests/phase3-latest-p1-review-rollback-and-recovery.test.ts \
+            --exclude tests/catering-phase3-pilot-contract.test.ts \
+            --exclude tests/phase3-latest-p1-review-preexisting-and-legacy.test.ts
+
+  scoped-regression:
+    needs: ci-scope
+    if: needs.ci-scope.outputs.scope != 'full'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Read-only process-tree tracer
+        if: needs.ci-scope.outputs.scope != 'operator' && needs.ci-scope.outputs.scope != 'supplier-ui'
+        run: |
+          if ! command -v strace >/dev/null; then
+            sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update
+            sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 install --no-install-recommends -y strace
+          fi
+          strace --version
+      - name: Scoped regression
+        if: needs.ci-scope.outputs.scope != 'operator'
+        env:
+          SCOPE: ${{ needs.ci-scope.outputs.scope }}
+        run: python3 -B scripts/ci-test-scope.py --run-tests "$SCOPE"
+      - name: Operator regression contracts
+        if: needs.ci-scope.outputs.scope == 'operator'
+        run: npx --no-install vitest run tests/catering-target-*.test.ts
+
+  build-and-test:
+    if: always()
+    needs: [ci-scope, ci-build-and-gates, full-regression, scoped-regression]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require selected regression and build gates
+        env:
+          SCOPE: ${{ needs.ci-scope.outputs.scope }}
+          SCOPE_RESULT: ${{ needs.ci-scope.result }}
+          BUILD_RESULT: ${{ needs.ci-build-and-gates.result }}
+          FULL_RESULT: ${{ needs.full-regression.result }}
+          SCOPED_RESULT: ${{ needs.scoped-regression.result }}
+        run: |
+          set -eu
+          test "$SCOPE_RESULT" = success
+          test "$BUILD_RESULT" = success
+          case "$SCOPE" in
+            full)
+              test "$FULL_RESULT" = success
+              test "$SCOPED_RESULT" = skipped
+              ;;
+            product|operator|supplier-ui)
+              test "$SCOPED_RESULT" = success
+              test "$FULL_RESULT" = skipped
+              ;;
+            *) exit 1 ;;
+          esac
 
   catering-target-operator-macos:
     runs-on: macos-latest

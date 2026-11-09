@@ -54,6 +54,24 @@ PRODUCT_COMPANION_DOCS = frozenset({
     "docs/product/PRODUKTZIEL_CATERING_AGENTS_PLATFORM.md",
     "docs/product/OPUS_UX_UI_REVIEW_20261031.md",
 })
+# The supplier UI edits local draft estimates and calls the existing pricing API.
+# Server, shared API, access control and persistence changes use a broader profile.
+SUPPLIER_UI_FILES = frozenset({
+    "backoffice-ui/src/ingredient-cost-helper.tsx",
+    "backoffice-ui/src/offer-pricing-editor.tsx",
+    "backoffice-ui/src/price-source-columns.tsx",
+    "backoffice-ui/src/price-source-review.tsx",
+    "backoffice-ui/src/price-source-settings.tsx",
+    "backoffice-ui/src/saved-ingredient-prices.tsx",
+    "tests/offer-pricing-editor.test.tsx",
+    "tests/supplier-price-helper.test.tsx",
+    "tests/supplier-invoice-helper.test.tsx",
+    "tests/configured-supplier-prices.test.tsx",
+})
+SUPPLIER_UI_TESTS = (
+    "tests/supplier-", "tests/configured-supplier-prices.test.tsx",
+    "tests/offer-pricing-", "tests/mutating-route-auth-matrix.test.ts",
+)
 SHA = re.compile(r"[0-9a-f]{40}")
 
 
@@ -117,6 +135,8 @@ def product_only(changes):
 def regression_command(scope):
     if scope == "full":
         return ["npm", "test"]
+    if scope == "supplier-ui":
+        return ["npx", "--no-install", "vitest", "run", *SUPPLIER_UI_TESTS]
     if scope == "product":
         return ["npx", "--no-install", "vitest", "run", *(
             argument for filename in MIGRATION_TEST_FILES for argument in ("--exclude", filename)
@@ -124,7 +144,7 @@ def regression_command(scope):
     raise ValueError("unknown regression scope")
 
 
-def regular_product_changes(base, head, changes):
+def regular_product_changes(base, head, changes, *, plain_sources=False):
     # A new symlink/gitlink is reported as A, not T. Inspect the Git modes rather
     # than trusting a product-looking filename or following its checkout target.
     raw = git("diff", "--raw", "--no-abbrev", "-z", "--no-renames", base, head, "--")
@@ -140,6 +160,8 @@ def regular_product_changes(base, head, changes):
         if after not in {"100644", "100755"} or before not in (
             {"000000"} if status == "A" else {"100644", "100755"}
         ):
+            return False
+        if plain_sources and (before, after, status) != ("100644", "100644", "M"):
             return False
         modes.append((status, path))
     return modes == changes
@@ -161,6 +183,9 @@ def select_scope(event_name, event, checkout_sha, ref):
         changes = changes_between(base, head)
         if operator_only(changes):
             return "operator", "only explicitly covered operator files and companion documentation changed"
+        if (changes and all(status == "M" and path in SUPPLIER_UI_FILES for status, path in changes)
+                and regular_product_changes(base, head, changes, plain_sources=True)):
+            return "supplier-ui", "only existing supplier pricing controls or their tests changed"
         if product_only(changes) and regular_product_changes(base, head, changes):
             return "product", "only application sources, product tests, DOM rehearsals and named companion documentation changed"
         return "full", "change includes infrastructure, CI, dependencies or paths outside the reviewed scopes"
@@ -181,6 +206,8 @@ def main():
     with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
         summary.write(f"### Test scope: {scope}\n\n{reason}.\n\n")
         summary.write("Build, Linux/macOS operator gates, browser rehearsal and Compose parity remain required.\n")
+        if scope == "supplier-ui":
+            summary.write("Runs supplier import, price editing, revision, print and authorization tests.\n")
         if scope == "product":
             summary.write("All application Vitest regressions run; only these unchanged historical infrastructure suites are omitted:\n")
             summary.writelines(f"- `{filename}`\n" for filename in MIGRATION_TEST_FILES)
@@ -192,4 +219,4 @@ if __name__ == "__main__":
     elif len(sys.argv) == 3 and sys.argv[1] == "--run-tests":
         raise SystemExit(subprocess.call(regression_command(sys.argv[2])))
     else:
-        raise SystemExit("Usage: ci-test-scope.py [--run-tests full|product]")
+        raise SystemExit("Usage: ci-test-scope.py [--run-tests full|product|supplier-ui]")
