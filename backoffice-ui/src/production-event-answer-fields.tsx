@@ -1,4 +1,5 @@
 type ProductionEventAnswerFieldsProps = {
+  hideSchedule?: boolean;
   editingEventType: string;
   editingEventDate: string;
   editingEventSchedule?: string;
@@ -14,6 +15,7 @@ type ProductionEventAnswerFieldsProps = {
 };
 
 export function ProductionEventAnswerFields({
+  hideSchedule = false,
   editingEventType,
   editingEventDate,
   editingEventSchedule = "",
@@ -56,7 +58,7 @@ export function ProductionEventAnswerFields({
             placeholder="JJJJ-MM-TT"
           />
         </label>
-        <label className="field-block">
+        {!hideSchedule && <label className="field-block">
           <span>Zeitfenster</span>
           <input
             aria-label="Zeitfenster"
@@ -64,7 +66,7 @@ export function ProductionEventAnswerFields({
             onChange={(event) => setEditingEventSchedule?.(event.target.value)}
             placeholder="z. B. Service 18:00–22:00"
           />
-        </label>
+        </label>}
         <label className="field-block">
           <span>Teilnehmerzahl</span>
           <input

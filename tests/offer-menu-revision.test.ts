@@ -195,6 +195,25 @@ describe("explicit offer menu and persisted continuation", () => {
     expect(changed.menuPlan.map(x=>x.servings)).toEqual([55,25,20]);
   });
 
+  it("confirms unchanged 80 guests and service time only on explicit request, retaining independent risks", async () => {
+    const { amendOfferEvent, validateOfferEventDetails } = await import("../offer-service/src/offer-event-revision.js");
+    const source = normalizeEventRequestToSpec(createEventRequestFromText({requestId:"confirmed-synthetic",channel:"text",rawText:text}));
+    source.attendees.expected = 80;
+    source.event.schedule = [{label:"Service", start:"18:00", end:"21:00"}];
+    const guest = {field:"attendees.expected",severity:"medium" as const,message:'Teilnehmerzahl nur ungefähr aus "ca. 80 Gäste" abgeleitet.',suggestedQuestion:"Wie viele Teilnehmer werden verbindlich erwartet?"};
+    const time = {field:"event.schedule",severity:"low" as const,message:'Zeitangabe in "18 bis 21 Uhr" ist nicht als vollständiger Termin belastbar.',suggestedQuestion:"Wie lautet das verbindliche Zeitfenster?"};
+    const independent = {field:"attendees.expected",severity:"high" as const,message:"Kapazität ungeprüft",suggestedQuestion:"Kapazität prüfen?"};
+    source.uncertainties = [guest,time,independent];
+    const same = {attendeeCount:80,eventSchedule:source.event.schedule};
+    expect(amendOfferEvent(source,same).uncertainties).toEqual([guest,time,independent]);
+    const confirmed = amendOfferEvent(source,{...same,confirmedFields:["attendeeCount","eventSchedule"]});
+    expect(confirmed.uncertainties).toEqual([independent]);
+    expect(confirmed.attendees.expected).toBe(80);
+    expect(confirmed.event.schedule).toEqual(source.event.schedule);
+    expect(() => validateOfferEventDetails({confirmedFields:["eventSchedule"],eventSchedule:[]})).toThrow();
+    expect(() => validateOfferEventDetails({confirmedFields:["attendeeCount"]})).toThrow();
+  });
+
   it("keeps explicit dishes and portions in the curated offer, every variant and customer text", async () => {
     const { app, draft } = await harness();
     try {

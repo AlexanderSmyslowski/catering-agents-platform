@@ -4,6 +4,7 @@ import { ProductionComponentAnswerCard } from "./production-component-answer-car
 type ProductionComponentAnswerListProps = {
   canEditPurchasedQuantities?: boolean;
   canSplitComponents?: boolean;
+  hideClassificationIds?: string[];
   attendeeCount?: number;
   menuPlan: unknown;
   editingComponentStates: Record<string, ComponentEditState>;
@@ -14,6 +15,7 @@ type ProductionComponentAnswerListProps = {
 export function ProductionComponentAnswerList({
   canEditPurchasedQuantities = false,
   canSplitComponents = false,
+  hideClassificationIds = [],
   attendeeCount,
   menuPlan,
   editingComponentStates,
@@ -48,6 +50,7 @@ export function ProductionComponentAnswerList({
             <ProductionComponentAnswerCard
               canEditPurchasedQuantities={canEditPurchasedQuantities}
               key={componentId}
+              hideClassification={hideClassificationIds.includes(componentId)}
               attendeeCount={attendeeCount}
               componentId={componentId}
               componentLabel={componentLabel}

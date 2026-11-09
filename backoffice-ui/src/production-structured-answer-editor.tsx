@@ -9,6 +9,8 @@ type ProductionStructuredAnswerEditorProps = {
   footer?: ReactNode;
   canEditPurchasedQuantities?: boolean;
   canSplitComponents?: boolean;
+  hideClassificationIds?: string[];
+  hideSchedule?: boolean;
   focusedProductionSpec: Record<string, unknown>;
   editingEventType: string;
   editingEventDate: string;
@@ -33,6 +35,8 @@ export function ProductionStructuredAnswerEditor({
   footer,
   canEditPurchasedQuantities = false,
   canSplitComponents = false,
+  hideClassificationIds = [],
+  hideSchedule = false,
   focusedProductionSpec,
   editingEventType,
   editingEventDate,
@@ -77,6 +81,7 @@ export function ProductionStructuredAnswerEditor({
         <details className="answer-section" open={eventSectionOpen}>
         <summary>Veranstaltungsdaten{eventSectionOpen ? "" : " – keine offene Rückfrage"}</summary>
         <ProductionEventAnswerFields
+          hideSchedule={hideSchedule}
           editingEventType={editingEventType}
           editingEventDate={editingEventDate}
           editingEventSchedule={editingEventSchedule ?? ""}
@@ -102,6 +107,7 @@ export function ProductionStructuredAnswerEditor({
         <ProductionComponentAnswerList
           canEditPurchasedQuantities={canEditPurchasedQuantities}
           canSplitComponents={canSplitComponents}
+          hideClassificationIds={hideClassificationIds}
           attendeeCount={Number(editingAttendeeCount)}
           menuPlan={focusedProductionSpec.menuPlan}
           editingComponentStates={editingComponentStates}
