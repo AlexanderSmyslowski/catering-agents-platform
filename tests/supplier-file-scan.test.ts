@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { createServer } from "node:net";
-import { mkdtempSync } from "node:fs";
+import { chmodSync, mkdtempSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { zipSync, strToU8 } from "fflate";
@@ -27,10 +27,9 @@ const workbook = () =>
     }),
   );
 it("requires fresh scanner, canary, archive and exact worksheet scans", async () => {
-  const path = join(
-      mkdtempSync(join(homedir(), ".codex", "supplier-scan-")),
-      "clamd.sock",
-    ),
+  const freshHome = mkdtempSync(join(homedir(), "supplier-home-"));
+  const directory = mkdtempSync(join(freshHome, "supplier-scan-"));
+  const path = join(directory, "clamd.sock"),
     scanned: Buffer[] = [];
   let badCanary = false;
   const version = `ClamAV 1.4.0/123/${new Date().toUTCString().replace(/^(\w+), (\d+) (\w+) (\d+) (\d+:\d+:\d+) GMT$/, "$1 $3 $2 $5 $4")}`;
@@ -77,6 +76,11 @@ it("requires fresh scanner, canary, archive and exact worksheet scans", async ()
     const parts = await pending;
     expect(parts.sheet.toString()).toContain("worksheet");
     expect(scanned).toHaveLength(3);
+    chmodSync(directory, 0o777);
+    await expect(
+      scanAndExtractSupplierWorkbook(workbook(), path),
+    ).rejects.toThrow("Scanner path is not protected");
+    chmodSync(directory, 0o700);
     badCanary = true;
     await expect(
       scanAndExtractSupplierWorkbook(workbook(), path),
