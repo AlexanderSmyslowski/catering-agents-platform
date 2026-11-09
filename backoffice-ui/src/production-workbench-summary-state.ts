@@ -1,3 +1,4 @@
+import { groupDishQuestions } from "./production-question-grouping.js";
 import { productionContextNotes } from "../../shared-core/src/production-clarification.js";
 import type { ProductionWorkbenchSummary } from "./production-workbench.js";
 import { countPurchaseListItems } from "./production-route-artifact-status-state.js";
@@ -61,6 +62,7 @@ export function buildProductionWorkbenchSummaryState({
   currentSpecPurchaseLists
 }: ProductionWorkbenchSummaryStateInput): ProductionWorkbenchSummary {
   const { notes: productionNotes, lineage: productionNoteLineage } = buildKitchenNoteDisplay(focusedProductionSpec);
+  const openQuestionCount = groupDishQuestions(focusedProductionSpec, productionQuestions).openCount;
   return {
     ...(hasActiveContext === undefined ? {} : { hasActiveContext }),
     ...(productionNotes.length ? { productionNotes } : {}),
@@ -71,9 +73,9 @@ export function buildProductionWorkbenchSummaryState({
     planStatusLabel: productionPlanStatusLabel,
     purchaseStatusLabel: purchaseZoneStatusLabel,
     // productionQuestions already contains only unanswered questions.
-    questionCount: productionQuestions.length + clarificationStatusCounts.answered,
+    questionCount: openQuestionCount + clarificationStatusCounts.answered,
     answeredQuestionCount: clarificationStatusCounts.answered,
-    unansweredQuestionCount: clarificationStatusCounts.unanswered,
+    unansweredQuestionCount: openQuestionCount,
     productionObjectCount: currentSpecPlans.length,
     productionObjectStatusLabel,
     purchaseListCount: currentSpecPurchaseLists.length,

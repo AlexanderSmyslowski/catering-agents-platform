@@ -2830,3 +2830,6 @@ label:has(> input[type="file"]:focus-visible) { outline: 3px solid #0066cc; outl
 .production-stage-heading h3 { margin: 0.25rem 0 0; }
 .production-stage-panel[hidden] { display: none; }
 .production-stage-panel { min-width: 0; }
+
+.question-inline-answer .component-answer-card .answer-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.question-inline-answer .component-answer-card select { min-width: 0; width: 100%; }

@@ -9,6 +9,7 @@ type ProductionComponentAnswerCardProps = {
   componentId: string;
   componentLabel: string;
   canSplit?: boolean;
+  hideClassification?: boolean;
   sourceServings?: number;
   productionSource?: { parentLabel: string; parentServings: number; reason: string };
   recipes: Array<Record<string, unknown>>;
@@ -22,6 +23,7 @@ export function ProductionComponentAnswerCard({
   componentId,
   componentLabel,
   canSplit = false,
+  hideClassification = false,
   sourceServings,
   productionSource,
   recipes,
@@ -57,6 +59,8 @@ export function ProductionComponentAnswerCard({
         <label className="field-block"><span>Produktionsportionen</span><input type="number" min="1" step="1" value={state.correctionServings ?? ""} onChange={event => updateEditingComponentState(componentId, { correctionServings: event.target.value })} /></label>
       </fieldset> : null}
       <ProductionComponentClassificationFields
+        showCategory={!hideClassification}
+        showProductionMode={!hideClassification}
         isSplitComponent={Boolean(productionSource)}
         menuCategory={state.menuCategory}
         productionMode={state.productionMode}

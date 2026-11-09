@@ -7,15 +7,22 @@ export type OfferEventDetails = {
   serviceForm?: string;
   attendeeCount?: number;
   eventSchedule?: Array<{ label: string; start?: string; end?: string }>;
+  confirmedFields?: Array<"attendeeCount" | "eventSchedule">;
 };
 
 export function validateOfferEventDetails(raw: unknown): OfferEventDetails | undefined {
   if (raw === undefined) return undefined;
   if (!raw || typeof raw !== "object" || Array.isArray(raw) || !Object.keys(raw).length ||
-    Object.keys(raw).some(key => !["eventDate", "eventType", "serviceForm", "attendeeCount", "eventSchedule"].includes(key))) {
+    Object.keys(raw).some(key => !["eventDate", "eventType", "serviceForm", "attendeeCount", "eventSchedule", "confirmedFields"].includes(key))) {
     throw new Error("Veranstaltungsdaten sind ungültig.");
   }
   const details = raw as OfferEventDetails;
+  if (details.confirmedFields !== undefined && (!Array.isArray(details.confirmedFields) ||
+    new Set(details.confirmedFields).size !== details.confirmedFields.length ||
+    details.confirmedFields.some(field => !["attendeeCount", "eventSchedule"].includes(field) || !(field in details)))) {
+    throw new Error("Bestätigung der Veranstaltungsdaten ist ungültig.");
+  }
+  if (details.confirmedFields?.includes("eventSchedule") && !details.eventSchedule?.length) throw new Error("Ein leeres Zeitfenster kann nicht bestätigt werden.");
   for (const key of ["eventType", "serviceForm"] as const) {
     if (key in details && (typeof details[key] !== "string" || !details[key]!.trim() || details[key]!.length > 200)) {
       throw new Error("Veranstaltungstyp und Serviceform dürfen nicht leer sein.");
@@ -58,10 +65,10 @@ export function amendOfferEvent(spec: AcceptedEventSpec, details?: OfferEventDet
         (question.severity === "medium" && /^Datum in "[\s\S]*" wirkt nur als ungefähre Angabe\.$/.test(question.message) && question.suggestedQuestion === "Welches Datum gilt verbindlich?");
     }
     if (dateChanged && question.field === "event.date_or_schedule") return question.severity === "high" && question.message === "No event date or schedule was found." && question.suggestedQuestion === "An welchem Datum oder in welchem Zeitfenster findet das Event statt?";
-    if (attendeesChanged && question.field === "attendees.expected") return question.suggestedQuestion === "Wie viele Teilnehmer werden verbindlich erwartet?" &&
+    if ((attendeesChanged || details.confirmedFields?.includes("attendeeCount")) && question.field === "attendees.expected") return question.suggestedQuestion === "Wie viele Teilnehmer werden verbindlich erwartet?" &&
       ((question.severity === "high" && question.message === "Participant count could not be extracted reliably.") ||
         (question.severity === "medium" && /^Teilnehmerzahl nur ungefähr aus "[\s\S]*" abgeleitet\.$/.test(question.message)));
-    return scheduleChanged && Boolean(details.eventSchedule?.length) && question.field === "event.schedule" && question.severity === "low" &&
+    return (scheduleChanged || Boolean(details.confirmedFields?.includes("eventSchedule"))) && Boolean(details.eventSchedule?.length) && question.field === "event.schedule" && question.severity === "low" &&
       question.suggestedQuestion === "Wie lautet das verbindliche Zeitfenster?" && (/^Zeitangabe in "[\s\S]*" ist nicht als vollständiger Termin belastbar\.$/.test(question.message) || question.message === removedTimeMessage);
   };
   return validateAcceptedEventSpec(withEvaluatedReadiness({
@@ -75,6 +82,6 @@ export function amendOfferEvent(spec: AcceptedEventSpec, details?: OfferEventDet
       ...(details.serviceForm ? { serviceForm: details.serviceForm.trim() } : {}) },
     uncertainties: questions.filter(item => !answeredExtraction(item)),
     assumptions: spec.assumptions?.filter(item => !(typeChanged && item.code === "event_type_defaulted") &&
-      !(serviceChanged && item.code === "service_form_defaulted") && !(attendeesChanged && item.code === "attendees_expected_approximate"))
+      !(serviceChanged && item.code === "service_form_defaulted") && !((attendeesChanged || details.confirmedFields?.includes("attendeeCount")) && item.code === "attendees_expected_approximate"))
   }));
 }

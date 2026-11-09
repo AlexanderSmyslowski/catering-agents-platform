@@ -51,6 +51,8 @@ export function OfferEventEditor({ draftId, revision, spec, disabled, onSaved, o
   const id = useId();
   useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
   const [event, setEvent] = useState<EventInput>();
+  const [confirmedGuests, setConfirmedGuests] = useState(false);
+  const [confirmedSchedule, setConfirmedSchedule] = useState(false);
   const [saving, setSaving] = useState(false);
   const [pendingSavedDraft, setPendingSavedDraft] = useState<string>();
   const frozen = saving || Boolean(pendingSavedDraft);
@@ -71,6 +73,7 @@ export function OfferEventEditor({ draftId, revision, spec, disabled, onSaved, o
   function begin() {
     setEvent({ eventDate: spec.event.date ?? "", eventType: formatEventTypeLabel(spec.event.type) ?? "", serviceForm: spec.event.serviceForm ?? spec.servicePlan.serviceForm,
       attendeeCount: String(spec.attendees.expected ?? ""), eventSchedule: structuredClone(spec.event.schedule ?? []) });
+    setConfirmedGuests(false); setConfirmedSchedule(false);
     setError(""); setErrors({}); setNotice(""); onEditingChange(true);
   }
   async function save() {
@@ -87,6 +90,7 @@ export function OfferEventEditor({ draftId, revision, spec, disabled, onSaved, o
         if (!servings) throw new Error("Bitte zuerst die Portionszahlen im Menü ergänzen.");
         return { componentId, label, servings, menuCategory, dietaryTags };
       }), { ...event, attendeeCount: Number(event.attendeeCount),
+        ...((confirmedGuests || confirmedSchedule) ? { confirmedFields: [...(confirmedGuests ? ["attendeeCount" as const] : []), ...(confirmedSchedule ? ["eventSchedule" as const] : [])] } : {}),
         eventType: event.eventType === formatEventTypeLabel(spec.event.type) ? spec.event.type : Object.entries(eventTypeLabels).find(([, label]) => label === event.eventType.trim())?.[0] ?? event.eventType });
       if (!live.current) return;
       // The new draft replaces the current view; keep its acknowledgement through that refresh.
@@ -138,6 +142,7 @@ export function OfferEventEditor({ draftId, revision, spec, disabled, onSaved, o
           {event.serviceForm && !Object.hasOwn(serviceFormLabels, event.serviceForm) ? <option value={event.serviceForm}>{event.serviceForm}</option> : null}
         </select>{message("serviceForm")}</label>
       </div>
+      {(spec.uncertainties ?? []).some(item => item.field === "attendees.expected") ? <label><input type="checkbox" checked={confirmedGuests} disabled={frozen} onChange={e => setConfirmedGuests(e.target.checked)} /> Gästezahl ausdrücklich bestätigen</label> : null}
       <h4>Zeitplan</h4>
       {!event.eventSchedule.length ? <p className="helper-text">Keine Uhrzeiten eingetragen. Bitte vor der Produktion klären.</p> : null}
       <UnverifiedTimeHints hints={timeHints} />
@@ -151,6 +156,7 @@ export function OfferEventEditor({ draftId, revision, spec, disabled, onSaved, o
         <button type="button" className="secondary-button" aria-label={`Zeitabschnitt ${index + 1} entfernen`} onClick={() => { setEvent({ ...event, eventSchedule: event.eventSchedule.filter((_, i) => i !== index) }); setErrors({}); }}>Entfernen</button>
       </fieldset>)}
       <button type="button" className="secondary-button" disabled={frozen || event.eventSchedule.length >= 20} onClick={() => { setEvent({ ...event, eventSchedule: [...event.eventSchedule, { label: "", start: "", end: "" }] }); setErrors({}); }}>Zeitabschnitt ergänzen</button>
+      {(spec.uncertainties ?? []).some(item => item.field === "event.schedule") && event.eventSchedule.length > 0 ? <label><input type="checkbox" checked={confirmedSchedule} disabled={frozen} onChange={e => setConfirmedSchedule(e.target.checked)} /> Zeitfenster ausdrücklich bestätigen</label> : null}
       <p className="helper-text">Die Portionen je Gericht bleiben auch bei geänderter Gästezahl erhalten. Bitte Menü und Kalkulation anschließend prüfen. Die bisherige Fassung bleibt im Verlauf.</p>
       {error ? <p role="alert" className="event-editor__error">{error}</p> : null}
       <div className="quiet-action-row">

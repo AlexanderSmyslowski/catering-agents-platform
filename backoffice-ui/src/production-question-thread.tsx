@@ -18,6 +18,8 @@ type ProductionQuestionThreadProps = {
   answerEditor?: ReactNode;
   renderQuestionActions?: (question: string) => ReactNode;
   renderQuestionEditor?: (question: string, reasonCode?: string) => ReactNode;
+  groupedQuestionTexts?: string[];
+  groupedQuestions?: ReactNode;
 };
 
 function formatPurchaseListCount(count: number): string {
@@ -72,10 +74,12 @@ export function ProductionQuestionThread({
   productionConversationProjection,
   answerEditor,
   renderQuestionActions,
-  renderQuestionEditor
+  renderQuestionEditor,
+  groupedQuestionTexts = [],
+  groupedQuestions
 }: ProductionQuestionThreadProps) {
   const messages = productionConversationProjection.messages;
-  const questions = messages.filter(message => message.type === "structured_agent_question");
+  const questions = messages.filter(message => message.type === "structured_agent_question" && !groupedQuestionTexts.includes(message.text));
   const warnings = messages.filter(message => message.type === "ingestion_warning_anchor");
   const provenance = messages.filter(message =>
     message.type === "system_agent_hint" || message.type === "source_provenance_anchor" ||
@@ -112,6 +116,7 @@ export function ProductionQuestionThread({
           </li>;
         })}
       </ol> : null}
+      {groupedQuestions}
       {/* Questions first, then the matching answer form with its save action. */}
       {answerEditor}
       <details className="question-context-details">

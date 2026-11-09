@@ -1,3 +1,4 @@
+import { groupDishQuestions } from "./production-question-grouping.js";
 import { useContext } from "react";
 import { ProductionSplitCapability } from "./production-capabilities.js";
 import { productionDraftEntryId } from "./production-entry-focus.js";
@@ -171,6 +172,13 @@ export function ProductionQuestionPanel({
     editingSpecId,
     focusedProductionSpecId: String(focusedProductionSpec?.specId ?? "")
   });
+  const questionTexts = productionConversationProjection.messages.filter(message => message.type === "structured_agent_question" && message.clarificationAnswerStatus !== "answered").map(message => message.text);
+  const grouped = groupDishQuestions(focusedProductionSpec, questionTexts);
+  const groupedComponents = grouped.components;
+  const groupedQuestionTexts = grouped.texts;
+  const hasInlineSchedule = answersEditable && actionState.isFocusedSpecEditing && Boolean(setEditingEventSchedule) &&
+    productionConversationProjection.messages.some(message => message.type === "structured_agent_question" && message.clarificationAnswerStatus !== "answered" &&
+      (message.clarificationQuestion?.reasonCode === "event.schedule" || (!message.clarificationQuestion?.reasonCode && message.text === "Wie lautet das verbindliche Zeitfenster?")));
   const requestId = intakeRequestDetail?.requestId ?? "";
 
   useEffect(() => {
@@ -183,8 +191,9 @@ export function ProductionQuestionPanel({
   const allDietaryAnswered = hasDietaryReview && productionQuestions.length === 0 &&
     questionState.currentDraft!.dietaryQuestionReviews!.every(review => review.status === "confirmed");
 
+  const visibleQuestionCount = grouped.openCount;
   const questionCountLabel =
-    productionQuestions.length === 1 ? "1 Rückfrage beantworten" : `${productionQuestions.length} Rückfragen beantworten`;
+    visibleQuestionCount === 1 ? "1 Rückfrage beantworten" : `${visibleQuestionCount} Rückfragen beantworten`;
 
   // Lead to a control that is actually rendered; collapsed sections open first.
   const revealAndFocus = (elementId: string) => {
@@ -292,12 +301,27 @@ export function ProductionQuestionPanel({
             <ProductionQuestionThread
               specLabel={getSpecLabel(focusedProductionSpec)}
               facts={workbenchSpecFacts}
-              questionCount={productionQuestions.length}
+              questionCount={visibleQuestionCount}
               readinessLabel={focusedSpecReadinessLabel}
               selectedPlan={selectedPlan}
               selectedPlanReadinessLabel={selectedPlanReadinessLabel}
               currentSpecPurchaseLists={currentSpecPurchaseLists}
               productionConversationProjection={productionConversationProjection}
+              groupedQuestionTexts={groupedQuestionTexts}
+              groupedQuestions={groupedComponents.length ? <section className="question-inline-answer" aria-label="Gerichte zuordnen">
+                <h4>Gerichte zuordnen</h4><p>Bitte Kategorie und Herstellungsart je Gericht prüfen und fehlende Angaben auswählen.</p>
+                <div className="component-answer-list">{groupedComponents.map(item => {
+                  const id = String(item.componentId); const state = editingComponentStates[id];
+                  const decision = item.productionDecision && typeof item.productionDecision === "object" ? item.productionDecision as Record<string, unknown> : {};
+                  return <div className="component-answer-card" key={id} role="group" aria-label={String(item.label)}>
+                    <strong>{String(item.label)}</strong>
+                    {answersEditable && actionState.isFocusedSpecEditing && state ? <ProductionComponentClassificationFields menuCategory={state.menuCategory} productionMode={state.productionMode}
+                      onMenuCategoryChange={menuCategory => updateEditingComponentState(id, { menuCategory })}
+                      onProductionModeChange={productionMode => updateEditingComponentState(id, { productionMode })} /> : <p>Kategorie: {String(item.menuCategory || "offen")} · Herstellung: {String(decision.mode || "offen")}</p>}
+                  </div>;
+                })}</div>
+                {answersEditable && actionState.isFocusedSpecEditing ? <button type="button" disabled={actionState.saveAnswersDisabled} onClick={() => void saveSpecEdit()}>Alle geänderten Antworten speichern</button> : null}
+              </section> : null}
               renderQuestionActions={activeCaseId && questionState.currentDraft ? question => <ProductionDietaryQuestionActions
                 caseId={activeCaseId} draft={questionState.currentDraft!} question={question} busy={submitting}
                 onChanged={refreshAfterDraftDecision} /> : undefined}
@@ -325,8 +349,10 @@ export function ProductionQuestionPanel({
               } : undefined}
               answerEditor={
                 answersEditable && actionState.isFocusedSpecEditing ? (
-                  <ProductionStructuredAnswerEditor
+                  <details className="answer-section"><summary>Weitere Angaben und Details bearbeiten</summary><ProductionStructuredAnswerEditor
                     footer={<div className="action-row"><button type="button" disabled={actionState.saveAnswersDisabled} onClick={() => void saveSpecEdit()}>Antworten speichern</button>{actionState.saveAnswersDisabled ? <span className="helper-text">{submitting ? "Speichern läuft …" : "Ändere zuerst eine Angabe."}</span> : null}</div>}
+                    hideClassificationIds={groupedComponents.map(item => String(item.componentId))}
+                    hideSchedule={hasInlineSchedule}
                     canEditPurchasedQuantities={canEditPurchasedQuantities}
                     canSplitComponents={Boolean(splitEnabled && canEditPurchasedQuantities && questionState.currentDraft && !questionState.currentDraft.draftArtifacts?.productionPlan && !questionState.currentDraft.draftArtifacts?.purchaseList && !questionState.currentDraft.draftArtifacts?.recipes)}
                     focusedProductionSpec={focusedProductionSpec}
@@ -347,7 +373,7 @@ export function ProductionQuestionPanel({
                     setEditingServiceForm={setEditingServiceForm}
                     setEditingMenuItems={setEditingMenuItems}
                     updateEditingComponentState={updateEditingComponentState}
-                  />
+                  /></details>
                 ) : null
               }
             />
