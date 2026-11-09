@@ -262,15 +262,16 @@ class CateringTargetOperatorTests(unittest.TestCase):
         base = ["nue-prepare", "--target", "catering-prod-02", "--product-commit", PRODUCT_SHA,
                 "--operations-commit", OPERATIONS_SHA, "--product-source", "/product", "--output-dir", "/output"]
         pins = {"manifestSha256":"a" * 64, "helperSha256":"b" * 64}
-        for supplied, expected, profile in (([], None, None), (["--accepted-current-manifest-sha256", pins["manifestSha256"],
-                                               "--accepted-current-helper-sha256", pins["helperSha256"]], pins, None),
-                                              (["--runtime-profile", "supplier-mail"], None, "supplier-mail")):
+        for supplied, expected, profile, activation in (([], None, None, False), (["--accepted-current-manifest-sha256", pins["manifestSha256"],
+                                               "--accepted-current-helper-sha256", pins["helperSha256"]], pins, None, False),
+                                              (["--runtime-profile", "supplier-mail"], None, "supplier-mail", False),
+                                              (["--runtime-profile", "supplier-mail", "--activate-supplier-mail"], None, "supplier-mail", True)):
             helper = Mock(); helper.prepare.return_value = "c" * 64
             with patch.object(operator, "require_macos"), patch.object(operator, "repository_root", return_value=Path("/ops")), \
                  patch.object(operator, "verify_commit_gates", return_value=(Path("/ops"), Path("/product"))), \
                  patch.object(operator, "_nue", return_value=helper), patch.dict(sys.modules, {operator.__name__:operator}), patch("builtins.print"):
                 self.assertEqual(operator.main(base + supplied), 0)
-            self.assertEqual(helper.prepare.call_args.kwargs, {"accepted_current_release":expected, "runtime_profile":profile})
+            self.assertEqual(helper.prepare.call_args.kwargs, {"accepted_current_release":expected, "runtime_profile":profile, "mail_activation":activation})
 
 
     def test_stage_receipt_binds_commits_manifest_images_and_artifact_digests(self) -> None:

@@ -73,6 +73,7 @@ class NueTests(unittest.TestCase):
         self.backup_idle_patch.stop()
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp);sha='a'*64;bundle=root/sha;bundle.mkdir()
+            compose=root/"compose.json";compose.write_text(json.dumps({"services":{"offer":{}}}))
             smoke=root/'smoke';smoke.write_bytes(b'smoke');smoke.chmod(0o700)
             signature=root/'signature';signature.write_bytes(b'synthetic')
             stage={'manifestSha256':sha,'mode':'nue-image-only','baselineSha256':'b'*64,'backupProofSha256':'c'*64}
@@ -80,7 +81,7 @@ class NueTests(unittest.TestCase):
             admission={'nonce':'d'*32};admission_sha=hashlib.sha256(nue.canonical(admission)).hexdigest()
             for phase in ('stage','apply'):
                 with self.subTest(phase=phase),ExitStack() as stack:
-                    stack.enter_context(patch.multiple(nue,RELEASES=root))
+                    stack.enter_context(patch.multiple(nue,RELEASES=root,COMPOSE=compose))
                     stack.enter_context(patch.object(nue,'host_identity'))
                     stack.enter_context(patch.object(nue,'protected',side_effect=lambda p,**kw:Path(p)))
                     stack.enter_context(patch.object(nue,'require_admission',return_value=admission))
@@ -258,7 +259,7 @@ class NueTests(unittest.TestCase):
     def proof(self):
         return {"capture": {"sourceResumed": True, "files": list(range(17)), "manifestSha256": "c" * 64}, "restore": {"status": "ALL_THREE_DATABASES_GLOBALS_AND_REQUIRED_FILES_IDENTICAL", "databases": 3, "fileTrees": 8, "probeContainerRemoved": True, "runId": "a" * 32}, "captureCleanup": {"status": "OWN_TMPFS_UNMOUNTED", "runId": "a" * 32}, "finalHealth": {"status": "ORIGINAL_SEVEN_CONTAINERS_POLICIES_DATABASE_SCOPE_AND_HTTPS_HEALTHY"}, "snapshotId": "b" * 64, "manifestSha256": "c" * 64, "at": datetime.datetime.now(datetime.timezone.utc).isoformat(), "runId": "a" * 32}
 
-    def run_apply_failure(self, tmp, recovery_fails=False, preflight_fails=False, loaded_mutation=None, smoke_fails=False, receipt_failure=None, success=False, daemon_failure=None, prior_abort=False):
+    def run_apply_failure(self, tmp, recovery_fails=False, preflight_fails=False, loaded_mutation=None, smoke_fails=False, receipt_failure=None, success=False, daemon_failure=None, prior_abort=False, mail_activation=False):
         sha = "a" * 64; bundle = tmp / sha; bundle.mkdir()
         compose = tmp / "compose.json"
         old = json.dumps({"services": {s: {"image": "old"} for s in nue.SERVICES}}).encode(); compose.write_bytes(old)
@@ -266,7 +267,8 @@ class NueTests(unittest.TestCase):
         baseline = {"files": {str(compose): {"uid": 0, "gid": 0, "mode": 0o600}}, "containers": {"platform-infra-" + s + "-1": {"id": s, "image": "old", "restart": {"Name": "unless-stopped", "MaximumRetryCount": 0}} for s in nue.SERVICES}}
         binding = {"platformManifestDigest": "sha256:" + "1" * 64, "configDigest": "sha256:" + "2" * 64}
         manifest = {"schemaBinding": {}, "bases": {}, "images": {r: dict(binding) for r in ("runtime", "web")}}
-        (bundle / "stage.json").write_text(json.dumps({"manifestSha256": sha, "mode": "nue-image-only", "baselineSha256": "b" * 64, "backupProofSha256": "c" * 64}))
+        if mail_activation: manifest.update(runtimeProfile="supplier-mail", mailActivation=True)
+        (bundle / "stage.json").write_text(json.dumps({"manifestSha256": sha, "mode": "nue-image-only", "baselineSha256": "b" * 64, "backupProofSha256": "c" * 64, **({"mailSettingsSha256": "f" * 64} if mail_activation else {})}))
         if prior_abort:
             for name in (*nue.ABORT_ARTIFACTS,"apply-attempt.json","apply-terminal.json"):
                 (bundle/name).write_bytes(("previous:"+name).encode())
@@ -306,6 +308,7 @@ class NueTests(unittest.TestCase):
             stack.enter_context(patch.object(nue, "verify_bundle", return_value=manifest))
             stack.enter_context(patch.object(nue, "read_bound", side_effect=lambda p, sha: baseline if Path(p).name == "baseline.json" else {}))
             stack.enter_context(patch.object(nue, "backup_gate"))
+            stack.enter_context(patch.object(nue, "mail_prerequisites", return_value="f" * 64))
             stack.enter_context(patch.object(nue, "own_lock", return_value="token"))
             stack.enter_context(patch.object(nue, "owned"))
             stack.enter_context(patch.object(nue, "snapshot", return_value={} if preflight_fails else baseline))
@@ -325,6 +328,16 @@ class NueTests(unittest.TestCase):
                 nue.apply(bundle, sha, smoke, hashlib.sha256(smoke.read_bytes()).hexdigest(), admission_sha=admission_sha,
                           signature_path=signature, signature_sha=nue.digest(signature))
             return bundle, old, compose.read_bytes(), pause.call_count, up.call_count, unlock.call_count
+
+    def test_mail_activation_candidate_failure_restores_original_compose(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            bundle, old, after, pauses, starts, unlocks = self.run_apply_failure(Path(temporary), mail_activation=True)
+            self.assertEqual(after, old)
+            self.assertEqual((pauses, starts, unlocks), (2, 2, 1))
+            candidate = json.loads((bundle / "compose.candidate.json").read_bytes())
+            self.assertEqual(candidate["services"]["offer"]["environment"], {nue.MAIL_ENV: nue.MAIL_CONFIG_TARGET})
+            self.assertEqual(candidate["services"]["offer"]["volumes"], nue.mail_mounts())
+            self.assertEqual(json.loads((bundle / "rollback-verified.json").read_bytes())["dataRolledBack"], False)
 
     def test_uncertain_docker_mutations_never_rollback_unlock_or_claim_terminal(self):
         for operation in ("load", "compose", "update"):
@@ -1328,7 +1341,7 @@ class NueTests(unittest.TestCase):
                         predecessor = SimpleNamespace(verify_bundle=Mock(return_value=manifest), verify_runtime=Mock(), verify=Mock(return_value={"status": "NUE_IMAGE_ONLY_VERIFIED"}))
                         with patch.multiple(nue, RELEASES=releases, LOCK=releases / "absent-lock"), patch.object(nue, "host_identity"), \
                              patch.object(nue, "protected", side_effect=lambda p, **kw: Path(p)), patch.object(nue, "verify_bundle", return_value=manifest), \
-                             patch.object(nue, "load_module", return_value=predecessor), patch.object(nue, "verify_runtime") as runtime:
+                             patch.object(nue, "load_module", return_value=predecessor), patch.object(nue, "mail_is_configured", return_value=False), patch.object(nue, "verify_runtime") as runtime:
                             invoke = lambda: nue.verify(root, sha) if consumer == "verify" else nue.accepted_current_bundle(object(),
                                 {"manifestSha256": sha, "helperSha256": manifest["helpers"]["catering_target_nue_image_update.py"]}, before_lock=consumer == "before-lock")
                             if mutation is None: invoke()
@@ -1388,13 +1401,15 @@ class NueTests(unittest.TestCase):
             operator._source_tree_digest.return_value = "c" * 64
             for profile in (None, "supplier-mail"):
                 inputs = root / (profile or "standard")
-                sha = nue.prepare(operator, source, "1" * 40, "2" * 40, inputs, runtime_profile=profile)
+                sha = nue.prepare(operator, source, "1" * 40, "2" * 40, inputs, runtime_profile=profile, mail_activation=profile is not None)
                 request = json.loads((inputs / "build-input.json").read_bytes())
                 self.assertEqual(request.get("runtimeProfile"), profile)
+                self.assertEqual(request.get("mailActivation", False), profile is not None)
                 with patch.object(nue, "host_identity"), patch.object(nue, "protected", side_effect=lambda p, **kw: Path(p)), \
                      patch.object(nue, "load_module", return_value=operator), patch.object(nue, "create_bundle", return_value="ok") as build:
                     self.assertEqual(nue.build_prepared(inputs, sha, root / "output", None, None), "ok")
                     self.assertEqual(build.call_args.kwargs["runtime_profile"], profile)
+                    self.assertEqual(build.call_args.kwargs["mail_activation"], profile is not None)
                     request["runtimeProfile"] = "unknown"
                     (inputs / "build-input.json").write_bytes(nue.canonical(request))
                     with self.assertRaisesRegex(RuntimeError, "EXPLICIT_FILE_BINDING"):
@@ -1404,6 +1419,88 @@ class NueTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "NUE_RUNTIME_PROFILE"):
                 nue.prepare(operator, source, "1" * 40, "2" * 40, root / "invalid", runtime_profile="unknown")
             self.assertFalse((root / "invalid").exists())
+
+    def test_mail_activation_is_explicit_and_candidate_has_only_two_fixed_readonly_mounts(self):
+        images = {name: "image" for name in nue.SERVICES}
+        old = json.dumps({"services": {name: {"image": "old"} for name in nue.SERVICES}}).encode()
+        plain = json.loads(nue.candidate_compose(old, images))
+        active = json.loads(nue.candidate_compose(old, images, True))
+        self.assertNotIn("environment", plain["services"]["offer"])
+        self.assertEqual(active["services"]["offer"]["environment"], {nue.MAIL_ENV: nue.MAIL_CONFIG_TARGET})
+        self.assertEqual(active["services"]["offer"]["volumes"], nue.mail_mounts())
+        listed = json.loads(old); listed["services"]["offer"]["environment"] = ["PORT=1"]
+        listed_active = json.loads(nue.candidate_compose(json.dumps(listed).encode(), images, True))
+        self.assertEqual(listed_active["services"]["offer"]["environment"], ["PORT=1", nue.MAIL_ENV + "=" + nue.MAIL_CONFIG_TARGET])
+        for name in set(nue.SERVICES) - {"offer"}:
+            self.assertEqual(active["services"][name], plain["services"][name])
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaisesRegex(RuntimeError, "NUE_MAIL_ACTIVATION_BINDING"):
+                nue.prepare(None, None, "1"*40, "2"*40, Path(tmp)/"input", mail_activation=True)
+
+    def test_scanner_ping_reads_fragmented_bounded_response(self):
+        from unittest.mock import MagicMock
+        for chunks, accepted in (([b"PO", b"NG", b"\0"], True), ([b"PONG", b""], False), ([b"X"*32], False), ([b"PONG!\0"], False)):
+            client = MagicMock(); client.recv.side_effect = chunks
+            client.__enter__.return_value = client
+            with self.subTest(chunks=chunks), patch.object(nue.socket, "socket", return_value=client):
+                if accepted: nue.scanner_ping(Path("/run/test.sock"))
+                else:
+                    with self.assertRaisesRegex(RuntimeError, "NUE_MAIL_SCANNER_UNAVAILABLE"):
+                        nue.scanner_ping(Path("/run/test.sock"))
+                client.sendall.assert_called_once_with(b"zPING\0")
+
+    def test_mail_verify_rejects_replaced_mount_content(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary); sha = "a"*64; bundle = root/sha; bundle.mkdir()
+            candidate = nue.canonical({"services":{"offer":{"environment":{nue.MAIL_ENV:nue.MAIL_CONFIG_TARGET}}}})
+            (bundle/"compose.candidate.json").write_bytes(candidate)
+            (bundle/"stage.json").write_bytes(nue.canonical({"baselineSha256":"b"*64, "mailSettingsSha256":"d"*64}))
+            (bundle/"installed.json").write_bytes(nue.canonical({"manifestSha256":sha, "composeSha256":hashlib.sha256(candidate).hexdigest(),
+                "images":{s:"image" for s in nue.SERVICES}, "status":"NUE_IMAGE_ONLY_INSTALLED"}))
+            manifest = {"images":{role:{"platformManifestDigest":"image"} for role in ("runtime", "web")}}
+            with patch.object(nue,"RELEASES",root), patch.object(nue,"LOCK",root/"lock"), patch.object(nue,"host_identity"), \
+                 patch.object(nue,"protected",side_effect=lambda p, **kw:Path(p)), patch.object(nue,"verify_bundle",return_value=manifest), \
+                 patch.object(nue,"read_bound",return_value={}), patch.object(nue,"require_completed_apply"), \
+                 patch.object(nue,"mail_prerequisites",return_value="d"*64), patch.object(nue,"mail_mounted_digest",return_value="e"*64), \
+                 patch.object(nue,"verify_runtime") as runtime:
+                with self.assertRaisesRegex(RuntimeError,"NUE_MAIL_SETTINGS_STAGE_BINDING"):
+                    nue.verify(bundle,sha)
+                runtime.assert_not_called()
+
+    def test_mail_verify_rejects_second_inspect_of_different_container(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            compose = Path(temporary) / "compose.json"; compose.write_bytes(b"{}")
+            row = {"id":"initial", "image":"new", "mounts":[], "restart":{}, "ports":{}, "networks":[],
+                   "environmentFormat":"unique-key-map-v1", "environmentSha256":"a"*64}
+            baseline = {"files":{str(compose):{"sha256":nue.digest(compose)}}, "networks":[], "volumes":[], "catalogue":{},
+                        "containers":{"platform-infra-offer-1":dict(row, image="old")}}
+            current = dict(baseline, containers={"platform-infra-offer-1":row})
+            with patch.object(nue, "COMPOSE", compose), patch.object(nue, "snapshot", return_value=current), \
+                 patch.object(nue, "inspect", return_value=[{"Id":"other"}]):
+                with self.assertRaisesRegex(RuntimeError, "NUE_MAIL_INSPECT_RACE"):
+                    nue.verify_runtime(baseline, {"offer":"new"}, b"{}", mail_activation=True)
+
+    def test_mail_mount_and_env_normalization_fails_closed_for_rollback(self):
+        base_env = ["DATABASE_URL=example", "PORT=1"]
+        base_mount = {"Type":"volume", "Destination":"/data", "RW":True}
+        added = [{"Type":"bind", "Source":str(source), "Destination":target, "RW":False,
+                  "Propagation":"rprivate", "Mode":"ro"} for source, target in
+                 ((nue.MAIL_SETTINGS, nue.MAIL_CONFIG_TARGET), (nue.MAIL_SCANNER_DIR, nue.MAIL_SCANNER_TARGET))]
+        row = {"Config":{"Env": base_env + [nue.MAIL_ENV + "=" + nue.MAIL_CONFIG_TARGET]}}
+        binding = {"mounts":[base_mount, *added], "environmentSha256":"changed"}
+        normalized = nue.without_mail_additions(row, binding)
+        self.assertEqual(normalized["mounts"], [base_mount])
+        self.assertEqual(normalized["environmentSha256"], nue.environment_binding(base_env))
+        for mutation in ("missing", "writable", "source", "duplicate", "environment"):
+            altered = dict(binding, mounts=[dict(m) for m in binding["mounts"]])
+            current = {"Config":{"Env":list(row["Config"]["Env"])}}
+            if mutation == "missing": altered["mounts"].pop()
+            if mutation == "writable": altered["mounts"][1]["RW"] = True
+            if mutation == "source": altered["mounts"][1]["Source"] = "/other"
+            if mutation == "duplicate": altered["mounts"].append(dict(added[0]))
+            if mutation == "environment": current["Config"]["Env"][-1] += "-other"
+            with self.subTest(mutation=mutation), self.assertRaises(RuntimeError):
+                nue.without_mail_additions(current, altered)
 
     def test_direct_explicit_build_refuses_foreign_lock_before_docker_or_output(self):
         from unittest.mock import Mock
