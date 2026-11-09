@@ -254,19 +254,72 @@ class GitBindingTests(unittest.TestCase):
 class WorkflowTests(unittest.TestCase):
     def test_required_jobs_and_scoped_acceptance_remain_unconditional(self):
         text = (ROOT / ".github/workflows/ci.yml").read_text()
-        build = text.split("  build-and-test:\n", 1)[1].split("  catering-target-operator-macos:", 1)[0]
-        self.assertIn("fetch-depth: 0", build)
-        self.assertLess(build.index("python3 -B tests/ci_test_scope_test.py"), build.index("id: test_scope"))
-        self.assertIn("if: steps.test_scope.outputs.scope != 'operator'\n        run: python3 -B scripts/ci-test-scope.py --run-tests \"${{ steps.test_scope.outputs.scope || 'full' }}\"", build)
-        self.assertIn("if: steps.test_scope.outputs.scope == 'operator'\n        run: npx --no-install vitest run tests/catering-target-*.test.ts", build)
+        self.assertIn("group: ci-pr-${{ github.event.pull_request.number || github.run_id }}", text)
+        self.assertIn("cancel-in-progress: ${{ github.event_name == 'pull_request' }}", text)
+        scope_job = text.split("  ci-scope:\n", 1)[1].split("  ci-build-and-gates:", 1)[0]
+        self.assertIn("fetch-depth: 0", scope_job)
+        self.assertLess(scope_job.index("python3 -B tests/ci_test_scope_test.py"), scope_job.index("id: test_scope"))
+        build = text.split("  ci-build-and-gates:\n", 1)[1].split("  full-regression:", 1)[0]
         gates = build.split("- name: Catering target operator acceptance gates", 1)[1]
         self.assertNotIn("if:", gates)
         for test in ["catering_target_operator_test.py", "catering_target02_test.py", "catering_target_v4_test.py",
                      "catering_target_nue_image_update_test.py", "catering_infrastructure_oci_test.py"]:
             self.assertIn(test, gates)
+        full = text.split("  full-regression:\n", 1)[1].split("  scoped-regression:", 1)[0]
+        self.assertIn("if: needs.ci-scope.outputs.scope == 'full'", full)
+        self.assertIn("fail-fast: false", full)
+        self.assertIn("shard: [1, 2, 3, 4]", full)
+        self.assertIn('vitest run "$long_test"', full)
+        self.assertIn('vitest run --shard="$SHARD/4"', full)
+        for name in ["phase3-latest-p1-review-absent-and-compatibility", "phase3-latest-p1-review-rollback-and-recovery",
+                     "catering-phase3-pilot-contract", "phase3-latest-p1-review-preexisting-and-legacy"]:
+            self.assertEqual(full.count(f"tests/{name}.test.ts"), 2)
+            self.assertIn(f"--exclude tests/{name}.test.ts", full)
+        scoped = text.split("  scoped-regression:\n", 1)[1].split("  build-and-test:", 1)[0]
+        self.assertIn("if: needs.ci-scope.outputs.scope != 'full'", scoped)
+        self.assertIn('scripts/ci-test-scope.py --run-tests "$SCOPE"', scoped)
+        self.assertIn("SCOPE: ${{ needs.ci-scope.outputs.scope }}", scoped)
+        self.assertIn("if: needs.ci-scope.outputs.scope != 'operator' && needs.ci-scope.outputs.scope != 'supplier-ui'", scoped)
+        self.assertIn("fetch-depth: 0", scoped)
+        self.assertIn("fetch-depth: 0", full)
+        self.assertIn("vitest run tests/catering-target-*.test.ts", scoped)
+        required = text.split("  build-and-test:\n", 1)[1].split("  catering-target-operator-macos:", 1)[0]
+        self.assertIn("if: always()", required)
+        self.assertIn("needs: [ci-scope, ci-build-and-gates, full-regression, scoped-regression]", required)
+        self.assertIn("product|operator|supplier-ui)", required)
+        self.assertIn("*) exit 1", required)
+        for check in ['test "$SCOPE_RESULT" = success', 'test "$BUILD_RESULT" = success',
+                      'test "$FULL_RESULT" = success', 'test "$SCOPED_RESULT" = success',
+                      'test "$SCOPED_RESULT" = skipped', 'test "$FULL_RESULT" = skipped']:
+            self.assertIn(check, required)
         for job in ["catering-target-operator-macos", "browser-rehearsal", "compose-render-parity"]:
             job_header = text.split(f"  {job}:\n", 1)[1].split("    steps:", 1)[0]
             self.assertNotIn("if:", job_header)
+
+    def test_required_aggregator_rejects_failed_or_missing_jobs(self):
+        text = (ROOT / ".github/workflows/ci.yml").read_text()
+        required = text.split("  build-and-test:\n", 1)[1].split("  catering-target-operator-macos:", 1)[0]
+        shell = required.split("        run: |\n", 1)[1]
+        shell = "\n".join(line[10:] for line in shell.splitlines() if line.startswith("          "))
+        cases = [
+            ("full", "success", "success", "success", "skipped", True),
+            ("supplier-ui", "success", "success", "skipped", "success", True),
+            ("operator", "success", "success", "skipped", "success", True),
+            ("product", "success", "success", "skipped", "success", True),
+            ("full", "success", "success", "failure", "skipped", False),
+            ("full", "success", "success", "skipped", "success", False),
+            ("supplier-ui", "success", "success", "skipped", "failure", False),
+            ("supplier-ui", "success", "failure", "skipped", "success", False),
+            ("supplier-ui", "failure", "success", "skipped", "success", False),
+            ("", "success", "success", "skipped", "success", False),
+            ("unknown", "success", "success", "skipped", "success", False),
+        ]
+        for profile, scope_result, build_result, full_result, scoped_result, succeeds in cases:
+            with self.subTest(profile=profile, scope=scope_result, build=build_result, full=full_result, scoped=scoped_result):
+                env = {**os.environ, "SCOPE": profile, "SCOPE_RESULT": scope_result,
+                       "BUILD_RESULT": build_result, "FULL_RESULT": full_result, "SCOPED_RESULT": scoped_result}
+                result = subprocess.run(["/bin/bash", "-c", shell], env=env, capture_output=True)
+                self.assertEqual(result.returncode == 0, succeeds)
 
 
 if __name__ == "__main__":
