@@ -185,6 +185,56 @@ describe("Angebotsauftrag nach Neuladen", () => {
     expect(event.defaultPrevented).toBe(false);
   });
 
+  it("binds list selection and browser history to the URL", async () => {
+    window.history.replaceState({}, "", "/angebot");
+    const { container, mount } = setup();
+    await mount();
+    await openCase(container);
+    expect(window.location.search).toBe("?offerCaseId=case-a");
+    const summary = container.querySelector<HTMLElement>("#history summary")!;
+    await act(async () => { summary.click(); await flush(); });
+    await act(async () => { container.querySelectorAll<HTMLButtonElement>("button[data-action='open-case']")[1].click(); await flush(); });
+    expect(window.location.search).toBe("?offerCaseId=case-b");
+    await act(async () => { window.history.back(); await new Promise(resolve => setTimeout(resolve, 30)); await flush(); });
+    expect(window.location.search).toBe("?offerCaseId=case-a");
+    expect(container.querySelector('[aria-label="Geöffneter Auftrag"] h2')?.textContent).toBe("Synthetischer Auftrag");
+    await act(async () => { window.history.forward(); await new Promise(resolve => setTimeout(resolve, 30)); await flush(); });
+    expect(container.querySelector('[aria-label="Geöffneter Auftrag"] h2')?.textContent).toBe("Synthetischer Auftrag B");
+  });
+
+  it("keeps the case and URL when browser back meets an open editor", async () => {
+    window.history.replaceState({}, "", "/angebot");
+    const { container, mount } = setup({ draft: true });
+    await mount();
+    await openCase(container);
+    const button = Array.from(container.querySelectorAll("button")).find(b => b.textContent === "Menü bearbeiten")!;
+    await act(async () => { button.click(); await flush(); });
+    await act(async () => { window.history.back(); await new Promise(resolve => setTimeout(resolve, 30)); await flush(); });
+    expect(window.location.search).toBe("?offerCaseId=case-a");
+    expect(container.textContent).toContain("Bitte Angebotsbearbeitung zuerst speichern oder abbrechen.");
+    expect(container.querySelector('[aria-label="Geöffneter Auftrag"] h2')?.textContent).toBe("Synthetischer Auftrag");
+  });
+
+  it("keeps typed source input when browser back would switch case", async () => {
+    window.history.replaceState({}, "", "/angebot");
+    const { container, mount } = setup();
+    await mount();
+    await openCase(container);
+    const textarea = container.querySelector<HTMLTextAreaElement>('textarea[placeholder*="Kundenanfrage"]')!;
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+    await act(async () => { setter.call(textarea, "synthetischer Entwurf"); textarea.dispatchEvent(new Event("input", { bubbles: true })); await flush(); });
+    await act(async () => { window.history.back(); await new Promise(resolve => setTimeout(resolve, 30)); await flush(); });
+    expect(window.location.search).toBe("?offerCaseId=case-a");
+    expect(textarea.value).toBe("synthetischer Entwurf");
+  });
+
+  it("opens a direct case URL after authentication", async () => {
+    window.history.replaceState({}, "", "/angebot?offerCaseId=case-a");
+    const { container, mount } = setup();
+    await mount();
+    expect(container.querySelector('[aria-label="Geöffneter Auftrag"] h2')?.textContent).toBe("Synthetischer Auftrag");
+  });
+
   it("opens the previously selected offer again after a page reload for the same user", async () => {
     window.history.replaceState({ existingContext: "preserve" }, "", "/angebot");
     const { container, mount } = setup();

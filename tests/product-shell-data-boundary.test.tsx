@@ -333,6 +333,25 @@ describe("independent product loader boundaries", () => {
     );
   });
 
+  it("restores the production case from URL and browser navigation", async () => {
+    const load = vi.spyOn(api, "loadProductionProductData").mockImplementation(async (caseId) =>
+      productionProductData(undefined, undefined, caseId));
+    await renderAt("/produktion?productionCaseId=case-a");
+    expect(load).toHaveBeenCalledWith("case-a");
+    await act(async () => {
+      window.history.pushState({}, "", "/produktion?productionCaseId=case-b");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+      await Promise.resolve(); await Promise.resolve();
+    });
+    expect(load).toHaveBeenLastCalledWith("case-b");
+    await act(async () => {
+      window.history.replaceState({}, "", "/produktion?productionDraftId=legacy");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+      await Promise.resolve(); await Promise.resolve();
+    });
+    expect(load).toHaveBeenLastCalledWith(undefined);
+  });
+
   it("does not project an unbound offer artifact into the real app route", async () => {
     const loadProduct = vi.spyOn(api, "loadOfferProductData").mockResolvedValue(
       offerProductData(offerDraft("draft-b", "Fall B"))
