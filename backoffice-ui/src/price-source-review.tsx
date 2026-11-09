@@ -22,7 +22,12 @@ export function PriceSourceReview({
   action: string;
 }) {
   const applied = new Set(preview.appliedArticles ?? []);
-  const openRows = preview.rows.filter(row => !applied.has(row.article));
+  const openRows = preview.rows.filter(
+    (row) =>
+      !applied.has(row.article) &&
+      !preview.removedArticles?.includes(row.article),
+  );
+  const [removals, setRemovals] = useState(new Set<string>());
   const [choices, setChoices] = useState<Map<string, ArticleMapping>>(
     () =>
       new Map(
@@ -51,15 +56,10 @@ export function PriceSourceReview({
       .toLocaleLowerCase("de")
       .includes(search.toLocaleLowerCase("de")),
   );
-  const selected = Array.from(choices.values()).filter((item) =>
-    item.ingredientKey.trim(),
+  const selected = Array.from(choices.values()).filter(
+    (item) => item.ingredientKey.trim() && !removals.has(item.article),
   );
-  const removedArticles = initial
-    .filter(
-      ({ article }) =>
-        choices.has(article) && !choices.get(article)?.ingredientKey.trim(),
-    )
-    .map(({ article }) => article);
+  const removedArticles = Array.from(removals);
   return (
     <section className="price-source-review">
       <h3>Preise und Zutaten prüfen</h3>
@@ -70,7 +70,12 @@ export function PriceSourceReview({
           : " · Gültigkeit ungeklärt"}
         .
       </p>
-      {applied.size > 0 && <p>{applied.size} Artikel bereits übernommen. Hier prüfst du die übrigen Artikel.</p>}
+      {applied.size > 0 && (
+        <p>
+          {applied.size} Artikel bereits übernommen. Hier prüfst du die übrigen
+          Artikel.
+        </p>
+      )}
       {preview.senderAuthenticated === false && (
         <p>
           Die Absenderadresse ist technisch unbestätigt. Gleiche die Preise vor
@@ -115,16 +120,44 @@ export function PriceSourceReview({
                 Art. {row.article} · {row.price.replace(".", ",")} € netto ·
                 laut Liste {row.quantity} {row.unit}
               </p>
+              {initial.some((mapping) => mapping.article === row.article) && (
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={removals.has(row.article)}
+                    onChange={(event) => {
+                      const remove = event.target.checked;
+                      setRemovals((prior) => {
+                        const next = new Set(prior);
+                        if (remove) next.add(row.article);
+                        else next.delete(row.article);
+                        return next;
+                      });
+                    }}
+                  />
+                  Zuordnung für künftige Kalkulationen entfernen
+                </label>
+              )}
               <label>
                 Zutat für {row.article}
                 <input
+                  disabled={removals.has(row.article)}
                   value={choice.ingredientKey}
                   onChange={(e) => change({ ingredientKey: e.target.value })}
                 />
               </label>
-              {choice.ingredientKey && (
+              {choice.ingredientKey && !removals.has(row.article) && (
                 <fieldset>
                   <legend>Wofür gilt der Nettopreis?</legend>
+                  {!complete(choice) && (
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => change({ ingredientKey: "" })}
+                    >
+                      Später prüfen
+                    </button>
+                  )}
                   <label>
                     Menge
                     <input
@@ -161,10 +194,21 @@ export function PriceSourceReview({
         </button>
       )}
       <p>{selected.length} Artikel zugeordnet</p>
-      {selected.some(item => !complete(item)) && <button type="button" className="secondary-button" onClick={() => {
-        const item = selected.find(item => !complete(item));
-        if (item) { setSearch(item.article); setLimit(found.length + openRows.length); }
-      }}>Fehlenden Preisbezug anzeigen</button>}
+      {selected.some((item) => !complete(item)) && (
+        <button
+          type="button"
+          className="secondary-button"
+          onClick={() => {
+            const item = selected.find((item) => !complete(item));
+            if (item) {
+              setSearch(item.article);
+              setLimit(openRows.length);
+            }
+          }}
+        >
+          Fehlenden Preisbezug anzeigen
+        </button>
+      )}
       <button
         type="button"
         disabled={

@@ -86,6 +86,7 @@ it("uses the selected supplier quotation with its recorded pack size and provena
 it("requires a new price basis when a known product changes from kg to a box", async () => {
   const element = document.createElement("div");
   const root = createRoot(element);
+  const save = vi.fn();
   try {
     await act(async () =>
       root.render(
@@ -114,12 +115,20 @@ it("requires a new price basis when a known product changes from kg to a box", a
             },
           ],
           action: "Prüfen",
-          onSave: vi.fn(),
+          onSave: save,
         }),
       ),
     );
-    expect(Array.from(element.querySelectorAll("button")).find(button => button.textContent === "Prüfen")?.disabled).toBe(true);
+    const button = (name: string) => Array.from(element.querySelectorAll("button")).find(entry => entry.textContent === name)!;
+    expect(button("Prüfen").disabled).toBe(true);
     expect(element.querySelector("select")?.value).toBe("");
+    await act(async () => button("Später prüfen").click());
+    expect(button("Prüfen").disabled).toBe(true);
+    const remove = element.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    expect(remove.checked).toBe(false);
+    await act(async () => remove.click());
+    await act(async () => button("Prüfen").click());
+    expect(save).toHaveBeenCalledWith([], ["X"]);
   } finally {
     await act(async () => root.unmount());
   }

@@ -44,6 +44,7 @@ export type Preview = {
   configVersion?: number;
   id: string;
   rows: PriceRow[];
+  removedArticles?: string[];
   appliedArticles?: string[];
   appliedAt?: string;
   createdAt: string;
