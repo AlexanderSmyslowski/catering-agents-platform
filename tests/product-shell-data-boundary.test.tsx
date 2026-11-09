@@ -462,7 +462,7 @@ describe("independent product loader boundaries", () => {
     await act(async () => { action!.click(); await flush(); });
     const target = container.querySelector('#production-clarification-continuation');
     expect(target?.getAttribute("aria-label")).toBe("Rückfragen in einer neuen Prüffassung klären");
-    expect(document.activeElement).toBe(target);
+    await vi.waitFor(() => expect(document.activeElement).toBe(target));
   });
 
   it.each(["prepare", "editable"])("focuses the appropriate real next action for a %s revision", async mode => {
@@ -479,7 +479,8 @@ describe("independent product loader boundaries", () => {
     const action = container.querySelector('[aria-label="Nächster Schritt"] button') ?? [...container.querySelectorAll("button")].find(item => item.textContent?.includes("Offene Rückfragen klären"));
     expect(action).toBeDefined(); await act(async () => { (action as HTMLButtonElement).click(); await flush(); });
     const target = container.querySelector(mode === "prepare" ? "#production-clarification-continuation" : "#production-question-panel");
-    expect(target).not.toBeNull(); expect(document.activeElement).toBe(target);
+    expect(target).not.toBeNull();
+    await vi.waitFor(() => expect(document.activeElement).toBe(target));
   });
 
   it("moves from completed questions to the existing review entry", async () => {
@@ -491,7 +492,9 @@ describe("independent product loader boundaries", () => {
     await act(async () => { root.render(createElement(ProductionQuestionPanel, props)); await flush(); });
     expect(container.textContent).toContain("Alle Ernährungsfragen sind beantwortet");
     const button = [...container.querySelectorAll("button")].find(item => item.textContent === "Zu den Prüfpunkten");
-    expect(button).toBeDefined(); await act(async () => button!.click()); expect(document.activeElement).toBe(entry);
+    expect(button).toBeDefined();
+    await act(async () => button!.click());
+    await vi.waitFor(() => expect(document.activeElement).toBe(entry));
   });
 
   it("does not project unbound production artifacts into the real app route", async () => {
