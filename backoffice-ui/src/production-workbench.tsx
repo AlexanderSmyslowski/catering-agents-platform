@@ -285,7 +285,7 @@ export function ProductionConversationalWorkbench({
       </header>
       {hasActiveContext ? (
         <>
-          <details className="production-calm-summary" aria-label="Kompakte Produktionszusammenfassung">
+          <details className="production-calm-summary" aria-label="Kompakte Produktionszusammenfassung" open={stage === "input"}>
             <summary>Auftragsstand und Hinweise</summary>
             <h3>{summary.hasActiveContext ? "Auftragsstand Küche" : "Bestandsdaten im Hintergrund"}</h3>
             <strong>{activeSpecLabel}</strong>

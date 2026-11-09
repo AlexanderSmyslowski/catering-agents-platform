@@ -92,7 +92,7 @@ import { useProductionPlanProgress } from "./use-production-plan-progress.js";
 import { useProductionWindowFileDrop } from "./use-production-window-file-drop.js";
 import { useMiniPilotResultState } from "./use-mini-pilot-result-state.js";
 import { useRecipeUploadDraft } from "./use-recipe-upload-draft.js";
-import { openProductionDraftEntry } from "./production-entry-focus.js";
+import { consumeProductionHandoffFocus, openProductionDraftEntry } from "./production-entry-focus.js";
 import {
   announceProductionDraftReview,
   announceProductionDraftRefresh,
@@ -1357,6 +1357,17 @@ function ProductWorkspaceView({
     resetSpecEdit
   });
   const activeCase = availableCases.find(candidate => candidate.caseId === (route === "offer" ? activeOfferCaseId : activeProductionCaseId));
+  useEffect(() => {
+    if (route !== "production" || !activeCase || activeCase.caseId !== activeProductionCaseId) return;
+    const caseId = activeCase.caseId;
+    const frame = requestAnimationFrame(() => {
+      if (!consumeProductionHandoffFocus(caseId)) return;
+      const header = document.querySelector<HTMLElement>('[aria-label="Geöffneter Auftrag"]');
+      header?.focus({ preventScroll: true });
+      header?.scrollIntoView?.({ block: "start", inline: "nearest", behavior: "auto" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [route, activeCase?.caseId, activeProductionCaseId]);
   const activeCaseStatus = activeCase?.status ?? "open";
   const nextActionInput: CaseNextActionInput = {
     product: route,
@@ -1450,7 +1461,7 @@ function ProductWorkspaceView({
     <>
       <AppFeedbackShell error={loaderError ?? error} notice={notice} loading={loading} route={route} />
 
-      {(route === "offer" ? activeOfferCaseId : activeProductionCaseId) ? <section className="panel current-order-header" aria-label="Geöffneter Auftrag">
+      {(route === "offer" ? activeOfferCaseId : activeProductionCaseId) ? <section className="panel current-order-header" aria-label="Geöffneter Auftrag" tabIndex={-1}>
         <h2>{activeCase?.displayName ?? "Auftrag geöffnet"}</h2>
         <p role="status">{(offerCaseUnavailable || offerCaseRefreshFailed) &&
           (loaderError === OFFER_RECOVERY_STORAGE_ERROR || loaderError === OFFER_SAVED_DRAFT_SUPERSEDED_ERROR) ? loaderError

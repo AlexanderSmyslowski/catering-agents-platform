@@ -2800,6 +2800,7 @@ label:has(> input[type="file"]:focus-visible) { outline: 3px solid #0066cc; outl
   gap: 0.5rem;
   min-width: 0;
 }
+.app-shell--production-route .production-stage-nav button:not(.secondary-button):not(.destructive-button):not(.quiet-list__button),
 .production-stage-nav button {
   display: inline-flex;
   align-items: center;
@@ -2811,6 +2812,7 @@ label:has(> input[type="file"]:focus-visible) { outline: 3px solid #0066cc; outl
   padding: 0.5rem 0.8rem;
   min-height: 44px;
 }
+.app-shell--production-route .production-stage-nav button[aria-current="step"]:not(.secondary-button):not(.destructive-button):not(.quiet-list__button),
 .production-stage-nav button[aria-current="step"] {
   background: #173e60;
   border-color: #173e60;

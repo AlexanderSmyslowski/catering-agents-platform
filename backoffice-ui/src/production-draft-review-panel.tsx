@@ -13,7 +13,7 @@ import {
   type ProductionDraftReviewDecision
 } from "./api.js";
 import { ProductionDraftFrozenContent } from "./production-draft-frozen-content.js";
-import { productionDraftEntryId, productionDraftEntryUrl } from "./production-entry-focus.js";
+import { consumeProductionHandoffDraftFocus, productionDraftEntryId, productionDraftEntryUrl } from "./production-entry-focus.js";
 
 const productionDraftReviewEvent = "catering:production-draft-review";
 const productionDraftRefreshEvent = "catering:production-draft-refresh";
@@ -461,6 +461,7 @@ export function ProductionDraftReviewPanel({
 
   useEffect(() => {
     if (!focusedDraftId || !drafts.some((draft) => draft.draftId === focusedDraftId)) return;
+    if (consumeProductionHandoffDraftFocus(focusedDraftId)) return;
     const entry = document.getElementById(productionDraftEntryId(focusedDraftId));
     entry?.focus({ preventScroll: true });
     entry?.scrollIntoView?.({ block: "start", inline: "nearest", behavior: "auto" });

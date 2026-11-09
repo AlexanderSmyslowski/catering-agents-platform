@@ -16,6 +16,7 @@ it("keeps drafts when moving between steps and reveals the requested target", as
   const report = { statusLabel: "", reasonLabel: "", nextStepLabel: "", commandLabel: "", errorLabels: [] };
   try {
     await act(async () => root.render(<ProductionConversationalWorkbench summary={summary} nextStep={{title:"Nächster Schritt",description:"Prüfen"}} miniPilotRawResult="" setMiniPilotRawResult={() => {}} miniPilotReportState={report} slots={{inputSlot:<Draft />,questionsSlot:<button id="question-target">Frage</button>,planningSlot:<p>Planung</p>,productionObjectsSlot:<p>Plan</p>,purchaseListSlot:<p>Einkauf</p>,lowerSlots:<p>Rezepte</p>}} />));
+    expect(container.querySelector<HTMLDetailsElement>('[aria-label="Kompakte Produktionszusammenfassung"]')!.open).toBe(true);
     const input = container.querySelector<HTMLInputElement>('input[aria-label="Entwurf"]')!;
     await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value")!.set!.call(input,"ungespeichert"); input.dispatchEvent(new Event("input",{bubbles:true})); });
     const click = async (label:string) => act(async () => { [...container.querySelectorAll("button")].find(b=>b.textContent?.includes(label))!.click(); });
