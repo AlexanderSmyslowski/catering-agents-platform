@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { createServer } from "node:net";
-import { chmodSync, mkdtempSync } from "node:fs";
+import { chmodSync, mkdtempSync, rmdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { zipSync, strToU8 } from "fflate";
@@ -87,5 +87,7 @@ it("requires fresh scanner, canary, archive and exact worksheet scans", async ()
     ).rejects.toThrow("canary");
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
+    rmdirSync(directory);
+    rmdirSync(freshHome);
   }
 });
