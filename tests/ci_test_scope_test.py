@@ -186,6 +186,26 @@ class GitBindingTests(unittest.TestCase):
         self.head = self.save("rename")
         self.assertEqual(self.classify_push(), "full")
 
+    def test_supplier_ui_profile_requires_only_reviewed_existing_regular_files(self):
+        name = "backoffice-ui/src/ingredient-cost-helper.tsx"
+        self.write(name, "existing")
+        self.base = self.save("add supplier view")
+        self.write(name, "changed")
+        self.head = self.save("edit supplier view")
+        self.assertEqual(self.classify_push(), "supplier-ui")
+        self.run_git("update-index", "--chmod=+x", name)
+        self.run_git("commit", "-qm", "change mode")
+        self.head = self.run_git("rev-parse", "HEAD")
+        self.assertNotEqual(self.classify_push(), "supplier-ui")
+        self.write("offer-service/src/app.ts", "changed")
+        self.head = self.save("include service")
+        self.assertNotEqual(self.classify_push(), "supplier-ui")
+        self.write("package-lock.json", "changed")
+        self.head = self.save("include dependencies")
+        self.assertEqual(self.classify_push(), "full")
+        self.assertIn("tests/supplier-", scope.regression_command("supplier-ui"))
+        self.assertIn("tests/mutating-route-auth-matrix.test.ts", scope.regression_command("supplier-ui"))
+
     def test_product_scope_uses_the_complete_real_main_diff(self):
         self.run_git("switch", "--detach", self.base)
         self.write("backoffice-ui/src/new-panel.tsx", "export const panel = 1;")
