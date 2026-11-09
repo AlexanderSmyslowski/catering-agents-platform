@@ -450,15 +450,6 @@ function ProductWorkspaceView({
   const [submitting, setSubmitting] = useState(false);
   const [offerMenuEditing, setOfferMenuEditing] = useState(false);
   const offerMenuEditingRef = useRef(false);
-  useEffect(() => {
-    if (!offerMenuEditing) return;
-    const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = "";
-    };
-    window.addEventListener("beforeunload", warnBeforeLeaving);
-    return () => window.removeEventListener("beforeunload", warnBeforeLeaving);
-  }, [offerMenuEditing]);
   const offerFocusRef = useRef({ caseId: activeOfferCaseId, draftId: activeOfferDraftId });
   offerFocusRef.current = { caseId: activeOfferCaseId, draftId: activeOfferDraftId };
 
@@ -872,6 +863,17 @@ function ProductWorkspaceView({
       ? buildRecordView(focusedProductionSpecRecord)
       : undefined
   });
+
+  const warnOnReload = offerMenuEditing || Boolean(route === "production" && editingSpecId && hasFocusedSpecEditChanges);
+  useEffect(() => {
+    if (!warnOnReload) return;
+    const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnBeforeLeaving);
+    return () => window.removeEventListener("beforeunload", warnBeforeLeaving);
+  }, [warnOnReload]);
 
   function loadSpecIntoEditorState(spec: Parameters<typeof loadSpecIntoEditorSnapshot>[0]): string {
     editingProductionDraftContext.current = activeProductionCaseId && currentProductionDraft &&
