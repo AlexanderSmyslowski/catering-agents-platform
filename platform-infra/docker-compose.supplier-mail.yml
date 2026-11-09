@@ -1,0 +1,20 @@
+services:
+  offer:
+    build:
+      target: supplier-mail
+    environment:
+      CATERING_SUPPLIER_MAIL_CONFIG: /run/catering-sources/mail.json
+    volumes:
+      - type: bind
+        source: ${CATERING_SUPPLIER_MAIL_SETTINGS_FILE:?Set the private mailbox settings file}
+        target: /run/catering-sources/mail.json
+        read_only: true
+        bind:
+          create_host_path: false
+      # Mount the directory so the daemon may replace its socket after a restart.
+      - type: bind
+        source: ${CATERING_SUPPLIER_SCANNER_DIRECTORY:?Set the private scanner socket directory}
+        target: /run/catering-scan
+        read_only: true
+        bind:
+          create_host_path: false

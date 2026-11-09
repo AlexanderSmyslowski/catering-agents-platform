@@ -33,6 +33,8 @@ import {
 import { OfferStore } from "./store.js";
 import { registerOfferApprovalRoutes } from "./routes/approval-routes.js";
 import { registerOfferCaseRoutes } from "./routes/case-routes.js";
+import { registerSupplierSourceRoutes, disabledSupplierSourceAdapter, type SupplierSourceAdapter } from "./supplier-source-routes.js";
+import { SupplierSourceStore } from "./supplier-source-store.js";
 import { registerSupplierUblPreview } from "./supplier-ubl-preview.js";
 import { registerOfferDraftRoutes } from "./routes/draft-routes.js";
 import { HttpSourceDocumentMetadataReader } from "./gateways/http-source-document-metadata-reader.js";
@@ -55,6 +57,8 @@ interface RecipeReviewBody {
 
 export interface OfferAppOptions extends CollectionStorageOptions {
   store?: OfferStore;
+  supplierSourceStore?: SupplierSourceStore;
+  supplierSourceAdapter?: SupplierSourceAdapter;
   recipeLibrary?: RecipeLibrary;
   auditLog?: AuditLogStore;
   userStore?: CateringUserStore;
@@ -281,6 +285,7 @@ export function buildOfferApp(input: OfferStore | OfferAppOptions = {}) {
   });
 
   registerSupplierUblPreview(app, actorForRequest);
+  registerSupplierSourceRoutes(app, {store: options.supplierSourceStore ?? new SupplierSourceStore(storageOptions), adapter: options.supplierSourceAdapter ?? disabledSupplierSourceAdapter, actorForRequest});
 
   registerOfferDraftRoutes(app, {
     store,

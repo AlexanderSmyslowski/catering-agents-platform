@@ -15,6 +15,7 @@ import {
 import { AppFeedbackShell } from "./app-feedback-shell.js";
 import { buildAppRouteShellState } from "./app-route-shell-state.js";
 import { buildAppDashboardRouteState } from "./app-dashboard-route-state.js";
+import { PriceSourceSettings } from "./price-source-settings.js";
 import { HomePortalApp } from "./home-portal-app.js";
 import { OfferRouteAccessBoundary } from "./offer-route-access-boundary.js";
 import type { OfferProductApp } from "./offer-product-app.js";
@@ -1675,6 +1676,7 @@ function AuthenticatedApp() {
   if (route === "home") {
     return (
       <HomePortalApp shell={routeShellState.shell}>
+        {cateringSession?.session.access.capabilities.includes("operations_audit") && cateringSession.session.access.capabilities.includes("commercial") && <PriceSourceSettings />}
         {cateringSession ? (
           <div className="masthead-actions">
             <span aria-label="Angemeldeter Benutzer">{cateringSession.session.user.displayName}</span>
