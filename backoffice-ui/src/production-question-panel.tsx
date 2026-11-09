@@ -306,16 +306,16 @@ export function ProductionQuestionPanel({
                 const component = matches.length === 1 ? matches[0] : undefined;
                 const id = component ? String(component.componentId ?? "") : "";
                 const state = editingComponentStates[id];
-                if (scheduleQuestion && setEditingEventSchedule) return <div className="question-inline-answer">
+                if (scheduleQuestion && setEditingEventSchedule) return <div className="question-inline-answer" role="group" aria-label={question}>
                   <label className="field-block"><span>Zeitfenster</span><input value={editingEventSchedule ?? ""} onChange={event => setEditingEventSchedule(event.target.value)} placeholder="z. B. Service 18:00–22:00" /></label>
-                  <button type="button" disabled={actionState.saveAnswersDisabled} onClick={() => void saveSpecEdit()}>Antworten speichern</button>
+                  <button type="button" disabled={actionState.saveAnswersDisabled} onClick={() => void saveSpecEdit()}>Alle geänderten Antworten speichern</button>
                 </div>;
-                if (component && state) return <div className="question-inline-answer">
+                if (component && state) return <div className="question-inline-answer" role="group" aria-label={question}>
                   <ProductionComponentClassificationFields menuCategory={state.menuCategory} productionMode={state.productionMode}
                     showCategory={question === menuCategoryQuestion(String(component.label))} showProductionMode={question === productionModeQuestion(String(component.label))}
                     onMenuCategoryChange={menuCategory => updateEditingComponentState(id, { menuCategory })}
                     onProductionModeChange={productionMode => updateEditingComponentState(id, { productionMode })} />
-                  <button type="button" disabled={actionState.saveAnswersDisabled} onClick={() => void saveSpecEdit()}>Antworten speichern</button>
+                  <button type="button" disabled={actionState.saveAnswersDisabled} onClick={() => void saveSpecEdit()}>Alle geänderten Antworten speichern</button>
                 </div>;
                 return null;
               } : undefined}
