@@ -789,6 +789,7 @@ def _arguments() -> argparse.ArgumentParser:
     nue_prepare = subparsers.add_parser("nue-prepare", help="export a commit/CI-bound NUE build input without requiring local Docker")
     bound_inputs(nue_prepare)
     nue_prepare.add_argument("--output-dir", type=Path, required=True)
+    nue_prepare.add_argument("--runtime-profile", choices=("supplier-mail",))
     nue_prepare.add_argument("--accepted-current-manifest-sha256")
     nue_prepare.add_argument("--accepted-current-helper-sha256")
 
@@ -886,7 +887,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             try:
                 pins = (args.accepted_current_manifest_sha256, args.accepted_current_helper_sha256)
                 binding = None if pins == (None, None) else {"manifestSha256": pins[0], "helperSha256": pins[1]}
-                digest = _nue().prepare(sys.modules[__name__], product, product_sha, operations_sha, args.output_dir.expanduser().absolute(), accepted_current_release=binding)
+                digest = _nue().prepare(sys.modules[__name__], product, product_sha, operations_sha, args.output_dir.expanduser().absolute(), accepted_current_release=binding, runtime_profile=args.runtime_profile)
             except (RuntimeError, OSError, ValueError) as exc:
                 raise OperatorError("NUE build-input preparation failed: " + type(exc).__name__) from None
             print(f"CATERING_NUE_BUILD_INPUT_OK target=catering-prod-02 request_sha256={digest}")

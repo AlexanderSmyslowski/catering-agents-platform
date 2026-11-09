@@ -420,7 +420,7 @@ class NueTests(unittest.TestCase):
     def test_only_signed_bound_clean_abort_allows_distinct_nonce_and_preserves_probes(self):
         with tempfile.TemporaryDirectory() as tmp, self.synthetic_issuer():
             releases=Path(tmp); sha="a"*64; bundle=releases/sha; bundle.mkdir()
-            manifest={"productCommit":"1"*40,"operationsCommit":"2"*40,"sourceTreeSha256":"3"*64,
+            manifest={"productCommit":"1"*40,"operationsCommit":"2"*40,"sourceTreeSha256":"3"*64,"runtimeProfile":"supplier-mail",
                       "helpers":{"catering_target_nue_image_update.py":"4"*64}}
             (bundle/"baseline.json").write_bytes(b"{}\n");(bundle/"backup-proof.json").write_bytes(b"{}\n")
             stage={"manifestSha256":sha,"mode":"nue-image-only","baselineSha256":nue.digest(bundle/"baseline.json"),
@@ -772,14 +772,15 @@ class NueTests(unittest.TestCase):
         from catering_target_operator_test import operator
         from catering_target_v4_test import archive_fixture
         binding = {"manifestSha256":"a" * 64, "helperSha256":"b" * 64}
-        for mode, predecessor in (("repository", None), ("local-current", None), ("local-current", binding)):
-            with self.subTest(mode=mode, predecessor=predecessor), tempfile.TemporaryDirectory() as tmp:
+        for mode, predecessor, profile in (("repository", None, None), ("local-current", None, None), ("local-current", binding, None), ("repository", None, "supplier-mail"), ("local-current", binding, "supplier-mail")):
+            with self.subTest(mode=mode, predecessor=predecessor, profile=profile), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp); source = root / "source"; source.mkdir(mode=0o755)
                 for directory in nue.RUNTIME_ROOTS: (source / directory).mkdir(parents=True, mode=0o755)
                 (source / "shared-core/src/persistence.ts").write_text("const BUSINESS_RECORDS_SCHEMA_MIGRATION=`CREATE TABLE records(id TEXT)`;\nfunction getCachedPool() {}")
                 (source / "package.json").write_text("{}"); (source / "package-lock.json").write_text('{"lockfileVersion":3}')
                 docker = source / "platform-infra/docker"; docker.mkdir(parents=True)
                 (docker / "Dockerfile.runtime").write_text("FROM node:22-alpine\nWORKDIR /app\nCOPY . .\nRUN npm ci\n")
+                (docker / "Dockerfile.supplier-mail").write_text((ROOT / "platform-infra/docker/Dockerfile.supplier-mail").read_text())
                 (docker / "Dockerfile.web").write_text("FROM node:22-alpine AS build\nWORKDIR /app\nCOPY . .\nRUN npm ci\nFROM caddy:2.10-alpine\n")
                 fixtures = {role: archive_fixture(role, "manifest") for role in ("runtime", "web")}
                 calls = []
@@ -802,9 +803,19 @@ class NueTests(unittest.TestCase):
                                             "caddy@sha256:" + "5" * 64 if mode == "repository" else None,
                                             base_mode=mode, runtime_base=nue.CURRENT_RUNTIME_M if mode == "local-current" else None,
                                             web_base=nue.CURRENT_WEB_M if mode == "local-current" else None,
-                                            exported=predecessor is not None, accepted_current_release=predecessor)
+                                            exported=predecessor is not None, accepted_current_release=predecessor, runtime_profile=profile)
                 manifest = nue.verify_bundle(out, sha)
                 self.assertEqual((manifest["targetId"], manifest["mode"]), ("catering-prod-02", "nue-image-only"))
+                self.assertEqual(manifest.get("runtimeProfile"), profile)
+                if profile is not None:
+                    original_manifest = (out / "manifest.json").read_bytes()
+                    bad = dict(manifest, runtimeProfile="unknown")
+                    (out / "manifest.json").write_bytes(nue.canonical(bad))
+                    with self.assertRaisesRegex(RuntimeError, "NUE_RUNTIME_PROFILE"):
+                        nue.verify_bundle(out, nue.digest(out / "manifest.json"))
+                    (out / "manifest.json").write_bytes(original_manifest)
+                self.assertEqual("RUN apk add --no-cache python3" in (out / "Dockerfile.runtime.bound").read_text(), profile is not None)
+                self.assertNotIn("apk add", (out / "Dockerfile.web.bound").read_text())
                 self.assertTrue(all("--pull=false" in call for call in calls if call[1] == "build"))
                 if mode == "repository":
                     self.assertIn("FROM node@sha256:", (out / "Dockerfile.runtime.bound").read_text())
@@ -1366,6 +1377,33 @@ class NueTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "EXPLICIT_FILE_BINDING"):
                     nue.build_prepared(inputs, sha, root / "output", None, None, **kwargs)
                 create.assert_not_called()
+
+    def test_profile_prepare_is_bound_to_build_and_tampering_fails(self):
+        from unittest.mock import Mock
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary); source = root / "product"; source.mkdir()
+            (source / "package-lock.json").write_text("{}")
+            operator = Mock(REPOSITORY="AlexanderSmyslowski/catering-agents-platform")
+            operator.export_product_context.side_effect = lambda src, sha, dst: shutil.copytree(src, dst)
+            operator._source_tree_digest.return_value = "c" * 64
+            for profile in (None, "supplier-mail"):
+                inputs = root / (profile or "standard")
+                sha = nue.prepare(operator, source, "1" * 40, "2" * 40, inputs, runtime_profile=profile)
+                request = json.loads((inputs / "build-input.json").read_bytes())
+                self.assertEqual(request.get("runtimeProfile"), profile)
+                with patch.object(nue, "host_identity"), patch.object(nue, "protected", side_effect=lambda p, **kw: Path(p)), \
+                     patch.object(nue, "load_module", return_value=operator), patch.object(nue, "create_bundle", return_value="ok") as build:
+                    self.assertEqual(nue.build_prepared(inputs, sha, root / "output", None, None), "ok")
+                    self.assertEqual(build.call_args.kwargs["runtime_profile"], profile)
+                    request["runtimeProfile"] = "unknown"
+                    (inputs / "build-input.json").write_bytes(nue.canonical(request))
+                    with self.assertRaisesRegex(RuntimeError, "EXPLICIT_FILE_BINDING"):
+                        nue.build_prepared(inputs, sha, root / "output", None, None)
+                    with self.assertRaisesRegex(RuntimeError, "NUE_RUNTIME_PROFILE"):
+                        nue.build_prepared(inputs, nue.digest(inputs / "build-input.json"), root / "output", None, None)
+            with self.assertRaisesRegex(RuntimeError, "NUE_RUNTIME_PROFILE"):
+                nue.prepare(operator, source, "1" * 40, "2" * 40, root / "invalid", runtime_profile="unknown")
+            self.assertFalse((root / "invalid").exists())
 
     def test_direct_explicit_build_refuses_foreign_lock_before_docker_or_output(self):
         from unittest.mock import Mock

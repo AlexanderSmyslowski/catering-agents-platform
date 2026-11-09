@@ -302,7 +302,8 @@ def runtime_schema(container, application_root="/app"):
 def verify_bundle(bundle, manifest_sha):
     bundle = Path(bundle)
     manifest = read_bound(bundle / "manifest.json", manifest_sha)
-    require(set(manifest) == {"schemaVersion", "mode", "repository", "targetId", "platform", "productCommit", "operationsCommit", "sourceTreeSha256", "schemaBinding", "bases", "images", "helpers"}, "NUE_MANIFEST_SHAPE")
+    require(set(manifest) - {"runtimeProfile"} == {"schemaVersion", "mode", "repository", "targetId", "platform", "productCommit", "operationsCommit", "sourceTreeSha256", "schemaBinding", "bases", "images", "helpers"}, "NUE_MANIFEST_SHAPE")
+    if "runtimeProfile" in manifest: require(manifest["runtimeProfile"] == "supplier-mail", "NUE_RUNTIME_PROFILE")
     require(manifest["schemaVersion"] == 1 and manifest["mode"] == "nue-image-only" and manifest["targetId"] == "catering-prod-02" and manifest["repository"] == "AlexanderSmyslowski/catering-agents-platform" and manifest["platform"] == "linux/amd64", "NUE_MANIFEST_TARGET")
     for field in ("productCommit", "operationsCommit"):
         require(re.fullmatch(r"[0-9a-f]{40}", manifest[field]), "NUE_COMMIT_BINDING")
@@ -337,7 +338,8 @@ def accepted_current_binding(binding):
     return dict(binding)
 
 
-def prepare(operator, source, product, operations, output, *, accepted_current_release=None):
+def prepare(operator, source, product, operations, output, *, accepted_current_release=None, runtime_profile=None):
+    require(runtime_profile in (None, "supplier-mail"), "NUE_RUNTIME_PROFILE")
     binding = accepted_current_binding(accepted_current_release) if accepted_current_release is not None else None
     require(not os.path.lexists(output), "NUE_INPUT_ALREADY_EXISTS")
     output.mkdir(mode=0o755)
@@ -348,6 +350,7 @@ def prepare(operator, source, product, operations, output, *, accepted_current_r
         shutil.copyfile(Path(__file__).with_name(name), tools / name); (tools / name).chmod(0o644)
     request = {"schemaVersion": 1, "mode": "nue-image-only-build-input", "repository": operator.REPOSITORY, "targetId": "catering-prod-02", "productCommit": product, "operationsCommit": operations, "sourceTreeSha256": operator._source_tree_digest(output / "source"), "helpers": {path.name: digest(path) for path in tools.iterdir()}}
     if binding is not None: request["acceptedCurrentRelease"] = binding
+    if runtime_profile is not None: request["runtimeProfile"] = runtime_profile
     (output / "build-input.json").write_bytes(canonical(request)); (output / "build-input.json").chmod(0o644)
     return digest(output / "build-input.json")
 
@@ -355,7 +358,7 @@ def prepare(operator, source, product, operations, output, *, accepted_current_r
 def build_prepared(directory, request_sha, output, node_base, caddy_base, *, base_mode="repository", runtime_base=None, web_base=None):
     host_identity(); directory = protected(directory, directory=True)
     request = read_bound(protected(directory / "build-input.json"), request_sha)
-    require(set(request) - {"acceptedCurrentRelease"} == {"schemaVersion", "mode", "repository", "targetId", "productCommit", "operationsCommit", "sourceTreeSha256", "helpers"}, "NUE_BUILD_REQUEST_SHAPE")
+    require(set(request) - {"acceptedCurrentRelease", "runtimeProfile"} == {"schemaVersion", "mode", "repository", "targetId", "productCommit", "operationsCommit", "sourceTreeSha256", "helpers"}, "NUE_BUILD_REQUEST_SHAPE")
     require(request["schemaVersion"] == 1 and request["mode"] == "nue-image-only-build-input" and request["repository"] == "AlexanderSmyslowski/catering-agents-platform" and request["targetId"] == "catering-prod-02", "NUE_BUILD_REQUEST_TARGET")
     require(set(request["helpers"]) == {"catering-target-operator.py", "catering_target_oci.py", "catering_target_nue_image_update.py"}, "NUE_HELPER_SCOPE")
     for name, expected in request["helpers"].items(): require(digest(protected(directory / "tools" / name)) == expected, "NUE_BUILD_HELPER_BINDING")
@@ -363,11 +366,13 @@ def build_prepared(directory, request_sha, output, node_base, caddy_base, *, bas
     operator = load_module("nue_build_operator", directory / "tools/catering-target-operator.py")
     require(operator._source_tree_digest(directory / "source") == request["sourceTreeSha256"], "NUE_BUILD_FULL_SOURCE_BINDING")
     for field in ("productCommit", "operationsCommit"): require(re.fullmatch(r"[0-9a-f]{40}", request[field]), "NUE_BUILD_COMMIT")
+    runtime_profile = request.get("runtimeProfile")
+    require("runtimeProfile" not in request or runtime_profile == "supplier-mail", "NUE_RUNTIME_PROFILE")
     binding = accepted_current_binding(request["acceptedCurrentRelease"]) if "acceptedCurrentRelease" in request else None
     if binding is not None:
         require(base_mode == "local-current", "NUE_ACCEPTED_CURRENT_BASE_MODE")
     protected(output.parent, directory=True)
-    return create_bundle(operator, directory / "source", request["productCommit"], request["operationsCommit"], output, node_base, caddy_base, exported=True, base_mode=base_mode, runtime_base=runtime_base, web_base=web_base, accepted_current_release=binding)
+    return create_bundle(operator, directory / "source", request["productCommit"], request["operationsCommit"], output, node_base, caddy_base, exported=True, base_mode=base_mode, runtime_base=runtime_base, web_base=web_base, accepted_current_release=binding, runtime_profile=runtime_profile)
 
 
 
@@ -757,10 +762,11 @@ def current_local_reference(role, identity):
     return "catering-nue-current-" + role + ":" + identity.removeprefix("sha256:")
 
 
-def create_bundle(operator, source, product, operations, output, node_base, caddy_base, *, exported=False, base_mode="repository", runtime_base=None, web_base=None, accepted_current_release=None):
+def create_bundle(operator, source, product, operations, output, node_base, caddy_base, *, exported=False, base_mode="repository", runtime_base=None, web_base=None, accepted_current_release=None, runtime_profile=None):
+    require(runtime_profile in (None, "supplier-mail"), "NUE_RUNTIME_PROFILE")
     binding = accepted_current_binding(accepted_current_release) if accepted_current_release is not None else None
     kwargs = dict(exported=exported, base_mode=base_mode, runtime_base=runtime_base, web_base=web_base,
-                  accepted_current_release=binding)
+                  accepted_current_release=binding, runtime_profile=runtime_profile)
     if binding is not None:
         require(exported and base_mode == "local-current", "NUE_ACCEPTED_CURRENT_BUILD_SCOPE")
         # Public Verify refuses any update lock; check the pinned release first.
@@ -774,8 +780,9 @@ def create_bundle(operator, source, product, operations, output, node_base, cadd
         if not isinstance(sys.exc_info()[1], UncertainDockerMutation): unlock(token)
 
 
-def _create_bundle(operator, source, product, operations, output, node_base, caddy_base, *, exported=False, base_mode="repository", runtime_base=None, web_base=None, accepted_current_release=None):
+def _create_bundle(operator, source, product, operations, output, node_base, caddy_base, *, exported=False, base_mode="repository", runtime_base=None, web_base=None, accepted_current_release=None, runtime_profile=None):
     """Build only with exact, already present base manifests; no floating FROM tags."""
+    require(runtime_profile in (None, "supplier-mail"), "NUE_RUNTIME_PROFILE")
     require(not output.exists() and not output.is_symlink(), "NUE_OUTPUT_EXISTS")
     binding = accepted_current_binding(accepted_current_release) if accepted_current_release is not None else None
     require(binding is None or (exported and base_mode == "local-current"), "NUE_ACCEPTED_CURRENT_BUILD_SCOPE")
@@ -809,12 +816,17 @@ def _create_bundle(operator, source, product, operations, output, node_base, cad
         (tools / name).chmod(0o644)
     images = {}
     for role in ("runtime", "web"):
-        original = (context / ("platform-infra/docker/Dockerfile." + role)).read_text()
+        docker_role = "supplier-mail" if role == "runtime" and runtime_profile == "supplier-mail" else role
+        original = (context / ("platform-infra/docker/Dockerfile." + docker_role)).read_text()
         if role == "runtime":
             require(original.count("FROM node:22-alpine") == 1 and original.count("FROM ") == 1, "NUE_RUNTIME_DOCKERFILE")
         else:
             require(original.count("FROM node:22-alpine AS build") == 1 and original.count("FROM caddy:2.10-alpine") == 1 and original.count("FROM ") == 2, "NUE_WEB_DOCKERFILE")
         rendered = local_current_dockerfile(role, runtime_base, web_base) if base_mode == "local-current" else original.replace("FROM node:22-alpine", "FROM " + node_base).replace("FROM caddy:2.10-alpine", "FROM " + caddy_base)
+        if base_mode == "local-current" and role == "runtime" and runtime_profile == "supplier-mail":
+            require(original.count("WORKDIR /app") == 1, "NUE_RUNTIME_DOCKERFILE")
+            rendered = original.replace("FROM node:22-alpine", "FROM " + current_local_reference("runtime", runtime_base)).replace(
+                "WORKDIR /app", "WORKDIR /\nRUN test ! -e /catering-product && test ! -L /catering-product\nWORKDIR /catering-product")
         dockerfile = output / ("Dockerfile." + role + ".bound")
         dockerfile.write_text(rendered); dockerfile.chmod(0o644)
         iid = output / (role + ".iid")
@@ -832,6 +844,7 @@ def _create_bundle(operator, source, product, operations, output, node_base, cad
         for kind, identity in (("runtime", runtime_base), ("web", web_base)):
             operator._oci().check_loaded_image(json.loads(command(["docker", "image", "inspect", current_local_reference(kind, identity)]))[0], identity)
     manifest = {"schemaVersion": 1, "mode": "nue-image-only", "repository": operator.REPOSITORY, "targetId": "catering-prod-02", "platform": "linux/amd64", "productCommit": product, "operationsCommit": operations, "sourceTreeSha256": operator._source_tree_digest(context), "schemaBinding": source_schema(context), "bases": bases, "images": images, "helpers": {path.name: digest(path) for path in tools.iterdir()}}
+    if runtime_profile is not None: manifest["runtimeProfile"] = runtime_profile
     (output / "manifest.json").write_bytes(canonical(manifest)); (output / "manifest.json").chmod(0o644)
     value = digest(output / "manifest.json")
     verify_bundle(output, value)
