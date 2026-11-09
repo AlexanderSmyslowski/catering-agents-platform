@@ -11,6 +11,7 @@ import {
   type AppRoute
 } from "./app-shell-state.js";
 import { caseIdFromLocation, navigateToCase } from "./case-location.js";
+import { focusCaseAction } from "./case-action-focus.js";
 import { AppFeedbackShell } from "./app-feedback-shell.js";
 import { buildAppRouteShellState } from "./app-route-shell-state.js";
 import { buildAppDashboardRouteState } from "./app-dashboard-route-state.js";
@@ -1407,15 +1408,7 @@ function ProductWorkspaceView({
     if (route === "offer" && offerMenuEditingRef.current && (action.kind === "approve_offer" || action.kind === "send_handoff")) {
       setError("Bitte Angebotsbearbeitung zuerst speichern oder abbrechen."); return;
     }
-    const focus = (selector: string) => {
-      const element = document.querySelector<HTMLElement>(selector);
-      // Focusing a task inside collapsed native details must reveal it first.
-      for (let parent = element?.parentElement; parent; parent = parent.parentElement) {
-        if (parent instanceof HTMLDetailsElement) parent.open = true;
-      }
-      element?.focus({ preventScroll: true });
-      element?.scrollIntoView?.({ block: "start", inline: "nearest", behavior: "auto" });
-    };
+    const focus = (selector: string) => focusCaseAction(route, selector);
 
     if (route === "production" && productionQuestions.length > 0 && (currentProductionApprovalApplied || currentProductionDraft?.dietaryQuestionReviews?.some(review => review.status === "pending") || document.getElementById("production-clarification-continuation"))) {
       focus(document.getElementById("production-clarification-continuation")
