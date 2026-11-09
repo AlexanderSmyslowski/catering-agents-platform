@@ -100,5 +100,11 @@ it("ranks a later undated reviewed price by observation and rejects stale config
   const edit={name:"Supplier",mailboxId:"mail",sender:"s@example.com",columns:{},autoApply:false,expectedConfigVersion:1};
   expect((await app.inject({method:"PUT",url:`/v1/offers/supplier-sources/${source.id}`,payload:edit})).statusCode).toBe(200);
   expect((await app.inject({method:"PUT",url:`/v1/offers/supplier-sources/${source.id}`,payload:edit})).statusCode).toBe(409);
+  expect((await app.inject({method:"PUT",url:`/v1/offers/supplier-sources/${source.id}`,payload:{...edit,sender:"other@example.com",expectedConfigVersion:2}})).statusCode).toBe(200);
+  expect((await app.inject({method:"GET",url:"/v1/offers/supplier-sources/prices?ingredient=mehl"})).json().prices).toEqual([]);
+  const replacement=await store.stage(ctx,source.id,{documentKey:JSON.stringify(["mail","2",1,"1"]),bytes:Buffer.from("new supplier"),rows:[{article:"A",description:"Mehl",quantity:"5",unit:"kg",price:"6"}],senderAuthenticated:false,complete:true,skipped:[],configVersion:3,mailboxBinding:"binding",validFrom:"2020-01-01"});
+  await store.apply(ctx,source.id,replacement.previews.at(-1)!.id,false,mapping,{configVersion:3,mailboxBinding:"binding"});
+  expect((await app.inject({method:"GET",url:"/v1/offers/supplier-sources/prices?ingredient=mehl"})).json().prices[0].price).toBe("6");
+  expect((await store.get(ctx,source.id))!.prices).toHaveLength(3);
   await app.close();
 });

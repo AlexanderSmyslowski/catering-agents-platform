@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { SupplierSourceStore, type SupplierSourceConfig } from "../offer-service/src/supplier-source-store.js";
+import { SupplierSourceStore, supplierReviewVersion, type SupplierSourceConfig } from "../offer-service/src/supplier-source-store.js";
 
 const config: SupplierSourceConfig = { name: "Beispiel", mailboxId: "mailbox", sender: "supplier@example.com", columns: {}, articleMappings: [], autoApply: true, mailboxBinding: "binding" };
 const row = { article: "A1", description: "Mehl", quantity: "5", unit: "kg", price: "10.00" };
@@ -139,8 +139,8 @@ describe("supplier price source", () => {
     expect(partial.previews[0]!.appliedAt).toBeUndefined();
     expect(partial.previews[0]!.appliedArticles).toEqual(["A1"]);
     await expect(store.apply(context,source.id,partial.previews[0]!.id,false,[{...mappings[0]!,quantity:"10"}],expected)).rejects.toThrow("neue Vorschau");
-    await expect(store.discard(context,source.id,partial.previews[0]!.id,{...expected,sourceVersion:partial.version-1})).rejects.toThrow();
-    const discarded = await store.discard(context,source.id,partial.previews[0]!.id,{...expected,sourceVersion:partial.version});
+    await expect(store.discard(context,source.id,partial.previews[0]!.id,{...expected,sourceVersion:supplierReviewVersion(partial)-1})).rejects.toThrow();
+    const discarded = await store.discard(context,source.id,partial.previews[0]!.id,{...expected,sourceVersion:supplierReviewVersion(partial)});
     expect(discarded.previews[0]!.discardedAt).toBeDefined();
     expect(discarded.prices).toEqual(partial.prices);
     await expect(store.apply(context,source.id,partial.previews[0]!.id,false,mappings,expected)).rejects.toThrow();
@@ -150,11 +150,60 @@ describe("supplier price source", () => {
     const store = new SupplierSourceStore({rootDir:mkdtempSync(path.join(tmpdir(), "supplier-source-"))});
     const source=await store.create(context,config);
     const staged=await store.stage(context,source.id,{documentKey:JSON.stringify(["mailbox","1",1,"1"]),bytes:Buffer.from("first"),rows:[row],skipped:[],complete:true,senderAuthenticated:false,configVersion:1,mailboxBinding:"binding"});
-    await store.stage(context,source.id,{documentKey:JSON.stringify(["mailbox","1",2,"1"]),bytes:Buffer.from("second"),rows:[row],skipped:[],complete:true,senderAuthenticated:false,configVersion:1,mailboxBinding:"binding"});
-    await expect(store.apply(context,source.id,staged.previews[0]!.id,false,mappings,{configVersion:1,mailboxBinding:"binding",sourceVersion:staged.version})).rejects.toThrow("Quellenversion");
+    const second=await store.stage(context,source.id,{documentKey:JSON.stringify(["mailbox","1",2,"1"]),bytes:Buffer.from("second"),rows:[row],skipped:[],complete:true,senderAuthenticated:false,configVersion:1,mailboxBinding:"binding"});
+    expect(supplierReviewVersion(second)).toBe(supplierReviewVersion(staged));
+    await store.apply(context,source.id,second.previews[1]!.id,false,mappings,{configVersion:1,mailboxBinding:"binding",sourceVersion:supplierReviewVersion(staged)});
+    await expect(store.apply(context,source.id,staged.previews[0]!.id,false,mappings,{configVersion:1,mailboxBinding:"binding",sourceVersion:supplierReviewVersion(staged)})).rejects.toThrow("Quellenversion");
     await store.configure(context,source.id,config,1);
     await expect(store.configure(context,source.id,config,1)).rejects.toThrow("Quellenversion");
-    expect((await store.get(context,source.id))!.prices).toEqual([]);
+    expect((await store.get(context,source.id))!.prices).toHaveLength(1);
+  });
+
+  it("keeps a review token valid across cursor/status writes but fences business edits", async () => {
+    const store=new SupplierSourceStore({rootDir:mkdtempSync(path.join(tmpdir(),"supplier-source-"))});
+    const source=await store.create(context,config), expected={configVersion:1,mailboxBinding:"binding"};
+    const stage=(uid:number) => store.stage(context,source.id,{documentKey:JSON.stringify(["mailbox","1",uid,"1"]),bytes:Buffer.from(String(uid)),rows:[row],skipped:[],complete:true,senderAuthenticated:false,...expected});
+    const first=await stage(1); await store.apply(context,source.id,first.previews[0]!.id,false,mappings,expected);
+    const later=await stage(2), token=supplierReviewVersion(later);
+    const poll=await store.recordPoll(context,source.id,{...expected,expected:{uidValidity:"1",lastUid:1},next:{uidValidity:"1",lastUid:2},status:"ok"});
+    expect(poll.version).toBeGreaterThan(later.version);
+    expect(supplierReviewVersion(poll)).toBe(token);
+    const failed=await store.recordPollFailure(context,source.id,expected);
+    expect(supplierReviewVersion(failed)).toBe(token);
+    await store.apply(context,source.id,later.previews[1]!.id,false,mappings,{...expected,sourceVersion:token});
+    await expect(store.discard(context,source.id,later.previews[1]!.id,{...expected,sourceVersion:token})).rejects.toThrow("Quellenversion");
+  });
+  it("persists explicit removals across partial review and preserves same-source mappings on reconfigure", async () => {
+    const store=new SupplierSourceStore({rootDir:mkdtempSync(path.join(tmpdir(),"supplier-source-"))});
+    const source=await store.create(context,config), expected={configVersion:1,mailboxBinding:"binding"};
+    const b={...row,article:"B",description:"Rice"}, c={...row,article:"C",description:"Oil"};
+    const stage=(uid:number, rows:typeof row[])=>store.stage(context,source.id,{documentKey:JSON.stringify(["mailbox","1",uid,"1"]),bytes:Buffer.from(String(uid)),rows,skipped:[],complete:true,senderAuthenticated:false,...expected});
+    const all=[...mappings,{article:"B",ingredientKey:"rice",quantity:"5",unit:"kg"},{article:"C",ingredientKey:"oil",quantity:"5",unit:"kg"}];
+    const first=await stage(1,[row,b,c]); await store.apply(context,source.id,first.previews[0]!.id,false,all,expected);
+    const next=await stage(2,[row,b,c]); const partial=await store.apply(context,source.id,next.previews[1]!.id,false,mappings,expected,["B"]);
+    expect(partial.previews[1]!.removedArticles).toEqual(["B"]);
+    const finished=await store.apply(context,source.id,next.previews[1]!.id,false,[all[2]!],expected);
+    expect(finished.previews[1]!.appliedAt).toBeDefined();
+    expect(finished.config.articleMappings.map(m=>m.article).sort()).toEqual(["A1","C"]);
+    const same=await store.configure(context,source.id,config,1);
+    expect(same.config.articleMappings.map(m=>m.article).sort()).toEqual(["A1","C"]);
+    const changed=await store.configure(context,source.id,{...config,sender:"other@example.com"},2);
+    expect(changed.config.articleMappings).toEqual([]);
+    expect(changed.publishedMappings).toEqual([]);
+    expect(changed.prices.some(p => p.article === "C")).toBe(true);
+    expect(changed.sourceEpoch).toBe(2);
+    expect(changed.prices.every(p => p.sourceEpoch === 1)).toBe(true);
+  });
+  it("compares automatic changes against the latest reviewed price for the exact basis", async () => {
+    const store=new SupplierSourceStore({rootDir:mkdtempSync(path.join(tmpdir(),"supplier-source-"))});
+    const source=await store.create(context,config), expected={configVersion:1,mailboxBinding:"binding"};
+    const tomorrow=new Date(Date.now()+86400000).toISOString().slice(0,10);
+    const stage=(uid:number,price:string,quantity:string,validFrom?:string)=>store.stage(context,source.id,{documentKey:JSON.stringify(["mailbox","1",uid,"1"]),bytes:Buffer.from(String(uid)),rows:[{...row,price,quantity}],skipped:[],complete:true,senderAuthenticated:true,...expected,...(validFrom?{validFrom}:{})});
+    const initial=await stage(1,"10","5"); await store.apply(context,source.id,initial.previews[0]!.id,false,mappings,expected);
+    const changed=await stage(2,"20","10"); await store.apply(context,source.id,changed.previews[1]!.id,false,[{...mappings[0]!,quantity:"10"}],expected);
+    const excessive=await stage(3,"27","10",tomorrow); await expect(store.apply(context,source.id,excessive.previews[2]!.id,true,undefined,expected)).rejects.toThrow("25 Prozent");
+    const normal=await stage(4,"24","10",tomorrow); const applied=await store.apply(context,source.id,normal.previews[3]!.id,true,undefined,expected);
+    expect(applied.prices.at(-1)).toMatchObject({price:"24",quantity:"10",rawQuantity:"10"});
   });
 
 });

@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { AUTHENTICATED_SESSION_APPROVAL_ACTOR_SOURCE, hasMinimalMvpCapability, type TrustedActor, type BusinessContext } from "@catering/shared-core";
-import { SupplierSourceStore, type SupplierRow, type SupplierSourceConfig, type SupplierSourceRecord } from "./supplier-source-store.js";
+import { SupplierSourceStore, supplierReviewVersion, type SupplierRow, type SupplierSourceConfig, type SupplierSourceRecord } from "./supplier-source-store.js";
 
 type Selection = { uidValidity: string; uid: number; part: string };
 export interface SupplierSourceAdapter {
@@ -41,7 +41,7 @@ function mappings(value: unknown): Array<{article: string; ingredientKey: string
 export function registerSupplierSourceRoutes(app: FastifyInstance, input: {store: SupplierSourceStore; adapter: SupplierSourceAdapter; actorForRequest: (request: {headers: Record<string, string | string[] | undefined>}) => TrustedActor}) {
   app.register(async scope => {
   const base = "/v1/offers/supplier-sources";
-  const summary = (source: SupplierSourceRecord) => ({id: source.id, version: source.version, configVersion: source.configVersion, config: (({mailboxBinding: _binding, ...visible}) => visible)(source.config), active: source.active, pollStatus: source.pollStatus ?? null, poll: source.poll ?? null, pendingCount: source.previews.filter(p => !p.appliedAt && !p.discardedAt && p.configVersion === source.configVersion).length});
+  const summary = (source: SupplierSourceRecord) => ({id: source.id, version: supplierReviewVersion(source), configVersion: source.configVersion, config: (({mailboxBinding: _binding, ...visible}) => visible)(source.config), active: source.active, pollStatus: source.pollStatus ?? null, poll: source.poll ?? null, pendingCount: source.previews.filter(p => !p.appliedAt && !p.discardedAt && p.configVersion === source.configVersion).length});
   scope.addHook("onRequest", async (request, reply) => {
     reply.header("cache-control", "private, no-store");
     const actor = input.actorForRequest(request);
@@ -79,6 +79,7 @@ export function registerSupplierSourceRoutes(app: FastifyInstance, input: {store
     const today = new Date().toISOString().slice(0, 10);
     const latest = new Map<string, {sourceName:string} & SupplierSourceRecord["prices"][number]>();
     for (const source of await input.store.list(ctx(req))) for (const price of source.prices) {
+      if ((price.sourceEpoch ?? 1) !== (source.sourceEpoch ?? 1)) continue;
       if (req.query.ingredient && price.ingredientKey.normalize("NFC").toLocaleLowerCase("de-DE") !== req.query.ingredient.trim().normalize("NFC").toLocaleLowerCase("de-DE")) continue;
       if (price.validFrom && price.validFrom > today) continue;
       if (!(source.publishedMappings ?? source.config.articleMappings).some(mapping => mapping.article === price.article && mapping.ingredientKey === price.ingredientKey)) continue;
@@ -97,7 +98,7 @@ export function registerSupplierSourceRoutes(app: FastifyInstance, input: {store
   }));
   scope.get<{Params:{id:string;previewId:string}}>(`${base}/:id/previews/:previewId`, async (req, reply) => safe(reply, async () => {
     const source = await input.store.get(ctx(req), req.params.id); const preview = source?.previews.find(p => p.id === req.params.previewId && !p.appliedAt && !p.discardedAt && p.configVersion === source.configVersion);
-    if (!preview) throw new Error("Vorschau nicht gefunden."); return {preview: {...preview, sourceVersion: source!.version}};
+    if (!preview) throw new Error("Vorschau nicht gefunden."); return {preview: {...preview, sourceVersion: supplierReviewVersion(source!)}};
   }));
   scope.post<{Params:{id:string;previewId:string}; Body:{expectedConfigVersion?:unknown;expectedSourceVersion?:unknown}}>(`${base}/:id/previews/:previewId/discard`, async (req, reply) => safe(reply, async () => {
     if (!Number.isSafeInteger(req.body?.expectedConfigVersion) || !Number.isSafeInteger(req.body?.expectedSourceVersion)) throw new Error("Versionsangaben erforderlich.");
@@ -122,7 +123,7 @@ export function registerSupplierSourceRoutes(app: FastifyInstance, input: {store
     const updated = await input.store.stage(ctx(req), source.id, {...parsed, documentKey, configVersion: source.configVersion, mailboxBinding: binding});
     const preview = updated.previews.find(p => p.documentKey === documentKey && p.configVersion === source.configVersion);
     if (!preview) throw new Error("Vorschau nicht gefunden.");
-    return {preview: {...preview, sourceVersion: updated.version}};
+    return {preview: {...preview, sourceVersion: supplierReviewVersion(updated)}};
   }));
   scope.post<{Params:{id:string}; Body:{previewId?:unknown; articleMappings?:unknown; removedArticles?:unknown; expectedConfigVersion?:unknown; expectedSourceVersion?:unknown}}>(`${base}/:id/activate`, async (req, reply) => safe(reply, async () => {
     if (typeof req.body?.previewId !== "string" || !Number.isSafeInteger(req.body.expectedConfigVersion) || !Number.isSafeInteger(req.body.expectedSourceVersion)) throw new Error("Vorschau und Versionsangaben erforderlich.");
