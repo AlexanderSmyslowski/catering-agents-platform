@@ -2638,6 +2638,8 @@ button:disabled {
 .production-question__heading h4 { margin: 0; font-size: 0.95rem; }
 .production-question p { margin: 0.65rem 0 0; overflow-wrap: anywhere; }
 .production-question__answer { margin-top: 1rem; padding-left: 1rem; border-left: 1px solid #d2d2d7; }
+.question-inline-answer { display: grid; gap: 0.75rem; margin-top: 0.9rem; }
+.question-inline-answer button { justify-self: start; max-width: 100%; }
 .production-question__answer strong { font-size: 0.85rem; }
 .production-question-warnings { padding: 1rem; border: 1px solid #b86500; background: #fff8ed; }
 .production-question-warnings h4 { margin: 0; }

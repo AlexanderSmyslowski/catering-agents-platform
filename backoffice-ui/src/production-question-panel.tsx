@@ -18,6 +18,7 @@ import { ProductionClarificationDraftPanel } from "./production-clarification-dr
 import type { WorkbenchSpecFact } from "./production-question-thread.js";
 import { ProductionStructuredAnswerEditor } from "./production-structured-answer-editor.js";
 import type { ComponentEditState } from "./production-answer-types.js";
+import { ProductionComponentClassificationFields } from "./production-component-classification-fields.js";
 
 export { formatDocumentIngestionSummary } from "./production-intake-origin-card-state.js";
 
@@ -295,6 +296,28 @@ export function ProductionQuestionPanel({
               renderQuestionActions={activeCaseId && questionState.currentDraft ? question => <ProductionDietaryQuestionActions
                 caseId={activeCaseId} draft={questionState.currentDraft!} question={question} busy={submitting}
                 onChanged={refreshAfterDraftDecision} /> : undefined}
+              renderQuestionEditor={answersEditable && actionState.isFocusedSpecEditing ? (question, reasonCode) => {
+                const scheduleQuestion = reasonCode === "event.schedule" || (!reasonCode && /^Wie lautet das verbindliche Zeitfenster\?/i.test(question));
+                const matches = Array.isArray(focusedProductionSpec.menuPlan)
+                  ? (focusedProductionSpec.menuPlan as Array<Record<string, unknown>>).filter(item =>
+                    typeof item.label === "string" && question.startsWith(`${item.label}:`) && /Herstellungsentscheidung|Klassifikation|Kategorie fehlt/i.test(question))
+                  : [];
+                const component = matches.length === 1 ? matches[0] : undefined;
+                const id = component ? String(component.componentId ?? "") : "";
+                const state = editingComponentStates[id];
+                if (scheduleQuestion && setEditingEventSchedule) return <div className="question-inline-answer">
+                  <label className="field-block"><span>Zeitfenster</span><input value={editingEventSchedule ?? ""} onChange={event => setEditingEventSchedule(event.target.value)} placeholder="z. B. Service 18:00–22:00" /></label>
+                  <button type="button" disabled={actionState.saveAnswersDisabled} onClick={() => void saveSpecEdit()}>Antworten speichern</button>
+                </div>;
+                if (component && state) return <div className="question-inline-answer">
+                  <ProductionComponentClassificationFields menuCategory={state.menuCategory} productionMode={state.productionMode}
+                    showCategory={!/Herstellungsentscheidung/i.test(question)} showProductionMode={/Herstellungsentscheidung/i.test(question)}
+                    onMenuCategoryChange={menuCategory => updateEditingComponentState(id, { menuCategory })}
+                    onProductionModeChange={productionMode => updateEditingComponentState(id, { productionMode })} />
+                  <button type="button" disabled={actionState.saveAnswersDisabled} onClick={() => void saveSpecEdit()}>Antworten speichern</button>
+                </div>;
+                return null;
+              } : undefined}
               answerEditor={
                 answersEditable && actionState.isFocusedSpecEditing ? (
                   <ProductionStructuredAnswerEditor
