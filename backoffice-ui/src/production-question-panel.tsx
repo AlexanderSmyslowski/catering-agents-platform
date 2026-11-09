@@ -18,6 +18,7 @@ import { ProductionClarificationDraftPanel } from "./production-clarification-dr
 import type { WorkbenchSpecFact } from "./production-question-thread.js";
 import { ProductionStructuredAnswerEditor } from "./production-structured-answer-editor.js";
 import type { ComponentEditState } from "./production-answer-types.js";
+import { menuCategoryQuestion, productionModeQuestion } from "./production-question-language-state.js";
 import { ProductionComponentClassificationFields } from "./production-component-classification-fields.js";
 
 export { formatDocumentIngestionSummary } from "./production-intake-origin-card-state.js";
@@ -300,7 +301,7 @@ export function ProductionQuestionPanel({
                 const scheduleQuestion = reasonCode === "event.schedule" || (!reasonCode && /^Wie lautet das verbindliche Zeitfenster\?/i.test(question));
                 const matches = Array.isArray(focusedProductionSpec.menuPlan)
                   ? (focusedProductionSpec.menuPlan as Array<Record<string, unknown>>).filter(item =>
-                    typeof item.label === "string" && question.startsWith(`${item.label}:`) && /Herstellungsentscheidung|Klassifikation|Kategorie fehlt/i.test(question))
+                    typeof item?.label === "string" && (question === menuCategoryQuestion(item.label) || question === productionModeQuestion(item.label)))
                   : [];
                 const component = matches.length === 1 ? matches[0] : undefined;
                 const id = component ? String(component.componentId ?? "") : "";
@@ -311,7 +312,7 @@ export function ProductionQuestionPanel({
                 </div>;
                 if (component && state) return <div className="question-inline-answer">
                   <ProductionComponentClassificationFields menuCategory={state.menuCategory} productionMode={state.productionMode}
-                    showCategory={!/Herstellungsentscheidung/i.test(question)} showProductionMode={/Herstellungsentscheidung/i.test(question)}
+                    showCategory={question === menuCategoryQuestion(String(component.label))} showProductionMode={question === productionModeQuestion(String(component.label))}
                     onMenuCategoryChange={menuCategory => updateEditingComponentState(id, { menuCategory })}
                     onProductionModeChange={productionMode => updateEditingComponentState(id, { productionMode })} />
                   <button type="button" disabled={actionState.saveAnswersDisabled} onClick={() => void saveSpecEdit()}>Antworten speichern</button>
