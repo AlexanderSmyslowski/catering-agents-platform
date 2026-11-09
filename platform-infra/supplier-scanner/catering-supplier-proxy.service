@@ -1,0 +1,18 @@
+[Unit]
+Description=CateringOS supplier scanner socket proxy
+Requires=catering-supplier-clamd.service
+After=catering-supplier-clamd.service
+
+[Service]
+User=clamav
+Group=clamav
+ExecStart=/usr/lib/systemd/systemd-socket-proxyd /run/catering-supplier-clamd/private.sock
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+PrivateTmp=yes
+PrivateNetwork=yes
+ProtectSystem=strict
+ProtectHome=yes
+InaccessiblePaths=-/etc/catering-supplier-mail -/etc/catering-target -/etc/catering-backup -/var/lib/catering-backup -/var/run/postgresql -/run/credentials -/run/docker.sock
+RestrictAddressFamilies=AF_UNIX
+LimitCORE=0

@@ -1,0 +1,3 @@
+# Add to Ubuntu's /etc/apparmor.d/local/usr.sbin.clamd and reload that profile.
+  /etc/clamav/catering-supplier-clamd.conf r,
+  /run/catering-supplier-clamd/private.sock rw,

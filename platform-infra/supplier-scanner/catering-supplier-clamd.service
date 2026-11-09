@@ -1,7 +1,5 @@
 [Unit]
 Description=CateringOS supplier attachment scanner
-Requires=catering-supplier-clamd.socket
-After=catering-supplier-clamd.socket
 
 [Service]
 Type=simple
@@ -12,6 +10,8 @@ NoNewPrivileges=yes
 CapabilityBoundingSet=
 PrivateTmp=yes
 PrivateNetwork=yes
+RuntimeDirectory=catering-supplier-clamd
+RuntimeDirectoryMode=0700
 ProtectSystem=strict
 ProtectHome=yes
 ReadOnlyPaths=/var/lib/clamav

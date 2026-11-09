@@ -7,7 +7,7 @@ SocketUser=root
 SocketGroup=root
 SocketMode=0600
 DirectoryMode=0700
-Service=catering-supplier-clamd.service
+Service=catering-supplier-proxy.service
 
 [Install]
 WantedBy=sockets.target
