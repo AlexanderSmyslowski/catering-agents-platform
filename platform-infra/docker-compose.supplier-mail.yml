@@ -1,7 +1,7 @@
 services:
   offer:
     build:
-      target: supplier-mail
+      dockerfile: platform-infra/docker/Dockerfile.supplier-mail
     environment:
       CATERING_SUPPLIER_MAIL_CONFIG: /run/catering-sources/mail.json
     volumes:
