@@ -23,9 +23,16 @@ npm run build
 
 ### GitHub-CI: Produkt- und Operationsregression
 
-Die vier bestehenden CI-Jobs bleiben Pflicht: Build/Test, Linux- und macOS-
-Operatorpruefungen, Browser-Rehearsal und Compose-Paritaet (Linux-Operator im
-Build/Test-Job). Nur der Umfang des Vitest-Schritts wird ausgewaehlt:
+Der erforderliche Check `build-and-test` führt Build und ausgewählte Regressionen
+zusammen. Browser-Rehearsal, Compose-Parität und die Operatorprüfungen laufen
+weiterhin. Der Testumfang richtet sich nach dem gesamten Änderungsumfang:
+
+- Änderungen ausschließlich an den vorhandenen Preis- und Kalkulationsansichten
+  in `SUPPLIER_UI_FILES` erhalten das Profil `supplier-ui`. Es prüft den
+  Lieferantenimport, die Preisübernahme, den Angebotseditor, Preisfassungen,
+  Druck und die Berechtigungen für schreibende Routen. Die Dateiliste ist
+  ausdrücklich begrenzt. Neue Dateien, Berechtigungsänderungen und Änderungen
+  an der API benötigen mindestens den breiteren Produktlauf.
 
 - Bei ausschliesslichen Aenderungen an den explizit in
   `scripts/ci-test-scope.py` aufgefuehrten Python-Operatoren und ihren Python-Tests
@@ -44,7 +51,7 @@ Build/Test-Job). Nur der Umfang des Vitest-Schritts wird ausgewaehlt:
   Schema-/Migrationskompatibilitaet und ersetzt keine Release-/Restoregates.
 - Aenderungen an Infrastruktur, den sechs ausgelassenen Suiten oder ihren
   Helpern, Paketen, Testkonfiguration, CI selbst und unbekannten Pfaden behalten
-  `npm test`. Operationsdokumente sind keine pauschal erlaubte Begleitdoku.
+  die vollständige Vitest-Suite. Operationsdokumente sind keine pauschal erlaubte Begleitdoku.
   Gemischte Produkt-/Operationspatches, reine Doku-Aenderungen, Loeschungen,
   Verschiebungen und Typwechsel waehlen ebenfalls die volle Suite.
 - PRs werden gegen die tatsaechlich ausgecheckte GitHub-Mergefassung und deren
