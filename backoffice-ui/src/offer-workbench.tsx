@@ -636,6 +636,16 @@ export function OfferConversationalWorkbench({
                     {`Auftrag: ${renderDraftFocusLabel(focusedDraft)} · Fassung ${focusedDraftRevision}. `}
                     Die Freigabe gilt intern für genau diese Fassung und ist kein Versand an den Kunden. Danach ist für diesen Auftrag keine Freigabe einer anderen Variante vorgesehen.
                   </p>
+                  {focusedOpenQuestions.length > 0 && (
+                    <div>
+                      <strong>Bei dieser Freigabe noch offen ({focusedOpenQuestions.length})</strong>
+                      <ul className="item-list compact">
+                        {focusedOpenQuestions.map((question, index) => (
+                          <li key={index}>{question}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                   <div className="quiet-action-row">
                     <button type="button" disabled={approvalActionsBlocked} onClick={() => void confirmPendingApproval()}>
                       Bestätigen
