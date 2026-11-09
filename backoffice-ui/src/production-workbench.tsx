@@ -1,9 +1,22 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { MiniPilotCheckPanel } from "./mini-pilot-check-panel.js";
 import type { MiniPilotCheckReportState } from "./mini-pilot-check-report-state.js";
 import { shouldShowMiniPilotPanel } from "./mini-pilot-panel-gate.js";
 import { buildProductionMiniPilotCardState } from "./production-mini-pilot-card-state.js";
 import { buildProductionWorkbenchOutputAnchorState } from "./production-workbench-output-anchor-state.js";
+
+const productionStages = [
+  { id: "input", label: "Auftrag" },
+  { id: "questions", label: "Rückfragen" },
+  { id: "planning", label: "Rezepte und Mengen" },
+  { id: "production", label: "Produktionsplan" },
+  { id: "purchase", label: "Einkauf" },
+  { id: "resources", label: "Übergabe und Rezepte" }
+] as const;
+type ProductionStage = (typeof productionStages)[number]["id"];
+function isProductionStage(value: string | undefined): value is ProductionStage {
+  return productionStages.some(item => item.id === value);
+}
 
 export type ProductionWorkbenchSummary = {
   approvalState?: "pending" | "approved" | "applied";
@@ -158,6 +171,42 @@ export function ProductionConversationalWorkbench({
   miniPilotStorageHintLabel,
   slots
 }: ProductionConversationalWorkbenchProps) {
+  const [stage, setStage] = useState<ProductionStage>("input");
+  const rootRef = useRef<HTMLElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    function reveal(event: Event) {
+      const detail = (event as CustomEvent<{ selector?: string; id?: string }>).detail;
+      let target: Element | null = detail?.id ? document.getElementById(detail.id) : null;
+      if (!target && detail?.selector) {
+        try { target = rootRef.current?.querySelector(detail.selector) ?? null; } catch { return; }
+      }
+      if (!target || !rootRef.current?.contains(target)) return;
+      const next = target?.closest<HTMLElement>("[data-production-stage]")?.dataset.productionStage;
+      if (isProductionStage(next)) setStage(next);
+    }
+    window.addEventListener("production:reveal", reveal);
+    return () => window.removeEventListener("production:reveal", reveal);
+  }, []);
+
+  function revealLink(event: MouseEvent<HTMLElement>) {
+    const link = (event.target as Element).closest<HTMLAnchorElement>('a[href^="#production-"]');
+    const id = link?.getAttribute("href")?.slice(1);
+    const target = id ? document.getElementById(id) : null;
+    const next = target?.closest<HTMLElement>("[data-production-stage]")?.dataset.productionStage;
+    if (!target || !isProductionStage(next) || next === stage) return;
+    event.preventDefault();
+    setStage(next);
+    requestAnimationFrame(() => {
+      for (let parent = target.parentElement; parent; parent = parent.parentElement) {
+        if (parent instanceof HTMLDetailsElement) parent.open = true;
+      }
+      target.focus({ preventScroll: true });
+      target.scrollIntoView?.({ block: "start", inline: "nearest", behavior: "auto" });
+    });
+  }
+
   const miniPilotCard = buildProductionMiniPilotCardState();
   const showMiniPilotPanel = shouldShowMiniPilotPanel();
   const {
@@ -222,10 +271,22 @@ export function ProductionConversationalWorkbench({
   );
 
   return (
-    <section className={layoutClassName} aria-label="Produktionsagent Conversational Workbench">
+    <section ref={rootRef} className={layoutClassName} aria-label="Produktionsagent Conversational Workbench" onClickCapture={revealLink}>
+      <nav className="production-stage-nav" aria-label="Produktionsschritte">
+        {productionStages.map((item, index) => (
+          <button key={item.id} type="button" aria-current={stage === item.id ? "step" : undefined}
+            onClick={() => { setStage(item.id); requestAnimationFrame(() => headingRef.current?.focus()); }}>
+            <span aria-hidden="true">{index + 1}</span>{item.label}
+          </button>
+        ))}
+      </nav>
+      <header className="production-stage-heading">
+        <h3 ref={headingRef} tabIndex={-1}>{productionStages.find(item => item.id === stage)?.label}</h3>
+      </header>
       {hasActiveContext ? (
         <>
-          <aside className="production-calm-summary" aria-label="Kompakte Produktionszusammenfassung">
+          <details className="production-calm-summary" aria-label="Kompakte Produktionszusammenfassung" open={stage === "input"}>
+            <summary>Auftragsstand und Hinweise</summary>
             <h3>{summary.hasActiveContext ? "Auftragsstand Küche" : "Bestandsdaten im Hintergrund"}</h3>
             <strong>{activeSpecLabel}</strong>
             {!summary.hasActiveContext ? <p className="helper-text">Kontext aus Demo, Bestand oder vorherigem Lauf. Für einen neuen Auftrag zuerst eine Datei oder Texteingabe übernehmen.</p> : null}
@@ -275,11 +336,11 @@ export function ProductionConversationalWorkbench({
                 />
               </>
             ) : null}
-          </aside>
+          </details>
         </>
       ) : null}
       {hasActiveContext ? (
-          <div className="production-progressive-zone">
+          <div className="production-progressive-zone production-stage-panel" data-production-stage="questions" hidden={stage !== "questions"}>
         <details className="progressive-panel" open={questionCount > 0}>
           <summary>
             <span>Rückfragen und Antworten</span>
@@ -289,10 +350,10 @@ export function ProductionConversationalWorkbench({
         </details>
           </div>
       ) : null}
-      {inputPanel}
+      <div className="production-stage-panel" data-production-stage="input" hidden={stage !== "input"}>{inputPanel}</div>
       {hasActiveContext ? (
         <>
-          <div className="production-objects-zone">
+          <div className="production-objects-zone production-stage-panel" data-production-stage="production" hidden={stage !== "production"}>
         <article
           id={productionOutputAnchorId}
           className="production-output-anchor"
@@ -312,7 +373,7 @@ export function ProductionConversationalWorkbench({
         </details>
           </div>
 
-          <div className="production-purchase-zone">
+          <div className="production-purchase-zone production-stage-panel" data-production-stage="purchase" hidden={stage !== "purchase"}>
         <details className="progressive-panel production-purchase-panel" open={purchaseListCount > 0}>
           <summary>
             <span>Einkaufsliste</span>
@@ -322,10 +383,10 @@ export function ProductionConversationalWorkbench({
         </details>
           </div>
 
-          {slots.planningSlot ? <div className="production-planning-zone">{slots.planningSlot}</div> : null}
-          <div className="production-lower-zones">{slots.lowerSlots}</div>
+          {slots.planningSlot ? <div className="production-planning-zone production-stage-panel" data-production-stage="planning" hidden={stage !== "planning"}>{slots.planningSlot}</div> : null}
+          <div className="production-lower-zones production-stage-panel" data-production-stage="resources" hidden={stage !== "resources"}>{slots.lowerSlots}</div>
         </>
-      ) : null}
+      ) : stage !== "input" ? <p className="helper-text">Bitte zuerst einen Auftrag eingeben oder öffnen. Danach stehen die zugehörigen Arbeitsschritte hier bereit.</p> : null}
     </section>
   );
 }

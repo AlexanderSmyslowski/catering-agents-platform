@@ -17,6 +17,7 @@ type ProductionQuestionThreadProps = {
   productionConversationProjection: ProductionConversationProjection;
   answerEditor?: ReactNode;
   renderQuestionActions?: (question: string) => ReactNode;
+  renderQuestionEditor?: (question: string, reasonCode?: string) => ReactNode;
 };
 
 function formatPurchaseListCount(count: number): string {
@@ -70,7 +71,8 @@ export function ProductionQuestionThread({
   currentSpecPurchaseLists,
   productionConversationProjection,
   answerEditor,
-  renderQuestionActions
+  renderQuestionActions,
+  renderQuestionEditor
 }: ProductionQuestionThreadProps) {
   const messages = productionConversationProjection.messages;
   const questions = messages.filter(message => message.type === "structured_agent_question");
@@ -102,6 +104,7 @@ export function ProductionQuestionThread({
               <strong>Gespeicherte Antwort</strong><p>{message.reviewedAnswerText}</p>
             </div> : null}
             {renderQuestionActions?.(message.text)}
+            {renderQuestionEditor?.(message.text, message.clarificationQuestion?.reasonCode)}
             {answers.map(answer => <div className="production-question__answer" key={answer.messageId}>
               <strong>Gespeicherte Antwort</strong>
               <p>{answer.text}</p>

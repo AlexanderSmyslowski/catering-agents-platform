@@ -333,6 +333,25 @@ describe("independent product loader boundaries", () => {
     );
   });
 
+  it("restores the production case from URL and browser navigation", async () => {
+    const load = vi.spyOn(api, "loadProductionProductData").mockImplementation(async (caseId) =>
+      productionProductData(undefined, undefined, caseId));
+    await renderAt("/produktion?productionCaseId=case-a");
+    expect(load).toHaveBeenCalledWith("case-a");
+    await act(async () => {
+      window.history.pushState({}, "", "/produktion?productionCaseId=case-b");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+      await Promise.resolve(); await Promise.resolve();
+    });
+    expect(load).toHaveBeenLastCalledWith("case-b");
+    await act(async () => {
+      window.history.replaceState({}, "", "/produktion?productionDraftId=legacy");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+      await Promise.resolve(); await Promise.resolve();
+    });
+    expect(load).toHaveBeenLastCalledWith(undefined);
+  });
+
   it("does not project an unbound offer artifact into the real app route", async () => {
     const loadProduct = vi.spyOn(api, "loadOfferProductData").mockResolvedValue(
       offerProductData(offerDraft("draft-b", "Fall B"))
@@ -443,7 +462,7 @@ describe("independent product loader boundaries", () => {
     await act(async () => { action!.click(); await flush(); });
     const target = container.querySelector('#production-clarification-continuation');
     expect(target?.getAttribute("aria-label")).toBe("Rückfragen in einer neuen Prüffassung klären");
-    expect(document.activeElement).toBe(target);
+    await vi.waitFor(() => expect(document.activeElement).toBe(target));
   });
 
   it.each(["prepare", "editable"])("focuses the appropriate real next action for a %s revision", async mode => {
@@ -460,7 +479,8 @@ describe("independent product loader boundaries", () => {
     const action = container.querySelector('[aria-label="Nächster Schritt"] button') ?? [...container.querySelectorAll("button")].find(item => item.textContent?.includes("Offene Rückfragen klären"));
     expect(action).toBeDefined(); await act(async () => { (action as HTMLButtonElement).click(); await flush(); });
     const target = container.querySelector(mode === "prepare" ? "#production-clarification-continuation" : "#production-question-panel");
-    expect(target).not.toBeNull(); expect(document.activeElement).toBe(target);
+    expect(target).not.toBeNull();
+    await vi.waitFor(() => expect(document.activeElement).toBe(target));
   });
 
   it("moves from completed questions to the existing review entry", async () => {
@@ -472,7 +492,9 @@ describe("independent product loader boundaries", () => {
     await act(async () => { root.render(createElement(ProductionQuestionPanel, props)); await flush(); });
     expect(container.textContent).toContain("Alle Ernährungsfragen sind beantwortet");
     const button = [...container.querySelectorAll("button")].find(item => item.textContent === "Zu den Prüfpunkten");
-    expect(button).toBeDefined(); await act(async () => button!.click()); expect(document.activeElement).toBe(entry);
+    expect(button).toBeDefined();
+    await act(async () => button!.click());
+    await vi.waitFor(() => expect(document.activeElement).toBe(entry));
   });
 
   it("does not project unbound production artifacts into the real app route", async () => {

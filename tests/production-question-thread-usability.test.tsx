@@ -43,6 +43,19 @@ describe("production questions as an office task list", () => {
     expect(node.querySelector("button")?.textContent).toBe("Antwort bearbeiten");
   });
 
+  it("places the matching response control inside its question", () => {
+    const projection: ProductionConversationProjection = { sessionId: "s", messages: [
+      { messageId: "q", type: "structured_agent_question", role: "agent", title: "Frage", text: "Ofengemüse: Kategorie fehlt.", questionIndex: 1 }
+    ] };
+    const html = renderToStaticMarkup(createElement(ProductionQuestionThread, {
+      specLabel: "Auftrag", facts: [], questionCount: 1, readinessLabel: "offen", currentSpecPurchaseLists: [],
+      productionConversationProjection: projection,
+      renderQuestionEditor: question => question.startsWith("Ofengemüse:") ? createElement("input", { "aria-label": "Kategorie für Ofengemüse" }) : null
+    }));
+    const node = document.createElement("div"); node.innerHTML = html;
+    expect(node.querySelector(".production-question input")?.getAttribute("aria-label")).toBe("Kategorie für Ofengemüse");
+  });
+
   it("keeps source quality warnings visible while technical provenance starts collapsed", () => {
     const node = renderQuestions();
     const details = node.querySelector("details.production-question-provenance");

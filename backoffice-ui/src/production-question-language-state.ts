@@ -73,6 +73,15 @@ function hybridSourcingQuestion(label: string): string | undefined {
   return `${label}: Hybridfall. Bitte bewusst entscheiden, ob Eigenproduktion, Bäcker-Zukauf, Convenience-Zukauf oder Fertigprodukt gilt.`;
 }
 
+export function productionModeQuestion(label: string): string {
+  return hybridSourcingQuestion(label) ??
+    `${label}: Herstellungsentscheidung fehlt. Bitte Eigenproduktion, Hybrid, Convenience-Zukauf oder Fertigprodukt festlegen.`;
+}
+
+export function menuCategoryQuestion(label: string): string {
+  return `${label}: Kategorie fehlt. Bitte klassisch, vegetarisch oder vegan festlegen.`;
+}
+
 function translateUncertaintyMessage(field?: string, message?: string): string | undefined {
   if (field === "attendees.expected") {
     return "Die Teilnehmerzahl konnte nicht zuverlässig aus dem Dokument abgeleitet werden.";
@@ -205,10 +214,7 @@ export function buildProductionQuestions(spec?: Record<string, unknown>): string
       }
 
       const label = String(component?.label ?? component?.componentId ?? "Position");
-      return (
-        hybridSourcingQuestion(label) ??
-        `${label}: Herstellungsentscheidung fehlt. Bitte Eigenproduktion, Hybrid, Convenience-Zukauf oder Fertigprodukt festlegen.`
-      );
+      return productionModeQuestion(label);
     })
     .filter((item): item is string => Boolean(item));
   questions.push(...unresolvedSourcingQuestions);
@@ -247,7 +253,7 @@ export function buildProductionQuestions(spec?: Record<string, unknown>): string
       }
 
       const label = String(component?.label ?? component?.componentId ?? "Position");
-      return `${label}: Kategorie fehlt. Bitte klassisch, vegetarisch oder vegan festlegen.`;
+      return menuCategoryQuestion(label);
     })
     .filter((item): item is string => Boolean(item));
   questions.push(...unresolvedCategoriesQuestions);

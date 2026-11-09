@@ -86,6 +86,7 @@ async () => {
     throw new Error("Produktionsfall aus dem bestätigten Handoff fehlt oder passt nicht zur Angebotsidentität.");
   }
 
+
   sessionStorage.setItem("catering.browser-rehearsal.production-case-id", productionCase.caseId);
   sessionStorage.setItem("catering.browser-rehearsal.production-handoff-id", handoffId);
   sessionStorage.setItem("catering.browser-rehearsal.production-spec-id", expectedSpecId);

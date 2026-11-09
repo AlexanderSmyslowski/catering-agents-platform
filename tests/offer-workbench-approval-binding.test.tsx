@@ -457,7 +457,7 @@ describe("two-step internal offer approval", () => {
   it("asks for a named confirmation and approves exactly once only after confirming", async () => {
     const approveDraft = vi.fn(async (_draftId: string, _revision: number, _variantId: string) => undefined);
     const setSelectedVariantId = vi.fn();
-    const offer = twoVariantDraft();
+    const offer = { ...twoVariantDraft(), openQuestions: ["Sonderkost klären"] };
     const root = createRoot(document.body.appendChild(document.createElement("div")));
     await act(async () => root.render(createElement(OfferConversationalWorkbench, props({
       activeDraft: offer, selectedDraft: offer, approveDraft, setSelectedVariantId
@@ -468,6 +468,8 @@ describe("two-step internal offer approval", () => {
     expect(confirmation.textContent).toContain("Variante „Mitte“ (100 Gäste) intern freigeben?");
     expect(confirmation.textContent).toContain("Auftrag: Angebot A · Fassung 1");
     expect(confirmation.textContent).toContain("kein Versand an den Kunden");
+    expect(confirmation.textContent).toContain("Bei dieser Freigabe noch offen (1)");
+    expect(confirmation.textContent).toContain("Sonderkost klären");
     expect(document.activeElement).toBe(confirmation);
     expect(approveDraft).not.toHaveBeenCalled();
     expect(setSelectedVariantId).not.toHaveBeenCalled();

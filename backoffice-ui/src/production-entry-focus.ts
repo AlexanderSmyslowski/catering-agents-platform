@@ -17,6 +17,38 @@ export function productionDraftEntryUrl(draftId?: string, productionCaseId?: str
   return `/produktion?productionDraftId=${encodedDraftId}${encodedCaseId}#${productionDraftEntryId(draftId)}`;
 }
 
+const handoffFocusKey = "catering:production-handoff-focus";
+const handoffDraftFocusKey = "catering:production-handoff-draft-focus";
+
+export function consumeProductionHandoffFocus(caseId: string): boolean {
+  if (typeof window === "undefined" || window.location.hash) return false;
+  try {
+    if (window.sessionStorage.getItem(handoffFocusKey) !== caseId) return false;
+    window.sessionStorage.removeItem(handoffFocusKey);
+    return true;
+  } catch { return false; }
+}
+
+export function consumeProductionHandoffDraftFocus(draftId: string): boolean {
+  if (typeof window === "undefined" || window.location.hash) return false;
+  try {
+    if (window.sessionStorage.getItem(handoffDraftFocusKey) !== draftId) return false;
+    window.sessionStorage.removeItem(handoffDraftFocusKey);
+    return true;
+  } catch { return false; }
+}
+
 export function openProductionDraftEntry(draftId?: string, productionCaseId?: string): void {
-  if (typeof window !== "undefined") window.location.assign(productionDraftEntryUrl(draftId, productionCaseId));
+  if (typeof window === "undefined") return;
+  let target = productionDraftEntryUrl(draftId, productionCaseId);
+  if (productionCaseId) {
+    try {
+      window.sessionStorage.setItem(handoffFocusKey, productionCaseId);
+      if (draftId) window.sessionStorage.setItem(handoffDraftFocusKey, draftId);
+      else window.sessionStorage.removeItem(handoffDraftFocusKey);
+      // The URL still identifies the draft; the handoff begins at its order header.
+      target = target.split("#", 1)[0]!;
+    } catch { /* The original deep link remains usable. */ }
+  }
+  window.location.assign(target);
 }

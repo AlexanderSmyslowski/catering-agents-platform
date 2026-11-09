@@ -75,7 +75,7 @@ export function buildProductionManualSpecSubmitAction({
       const result = await createProductionDraftFromAcceptedEventSpec(caseId, { specId });
       const draftId = result.draft?.draftId;
       if (typeof draftId !== "string" || !draftId.trim()) throw new Error("Produktionsentwurf enthält keine gültige ID.");
-      if (typeof window !== "undefined") window.history.replaceState(window.history.state, "", productionDraftEntryUrl(draftId, caseId));
+      if (typeof window !== "undefined") window.history.pushState(window.history.state, "", productionDraftEntryUrl(draftId, caseId));
       setActiveProductionCaseId(caseId);
       setActiveProductionCaseSpecId(specId);
       setFocusedProductionSpecId(specId);

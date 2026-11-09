@@ -8,10 +8,10 @@ import {
 import {
   detectRoute,
   getPathname,
-  offerCaseFocusFromHistory,
-  rememberOfferCaseFocus,
   type AppRoute
 } from "./app-shell-state.js";
+import { caseIdFromLocation, navigateToCase } from "./case-location.js";
+import { focusCaseAction } from "./case-action-focus.js";
 import { AppFeedbackShell } from "./app-feedback-shell.js";
 import { buildAppRouteShellState } from "./app-route-shell-state.js";
 import { buildAppDashboardRouteState } from "./app-dashboard-route-state.js";
@@ -92,7 +92,7 @@ import { useProductionPlanProgress } from "./use-production-plan-progress.js";
 import { useProductionWindowFileDrop } from "./use-production-window-file-drop.js";
 import { useMiniPilotResultState } from "./use-mini-pilot-result-state.js";
 import { useRecipeUploadDraft } from "./use-recipe-upload-draft.js";
-import { openProductionDraftEntry } from "./production-entry-focus.js";
+import { consumeProductionHandoffFocus, openProductionDraftEntry } from "./production-entry-focus.js";
 import {
   announceProductionDraftReview,
   announceProductionDraftRefresh,
@@ -148,13 +148,6 @@ function consumePromotedProductionSpecFocus(route: string): string | undefined {
   return specId || undefined;
 }
 
-function productionCaseIdFromLocation(route: string): string | undefined {
-  if (route !== "production" || typeof window === "undefined") {
-    return undefined;
-  }
-  const caseId = new URLSearchParams(window.location.search).get("productionCaseId")?.trim();
-  return caseId || undefined;
-}
 
 type ProductWorkspaceProps = {
   route: Exclude<AppRoute, "home">;
@@ -173,6 +166,7 @@ type ProductWorkspaceProps = {
   activeProductionSpecId?: string;
   setActiveProductionSpecId: (specId: string | undefined) => void;
   availableCases: CaseSummary[];
+  historyGuardRef: { current: (() => boolean) | undefined };
   currentOfferApprovedOfferId?: string;
   currentOfferHandoffId?: string;
   currentOfferApprovalBinding?: OfferApprovalBinding;
@@ -441,6 +435,7 @@ function ProductWorkspaceView({
   setActiveProductionCaseId,
   setActiveProductionSpecId,
   availableCases,
+  historyGuardRef: parentHistoryGuardRef,
   currentOfferApprovedOfferId,
   currentOfferHandoffId,
   currentOfferApprovalBinding,
@@ -456,15 +451,6 @@ function ProductWorkspaceView({
   const [submitting, setSubmitting] = useState(false);
   const [offerMenuEditing, setOfferMenuEditing] = useState(false);
   const offerMenuEditingRef = useRef(false);
-  useEffect(() => {
-    if (!offerMenuEditing) return;
-    const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = "";
-    };
-    window.addEventListener("beforeunload", warnBeforeLeaving);
-    return () => window.removeEventListener("beforeunload", warnBeforeLeaving);
-  }, [offerMenuEditing]);
   const offerFocusRef = useRef({ caseId: activeOfferCaseId, draftId: activeOfferDraftId });
   offerFocusRef.current = { caseId: activeOfferCaseId, draftId: activeOfferDraftId };
 
@@ -700,6 +686,9 @@ function ProductWorkspaceView({
     if (route === "offer" && offerMenuEditingRef.current) {
       setError("Bitte Angebotsbearbeitung zuerst speichern oder abbrechen."); return false;
     }
+    if (route === "production" && editingSpecId && hasFocusedSpecEditChanges) {
+      setError("Bitte Produktionsbearbeitung zuerst speichern oder abbrechen."); return false;
+    }
     if (hasSourceInputs) {
       setError(offerCaseUnavailable ? unavailableSourceSwitchError : offerCaseNotReady ? loadingSourceSwitchError : sourceSwitchError);
       return false;
@@ -713,10 +702,8 @@ function ProductWorkspaceView({
   }
   const historySwitchGuardRef = useRef<(() => boolean) | undefined>(canChangeHistoryCase);
   historySwitchGuardRef.current = canChangeHistoryCase;
-  useEffect(() => {
-    historySwitchGuardRef.current = canChangeHistoryCase;
-    return () => { historySwitchGuardRef.current = undefined; };
-  }, []);
+  parentHistoryGuardRef.current = canChangeHistoryCase;
+  useEffect(() => () => { parentHistoryGuardRef.current = undefined; }, [parentHistoryGuardRef]);
   function clearSourceInputs() {
     setOfferText("");
     stagedOfferTextRequestRef.current = undefined;
@@ -877,6 +864,17 @@ function ProductWorkspaceView({
       ? buildRecordView(focusedProductionSpecRecord)
       : undefined
   });
+
+  const warnOnReload = offerMenuEditing || Boolean(route === "production" && editingSpecId && hasFocusedSpecEditChanges);
+  useEffect(() => {
+    if (!warnOnReload) return;
+    const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnBeforeLeaving);
+    return () => window.removeEventListener("beforeunload", warnBeforeLeaving);
+  }, [warnOnReload]);
 
   function loadSpecIntoEditorState(spec: Parameters<typeof loadSpecIntoEditorSnapshot>[0]): string {
     editingProductionDraftContext.current = activeProductionCaseId && currentProductionDraft &&
@@ -1359,6 +1357,17 @@ function ProductWorkspaceView({
     resetSpecEdit
   });
   const activeCase = availableCases.find(candidate => candidate.caseId === (route === "offer" ? activeOfferCaseId : activeProductionCaseId));
+  useEffect(() => {
+    if (route !== "production" || !activeCase || activeCase.caseId !== activeProductionCaseId) return;
+    const caseId = activeCase.caseId;
+    const frame = requestAnimationFrame(() => {
+      if (!consumeProductionHandoffFocus(caseId)) return;
+      const header = document.querySelector<HTMLElement>('[aria-label="Geöffneter Auftrag"]');
+      header?.focus({ preventScroll: true });
+      header?.scrollIntoView?.({ block: "start", inline: "nearest", behavior: "auto" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [route, activeCase?.caseId, activeProductionCaseId]);
   const activeCaseStatus = activeCase?.status ?? "open";
   const nextActionInput: CaseNextActionInput = {
     product: route,
@@ -1410,15 +1419,7 @@ function ProductWorkspaceView({
     if (route === "offer" && offerMenuEditingRef.current && (action.kind === "approve_offer" || action.kind === "send_handoff")) {
       setError("Bitte Angebotsbearbeitung zuerst speichern oder abbrechen."); return;
     }
-    const focus = (selector: string) => {
-      const element = document.querySelector<HTMLElement>(selector);
-      // Focusing a task inside collapsed native details must reveal it first.
-      for (let parent = element?.parentElement; parent; parent = parent.parentElement) {
-        if (parent instanceof HTMLDetailsElement) parent.open = true;
-      }
-      element?.focus({ preventScroll: true });
-      element?.scrollIntoView?.({ block: "start", inline: "nearest", behavior: "auto" });
-    };
+    const focus = (selector: string) => focusCaseAction(route, selector);
 
     if (route === "production" && productionQuestions.length > 0 && (currentProductionApprovalApplied || currentProductionDraft?.dietaryQuestionReviews?.some(review => review.status === "pending") || document.getElementById("production-clarification-continuation"))) {
       focus(document.getElementById("production-clarification-continuation")
@@ -1460,7 +1461,7 @@ function ProductWorkspaceView({
     <>
       <AppFeedbackShell error={loaderError ?? error} notice={notice} loading={loading} route={route} />
 
-      {(route === "offer" ? activeOfferCaseId : activeProductionCaseId) ? <section className="panel current-order-header" aria-label="Geöffneter Auftrag">
+      {(route === "offer" ? activeOfferCaseId : activeProductionCaseId) ? <section className="panel current-order-header" aria-label="Geöffneter Auftrag" tabIndex={-1}>
         <h2>{activeCase?.displayName ?? "Auftrag geöffnet"}</h2>
         <p role="status">{(offerCaseUnavailable || offerCaseRefreshFailed) &&
           (loaderError === OFFER_RECOVERY_STORAGE_ERROR || loaderError === OFFER_SAVED_DRAFT_SUPERSEDED_ERROR) ? loaderError
@@ -1576,16 +1577,48 @@ type ProductRouteControllerProps = {
  * fall back to a global first record when the operator changes workspaces. */
 function ProductRouteController({ route, shell, masthead }: ProductRouteControllerProps) {
   const userId = useCateringSession()?.session.user.userId;
-  const [activeOfferCaseId, setActiveOfferCaseId] = useState<string | undefined>(
-    () => route === "offer" ? offerCaseFocusFromHistory(userId) : undefined
+  const [activeOfferCaseId, updateOfferCaseId] = useState<string | undefined>(
+    () => route === "offer" ? caseIdFromLocation("offer", userId) : undefined
   );
-  useEffect(() => {
-    if (route === "offer") rememberOfferCaseFocus(userId, activeOfferCaseId);
-  }, [route, userId, activeOfferCaseId]);
-  const [activeProductionCaseId, setActiveProductionCaseId] = useState<string | undefined>(
-    () => productionCaseIdFromLocation(route)
+  const [activeProductionCaseId, updateProductionCaseId] = useState<string | undefined>(
+    () => route === "production" ? caseIdFromLocation("production", userId) : undefined
   );
   const [activeProductionSpecId, setActiveProductionSpecId] = useState<string>();
+  const historyGuardRef = useRef<(() => boolean) | undefined>(undefined);
+  const currentLocationRef = useRef({ url: window.location.href, state: window.history.state });
+  const activeCaseRef = useRef(route === "offer" ? activeOfferCaseId : activeProductionCaseId);
+  activeCaseRef.current = route === "offer" ? activeOfferCaseId : activeProductionCaseId;
+  const rememberLocation = () => { currentLocationRef.current = { url: window.location.href, state: window.history.state }; };
+  const setActiveOfferCaseId = (caseId: string | undefined) => {
+    navigateToCase("offer", caseId, userId);
+    rememberLocation();
+    updateOfferCaseId(caseId);
+  };
+  const setActiveProductionCaseId = (caseId: string | undefined) => {
+    navigateToCase("production", caseId, userId);
+    rememberLocation();
+    updateProductionCaseId(caseId);
+    setActiveProductionSpecId(undefined);
+  };
+  useEffect(() => {
+    const restoreCase = (event?: PopStateEvent) => {
+      const caseId = caseIdFromLocation(route, userId);
+      if (event && caseId !== activeCaseRef.current && historyGuardRef.current && !historyGuardRef.current()) {
+        // The browser has already moved; restore the visible case's address without discarding edits.
+        window.history.pushState(currentLocationRef.current.state, "", currentLocationRef.current.url);
+        return;
+      }
+      rememberLocation();
+      if (route === "offer") updateOfferCaseId(caseId);
+      else {
+        updateProductionCaseId(caseId);
+        setActiveProductionSpecId(undefined);
+      }
+    };
+    restoreCase();
+    window.addEventListener("popstate", restoreCase);
+    return () => window.removeEventListener("popstate", restoreCase);
+  }, [route, userId]);
 
   if (route === "offer") {
     return (
@@ -1611,6 +1644,7 @@ function ProductRouteController({ route, shell, masthead }: ProductRouteControll
             setActiveProductionSpecId={setActiveProductionSpecId}
             setActiveProductionCaseId={setActiveProductionCaseId}
             availableCases={product.data.cases}
+            historyGuardRef={historyGuardRef}
             currentOfferApprovedOfferId={product.data.approvedOffer?.approvedOfferId ?? product.data.activeCase?.approvedOfferId}
             currentOfferHandoffId={product.data.handoff?.handoffId}
             currentOfferApprovalBinding={buildOfferApprovalBinding(product.data.approvedOffer, product.data.handoff, product.data.activeCase?.approvedOfferId)}
@@ -1645,6 +1679,7 @@ function ProductRouteController({ route, shell, masthead }: ProductRouteControll
           activeProductionSpecId={activeProductionSpecId}
           setActiveProductionSpecId={setActiveProductionSpecId}
           availableCases={product.data.cases}
+          historyGuardRef={historyGuardRef}
           currentProductionDraftId={product.data.currentDraft?.draftId}
           currentProductionDraft={product.data.currentDraft}
           lastAppliedProduction={product.data.lastApplied}

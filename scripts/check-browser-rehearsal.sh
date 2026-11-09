@@ -83,6 +83,7 @@ open_offer_history_item="$(load_rehearsal_script "open-offer-history-item.js")"
 offer_to_production="$(load_rehearsal_script "offer-to-production.js")"
 handoff_offer_case="$(load_rehearsal_script "handoff-offer-case.js")"
 confirm_production_handoff="$(load_rehearsal_script "confirm-production-handoff.js")"
+confirm_production_landing="$(load_rehearsal_script "confirm-production-landing.js")"
 open_production_history_item="$(load_rehearsal_script "open-production-history-item.js")"
 
 echo "Browser-Navigations- und Markerpruefung:"
@@ -98,6 +99,7 @@ if [[ "${CREATE_OFFER_CASE}" == "1" ]]; then
   check_current_page_markers_at_viewports "Angebot" "${offer_markers}"
   click_rehearsal_link "Angebot -> Produktion Handoff" "/produktion" "${handoff_offer_case}"
   check_current_page_markers "Produktions-Handoff serverseitig bestaetigt" "${confirm_production_handoff}"
+  check_current_page_markers "Produktions-Handoff am Auftragskopf" "${confirm_production_landing}"
   check_current_page_markers_at_viewports "Produktion Angebots-Handoff" "${production_handoff_markers}"
   check_current_page_markers "Produktion Auftrag bewusst geoeffnet" "${open_production_history_item}"
   check_browser_diagnostics

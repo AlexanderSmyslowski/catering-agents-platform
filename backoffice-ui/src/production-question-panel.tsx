@@ -18,6 +18,8 @@ import { ProductionClarificationDraftPanel } from "./production-clarification-dr
 import type { WorkbenchSpecFact } from "./production-question-thread.js";
 import { ProductionStructuredAnswerEditor } from "./production-structured-answer-editor.js";
 import type { ComponentEditState } from "./production-answer-types.js";
+import { menuCategoryQuestion, productionModeQuestion } from "./production-question-language-state.js";
+import { ProductionComponentClassificationFields } from "./production-component-classification-fields.js";
 
 export { formatDocumentIngestionSummary } from "./production-intake-origin-card-state.js";
 
@@ -274,10 +276,14 @@ export function ProductionQuestionPanel({
             </div>
           </div> : null}
           {answersEditable && allDietaryAnswered && questionState.currentDraft?.draftId ? <button type="button" className="secondary-button" onClick={() => {
-            const entry = document.getElementById(productionDraftEntryId(questionState.currentDraft!.draftId));
-            for (let parent = entry?.parentElement; parent; parent = parent.parentElement) if (parent instanceof HTMLDetailsElement) parent.open = true;
-            entry?.focus({ preventScroll: true });
-            entry?.scrollIntoView?.({ block: "start", inline: "nearest", behavior: "auto" });
+            const id = productionDraftEntryId(questionState.currentDraft!.draftId);
+            window.dispatchEvent(new CustomEvent("production:reveal", { detail: { id } }));
+            requestAnimationFrame(() => {
+              const entry = document.getElementById(id);
+              for (let parent = entry?.parentElement; parent; parent = parent.parentElement) if (parent instanceof HTMLDetailsElement) parent.open = true;
+              entry?.focus({ preventScroll: true });
+              entry?.scrollIntoView?.({ block: "start", inline: "nearest", behavior: "auto" });
+            });
           }}>Zu den Prüfpunkten</button> : null}
           {answersEditable && hasDietaryReview ? <div className="production-question-guidance">
             <button className="secondary-button" disabled={submitting || actionState.editAnswersDisabled} onClick={() => beginSpecEdit(focusedProductionSpec)}>Angaben oder Kennzeichnung ändern</button>
@@ -295,6 +301,28 @@ export function ProductionQuestionPanel({
               renderQuestionActions={activeCaseId && questionState.currentDraft ? question => <ProductionDietaryQuestionActions
                 caseId={activeCaseId} draft={questionState.currentDraft!} question={question} busy={submitting}
                 onChanged={refreshAfterDraftDecision} /> : undefined}
+              renderQuestionEditor={answersEditable && actionState.isFocusedSpecEditing ? (question, reasonCode) => {
+                const scheduleQuestion = reasonCode === "event.schedule" || (!reasonCode && /^Wie lautet das verbindliche Zeitfenster\?/i.test(question));
+                const matches = Array.isArray(focusedProductionSpec.menuPlan)
+                  ? (focusedProductionSpec.menuPlan as Array<Record<string, unknown>>).filter(item =>
+                    typeof item?.label === "string" && (question === menuCategoryQuestion(item.label) || question === productionModeQuestion(item.label)))
+                  : [];
+                const component = matches.length === 1 ? matches[0] : undefined;
+                const id = component ? String(component.componentId ?? "") : "";
+                const state = editingComponentStates[id];
+                if (scheduleQuestion && setEditingEventSchedule) return <div className="question-inline-answer" role="group" aria-label={question}>
+                  <label className="field-block"><span>Zeitfenster</span><input value={editingEventSchedule ?? ""} onChange={event => setEditingEventSchedule(event.target.value)} placeholder="z. B. Service 18:00–22:00" /></label>
+                  <button type="button" disabled={actionState.saveAnswersDisabled} onClick={() => void saveSpecEdit()}>Alle geänderten Antworten speichern</button>
+                </div>;
+                if (component && state) return <div className="question-inline-answer" role="group" aria-label={question}>
+                  <ProductionComponentClassificationFields menuCategory={state.menuCategory} productionMode={state.productionMode}
+                    showCategory={question === menuCategoryQuestion(String(component.label))} showProductionMode={question === productionModeQuestion(String(component.label))}
+                    onMenuCategoryChange={menuCategory => updateEditingComponentState(id, { menuCategory })}
+                    onProductionModeChange={productionMode => updateEditingComponentState(id, { productionMode })} />
+                  <button type="button" disabled={actionState.saveAnswersDisabled} onClick={() => void saveSpecEdit()}>Alle geänderten Antworten speichern</button>
+                </div>;
+                return null;
+              } : undefined}
               answerEditor={
                 answersEditable && actionState.isFocusedSpecEditing ? (
                   <ProductionStructuredAnswerEditor
