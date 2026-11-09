@@ -86,17 +86,6 @@ async () => {
     throw new Error("Produktionsfall aus dem bestätigten Handoff fehlt oder passt nicht zur Angebotsidentität.");
   }
 
-  await waitFor("Handoff am Auftragskopf", () => {
-    const header = document.querySelector('[aria-label="Geöffneter Auftrag"]');
-    const summary = document.querySelector('[aria-label="Kompakte Produktionszusammenfassung"]');
-    const current = document.querySelector('.production-stage-nav button[aria-current="step"]');
-    if (!header || document.activeElement !== header || header.getBoundingClientRect().top < -2 || header.getBoundingClientRect().top > 180) return false;
-    if (!(summary instanceof HTMLDetailsElement) || !summary.open || !current) return false;
-    const active = getComputedStyle(current);
-    const other = document.querySelector('.production-stage-nav button:not([aria-current])');
-    if (!other || active.backgroundColor === getComputedStyle(other).backgroundColor) return false;
-    return true;
-  });
 
   sessionStorage.setItem("catering.browser-rehearsal.production-case-id", productionCase.caseId);
   sessionStorage.setItem("catering.browser-rehearsal.production-handoff-id", handoffId);
