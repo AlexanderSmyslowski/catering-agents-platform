@@ -74,6 +74,10 @@ it("uses the selected supplier quotation with its recorded pack size and provena
     );
     expect(apply).toHaveBeenCalledWith(
       "4.40",
+      expect.stringContaining("Reis: 2 kg / 5 kg × 11,00 EUR = 4,40 EUR netto"),
+    );
+    expect(apply).toHaveBeenCalledWith(
+      "4.40",
       expect.stringContaining("Testliste, Art. T1, gültig ab 2026-11-09"),
     );
   } finally {

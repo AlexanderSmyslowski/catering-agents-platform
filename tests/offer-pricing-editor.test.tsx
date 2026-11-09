@@ -75,7 +75,7 @@ describe("offer pricing editor", () => {
     await act(async () => transfer.click());
     expect(field("Kosten gesamt netto").value).toBe("11.00");
     expect(field("Beleg oder Schätzgrund").value).toContain("Synthetischer Beispielpreis");
-    expect(document.body.textContent).toContain("Einzelne Ansätze werden nicht gespeichert");
+    expect(document.body.textContent).toContain("Nach dem Speichern findest du die Summe und ihre Quellen im Angebot");
     expect(document.querySelector('[aria-label="Interne Kosten und Deckungsbeitrag"]')?.textContent).toContain("nur Gesamtsumme und Quellenhinweis gespeichert");
     await change(field("Benötigte Menge"), "6");
     expect(field("Kosten gesamt netto").value).toBe("");

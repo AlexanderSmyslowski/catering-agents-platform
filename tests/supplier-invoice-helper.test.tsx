@@ -162,10 +162,16 @@ it("retains three original invoice positions within the source limit and blocks 
   }
   await act(async () => label("Alle direkten Kosten").querySelector("input")!.click());
   const transfer = Array.from(document.querySelectorAll("button")).find(b => b.textContent === "Kostensumme als Schätzung übernehmen")!;
+  expect(transfer.disabled).toBe(true);
+  expect(document.body.textContent).toContain("benötigte Mengen, Preisbezüge und Teilbeträge nicht gespeichert");
+  await act(async () => label("Nur Summe und Quellen übernehmen").querySelector("input")!.click());
+  await act(async () => label("Alle direkten Kosten").querySelector("input")!.click());
   expect(transfer.disabled).toBe(false);
   await act(async () => transfer.click());
   expect(apply).toHaveBeenCalledOnce();
   for (const article of ["Testware", "Bohne", "Reis"]) expect(apply.mock.calls[0]![1]).toContain(article);
+  expect(apply.mock.calls[0]![1]).not.toContain("Rechenwege:");
+  expect(apply.mock.calls[0]![1].length).toBeLessThanOrEqual(500);
   await setInput(label("Quelle oder Schätzgrund").querySelector("input")!, "x".repeat(500));
   expect(document.body.textContent).toContain("Quellenhinweise sind zu lang");
   expect(transfer.disabled).toBe(true);
