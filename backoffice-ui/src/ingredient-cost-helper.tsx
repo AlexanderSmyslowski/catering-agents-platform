@@ -1,8 +1,9 @@
 import { useRef, useState } from "react";
+import { SavedIngredientPrices } from "./saved-ingredient-prices.js";
 import { ApiResponseError, previewSupplierInvoice, type SupplierInvoicePreviewCandidate } from "./api.js";
 import { readSchwanPriceListInfo, type SupplierPriceCandidate } from "./supplier-price-import.js";
 
-type IngredientCostRow = { id: number; name: string; used: string; reference: string; unit: string; price: string; source: string; supplierOriginalPrice?: string; supplierOriginalName?: string; supplierOriginalSource?: string; invoiceOriginal?: { article: string; reference: string; unit: string; price: string; supplier: string; invoiceId: string; invoiceDate: string; lineId: string } };
+type IngredientCostRow = { id: number; name: string; used: string; reference: string; unit: string; price: string; source: string; supplierOriginalPrice?: string; supplierOriginalName?: string; supplierOriginalSource?: string; catalogBasis?: {quantity: string; unit: string}; invoiceOriginal?: { article: string; reference: string; unit: string; price: string; supplier: string; invoiceId: string; invoiceDate: string; lineId: string } };
 const ingredientCostSourcePrefix = "Zutaten- und Kostenansätze: ";
 const emptyRow = (id: number): IngredientCostRow => ({ id, name: "", used: "", reference: "", unit: "", price: "", source: "" });
 const supplierPriceChanged = (row: IngredientCostRow) => {
@@ -65,7 +66,7 @@ export function IngredientCostHelper({ existingCost, onApply, onInvalidate }: {
   const totals = rows.map(ingredientTotal);
   const complete = totals.every((value): value is bigint => value !== undefined);
   const total = complete ? totals.reduce((sum, value) => sum + value, 0n) : undefined;
-  const sources = [...new Set(rows.map(row => row.source.trim() + (row.supplierOriginalSource && row.source.trim() !== row.supplierOriginalSource ? `; ${row.supplierOriginalSource}` : "") + (row.supplierOriginalName ? `; Listenartikel ${row.supplierOriginalName}` : "") + (row.invoiceOriginal ? `; ${row.invoiceOriginal.supplier}, ${row.invoiceOriginal.invoiceId}, ${row.invoiceOriginal.invoiceDate}, Pos. ${row.invoiceOriginal.lineId}, ${row.invoiceOriginal.article}: ${row.invoiceOriginal.reference} ${row.invoiceOriginal.unit}, ${row.invoiceOriginal.price} EUR netto, ungeprüft` : "") + (supplierPriceChanged(row) ? "; Preis manuell geändert" : "") + (supplierNameChanged(row) ? "; Listenartikel manuell geändert" : "") + (invoiceBasisChanged(row) ? "; Rechnungsartikel, Bezug, Einheit oder Preis manuell geändert" : "")))].join("; ");
+  const sources = [...new Set(rows.map(row => row.source.trim() + (row.supplierOriginalSource && row.source.trim() !== row.supplierOriginalSource ? `; ${row.supplierOriginalSource}` : "") + (row.supplierOriginalName ? `; Listenartikel ${row.supplierOriginalName}` : "") + (row.invoiceOriginal ? `; ${row.invoiceOriginal.supplier}, ${row.invoiceOriginal.invoiceId}, ${row.invoiceOriginal.invoiceDate}, Pos. ${row.invoiceOriginal.lineId}, ${row.invoiceOriginal.article}: ${row.invoiceOriginal.reference} ${row.invoiceOriginal.unit}, ${row.invoiceOriginal.price} EUR netto, ungeprüft` : "") + (supplierPriceChanged(row) ? "; Preis manuell geändert" : "") + (supplierNameChanged(row) ? "; Listenartikel manuell geändert" : "") + (row.catalogBasis && (!sameDecimal(row.reference, row.catalogBasis.quantity) || row.unit !== row.catalogBasis.unit) ? "; Listenpreisbezug manuell geändert" : "") + (invoiceBasisChanged(row) ? "; Rechnungsartikel, Bezug, Einheit oder Preis manuell geändert" : "")))].join("; ");
   const source = ingredientCostSourcePrefix + sources;
   const ready = complete && total !== undefined && total <= maximumCents && source.length <= 500;
   const existingCents = editorCents(existingCost);
@@ -137,18 +138,25 @@ export function IngredientCostHelper({ existingCost, onApply, onInvalidate }: {
     {rows.map((row, index) => <fieldset className="offer-pricing__ingredient-row offer-pricing__cost-fields" key={row.id}>
       <legend>Ansatz {index + 1}</legend>
       <label>Zutat oder Kostenbestandteil<input value={row.name} onChange={event => update(row.id, { name: event.target.value })} /></label>
+      <SavedIngredientPrices ingredient={row.name} onSelect={item => {
+        const date = item.validFrom ? "gültig ab " + item.validFrom : "erfasst am " + item.observedAt.slice(0,10);
+        const source = item.sourceName + ", Art. " + item.article + ", " + date + ", " + item.price + " EUR netto / " + item.quantity + " " + item.unit;
+        update(row.id, { name: item.ingredientKey, reference: item.quantity, unit: item.unit, used: row.unit && row.unit !== item.unit ? "" : row.used,
+          price: item.price, source, supplierOriginalSource: source, supplierOriginalPrice: item.price, supplierOriginalName: item.ingredientKey,
+          catalogBasis: {quantity: item.quantity, unit: item.unit}, invoiceOriginal: undefined });
+      }} />
       {prices.length > 0 && row.name.trim().length >= 2 ? <div>
         <p>Passende Artikel aus der Preisliste {priceDate ? `vom ${priceDate.split("-").reverse().join(".")}` : "– bitte Preisstand eintragen"}:</p>
         {prices.filter(candidate => candidate.product.toLocaleLowerCase("de-DE").includes(row.name.trim().toLocaleLowerCase("de-DE"))).slice(0, 8).map(candidate => <button type="button" className="secondary-button" key={candidate.row} disabled={!priceDate} onClick={() => {
           const source = `Schwan Preisliste ${priceDate}${listValidFrom ? `, Datei gültig ab ${listValidFrom}${priceDate !== listValidFrom ? " (Preisstand manuell geändert)" : ""}` : ""}, Artikel ${candidate.article || "ohne Nummer"}, Zeile ${candidate.row}; ${candidate.unit || "Einheit offen"}, Inhalt ${candidate.content || "offen"}; ungeprüft`;
-          update(row.id, { name: candidate.product, reference: "", unit: "", price: candidate.price, supplierOriginalPrice: candidate.price, supplierOriginalName: candidate.product, supplierOriginalSource: source, invoiceOriginal: undefined, source });
+          update(row.id, { name: candidate.product, catalogBasis: undefined, reference: "", unit: "", price: candidate.price, supplierOriginalPrice: candidate.price, supplierOriginalName: candidate.product, supplierOriginalSource: source, invoiceOriginal: undefined, source });
         }}>{candidate.product} · {candidate.content || "Inhalt offen"} · {candidate.unit || "Einheit offen"} · {candidate.price.replace(".", ",")} €</button>)}
         <p className="helper-text">Nach der Auswahl Nettopreis, Preisbezug und Einheit anhand der Preisliste prüfen und eintragen. Der Treffer ist keine automatische Gleichsetzung mit der Zutat.</p>
       </div> : null}
       {invoiceCandidates.length > 0 ? <div>
         <p>Ungeprüfte Rechnungspositionen:</p>
         {invoiceCandidates.filter(candidate => !row.name.trim() || candidate.article.toLocaleLowerCase("de-DE").includes(row.name.trim().toLocaleLowerCase("de-DE"))).slice(0, 8).map(candidate => <button type="button" className="secondary-button" key={candidate.lineId} onClick={() => {
-          update(row.id, { name: candidate.article, reference: candidate.quantity, unit: candidate.unit, price: candidate.lineNetEur, supplierOriginalPrice: undefined, supplierOriginalName: undefined, supplierOriginalSource: undefined, invoiceOriginal: { article: candidate.article, reference: candidate.quantity, unit: candidate.unit, price: candidate.lineNetEur, supplier: candidate.supplier, invoiceId: candidate.invoiceId, invoiceDate: candidate.invoiceDate, lineId: candidate.lineId },
+          update(row.id, { name: candidate.article, catalogBasis: undefined, reference: candidate.quantity, unit: candidate.unit, price: candidate.lineNetEur, supplierOriginalPrice: undefined, supplierOriginalName: undefined, supplierOriginalSource: undefined, invoiceOriginal: { article: candidate.article, reference: candidate.quantity, unit: candidate.unit, price: candidate.lineNetEur, supplier: candidate.supplier, invoiceId: candidate.invoiceId, invoiceDate: candidate.invoiceDate, lineId: candidate.lineId },
             source: "Rechnungsposition, ungeprüft" });
         }}>{candidate.article} · {candidate.supplier} · Rechnung {candidate.invoiceId} vom {candidate.invoiceDate.split("-").reverse().join(".")} · Position {candidate.lineId} · {candidate.quantity} {candidate.unit} · {candidate.lineNetEur} € netto · ungeprüft</button>)}
         <p className="helper-text">Auswahl und Preisbezug anhand des Belegs prüfen. „Stück“ kann auch ein Gebinde bezeichnen. Bei abweichender Qualität oder Ware nicht übernehmen. Preise mit mehr als vier Nachkommastellen müssen vor einer Berechnung geprüft und angepasst werden.</p>

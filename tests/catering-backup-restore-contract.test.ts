@@ -825,8 +825,8 @@ describe("Catering backup and isolated restore repository contract", () => {
         writeFileSync(driftPassword, "fixture-password\n", { mode: 0o600 });
         const driftOffhostAttestation = path.join(driftRoot, "offhost-attestation");
         const driftSecretAttestation = path.join(driftRoot, "secret-attestation");
-        writeFileSync(driftOffhostAttestation, offhostAttestationText.replace(/host_binding=0+/g, `host_binding=${hostDigest}`).replace(/production_host_binding=0+/g, `production_host_binding=${hostDigest}`).replace(/repository_identity=b+/g, "repository_identity=" + "b".repeat(64)), { mode: 0o600 });
-        writeFileSync(driftSecretAttestation, secretAttestationText.replace(/host_binding=0+/g, `host_binding=${hostDigest}`).replace(/repository_identity=b+/g, "repository_identity=" + "b".repeat(64)), { mode: 0o600 });
+        writeFileSync(driftOffhostAttestation, offhostAttestationText, { mode: 0o600 });
+        writeFileSync(driftSecretAttestation, secretAttestationText, { mode: 0o600 });
         writeFileSync(driftEvidence, previousEvidenceBytes, { mode: 0o600 });
         const countPath = path.join(driftRoot, "restic-count");
         const driftResult = spawnSync(path.join(repoRoot, files.backup), [], {
@@ -855,9 +855,9 @@ describe("Catering backup and isolated restore repository contract", () => {
             CATERING_BACKUP_PRODUCTION_INTERFACE_ADDRESSES: "1.1.1.1",
             CATERING_BACKUP_PRODUCTION_EXTERNAL_ADDRESSES: "none",
             CATERING_OFFHOST_ATTESTATION_FILE: driftOffhostAttestation,
-            CATERING_OFFHOST_ATTESTATION_SHA256: sha256(offhostAttestationText.replace(/host_binding=0+/g, `host_binding=${hostDigest}`).replace(/production_host_binding=0+/g, `production_host_binding=${hostDigest}`).replace(/repository_identity=b+/g, "repository_identity=" + "b".repeat(64))),
+            CATERING_OFFHOST_ATTESTATION_SHA256: sha256(offhostAttestationText),
             CATERING_SECRET_RECOVERY_ATTESTATION_FILE: driftSecretAttestation,
-            CATERING_SECRET_RECOVERY_ATTESTATION_SHA256: sha256(secretAttestationText.replace(/host_binding=0+/g, `host_binding=${hostDigest}`).replace(/repository_identity=b+/g, "repository_identity=" + "b".repeat(64))),
+            CATERING_SECRET_RECOVERY_ATTESTATION_SHA256: sha256(secretAttestationText),
             CATERING_BACKUP_EXPECTED_UID: String(process.getuid?.() ?? 0),
             CATERING_BACKUP_TEST_MODE: "1",
             CATERING_BACKUP_ATTESTATION_NOW_EPOCH: "1788480000",

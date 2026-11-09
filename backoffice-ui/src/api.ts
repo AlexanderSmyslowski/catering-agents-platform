@@ -328,7 +328,7 @@ export class ApiResponseError extends Error {
   }
 }
 
-async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
+export async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
   const requestInit = buildCateringBrowserRequestInit(init, {
     includeJsonContentType: true,
     sessionBound: true
