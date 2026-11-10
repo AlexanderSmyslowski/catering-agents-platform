@@ -139,7 +139,7 @@ describe("global action integration contracts", () => {
         draftId: "offer-draft-1",
         revision: 4,
         eventSummary: "Business Lunch",
-        variantSet: [{ variantId: "variant-1", label: "Ausgewogen" }],
+        variantSet: [{ variantId: "variant-1", label: "Ausgewogen", proposedEventSpec: { event: { date: "2026-11-12" } } }],
         openQuestions: [],
         proposedEventSpec: {},
         reviewStatus: {
@@ -168,7 +168,7 @@ describe("global action integration contracts", () => {
         draftId: "offer-draft-1",
         revision: 2,
         eventSummary: "Business Lunch",
-        variantSet: [{ variantId: "variant-1", label: "Ausgewogen" }],
+        variantSet: [{ variantId: "variant-1", label: "Ausgewogen", proposedEventSpec: { event: { date: "2026-11-12" } } }],
         openQuestions: [],
         proposedEventSpec: {},
         reviewStatus: {
@@ -210,7 +210,7 @@ describe("global action integration contracts", () => {
       draftId: "offer-draft-1",
       revision: 2,
       eventSummary: "Business Lunch",
-      variantSet: [{ variantId: "variant-1", label: "Ausgewogen" }],
+      variantSet: [{ variantId: "variant-1", label: "Ausgewogen", proposedEventSpec: { event: { date: "2026-11-12" } } }],
       openQuestions: [],
       proposedEventSpec: {},
       reviewStatus: {
@@ -572,7 +572,7 @@ describe("global action integration contracts", () => {
         draftId: "offer-draft-1",
         revision: 4,
         eventSummary: "Business Lunch",
-        variantSet: [{ variantId: "variant-1", label: "Ausgewogen" }],
+        variantSet: [{ variantId: "variant-1", label: "Ausgewogen", proposedEventSpec: { event: { date: "2026-11-12" } } }],
         openQuestions: [],
         proposedEventSpec: {},
         reviewStatus: {

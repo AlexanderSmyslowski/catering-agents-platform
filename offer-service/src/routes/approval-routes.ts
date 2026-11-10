@@ -49,15 +49,25 @@ function approvalRoleForActor(actor: TrustedActor): "offer_operator" | "admin" {
 }
 
 function sameDecision(
-  left: { decision: string; selectedVariantId?: string; comment?: string; decidedBy: { name: string; role: string; source: string } },
-  right: { decision: string; selectedVariantId?: string; comment?: string; decidedBy: { name: string; role: string; source: string } }
+  left: { decision: string; selectedVariantId?: string; missingEventDateAcknowledged?: true; comment?: string; decidedBy: { name: string; role: string; source: string } },
+  right: { decision: string; selectedVariantId?: string; missingEventDateAcknowledged?: true; comment?: string; decidedBy: { name: string; role: string; source: string } }
 ): boolean {
   return left.decision === right.decision
     && left.selectedVariantId === right.selectedVariantId
+    && left.missingEventDateAcknowledged === right.missingEventDateAcknowledged
     && left.comment === right.comment
     && left.decidedBy.name === right.decidedBy.name
     && left.decidedBy.role === right.decidedBy.role
     && left.decidedBy.source === right.decidedBy.source;
+}
+
+// A stored pre-feature decision is already authoritative. A later explicit
+// acknowledgement may repair its projections without rewriting history.
+function sameRecordedDecision(existing: ApprovalRequestRecord, requested: ApprovalRequestRecord): boolean {
+  if (sameDecision(existing, requested)) return true;
+  return existing.missingEventDateAcknowledged === undefined &&
+    requested.missingEventDateAcknowledged === true &&
+    sameDecision(existing, { ...requested, missingEventDateAcknowledged: undefined });
 }
 
 function sameOptionalJsonValue<T>(left: T | undefined, right: T | undefined): boolean {
@@ -120,7 +130,7 @@ export function registerOfferApprovalRoutes(app: FastifyInstance, deps: OfferApp
   };
   type OfferAuditPublicationHolder = { publications: OfferAuditPublication[] };
   type DecisionResolution =
-    | { status: "case_timeline_conflict" | "legacy_conflict" | "decision_conflict" | "missing_draft" | "stale_revision" | "unpriceable_variant" | "missing_variant" | "audit_conflict" }
+    | { status: "case_timeline_conflict" | "legacy_conflict" | "decision_conflict" | "missing_draft" | "stale_revision" | "unpriceable_variant" | "missing_variant" | "missing_date_confirmation" | "audit_conflict" }
     | { status: "aggregate"; aggregate: OfferDecisionAggregate; published: true }
     | { status: "projection_conflict" };
   type HandoffResolution =
@@ -559,7 +569,7 @@ export function registerOfferApprovalRoutes(app: FastifyInstance, deps: OfferApp
     if (!winner) return undefined;
     return requireIdenticalCandidate
       ? (areJsonValuesEqual(winner, candidate) ? winner : undefined)
-      : (sameDecision(winner.approval, requestedApproval) ? winner : undefined);
+      : (sameRecordedDecision(winner.approval, requestedApproval) ? winner : undefined);
   };
 
   const resolveLegacyDecision = async (
@@ -580,7 +590,7 @@ export function registerOfferApprovalRoutes(app: FastifyInstance, deps: OfferApp
       const orphanOffer = await scope.getApprovedOffer(approvedOfferIdForApproval(requestedApproval));
       return orphanOffer ? { status: "conflict" } : { status: "none" };
     }
-    if (!sameDecision(legacyApproval, requestedApproval)) return { status: "conflict" };
+    if (!sameRecordedDecision(legacyApproval, requestedApproval)) return { status: "conflict" };
 
     let candidate: OfferDecisionAggregate;
     let observedApprovedOffer: ApprovedOffer | undefined;
@@ -669,12 +679,15 @@ export function registerOfferApprovalRoutes(app: FastifyInstance, deps: OfferApp
     return { status: "aggregate", aggregate, published: true };
   };
 
-  app.post<{ Params: { draftId: string }; Body: { decision?: "approved" | "rejected"; revision?: number; variantId?: string; comment?: string } }>(
+  app.post<{ Params: { draftId: string }; Body: { decision?: "approved" | "rejected"; revision?: number; variantId?: string; missingEventDateAcknowledged?: boolean; comment?: string } }>(
     "/v1/offers/drafts/:draftId/decision",
     async (request, reply) => {
       const forbidden = requireOfferOperator(request, reply);
       if (forbidden) return forbidden;
       const actor = actorForRequest(request);
+      if (request.body?.missingEventDateAcknowledged !== undefined && typeof request.body.missingEventDateAcknowledged !== "boolean") {
+        return reply.code(422).send({ message: "Datumsbestätigung ist ungültig." });
+      }
       const decision = request.body?.decision;
       const requestedRevision = request.body?.revision;
       const hasValidDecision = decision === "approved" || decision === "rejected";
@@ -693,6 +706,8 @@ export function registerOfferApprovalRoutes(app: FastifyInstance, deps: OfferApp
             ...(decision === "approved" && request.body.variantId !== undefined
               ? { selectedVariantId: request.body.variantId }
               : {}),
+            ...(decision === "approved" && request.body.missingEventDateAcknowledged === true
+              ? { missingEventDateAcknowledged: true as const } : {}),
             ...(request.body?.comment?.trim() ? { comment: request.body.comment.trim() } : {})
           });
         } catch (error) {
@@ -739,7 +754,7 @@ export function registerOfferApprovalRoutes(app: FastifyInstance, deps: OfferApp
             if (timelineError) return { status: "case_timeline_conflict" as const };
             const existingAggregate = await scope.getDecisionAggregate(requestedApproval!.approvalRequestId);
             if (existingAggregate) {
-              if (!sameDecision(existingAggregate.approval, requestedApproval!)) {
+              if (!sameRecordedDecision(existingAggregate.approval, requestedApproval!)) {
                 return { status: "decision_conflict" as const };
               }
               return publish(existingAggregate);
@@ -765,6 +780,11 @@ export function registerOfferApprovalRoutes(app: FastifyInstance, deps: OfferApp
 
             let candidateApprovedOffer: ApprovedOffer | undefined;
             if (requestedApproval!.decision === "approved") {
+              const variant = draft.variantSet.find(item => item.variantId === requestedApproval!.selectedVariantId);
+              const date = variant?.proposedEventSpec.event.date;
+              if (variant && !(typeof date === "string" && date.trim()) && requestedApproval!.missingEventDateAcknowledged !== true) {
+                return { status: "missing_date_confirmation" as const };
+              }
               try {
                 candidateApprovedOffer = buildApprovedOffer(actor, draft, requestedApproval!);
               } catch {
@@ -854,6 +874,9 @@ export function registerOfferApprovalRoutes(app: FastifyInstance, deps: OfferApp
         }
         if (resolution.status === "stale_revision") {
           return reply.code(409).send({ message: "Die angeforderte Angebotsrevision ist nicht mehr der aktuelle Entwurf." });
+        }
+        if (resolution.status === "missing_date_confirmation") {
+          return reply.code(422).send({ message: "Das Veranstaltungsdatum fehlt. Bitte ausdrücklich bestätigen, dass die interne Freigabe ohne Datum erfolgt." });
         }
         if (resolution.status === "unpriceable_variant") {
           return reply.code(422).send({ message: "Die gewählte Angebotsvariante enthält keinen vollständigen freigabefähigen Preis-Snapshot." });

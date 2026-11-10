@@ -122,7 +122,7 @@ async function completeOfferCase(
     method: "POST",
     url: `/v1/offers/drafts/${draft.draftId}/decision`,
     headers: alphaHeaders,
-    payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
+    payload: { missingEventDateAcknowledged: true, decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
   });
   expect(decision.statusCode, decision.body).toBe(201);
   const approvedOfferId = decision.json<{ approvedOffer: { approvedOfferId: string } }>()
@@ -365,7 +365,7 @@ describe("offer case routes", () => {
       method: "POST",
       url: `/v1/offers/drafts/${orphan!.draftId}/decision`,
       headers: alphaHeaders,
-      payload: {
+      payload: { missingEventDateAcknowledged: true,
         decision: "approved",
         revision: orphan!.revision,
         variantId: orphan!.variantSet[0]!.variantId
@@ -414,7 +414,7 @@ describe("offer case routes", () => {
       method: "POST",
       url: `/v1/offers/drafts/${draft.draftId}/decision`,
       headers: alphaHeaders,
-      payload: {
+      payload: { missingEventDateAcknowledged: true,
         decision: "approved",
         revision: draft.revision,
         variantId: draft.variantSet[0]!.variantId
@@ -534,7 +534,7 @@ describe("offer case routes", () => {
       method: "POST",
       url: `/v1/offers/drafts/${draft.draftId}/decision`,
       headers: alphaHeaders,
-      payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
+      payload: { missingEventDateAcknowledged: true, decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
     });
     expect(decision.statusCode, decision.body).toBe(201);
     const approvedOfferId = decision.json<{ approvedOffer: { approvedOfferId: string } }>().approvedOffer.approvedOfferId;
@@ -805,7 +805,7 @@ describe("offer case routes", () => {
       method: "POST" as const,
       url: `/v1/offers/drafts/${draft.draftId}/decision`,
       headers: alphaHeaders,
-      payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
+      payload: { missingEventDateAcknowledged: true, decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
     });
 
     const first = await request();
@@ -873,7 +873,7 @@ describe("offer case routes", () => {
       method: "POST",
       url: `/v1/offers/drafts/${draft.draftId}/decision`,
       headers: alphaHeaders,
-      payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
+      payload: { missingEventDateAcknowledged: true, decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
     });
     expect(decision.statusCode, decision.body).toBe(201);
     const approvedOfferId = decision.json<{ approvedOffer: { approvedOfferId: string } }>().approvedOffer.approvedOfferId;
@@ -966,7 +966,7 @@ describe("offer case routes", () => {
       method: "POST",
       url: `/v1/offers/drafts/${draft.draftId}/decision`,
       headers: alphaHeaders,
-      payload: {
+      payload: { missingEventDateAcknowledged: true,
         decision: "approved",
         revision: 1,
         variantId: draft.variantSet[0]!.variantId
@@ -1033,7 +1033,7 @@ describe("offer case routes", () => {
       method: "POST",
       url: `/v1/offers/drafts/${draft.draftId}/decision`,
       headers: alphaHeaders,
-      payload: {
+      payload: { missingEventDateAcknowledged: true,
         decision: "approved",
         revision: 1,
         variantId: draft.variantSet[0]!.variantId
@@ -1144,7 +1144,7 @@ describe("offer case routes", () => {
       method: "POST",
       url: `/v1/offers/drafts/${draft.draftId}/decision`,
       headers: alphaHeaders,
-      payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
+      payload: { missingEventDateAcknowledged: true, decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
     });
     expect(decision.statusCode, decision.body).toBe(201);
     const approvedOfferId = decision.json<{ approvedOffer: { approvedOfferId: string } }>()
@@ -1264,7 +1264,7 @@ describe("offer case routes", () => {
       method: "POST",
       url: `/v1/offers/drafts/${draft.draftId}/decision`,
       headers: alphaHeaders,
-      payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
+      payload: { missingEventDateAcknowledged: true, decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
     });
     expect(decision.statusCode, decision.body).toBe(201);
     const approvedOfferId = decision.json<{ approvedOffer: { approvedOfferId: string } }>()
@@ -1378,7 +1378,7 @@ describe("offer case routes", () => {
         method: "POST",
         url: `/v1/offers/drafts/${draft.draftId}/decision`,
         headers: alphaHeaders,
-        payload: {
+        payload: { missingEventDateAcknowledged: true,
           decision: "approved",
           revision: 1,
           variantId: draft.variantSet[0]!.variantId
@@ -1441,7 +1441,7 @@ describe("offer case routes", () => {
       method: "POST",
       url: `/v1/offers/drafts/${draft.draftId}/decision`,
       headers: alphaHeaders,
-      payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
+      payload: { missingEventDateAcknowledged: true, decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
     });
     expect(decision.statusCode, decision.body).toBe(201);
     const approvedOfferId = decision.json<{ approvedOffer: { approvedOfferId: string } }>()

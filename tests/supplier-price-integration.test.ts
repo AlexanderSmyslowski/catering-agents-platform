@@ -67,7 +67,7 @@ it("accepts a signed comparable follow-up, keeps replay idempotent, and leaves p
   const draftResponse = await app.inject({method:"POST",url:"/v1/offers/from-text",headers,payload:{caseId:caseResponse.json().case.caseId,text:"Business Lunch fuer 35 Personen."}});
   expect(draftResponse.statusCode).toBe(201);
   const draft = draftResponse.json();
-  const decision = await app.inject({method:"POST",url:`/v1/offers/drafts/${draft.draftId}/decision`,headers,payload:{decision:"approved",revision:1,variantId:draft.variantSet[0].variantId}});
+  const decision = await app.inject({method:"POST",url:`/v1/offers/drafts/${draft.draftId}/decision`,headers,payload:{ missingEventDateAcknowledged: true,decision:"approved",revision:1,variantId:draft.variantSet[0].variantId}});
   expect(decision.statusCode).toBe(201);
   const approvedId = decision.json().approvedOffer.approvedOfferId;
   const { OfferStore } = await import("../offer-service/src/store.js");

@@ -178,7 +178,7 @@ describe("production handoff port", () => {
       payload: { caseId: offerCaseId, text: "Kunde: SYNTHETISCHES Testinstitut\n\nBusiness Lunch fuer 35 Personen." }
     });
     const draft = createdDraft.json<{ draftId: string; variantSet: Array<{ variantId: string }> }>();
-    const approved = await offerApp.inject({ method: "POST", url: `/v1/offers/drafts/${draft.draftId}/decision`, headers: offerHeaders, payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId } });
+    const approved = await offerApp.inject({ method: "POST", url: `/v1/offers/drafts/${draft.draftId}/decision`, headers: offerHeaders, payload: { missingEventDateAcknowledged: true, decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId } });
     const approvedOfferId = approved.json<{ approvedOffer: { approvedOfferId: string } }>().approvedOffer.approvedOfferId;
     const createdHandoff = await offerApp.inject({ method: "POST", url: `/v1/offers/approved/${approvedOfferId}/handoffs`, headers: offerHeaders, payload: {} });
     const handoffId = createdHandoff.json<{ handoff: { handoffId: string } }>().handoff.handoffId;

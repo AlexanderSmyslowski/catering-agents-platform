@@ -1039,10 +1039,10 @@ export async function createOfferDraftFromRequest(
   });
 }
 
-export async function decideOfferDraft(draftId: string, revision: number, variantId: string) {
+export async function decideOfferDraft(draftId: string, revision: number, variantId: string, missingEventDateAcknowledged?: true) {
   return fetchJson<{ approval: Record<string, unknown>; approvedOffer?: { approvedOfferId: string; selectedVariantId?: string } }>(`/api/offers/v1/offers/drafts/${draftId}/decision`, {
     method: "POST",
-    body: JSON.stringify({ decision: "approved", revision, variantId })
+    body: JSON.stringify({ decision: "approved", revision, variantId, ...(missingEventDateAcknowledged ? { missingEventDateAcknowledged: true } : {}) })
   });
 }
 

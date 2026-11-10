@@ -17,6 +17,7 @@ export interface CreateApprovalRequestRecordInput {
   target: ApprovalRequestRecord["target"];
   decision: ApprovalRequestRecord["decision"];
   selectedVariantId?: string;
+  missingEventDateAcknowledged?: true;
   comment?: string;
   now?: Date;
 }
@@ -43,6 +44,7 @@ export function createApprovalRequestRecord(
     target: { ...input.target },
     decision: input.decision,
     ...(input.selectedVariantId === undefined ? {} : { selectedVariantId: input.selectedVariantId }),
+    ...(input.missingEventDateAcknowledged === undefined ? {} : { missingEventDateAcknowledged: input.missingEventDateAcknowledged }),
     requestedAt: timestamp,
     decidedAt: timestamp,
     decidedBy: {

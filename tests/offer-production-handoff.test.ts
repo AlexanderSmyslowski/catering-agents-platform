@@ -73,7 +73,7 @@ describe("offer production handoff", () => {
       method: "POST",
       url: `/v1/offers/drafts/${draft.draftId}/decision`,
       headers: trustedHeaders,
-      payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]?.variantId }
+      payload: { missingEventDateAcknowledged: true, decision: "approved", revision: 1, variantId: draft.variantSet[0]?.variantId }
     });
     const approvedOfferId = decisionResponse.json<{ approvedOffer: { approvedOfferId: string } }>().approvedOffer.approvedOfferId;
     const originalDraft = await store.getDraft({ businessId: "local" }, draft.draftId);
@@ -112,7 +112,7 @@ describe("offer production handoff", () => {
       expect(created.statusCode).toBe(201);
       const draft = created.json<OfferDraft>();
       const approval = await app.inject({ method: "POST", url: `/v1/offers/drafts/${draft.draftId}/decision`, headers: trustedHeaders,
-        payload: { decision: "approved", revision: draft.revision, variantId: draft.variantSet[0]!.variantId } });
+        payload: { missingEventDateAcknowledged: true, decision: "approved", revision: draft.revision, variantId: draft.variantSet[0]!.variantId } });
       expect(approval.statusCode).toBe(201);
       const response = await app.inject({ method: "POST", url: `/v1/offers/approved/${approval.json().approvedOffer.approvedOfferId}/handoffs`, headers: trustedHeaders, payload: {} });
       expect(response.statusCode).toBe(201);
@@ -139,7 +139,7 @@ describe("offer production handoff", () => {
     const selectedVariant = draft.variantSet[0]!;
     expect(selectedVariant.proposedEventSpec.budgetContext.pricingSummary.subtotal.amount).not.toBe(draft.pricingSummary.subtotal.amount);
 
-    const decision = await app.inject({ method: "POST", url: `/v1/offers/drafts/${draft.draftId}/decision`, headers: trustedHeaders, payload: { decision: "approved", revision: 1, variantId: selectedVariant.variantId } });
+    const decision = await app.inject({ method: "POST", url: `/v1/offers/drafts/${draft.draftId}/decision`, headers: trustedHeaders, payload: { missingEventDateAcknowledged: true, decision: "approved", revision: 1, variantId: selectedVariant.variantId } });
     expect(decision.statusCode).toBe(201);
     const approvedOffer = decision.json<{ approvedOffer: { approvedOfferId: string; pricingSummary: unknown } }>().approvedOffer;
     expect(approvedOffer.pricingSummary).toEqual(selectedVariant.proposedEventSpec.budgetContext.pricingSummary);
@@ -164,7 +164,7 @@ describe("offer production handoff", () => {
     const draft = draftResponse.json<{ draftId: string; variantSet: Array<{ variantId: string }> }>();
     const decision = await app.inject({
       method: "POST", url: `/v1/offers/drafts/${draft.draftId}/decision`, headers: trustedHeaders,
-      payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
+      payload: { missingEventDateAcknowledged: true, decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId }
     });
     const approvedOfferId = decision.json<{ approvedOffer: { approvedOfferId: string } }>().approvedOffer.approvedOfferId;
     const logForWithResult = auditLog.logForWithResult.bind(auditLog);
