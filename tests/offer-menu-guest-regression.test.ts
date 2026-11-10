@@ -30,7 +30,7 @@ describe("synthetische Menü-/Gästeformulierungen",()=>{
         expect(spec.menuPlan.map((x:any)=>x.label)).toEqual(dishes);
         expect(spec.menuPlan.every((x:any)=>x.servings===undefined)).toBe(true);
       }
-      const selected=draft.variantSet[1];const a=await app.inject({method:"POST",url:`/v1/offers/drafts/${draft.draftId}/decision`,headers,payload:{decision:"approved",revision:draft.revision,variantId:selected.variantId}});expect(a.statusCode,a.body).toBe(201);
+      const selected=draft.variantSet[1];const a=await app.inject({method:"POST",url:`/v1/offers/drafts/${draft.draftId}/decision`,headers,payload:{decision:"approved",revision:draft.revision,variantId:selected.variantId,...(!draft.proposedEventSpec.event.date && {missingEventDateAcknowledged:true})}});expect(a.statusCode,a.body).toBe(201);
       const h=await app.inject({method:"POST",url:`/v1/offers/approved/${a.json().approvedOffer.approvedOfferId}/handoffs`,headers,payload:{}});expect(h.statusCode,h.body).toBe(201);
       expect(h.json().handoff.eventSpecSnapshot.menuPlan.map((x:any)=>x.label)).toEqual(dishes);
       expect(h.json().handoff.eventSpecSnapshot.attendees.expected).toBe(80);
