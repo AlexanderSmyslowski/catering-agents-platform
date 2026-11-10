@@ -65,7 +65,7 @@ async function persistApprovedHandoff(
     method: "POST",
     url: `/v1/offers/drafts/${reviewedDraft.draftId}/decision`,
     headers,
-    payload: { decision: "approved", revision: reviewedDraft.revision, variantId: reviewedDraft.variantSet[0]!.variantId }
+    payload: { missingEventDateAcknowledged: true, decision: "approved", revision: reviewedDraft.revision, variantId: reviewedDraft.variantSet[0]!.variantId }
   });
   expect(decisionResponse.statusCode, decisionResponse.body).toBe(201);
   const approvedOfferId = decisionResponse.json<{ approvedOffer: { approvedOfferId: string } }>().approvedOffer.approvedOfferId;

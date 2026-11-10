@@ -19,7 +19,7 @@ function draft(draftId: string, eventSummary: string, revision = 1) {
     revision,
     eventSummary,
     openQuestions: [],
-    variantSet: [{ variantId: "classic", label: "Klassisch" }],
+    variantSet: [{ variantId: "classic", label: "Klassisch", proposedEventSpec: { event: { date: "2026-11-12" } } }],
     customerFacingText: "Text",
     internalWorkingText: "Intern",
     proposedEventSpec: {
@@ -439,8 +439,8 @@ function twoVariantDraft(revision = 1) {
   return {
     ...draft("draft-a", "Angebot A", revision),
     variantSet: [
-      { variantId: "lower", label: "Unteres Arbeitsband", proposedEventSpec: { attendees: { expected: 80 } } },
-      { variantId: "middle", label: "Mitte", proposedEventSpec: { attendees: { expected: 100 } } }
+      { variantId: "lower", label: "Unteres Arbeitsband", proposedEventSpec: { event: { date: "2026-11-12" }, attendees: { expected: 80 } } },
+      { variantId: "middle", label: "Mitte", proposedEventSpec: { event: { date: "2026-11-12" }, attendees: { expected: 100 } } }
     ]
   };
 }
@@ -454,6 +454,41 @@ function buttonWithText(scope: ParentNode, text: string): HTMLButtonElement {
 const approvalConfirmation = () => document.getElementById("offer-approval-confirmation");
 
 describe("two-step internal offer approval", () => {
+  it("requires a separate acknowledgement for the selected variant without a date", async () => {
+    const approveDraft = vi.fn(async () => undefined);
+    const original = twoVariantDraft();
+    const offer = { ...original, variantSet: [original.variantSet[0]!, { ...original.variantSet[1]!, proposedEventSpec: { attendees: { expected: 100 }, event: {} } }] };
+    const root = createRoot(document.body.appendChild(document.createElement("div")));
+    await act(async () => root.render(createElement(OfferConversationalWorkbench, props({ activeDraft: offer, selectedDraft: offer, approveDraft }))));
+    await act(async () => buttonWithText(document, "Variante freigeben: Mitte").click());
+    const confirmation = approvalConfirmation()!;
+    expect(confirmation.textContent).toContain("Das Veranstaltungsdatum fehlt");
+    const checkbox = confirmation.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    const confirm = buttonWithText(confirmation, "Bestätigen");
+    expect(confirm.disabled).toBe(true);
+    await act(async () => confirm.click());
+    expect(approveDraft).not.toHaveBeenCalled();
+    await act(async () => checkbox.click());
+    expect(confirm.disabled).toBe(false);
+    await act(async () => { confirm.click(); await flushPromises(); });
+    expect(approveDraft).toHaveBeenCalledExactlyOnceWith("draft-a", 1, "middle", true);
+    await act(async () => root.unmount());
+  });
+
+  it("does not carry a missing-date acknowledgement to another variant", async () => {
+    const original = twoVariantDraft();
+    const offer = { ...original, variantSet: original.variantSet.map(v => ({ ...v, proposedEventSpec: { ...v.proposedEventSpec, event: {} } })) };
+    const root = createRoot(document.body.appendChild(document.createElement("div")));
+    await act(async () => root.render(createElement(OfferConversationalWorkbench, props({ activeDraft: offer, selectedDraft: offer }))));
+    await act(async () => buttonWithText(document, "Variante freigeben: Mitte").click());
+    await act(async () => approvalConfirmation()!.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());
+    await act(async () => buttonWithText(approvalConfirmation()!, "Abbrechen").click());
+    await act(async () => buttonWithText(document, "Variante freigeben: Unteres Arbeitsband").click());
+    expect(approvalConfirmation()!.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked).toBe(false);
+    expect(buttonWithText(approvalConfirmation()!, "Bestätigen").disabled).toBe(true);
+    await act(async () => root.unmount());
+  });
+
   it("asks for a named confirmation and approves exactly once only after confirming", async () => {
     const approveDraft = vi.fn(async (_draftId: string, _revision: number, _variantId: string) => undefined);
     const setSelectedVariantId = vi.fn();

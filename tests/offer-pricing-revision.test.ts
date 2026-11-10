@@ -58,7 +58,7 @@ describe("persisted offer price calculation", () => {
       } });
       expect(stale.statusCode).toBe(409);
       const decision = await app.inject({ method: "POST", url: "/v1/offers/drafts/" + revised.draftId + "/decision", headers,
-        payload: { revision: 1, decision: "approved", variantId: revised.variantSet[0].variantId } });
+        payload: { missingEventDateAcknowledged: true, revision: 1, decision: "approved", variantId: revised.variantSet[0].variantId } });
       expect(decision.statusCode, decision.body).toBe(201);
       const offer = decision.json().approvedOffer;
       expect(offer.pricingSummary).toEqual(revised.pricingSummary);
@@ -81,7 +81,7 @@ describe("persisted offer price calculation", () => {
       expect((await new OfferStore({ rootDir }).getDraft({ businessId: "alpha" }, revised.draftId))?.pricingSummary).toEqual(revised.pricingSummary);
       expect(await store.getDraft({ businessId: "alpha" }, draft.draftId)).toEqual(draft);
       const decision = await app.inject({ method: "POST", url: "/v1/offers/drafts/" + revised.draftId + "/decision", headers,
-        payload: { revision: 1, decision: "approved", variantId: revised.variantSet[0].variantId } });
+        payload: { missingEventDateAcknowledged: true, revision: 1, decision: "approved", variantId: revised.variantSet[0].variantId } });
       expect(decision.statusCode, decision.body).toBe(201);
       const offer = decision.json().approvedOffer;
       const handoff = await app.inject({ method: "POST", url: "/v1/offers/approved/" + offer.approvedOfferId + "/handoffs", headers, payload: {} });
@@ -118,7 +118,7 @@ describe("persisted offer price calculation", () => {
       expect(successor.pricingSummary.calculationRequired).toBe(true);
       expect(successor.reviewStatus.publishApproved).toBe(false);
       const premature = await app.inject({ method: "POST", url: "/v1/offers/drafts/" + successor.draftId + "/decision", headers,
-        payload: { revision: 1, decision: "approved", variantId: successor.variantSet[0].variantId } });
+        payload: { missingEventDateAcknowledged: true, revision: 1, decision: "approved", variantId: successor.variantSet[0].variantId } });
       expect(premature.statusCode, premature.body).toBe(422);
       expect(readFileSync(file)).toEqual(before);
       expect(await store.getDraft({ businessId: "alpha" }, future.draftId)).toEqual(future);
@@ -140,7 +140,7 @@ describe("persisted offer price calculation", () => {
       expect(changed.json().pricingSummary.calculation).toBeUndefined();
       expect(changed.json().pricingSummary.calculationRequired).toBe(true);
       const afterMenu = await app.inject({ method: "POST", url: "/v1/offers/drafts/" + changed.json().draftId + "/decision", headers,
-        payload: { revision: 1, decision: "approved", variantId: changed.json().variantSet[0].variantId } });
+        payload: { missingEventDateAcknowledged: true, revision: 1, decision: "approved", variantId: changed.json().variantSet[0].variantId } });
       expect(afterMenu.statusCode, afterMenu.body).toBe(422);
       expect(changed.json().variantSet[0].proposedEventSpec.budgetContext.pricingSummary.calculation).toBeUndefined();
       expect((await store.getDraft({ businessId: "alpha" }, revised.draftId))?.pricingSummary.calculation).toEqual(revised.pricingSummary.calculation);
@@ -149,7 +149,7 @@ describe("persisted offer price calculation", () => {
       expect(repriced.statusCode, repriced.body).toBe(201);
       expect(repriced.json().pricingSummary.calculationRequired).toBeUndefined();
       const recovered = await app.inject({ method: "POST", url: "/v1/offers/drafts/" + repriced.json().draftId + "/decision", headers,
-        payload: { revision: 1, decision: "approved", variantId: repriced.json().variantSet[0].variantId } });
+        payload: { missingEventDateAcknowledged: true, revision: 1, decision: "approved", variantId: repriced.json().variantSet[0].variantId } });
       expect(recovered.statusCode, recovered.body).toBe(201);
 
     } finally { await app.close(); }
@@ -163,13 +163,13 @@ describe("persisted offer price calculation", () => {
       const revised = r.json();
       expect(revised.pricingSummary.calculation.grossCents).toBeUndefined();
       const a = await app.inject({ method: "POST", url: "/v1/offers/drafts/" + revised.draftId + "/decision", headers,
-        payload: { revision: 1, decision: "approved", variantId: revised.variantSet[0].variantId } });
+        payload: { missingEventDateAcknowledged: true, revision: 1, decision: "approved", variantId: revised.variantSet[0].variantId } });
       expect(a.statusCode, a.body).toBe(422);
       const menu = await app.inject({ method: "POST", url: "/v1/offers/drafts/" + revised.draftId + "/menu", headers,
         payload: { revision: 1, menuPlan: [{ label: "Menüänderung ohne Steuer", servings: 100 }] } });
       expect(menu.statusCode, menu.body).toBe(201);
       const bypass = await app.inject({ method: "POST", url: "/v1/offers/drafts/" + menu.json().draftId + "/decision", headers,
-        payload: { revision: 1, decision: "approved", variantId: menu.json().variantSet[0].variantId } });
+        payload: { missingEventDateAcknowledged: true, revision: 1, decision: "approved", variantId: menu.json().variantSet[0].variantId } });
       expect(bypass.statusCode, bypass.body).toBe(422);
     } finally { await app.close(); }
   });

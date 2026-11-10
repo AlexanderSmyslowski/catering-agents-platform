@@ -8,8 +8,9 @@ export function evaluateReadiness(spec: {
 }): { readiness: Readiness; missingFields: string[] } {
   const missingFields: string[] = [];
 
-  if (!spec.event?.date && !spec.event?.schedule?.some((slot) => slot.start)) {
-    missingFields.push("event.date_or_schedule");
+  const hasDatedSchedule = spec.event?.schedule?.some((slot) => /^\d{4}-\d{2}-\d{2}(?:T|$)/.test(slot.start ?? ""));
+  if (!spec.event?.date && !hasDatedSchedule) {
+    missingFields.push("event.date");
   }
 
   if (!spec.attendees?.expected || spec.attendees.expected <= 0) {
@@ -26,7 +27,7 @@ export function evaluateReadiness(spec: {
 
   let status: ReadinessStatus = "complete";
   if (missingFields.length > 0) {
-    const coreMissing = ["event.date_or_schedule", "attendees.expected", "menuPlan"];
+    const coreMissing = ["event.date", "attendees.expected", "menuPlan"];
     status = missingFields.some((field) => coreMissing.includes(field))
       ? "insufficient"
       : "partial";

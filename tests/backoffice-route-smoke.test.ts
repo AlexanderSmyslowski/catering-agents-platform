@@ -946,7 +946,7 @@ describe("backoffice route smoke", () => {
           draftId: "c3-draft-created",
           revision: 1,
           eventSummary: "C3 Sommerfest-Angebot für 80 Personen",
-          variantSet: [{ variantId: "classic", label: "Klassisch" }],
+          variantSet: [{ variantId: "classic", label: "Klassisch", proposedEventSpec: { event: { date: "2026-08-20" } } }],
           openQuestions: ["Getränkepaket noch klären"],
           customerFacingText: "Gerne bieten wir ein Sommerfest für 80 Personen an.",
           internalWorkingText: "Interne Angebotsnotiz: Buffet und Getränkepaket prüfen."

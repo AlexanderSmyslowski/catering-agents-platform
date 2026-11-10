@@ -92,6 +92,48 @@ describe("AcceptedEventSpec production decision transport", () => {
     for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
   });
 
+  it("removes the date question after the event date is added", async () => {
+    const rootDir = createRoot();
+    const env = { CATERING_DEFAULT_BUSINESS_ID: "local", CATERING_TRUSTED_ACTOR_SECRET: trustedSecret, CATERING_DEV_AUTH: "1" };
+    const offerApp = buildOfferApp({ rootDir, trustedActorSecret: trustedSecret, env });
+    try {
+      const c = await offerApp.inject({ method: "POST", url: "/v1/offers/cases", headers: offerHeaders, payload: {} });
+      expectStatus(c, 201);
+      const response = await offerApp.inject({ method: "POST", url: "/v1/offers/from-text", headers: offerHeaders,
+        payload: { caseId: c.json().case.caseId, requestId: "date-revision", text: "Buffet für 45 Gäste von 18 bis 21 Uhr." } });
+      expectStatus(response, 201);
+      const draft = response.json() as OfferDraft;
+      expect(draft.openQuestions.filter(q => /datum/i.test(q))).toHaveLength(1);
+      const revision = await offerApp.inject({ method: "POST", url: `/v1/offers/drafts/${draft.draftId}/menu`, headers: offerHeaders,
+        payload: { revision: draft.revision, menuPlan: [{ label: "Gemüse", servings: 45, menuCategory: "vegetarian" }], eventDetails: { eventDate: "2026-11-13" } } });
+      expectStatus(revision, 201);
+      expect((revision.json() as OfferDraft).openQuestions.filter(q => /datum/i.test(q))).toHaveLength(0);
+      expect((revision.json() as OfferDraft).proposedEventSpec.event.schedule).toEqual([{ label: "Zeitfenster", start: "18:00", end: "21:00" }]);
+    } finally { await offerApp.close(); }
+  });
+
+  it("carries a requested time range through normal offer approval and handoff", async () => {
+    const rootDir = createRoot();
+    const env = { CATERING_DEFAULT_BUSINESS_ID: "local", CATERING_TRUSTED_ACTOR_SECRET: trustedSecret, CATERING_DEV_AUTH: "1" };
+    const offerApp = buildOfferApp({ rootDir, trustedActorSecret: trustedSecret, env });
+    try {
+      const caseResponse = await offerApp.inject({ method: "POST", url: "/v1/offers/cases", headers: offerHeaders, payload: {} });
+      expectStatus(caseResponse, 201);
+      const created = await offerApp.inject({ method: "POST", url: "/v1/offers/from-text", headers: offerHeaders,
+        payload: { caseId: caseResponse.json().case.caseId, requestId: "time-window-handoff", text: "Buffet für 45 Gäste am 13.11.2026 von 18 bis 21 Uhr." } });
+      expectStatus(created, 201);
+      const draft = created.json() as OfferDraft;
+      const window = [{ label: "Zeitfenster", start: "18:00", end: "21:00" }];
+      expect(draft.proposedEventSpec.event.schedule).toEqual(window);
+      const approved = await offerApp.inject({ method: "POST", url: `/v1/offers/drafts/${draft.draftId}/decision`, headers: offerHeaders,
+        payload: { decision: "approved", revision: draft.revision, variantId: draft.variantSet[1]!.variantId } });
+      expectStatus(approved, 201);
+      const handoff = await offerApp.inject({ method: "POST", url: `/v1/offers/approved/${approved.json().approvedOffer.approvedOfferId}/handoffs`, headers: offerHeaders, payload: {} });
+      expectStatus(handoff, 201);
+      expect(handoff.json().handoff.eventSpecSnapshot.event.schedule).toEqual(window);
+    } finally { await offerApp.close(); }
+  });
+
   it("carries an edited 55/25/20 portion menu through canonical Intake, approval, Apply and exports", async () => {
     const rootDir = createRoot();
     const env = { CATERING_DEFAULT_BUSINESS_ID: "local", CATERING_TRUSTED_ACTOR_SECRET: trustedSecret, CATERING_DEV_AUTH: "1" };

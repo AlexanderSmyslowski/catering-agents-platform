@@ -79,7 +79,7 @@ export type OfferWorkbenchProps = {
   setSelectedDraftId: (draftId: string) => void;
   selectedVariantId?: string;
   setSelectedVariantId?: (variantId: string | undefined) => void;
-  approveDraft: (draftId: string, revision: number, variantId: string) => Promise<void>;
+  approveDraft: (draftId: string, revision: number, variantId: string, missingEventDateAcknowledged?: true) => Promise<void>;
   onMenuEditingChange?: (editing: boolean) => void;
   onMenuSaved?: (draftId: string) => Promise<void>;
   approvalBinding?: OfferApprovalBinding;
@@ -122,7 +122,15 @@ function visibleOpenQuestions(draft?: Record<string, unknown>): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
   for (const entry of draft.openQuestions) {
-    const question = String(entry);
+    const raw = String(entry).trim();
+    const labels: Record<string, string> = {
+      "event.date": "An welchem Datum findet die Veranstaltung statt?",
+      "event.date_or_schedule": "An welchem Datum findet die Veranstaltung statt?",
+      "attendees.expected": "Wie viele Gäste werden erwartet?",
+      menuPlan: "Welche Speisen sind gewünscht?",
+      "servicePlan.serviceForm": "Welche Serviceform ist gewünscht?"
+    };
+    const question = labels[raw] ?? (/^[a-z][\w]*(?:\.[\w]+)+$/i.test(raw) ? "Welche weiteren Angaben fehlen noch?" : raw);
     const key = question.replace(/\s+/g, " ").trim().toLowerCase();
     if (!key || seen.has(key)) continue;
     seen.add(key);
@@ -137,6 +145,15 @@ function countDraftOpenQuestions(draft?: Record<string, unknown>): number {
 
 function getDraftVariants(draft?: Record<string, unknown>): Array<Record<string, unknown>> {
   return Array.isArray(draft?.variantSet) ? (draft.variantSet as Array<Record<string, unknown>>) : [];
+}
+
+function variantHasEventDate(variant: Record<string, unknown>): boolean {
+  const spec = variant.proposedEventSpec;
+  if (!spec || typeof spec !== "object" || Array.isArray(spec)) return false;
+  const event = (spec as Record<string, unknown>).event;
+  if (!event || typeof event !== "object" || Array.isArray(event)) return false;
+  const date = (event as Record<string, unknown>).date;
+  return typeof date === "string" && date.trim().length > 0;
 }
 
 function getDraftId(draft?: Record<string, unknown>): string {
@@ -300,7 +317,7 @@ export function OfferConversationalWorkbench({
   // Two-step internal approval: the variant button only opens a named inline
   // confirmation; approveDraft runs solely from "Bestätigen". The pending
   // confirmation belongs to exactly one case/draft/revision/variant context.
-  const [pendingApproval, setPendingApproval] = useState<{ variantId: string; contextKey: string }>();
+  const [pendingApproval, setPendingApproval] = useState<{ variantId: string; contextKey: string; missingEventDateAcknowledged: boolean }>();
   const [approvalInFlight, setApprovalInFlight] = useState(false);
   const approvalInFlightRef = useRef(false);
   const approvalConfirmationRef = useRef<HTMLDivElement>(null);
@@ -310,7 +327,7 @@ export function OfferConversationalWorkbench({
     approvalContextKey ?? null,
     focusedDraftId,
     focusedDraftRevision ?? null,
-    focusedVariants.map((variant) => [String(variant.variantId), getVariantLabel(variant), getVariantGuests(variant) ?? null]),
+    focusedVariants.map((variant) => [String(variant.variantId), getVariantLabel(variant), getVariantGuests(variant) ?? null, variantHasEventDate(variant)]),
     approvalBinding?.approvedOfferId ?? null,
     approvalBinding?.offerDraftId ?? null,
     approvalBinding?.offerDraftRevision ?? null,
@@ -342,7 +359,8 @@ export function OfferConversationalWorkbench({
     const pending = activePendingApproval;
     const revision = focusedDraftRevision;
     const draftId = focusedDraftId;
-    if (!pending || !pendingVariant || revision === undefined || approvalInFlightRef.current) return;
+    if (!pending || !pendingVariant || revision === undefined || approvalInFlightRef.current ||
+        (!variantHasEventDate(pendingVariant) && !pending.missingEventDateAcknowledged)) return;
     // Never approve a context that changed after the confirmation opened.
     if (pending.contextKey !== approvalConfirmationKeyRef.current) {
       setPendingApproval(undefined);
@@ -353,7 +371,8 @@ export function OfferConversationalWorkbench({
     setPendingApproval(undefined);
     setSelectedVariantId(pending.variantId);
     try {
-      await approveDraft(draftId, revision, pending.variantId);
+      if (!variantHasEventDate(pendingVariant)) await approveDraft(draftId, revision, pending.variantId, true);
+      else await approveDraft(draftId, revision, pending.variantId);
     } finally {
       approvalInFlightRef.current = false;
       setApprovalInFlight(false);
@@ -610,7 +629,7 @@ export function OfferConversationalWorkbench({
                         disabled={approvalActionsBlocked}
                         onClick={() => {
                           if (approvalInFlightRef.current) return;
-                          setPendingApproval({ variantId, contextKey: approvalConfirmationKey });
+                          setPendingApproval({ variantId, contextKey: approvalConfirmationKey, missingEventDateAcknowledged: false });
                         }}
                       >
                         {`Variante freigeben: ${getVariantLabel(variant)}`}
@@ -646,8 +665,18 @@ export function OfferConversationalWorkbench({
                       </ul>
                     </div>
                   )}
+                  {!variantHasEventDate(pendingVariant) ? (
+                    <label className="field-block">
+                      <span>Das Veranstaltungsdatum fehlt. Die interne Freigabe erfolgt ohne Datum.</span>
+                      <span><input type="checkbox" checked={activePendingApproval.missingEventDateAcknowledged} onChange={(event) => {
+                        const checked = event.target.checked;
+                        setPendingApproval(current => current?.contextKey === activePendingApproval.contextKey && current.variantId === activePendingApproval.variantId
+                          ? { ...current, missingEventDateAcknowledged: checked } : current);
+                      }} /> Ich bestätige, dass das Veranstaltungsdatum noch offen ist.</span>
+                    </label>
+                  ) : null}
                   <div className="quiet-action-row">
-                    <button type="button" disabled={approvalActionsBlocked} onClick={() => void confirmPendingApproval()}>
+                    <button type="button" disabled={approvalActionsBlocked || (!variantHasEventDate(pendingVariant) && !activePendingApproval.missingEventDateAcknowledged)} onClick={() => void confirmPendingApproval()}>
                       Bestätigen
                     </button>
                     <button type="button" className="secondary-button" onClick={cancelPendingApproval}>

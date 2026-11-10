@@ -103,7 +103,12 @@ function dedupeStructuredQuestions(
 ): Array<{ text: string; clarificationQuestion?: ProductionClarificationQuestion }> {
   const seen = new Set<string>();
   return questions.filter((question) => {
-    const key = normalizedQuestionText(question.text);
+    const text = normalizedQuestionText(question.text);
+    const reason = question.clarificationQuestion?.reasonCode ?? "";
+    // Only canonical missing-date prompts are interchangeable; a custom question may mention the date for another reason.
+    const dateQuestion = /^(?:event\.date|event\.date_or_schedule)$/.test(reason) ||
+      /^(?:bitte klären: veranstaltungsdatum\.|welches veranstaltungsdatum gilt verbindlich für die produktion\?|an welchem datum findet (?:das event|die veranstaltung) statt\?|(?:bitte prüfen: )?fehlende oder unvollständige angabe: (?:veranstaltungsdatum|event\.date(?:_or_schedule)?)\.?)$/i.test(question.text);
+    const key = dateQuestion ? "event-date" : text;
     if (!key || seen.has(key)) {
       return false;
     }

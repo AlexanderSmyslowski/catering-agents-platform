@@ -39,5 +39,6 @@ export {
 export function getSpecLabel(spec: Record<string, unknown>): string {
   const event = asRecord(spec.event);
   const attendees = asRecord(spec.attendees);
-  return `${translateEventType(typeof event?.type === "string" ? event.type : "")} · ${attendees?.expected ?? "?"} Teilnehmer · ${event?.date ?? "offen"}`;
+  const occasionOpen = Array.isArray(spec.uncertainties) && spec.uncertainties.some(item => asRecord(item)?.field === "event.type");
+  return `${occasionOpen ? "Anlass offen" : translateEventType(typeof event?.type === "string" ? event.type : "")} · ${attendees?.expected ?? "?"} Teilnehmer · ${event?.date ?? "offen"}`;
 }

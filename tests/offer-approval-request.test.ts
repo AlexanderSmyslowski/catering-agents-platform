@@ -136,7 +136,7 @@ function decisionsFor(store: OfferStore) {
   return offerDecisionRepositoryFor(store);
 }
 
-async function createDraft(app: ReturnType<typeof buildTestApp>) {
+async function createDraft(app: ReturnType<typeof buildTestApp>, text = "Business Lunch am 12.11.2026 fuer 35 Personen.") {
   const caseResponse = await app.inject({
     method: "POST",
     url: "/v1/offers/cases",
@@ -149,7 +149,7 @@ async function createDraft(app: ReturnType<typeof buildTestApp>) {
     method: "POST",
     url: "/v1/offers/from-text",
     headers: trustedHeaders,
-    payload: { caseId, text: "Business Lunch fuer 35 Personen." }
+    payload: { caseId, text }
   });
   expect(response.statusCode).toBe(201);
   return response.json<{ draftId: string; variantSet: Array<{ variantId: string }> }>();
@@ -192,6 +192,26 @@ async function seedLegacyApprovalPair(store: OfferStore, draftId: string) {
 }
 
 describe("offer approval request", () => {
+  it("requires an explicit revision-bound acknowledgement before approving a variant without an event date", async () => {
+    const { app, store } = buildTestHarness();
+    const draft = await createDraft(app, "Business Lunch fuer 35 Personen.");
+    const url = `/v1/offers/drafts/${draft.draftId}/decision`;
+    const body = { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId };
+    const missing = await app.inject({ method: "POST", url, headers: trustedHeaders, payload: body });
+    expect(missing.statusCode).toBe(422);
+    expect(missing.json().message).toContain("Veranstaltungsdatum fehlt");
+    expect(await store.listApprovalsForTarget({ businessId: "local" }, { kind: "offer_draft", artifactId: draft.draftId, revision: 1 })).toHaveLength(0);
+    const malformed = await app.inject({ method: "POST", url, headers: trustedHeaders, payload: { ...body, missingEventDateAcknowledged: "true" } });
+    expect(malformed.statusCode).toBe(422);
+    const accepted = await app.inject({ method: "POST", url, headers: trustedHeaders, payload: { ...body, missingEventDateAcknowledged: true } });
+    expect(accepted.statusCode).toBe(201);
+    expect(accepted.json().approval).toMatchObject({ missingEventDateAcknowledged: true, target: { artifactId: draft.draftId, revision: 1 }, selectedVariantId: body.variantId });
+    const retry = await app.inject({ method: "POST", url, headers: trustedHeaders, payload: { ...body, missingEventDateAcknowledged: true } });
+    expect(retry.statusCode).toBe(201);
+    const incompatible = await app.inject({ method: "POST", url, headers: trustedHeaders, payload: body });
+    expect(incompatible.statusCode).toBe(409);
+  });
+
   it("creates an approved offer only after explicit variant approval", async () => {
     const app = buildTestApp();
     const draft = await createDraft(app);
@@ -1478,7 +1498,7 @@ describe("offer approval request", () => {
       payload: {
         caseId,
         requestId: "request-offer-approval-after-crash",
-        text: "Bitte das Angebot für 50 Personen neu berechnen."
+        text: "Bitte das Angebot am 12.11.2026 für 50 Personen neu berechnen."
       }
     });
     expect(continuation.statusCode, continuation.body).toBe(201);
@@ -1823,6 +1843,18 @@ describe("offer approval request", () => {
       { kind: "offer_draft", artifactId: draftSummary.draftId, revision: 1 }
     )).resolves.toHaveLength(1);
     await expect(store.listApprovedOffers({ businessId: "local" })).resolves.toHaveLength(0);
+  });
+
+  it("repairs a pre-feature legacy approval when the new UI acknowledges its missing date", async () => {
+    const { app, store } = buildTestHarness();
+    const draft = await createDraft(app, "Business Lunch fuer 35 Personen.");
+    const legacy = await seedLegacyApprovalPair(store, draft.draftId);
+    const result = await app.inject({ method: "POST", url: `/v1/offers/drafts/${draft.draftId}/decision`, headers: trustedHeaders,
+      payload: { decision: "approved", revision: 1, variantId: draft.variantSet[0]!.variantId, missingEventDateAcknowledged: true } });
+    expect(result.statusCode, result.body).toBe(201);
+    expect(result.json().approval).toEqual(legacy.approval);
+    expect(result.json().approval.missingEventDateAcknowledged).toBeUndefined();
+    expect(result.json().approvedOffer).toEqual(legacy.approvedOffer);
   });
 
   it("adopts an exact legacy approval pair without changing its stored decision", async () => {
@@ -3010,7 +3042,7 @@ describe("offer approval request", () => {
       method: "POST",
       url: `/v1/offers/drafts/${revisionTwo.draftId}/decision`,
       headers: trustedHeaders,
-      payload: { decision: "approved", revision: 1, variantId: revisionTwo.variantSet[0]!.variantId }
+      payload: { decision: "approved", revision: 1, variantId: revisionTwo.variantSet[0]!.variantId, missingEventDateAcknowledged: true }
     });
 
     expect(staleRetry.statusCode).toBe(409);

@@ -1039,10 +1039,10 @@ export async function createOfferDraftFromRequest(
   });
 }
 
-export async function decideOfferDraft(draftId: string, revision: number, variantId: string) {
+export async function decideOfferDraft(draftId: string, revision: number, variantId: string, missingEventDateAcknowledged?: true) {
   return fetchJson<{ approval: Record<string, unknown>; approvedOffer?: { approvedOfferId: string; selectedVariantId?: string } }>(`/api/offers/v1/offers/drafts/${draftId}/decision`, {
     method: "POST",
-    body: JSON.stringify({ decision: "approved", revision, variantId })
+    body: JSON.stringify({ decision: "approved", revision, variantId, ...(missingEventDateAcknowledged ? { missingEventDateAcknowledged: true } : {}) })
   });
 }
 
@@ -1399,7 +1399,7 @@ export type OfferMenuEditItem = {
   dietaryTags?: string[];
 };
 
-export async function reviseOfferMenu(draftId: string, revision: number, menuPlan: OfferMenuEditItem[], eventDetails?: import("../../offer-service/src/offer-event-revision.js").OfferEventDetails) {
+export async function reviseOfferMenu(draftId: string, revision: number, menuPlan: OfferMenuEditItem[] | undefined, eventDetails?: import("../../offer-service/src/offer-event-revision.js").OfferEventDetails) {
   return fetchJson<OfferDraft>(`/api/offers/v1/offers/drafts/${encodeURIComponent(draftId)}/menu`, {
     method: "POST",
     body: JSON.stringify({ revision, menuPlan, ...(eventDetails ? { eventDetails } : {}) })

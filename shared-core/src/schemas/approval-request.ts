@@ -32,6 +32,7 @@ export const approvalRequestSchema = {
     },
     decision: { enum: ["approved", "rejected"] },
     selectedVariantId: { type: "string", minLength: 1, maxLength: 160, pattern: ".*\\S.*" },
+    missingEventDateAcknowledged: { const: true },
     requestedAt: { type: "string", format: "date-time", maxLength: 80 },
     decidedAt: { type: "string", format: "date-time", maxLength: 80 },
     decidedBy: {

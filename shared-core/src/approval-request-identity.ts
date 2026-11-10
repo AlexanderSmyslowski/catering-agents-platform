@@ -86,6 +86,11 @@ export function assertApprovalRequestRecordSemantics(record: ApprovalRequestReco
     throw new Error("Ungültige finale Freigabeentscheidung.");
   }
 
+  if (record.missingEventDateAcknowledged !== undefined &&
+      (record.missingEventDateAcknowledged !== true || record.target.kind !== "offer_draft" || record.decision !== "approved")) {
+    throw new Error("Datumsbestätigung ist nur bei einer Angebotsfreigabe zulässig.");
+  }
+
   if (!isMinimalMvpRole(record.decidedBy.role)) {
     throw new Error("Ungültige Freigaberolle.");
   }

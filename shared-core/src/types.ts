@@ -20,6 +20,7 @@ export interface ApprovalRequestRecord {
   };
   decision: "approved" | "rejected";
   selectedVariantId?: string;
+  missingEventDateAcknowledged?: true;
   requestedAt: string;
   decidedAt: string;
   decidedBy: {

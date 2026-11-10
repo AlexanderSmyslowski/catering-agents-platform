@@ -155,12 +155,16 @@ export function ProductionQuestionPanel({
   });
   const sourceReviewRequired = hasUnsafeIntakeSource(intakeRequestDetail);
   const hasExistingPlan = Boolean(focusedSpecId && String(selectedPlan?.eventSpecId ?? "").trim() === focusedSpecId);
+  const questionTexts = productionConversationProjection.messages.filter(message => message.type === "structured_agent_question" && message.clarificationAnswerStatus !== "answered").map(message => message.text);
+  const grouped = groupDishQuestions(focusedProductionSpec, questionTexts);
+  const groupedComponents = grouped.components;
+  const groupedQuestionTexts = grouped.texts;
   const actionState = buildProductionQuestionPanelActionState({
     focusedProductionSpec,
     editingSpecId,
     submitting,
     hasFocusedSpecEditChanges,
-    openQuestionCount: productionQuestions.length,
+    openQuestionCount: grouped.openCount,
     hasExistingPlan,
     sourceReviewRequired,
     sourceReviewConfirmed
@@ -172,10 +176,6 @@ export function ProductionQuestionPanel({
     editingSpecId,
     focusedProductionSpecId: String(focusedProductionSpec?.specId ?? "")
   });
-  const questionTexts = productionConversationProjection.messages.filter(message => message.type === "structured_agent_question" && message.clarificationAnswerStatus !== "answered").map(message => message.text);
-  const grouped = groupDishQuestions(focusedProductionSpec, questionTexts);
-  const groupedComponents = grouped.components;
-  const groupedQuestionTexts = grouped.texts;
   const hasInlineSchedule = answersEditable && actionState.isFocusedSpecEditing && Boolean(setEditingEventSchedule) &&
     productionConversationProjection.messages.some(message => message.type === "structured_agent_question" && message.clarificationAnswerStatus !== "answered" &&
       (message.clarificationQuestion?.reasonCode === "event.schedule" || (!message.clarificationQuestion?.reasonCode && message.text === "Wie lautet das verbindliche Zeitfenster?")));
@@ -209,7 +209,7 @@ export function ProductionQuestionPanel({
   return (
     <article tabIndex={-1} id="production-question-panel" className="panel form-panel question-panel production-step-card">
       <header>
-        <h3>{!answersEditable ? "Produktionsstand prüfen" : productionQuestions.length > 0 ? questionCountLabel : "Erkannte Angaben prüfen"}</h3>
+        <h3>{!answersEditable ? "Produktionsstand prüfen" : visibleQuestionCount > 0 ? questionCountLabel : "Erkannte Angaben prüfen"}</h3>
         <p className="helper-text">
           {canResetStaleEditor
             ? "Eine neue Prüffassung ist verfügbar. Schließe das bisherige Antwortfenster, um sie zu bearbeiten."
@@ -234,11 +234,11 @@ export function ProductionQuestionPanel({
         <>
           {answersEditable && !hasDietaryReview ? <div className="question-action-panel" aria-label="Nächste Aktion für Rückfragen">
             <div>
-              <strong>{productionQuestions.length > 0 ? questionCountLabel : "Keine offenen Rückfragen"}</strong>
+              <strong>{visibleQuestionCount > 0 ? questionCountLabel : "Keine offenen Rückfragen"}</strong>
               <p className="helper-text">
-                {productionQuestions.length > 0 && actionState.isFocusedSpecEditing
+                {visibleQuestionCount > 0 && actionState.isFocusedSpecEditing
                   ? "Trage die fehlenden Angaben in die Antwortfelder ein und speichere sie dort."
-                  : productionQuestions.length > 0
+                  : visibleQuestionCount > 0
                   ? hasExistingPlan
                     ? "Öffne die Antwortfelder und ergänze fehlende Angaben vor einer Neuberechnung."
                     : "Öffne die Antwortfelder, ergänze fehlende Angaben und starte danach die Berechnung."
@@ -259,7 +259,7 @@ export function ProductionQuestionPanel({
                   disabled={actionState.editAnswersDisabled}
                   onClick={() => beginSpecEdit(focusedProductionSpec)}
                 >
-                  {productionQuestions.length > 0 ? "Rückfragen beantworten" : "Angaben prüfen"}
+                  {visibleQuestionCount > 0 ? "Rückfragen beantworten" : "Angaben prüfen"}
                 </button>
               )}
               {!continuationEditorOnly ? <div className="action-with-reason">

@@ -82,7 +82,7 @@ export function buildOfferApprovalBinding(
 }
 
 export type OfferApprovalActionInput = {
-  decideOfferDraft: (draftId: string, revision: number, variantId: string) => Promise<{ approvedOffer?: { approvedOfferId: string; selectedVariantId?: string } }>;
+  decideOfferDraft: (draftId: string, revision: number, variantId: string, missingEventDateAcknowledged?: true) => Promise<{ approvedOffer?: { approvedOfferId: string; selectedVariantId?: string } }>;
   createProductionHandoff: (approvedOfferId: string) => Promise<{ handoff?: { handoffId: string; source?: { selectedVariantId?: string } } }>;
   createProductionCaseFromHandoff: (handoffId: string) => Promise<{ case: { caseId: string } }>;
   createProductionDraftFromHandoff: (caseId: string, handoffId: string) => Promise<{ draft?: { draftId: string } }>;
@@ -105,8 +105,10 @@ export function buildOfferApprovalAction(input: OfferApprovalActionInput) {
     finally { input.setSubmitting(false); }
   };
   return {
-    approve: async (draftId: string, revision: number, variantId: string) => run(async () => {
-      const result = await input.decideOfferDraft(draftId, revision, variantId);
+    approve: async (draftId: string, revision: number, variantId: string, missingEventDateAcknowledged?: true) => run(async () => {
+      const result = missingEventDateAcknowledged
+        ? await input.decideOfferDraft(draftId, revision, variantId, true)
+        : await input.decideOfferDraft(draftId, revision, variantId);
       if (!result.approvedOffer?.approvedOfferId) throw new Error("Freigegebenes Angebot fehlt.");
       // Only the server-persisted identity is shown later; the requested
       // variant is never substituted for a missing response field.

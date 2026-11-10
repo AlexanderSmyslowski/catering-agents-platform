@@ -86,10 +86,7 @@ export function OfferEventEditor({ draftId, revision, spec, disabled, onSaved, o
     inFlight.current = true; setSaving(true);
     let postedDraftId: string | undefined;
     try {
-      const draft = await reviseOfferMenu(draftId, revision, spec.menuPlan.map(({ componentId, label, servings, menuCategory, dietaryTags }) => {
-        if (!servings) throw new Error("Bitte zuerst die Portionszahlen im Menü ergänzen.");
-        return { componentId, label, servings, menuCategory, dietaryTags };
-      }), { ...event, attendeeCount: Number(event.attendeeCount),
+      const draft = await reviseOfferMenu(draftId, revision, undefined, { ...event, attendeeCount: Number(event.attendeeCount),
         ...((confirmedGuests || confirmedSchedule) ? { confirmedFields: [...(confirmedGuests ? ["attendeeCount" as const] : []), ...(confirmedSchedule ? ["eventSchedule" as const] : [])] } : {}),
         eventType: event.eventType === formatEventTypeLabel(spec.event.type) ? spec.event.type : Object.entries(eventTypeLabels).find(([, label]) => label === event.eventType.trim())?.[0] ?? event.eventType });
       if (!live.current) return;
@@ -171,7 +168,7 @@ export function OfferEventEditor({ draftId, revision, spec, disabled, onSaved, o
       </div>
     </form> : <>
       <p>{spec.customer?.name ?? "Kunde offen"}</p>
-      <p>{formatEventTypeLabel(spec.event.type) ?? "Veranstaltung"} · {spec.event.date ? spec.event.date.split("-").reverse().join(".") : "Datum offen"} · {spec.attendees.expected ?? "offene"} Gäste · {formatServiceFormLabel(spec.event.serviceForm ?? spec.servicePlan.serviceForm)}</p>
+      <p>{spec.uncertainties?.some(item => item.field === "event.type") ? "Anlass offen" : formatEventTypeLabel(spec.event.type) ?? "Veranstaltung"} · {spec.event.date ? spec.event.date.split("-").reverse().join(".") : "Datum offen"} · {spec.attendees.expected ?? "offene"} Gäste · {spec.uncertainties?.some(item => item.field === "event.serviceForm") ? "Serviceform offen" : formatServiceFormLabel(spec.event.serviceForm ?? spec.servicePlan.serviceForm)}</p>
       {spec.event.schedule?.map((slot, index) => <p key={index}>{slot.label}: {slot.start ?? "offen"}–{slot.end ?? "offen"}{matchedSlotIndexes.has(index) ? <span className="helper-text"> · im Zeitplan, wie in der Anfrage</span> : null}</p>)}
       {!spec.event.schedule?.length ? <p className="helper-text">Zeitplan: noch keine bestätigten Uhrzeiten.</p> : null}
       <UnverifiedTimeHints hints={timeHints} />

@@ -1342,7 +1342,8 @@ describe("catering agents platform", () => {
     });
 
     expect(updateResponse.statusCode).toBe(200);
-    expect(updateResponse.json().acceptedEventSpec.readiness.status).toBe("complete");
+    expect(updateResponse.json().acceptedEventSpec.readiness.status).toBe("insufficient");
+    expect(updateResponse.json().acceptedEventSpec.missingFields).toContain("event.date");
     expect(updateResponse.json().acceptedEventSpec.event.date).toBeUndefined();
     expect(updateResponse.json().acceptedEventSpec.event.schedule).toEqual([
       { label: "Service", start: "16:30", end: "23:00" }

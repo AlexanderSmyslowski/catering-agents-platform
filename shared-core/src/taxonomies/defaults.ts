@@ -66,6 +66,7 @@ export const serviceFormKeywords: Record<string, string> = {
 
 export const eventTypeKeywords: Record<string, string> = {
   meeting: "meeting",
+  besprechung: "meeting",
   workshop: "meeting",
   konferenz: "conference",
   conference: "conference",
