@@ -16,6 +16,9 @@ import { priceModules } from "./pricing.js";
 import { validateAcceptedEventSpec } from "../validation.js";
 
 function materializeModules(spec: AcceptedEventSpec): ServiceModule[] {
+  if (spec.assumptions?.some(item => item.code === "explicit_menu_items")) {
+    return spec.menuPlan.map(item => ({ moduleId: item.componentId, label: item.label, category: "food", ...(item.servings !== undefined ? { quantity: item.servings } : {}) }));
+  }
   const defaultModules = eventTypeDefaults[spec.servicePlan.eventType]?.modules ?? [];
   const selectedModuleIds = [...new Set(defaultModules)];
 
@@ -41,10 +44,11 @@ function materializeModules(spec: AcceptedEventSpec): ServiceModule[] {
 
 function adjustVariant(spec: AcceptedEventSpec, tier: OfferVariant["qualityTier"]): AcceptedEventSpec {
   const multiplier = tier === "premium" ? 1.2 : tier === "economy" ? 0.9 : 1;
+  const preserveExplicitMenu = spec.assumptions?.some(item => item.code === "explicit_menu_items");
   const menuPlan = spec.menuPlan.map((component) => ({
     ...component,
     label:
-      tier === "premium"
+      preserveExplicitMenu ? component.label : tier === "premium"
         ? `${component.label} mit Premium-Finish`
         : tier === "economy"
           ? `${component.label} kompakt`
@@ -232,10 +236,9 @@ function createOfferDraftFromSpec(baseSpec: AcceptedEventSpec, draftId: string):
     )
   ];
 
-  const eventTypeLabel = formatEventTypeLabel(proposedEventSpec.servicePlan.eventType) ?? "Veranstaltung";
-  const serviceFormLabel =
-    formatServiceFormLabel(proposedEventSpec.event.serviceForm ?? proposedEventSpec.servicePlan.serviceForm) ??
-    "Serviceform";
+  const eventTypeLabel = proposedEventSpec.uncertainties?.some(item => item.field === "event.type") ? "Anlass offen" : formatEventTypeLabel(proposedEventSpec.servicePlan.eventType) ?? "Veranstaltung";
+  const serviceFormLabel = proposedEventSpec.uncertainties?.some(item => item.field === "event.serviceForm") ? "Serviceform offen" :
+    formatServiceFormLabel(proposedEventSpec.event.serviceForm ?? proposedEventSpec.servicePlan.serviceForm) ?? "Serviceform";
   const eventSummary = `${eventTypeLabel} für ${
     proposedEventSpec.attendees.expected ?? "offene"
   } Teilnehmer als ${serviceFormLabel}.`;
@@ -244,7 +247,7 @@ function createOfferDraftFromSpec(baseSpec: AcceptedEventSpec, draftId: string):
     `Vielen Dank für Ihre Anfrage: ${eventTypeLabel}.`,
     `Wir schlagen eine ${serviceFormLabel} mit folgenden Leistungsbausteinen vor:`,
     ...modules.map((module) => `- ${module.label}${module.category === "food" && module.quantity !== undefined ? `: ${module.quantity} Portionen` : ""}`),
-    `Gesamtschätzung: ${pricingSummary.subtotal.amount.toFixed(2)} EUR.`
+    proposedEventSpec.assumptions?.some(item => item.code === "explicit_menu_items") ? "Preis und Portionszahlen sind noch zu klären." : `Gesamtschätzung: ${pricingSummary.subtotal.amount.toFixed(2)} EUR.`
   ].join("\n");
 
   const internalWorkingText = [
@@ -298,7 +301,7 @@ export function createCuratedOfferDraft(
 ): OfferDraft {
   const baseDraft = createOfferDraft(request);
   const attendeeCount = baseDraft.proposedEventSpec.attendees.expected ?? 0;
-  const explicitMenu = baseDraft.proposedEventSpec.assumptions?.some((item) => item.code === "explicit_menu_portions");
+  const explicitMenu = baseDraft.proposedEventSpec.assumptions?.some((item) => item.code === "explicit_menu_portions" || item.code === "explicit_menu_items");
   const modules = explicitMenu
     ? [
         ...baseDraft.proposedEventSpec.menuPlan.map((item) => ({ moduleId: item.componentId, label: item.label, category: "food", quantity: item.servings })),

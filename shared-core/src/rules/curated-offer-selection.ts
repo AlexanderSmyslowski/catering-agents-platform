@@ -40,6 +40,7 @@ function ruleMatches(rule: PackageSelectionRule, spec: AcceptedEventSpec): boole
 }
 
 export function selectCuratedPackage(spec: AcceptedEventSpec): CuratedOfferPackage | undefined {
+  if (spec.uncertainties?.some(item => item.field === "event.type" || item.field === "event.serviceForm")) return undefined;
   const attendeeCount = spec.attendees.expected;
   if (attendeeCount === undefined) {
     return undefined;

@@ -59,6 +59,8 @@ export function amendOfferEvent(spec: AcceptedEventSpec, details?: OfferEventDet
     ? [...remainingQuestions, { field: "event.schedule", severity: "low" as const, message: removedTimeMessage, suggestedQuestion: "Wie lautet das verbindliche Zeitfenster?" }]
     : remainingQuestions;
   const answeredExtraction = (question: Uncertainty): boolean => {
+    if (typeChanged && question.field === "event.type") return question.severity === "medium" && question.message === "Der Anlass ist nicht eindeutig angegeben." && question.suggestedQuestion === "Welcher Anlass gilt?";
+    if (serviceChanged && question.field === "event.serviceForm") return question.severity === "medium" && question.message === "Die Serviceform ist nicht eindeutig angegeben." && question.suggestedQuestion === "Welche Serviceform gilt?";
     if (dateChanged && question.field === "event.date") {
       return (question.severity === "high" && question.message === "No exact event date could be extracted." && question.suggestedQuestion === "An welchem Datum findet das Event statt?") ||
         (question.severity === "medium" && question.message === "Mehrere oder ungültige Datumsangaben; Veranstaltungstermin nicht eindeutig." && question.suggestedQuestion === "Welches gültige Veranstaltungsdatum gilt verbindlich?") ||

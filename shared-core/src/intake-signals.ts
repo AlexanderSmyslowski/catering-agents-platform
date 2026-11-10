@@ -96,7 +96,7 @@ function extractAttendeeObservation(segment: string):
   const hedge = hasHedgeWords(normalized);
 
   const rangeMatch = normalized.match(
-    /\b(?:ca\.?|circa|etwa|ungef(?:ä|ae)hr|knapp)?\s*(\d{1,4})\s*(?:-|–|—|bis)\s*(\d{1,4})(?:\s*(?:gäste|gaeste|teilnehmer|personen|people))\b/i
+    /\b(?:ca\.?|circa|etwa|ungef(?:ä|ae)hr|knapp)?\s*(\d{1,4})\s*(?:-|–|—|bis)\s*(\d{1,4})(?:\s*(?:gästen?|gaesten?|teilnehmer|personen|people))\b/i
   );
   if (rangeMatch) {
     const low = Number(rangeMatch[1]);
@@ -112,7 +112,7 @@ function extractAttendeeObservation(segment: string):
   }
 
   const approximateMatch = normalized.match(
-    /\b(?:ca\.?|circa|etwa|ungef(?:ä|ae)hr|knapp)\s*(\d{1,4})(?:\s*(?:gäste|gaeste|teilnehmer|personen|people))?\b/i
+    /\b(?:ca\.?|circa|etwa|ungef(?:ä|ae)hr|knapp)\s*(\d{1,4})(?:\s*(?:gästen?|gaesten?|teilnehmer|personen|people))?\b/i
   );
   if (approximateMatch) {
     const count = Number(approximateMatch[1]);
@@ -126,8 +126,8 @@ function extractAttendeeObservation(segment: string):
   }
 
   const directMatch =
-    normalized.match(/\b(?:für|fuer)\s+(\d{1,4})\s*(?:gäste|gaeste|teilnehmer|personen|people)?\b/i) ??
-    normalized.match(/\b(\d{1,4})\s*(?:gäste|gaeste|teilnehmer|personen|people)\b/i);
+    normalized.match(/\b(?:für|fuer)\s+(\d{1,4})\s*(?:gästen?|gaesten?|teilnehmer|personen|people)?\b/i) ??
+    normalized.match(/\b(\d{1,4})\s*(?:gästen?|gaesten?|teilnehmer|personen|people)\b/i);
   if (directMatch) {
     const count = Number(directMatch[1]);
     if (Number.isFinite(count) && count > 0) {

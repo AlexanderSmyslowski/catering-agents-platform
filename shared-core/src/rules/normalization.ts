@@ -43,8 +43,8 @@ function detectServiceForm(text: string, eventType: string): string {
 
 function parseAttendees(text: string): number | undefined {
   const directMatch =
-    text.match(/\b(?:für|fuer)\s+(\d{1,4})\s*(?:gäste|gaeste|teilnehmer|personen|people)?\b/i) ??
-    text.match(/\b(\d{1,4})\s*(?:gäste|gaeste|teilnehmer|personen|people)\b/i);
+    text.match(/\b(?:für|fuer)\s+(\d{1,4})\s*(?:gästen?|gaesten?|teilnehmer|personen|people)?\b/i) ??
+    text.match(/\b(\d{1,4})\s*(?:gästen?|gaesten?|teilnehmer|personen|people)\b/i);
   if (directMatch) {
     return Number(directMatch[1]);
   }
@@ -235,6 +235,31 @@ function extractInlineMenuMarkerItems(text: string): InferredMenuItem[] {
   return labels.map((label) => inferMenuItemFromLabel(label));
 }
 
+// Only clear list introductions count as explicit dishes; a guest count after
+// “mit” is not a menu. Portions remain unknown unless each is stated.
+function extractExplicitUncountedMenu(text: string): InferredMenuItem[] {
+  const hasMenuHeading = /(?:^|\n)\s*(?:menü|menu)\s*:/iu.test(text);
+  const section = /(?:^|\n)\s*(?:menü|menu)\s*:\s*\n((?:[ \t]*[-•][ \t]*[^\n]+(?:\n|$))+)/iu.exec(text);
+  const inline = /(?:^|\n)\s*(?:menü|menu)\s*:[ \t]*([^\n.!?]+)/iu.exec(text);
+  const intro = /(?:\bmit\s+(?!\d)|\b(?:wir\s+)?hätten\s+gern\s+|\b(?:wir\s+)?haetten\s+gern\s+)([^\n.!?]+)/iu.exec(text);
+  const source = hasMenuHeading ? section?.[1] ?? inline?.[1] : intro?.[1];
+  if (!source) return [];
+  const chunks = source.split(/\s*,\s*|\s*;\s*|\n/iu).map(sanitizeMenuLine).filter(Boolean);
+  const parts = chunks.flatMap(chunk => {
+    const and = /\s+und\s+/iu.exec(chunk);
+    return and && !/\bmit\b/iu.test(chunk.slice(0, and.index))
+      ? [chunk.slice(0, and.index), chunk.slice(and.index + and[0].length)].map(sanitizeMenuLine)
+      : [chunk];
+  });
+  const food = /(?:suppe|ragout|quiche|mousse|salat|gemüse|gemuese|kuchen|dessert|pasta|nudel|kartoffel|fleisch|fisch|hähnchen|haehnchen|braten|bratling|curry|risotto|creme|obst|käse|kaese|brot|canap|torte|eintopf)/iu;
+  const nonFood = /\b(?:bühne|buehne|licht|ton|technik|personal|servicekräfte|servicekraefte|gäste|gästen|gaeste|gaesten|personen|teilnehmer|uhr)\b/iu;
+  if (parts.length < 2 || parts.some(item => nonFood.test(item) || isMenuNoise(item))) return [];
+  if (!parts.some(item => food.test(item))) return [];
+  if (parts.length > 100) throw Object.assign(new Error("Mehr als 100 Gerichte erkannt. Bitte das Menü in kleinere, eindeutig prüfbare Listen aufteilen."), { statusCode: 422 });
+  if (parts.some(item => item.length > 120 || /\d/iu.test(item))) return [];
+  return parts.map(inferMenuItemFromLabel);
+}
+
 function extractQuantifiedMenuItems(text: string): InferredMenuItem[] {
   // Only explicit dish counts establish portions. Guest subgroups, gram weights
   // and staff counts must not become additional menu servings.
@@ -312,7 +337,7 @@ function extractMenuItems(text: string, fallbackKeywords: string[]): InferredMen
   const detected = lines.flatMap((line) => {
     const directMatch = line.match(/\b(?:mit|includes?|serves?|menu|menü)\s+(.+)$/i);
 
-    if (directMatch?.[1]) {
+    if (directMatch?.[1] && !/\b(?:bühne|buehne|licht|ton|technik|personal|gäste|gästen|gaeste|gaesten|personen)\b/iu.test(directMatch[1])) {
       return directMatch[1]
         .split(/\bund\b|&|\/|;/i)
         .map((entry) => sanitizeMenuLine(entry.replace(/\.$/, "")))
@@ -411,13 +436,15 @@ export function normalizeEventRequestToSpec(
   const serviceForm = request.event?.serviceForm ?? detectServiceForm(rawText, eventType);
   const attendees = request.attendees?.expected ?? signals.attendeeCount ?? parseAttendees(rawText);
   const eventDate = request.event?.date ?? signals.eventDate ?? parseDate(rawText);
+  const explicitUncountedMenu = request.source.channel === "manual_form" ? [] : extractExplicitUncountedMenu(rawText);
+  const quantifiedMenu = extractQuantifiedMenuItems(rawText);
   const menuItems: InferredMenuItem[] =
     request.source.channel === "manual_form" && (request.desiredCatering?.length ?? 0) > 0
       ? request.desiredCatering!.map(item => {
           const inferred = inferManualMenuItem(item.label);
           return { ...inferred, dietaryTags: item.dietaryTags ?? inferred.dietaryTags };
         })
-      : extractMenuItems(
+      : quantifiedMenu.length ? quantifiedMenu : explicitUncountedMenu.length ? explicitUncountedMenu : extractMenuItems(
           rawText,
           request.desiredCatering?.map((item) => item.label) ?? defaults.defaultMenuKeywords
         );
@@ -425,15 +452,23 @@ export function normalizeEventRequestToSpec(
   const assumptions: Assumption[] = menuItems.some((item) => item.servings !== undefined)
     ? [{ code: "explicit_menu_portions", message: "Gerichte und Portionszahlen aus ausdrücklichen Portionsangaben übernommen; übrige Leistungen vor Freigabe ergänzen und prüfen.", applied: true }]
     : [];
+  if (explicitUncountedMenu.length && quantifiedMenu.length === 0) assumptions.push({ code: "explicit_menu_items", message: "Gerichte aus der Anfrage übernommen; Portionszahlen je Gericht sind noch offen.", applied: true });
   const uncertainties: Uncertainty[] = uniqueUncertainties(request.uncertainties ?? [], signals.uncertainties);
+  if (explicitUncountedMenu.length && quantifiedMenu.length === 0) uncertainties.push({ field: "menuPlan.servings", message: "Die Portionszahlen je Gericht wurden nicht genannt.", severity: "medium", suggestedQuestion: "Wie viele Portionen werden je Gericht benötigt?" });
   for (const item of menuItems) {
     if (item.dietaryReviewNote) uncertainties.push({ field: "menuPlan", message: item.dietaryReviewNote, severity: "medium", suggestedQuestion: `Welche Ernährungskennzeichnung gilt nach Rezeptprüfung für ${item.label}?` });
   }
 
+  if (!request.event?.type && !Object.keys(eventTypeKeywords).some(keyword => rawText.toLowerCase().includes(keyword))) {
+    uncertainties.push({ field: "event.type", message: "Der Anlass ist nicht eindeutig angegeben.", severity: "medium", suggestedQuestion: "Welcher Anlass gilt?" });
+  }
+  if (!request.event?.serviceForm && !Object.keys(serviceFormKeywords).some(keyword => rawText.toLowerCase().replace(/\s+/g, "").includes(keyword))) {
+    uncertainties.push({ field: "event.serviceForm", message: "Die Serviceform ist nicht eindeutig angegeben.", severity: "medium", suggestedQuestion: "Welche Serviceform gilt?" });
+  }
   if (!request.event?.type) {
     assumptions.push({
       code: "event_type_defaulted",
-      message: `Eventtyp aus dem Anfragetext abgeleitet: ${formatEventTypeLabel(eventType) ?? eventType}.`,
+      message: uncertainties.some(item => item.field === "event.type") ? "Anlass nicht angegeben; vorläufigen Standard bitte prüfen." : `Eventtyp aus dem Anfragetext abgeleitet: ${formatEventTypeLabel(eventType) ?? eventType}.`,
       applied: true
     });
   }
@@ -441,7 +476,7 @@ export function normalizeEventRequestToSpec(
   if (!request.event?.serviceForm) {
     assumptions.push({
       code: "service_form_defaulted",
-      message: `Serviceform aus dem Anfragetext abgeleitet: ${formatServiceFormLabel(serviceForm) ?? serviceForm}.`,
+      message: uncertainties.some(item => item.field === "event.serviceForm") ? "Serviceform nicht angegeben; vorläufigen Standard bitte prüfen." : `Serviceform aus dem Anfragetext abgeleitet: ${formatServiceFormLabel(serviceForm) ?? serviceForm}.`,
       applied: true
     });
   }
@@ -487,7 +522,7 @@ export function normalizeEventRequestToSpec(
     menuCategory: item.menuCategory,
     serviceStyle: serviceForm,
     desiredRecipeTags: [eventType],
-    servings: item.servings ?? attendees,
+    servings: explicitUncountedMenu.length && !quantifiedMenu.length ? item.servings : item.servings ?? attendees,
     dietaryTags: item.dietaryTags ?? []
   }));
 
