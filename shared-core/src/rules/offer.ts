@@ -244,8 +244,8 @@ function createOfferDraftFromSpec(baseSpec: AcceptedEventSpec, draftId: string):
   } Teilnehmer als ${serviceFormLabel}.`;
 
   const customerFacingText = [
-    `Vielen Dank für Ihre Anfrage: ${eventTypeLabel}.`,
-    `Wir schlagen eine ${serviceFormLabel} mit folgenden Leistungsbausteinen vor:`,
+    eventTypeLabel === "Anlass offen" ? "Vielen Dank für Ihre Anfrage." : `Vielen Dank für Ihre Anfrage: ${eventTypeLabel}.`,
+    serviceFormLabel === "Serviceform offen" ? "Folgende Leistungen sind vorgesehen:" : `Wir schlagen eine ${serviceFormLabel} mit folgenden Leistungsbausteinen vor:`,
     ...modules.map((module) => `- ${module.label}${module.category === "food" && module.quantity !== undefined ? `: ${module.quantity} Portionen` : ""}`),
     proposedEventSpec.assumptions?.some(item => item.code === "explicit_menu_items") ? "Preis und Portionszahlen sind noch zu klären." : `Gesamtschätzung: ${pricingSummary.subtotal.amount.toFixed(2)} EUR.`
   ].join("\n");

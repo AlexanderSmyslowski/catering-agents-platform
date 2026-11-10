@@ -168,7 +168,7 @@ export function OfferEventEditor({ draftId, revision, spec, disabled, onSaved, o
       </div>
     </form> : <>
       <p>{spec.customer?.name ?? "Kunde offen"}</p>
-      <p>{formatEventTypeLabel(spec.event.type) ?? "Veranstaltung"} · {spec.event.date ? spec.event.date.split("-").reverse().join(".") : "Datum offen"} · {spec.attendees.expected ?? "offene"} Gäste · {formatServiceFormLabel(spec.event.serviceForm ?? spec.servicePlan.serviceForm)}</p>
+      <p>{spec.uncertainties?.some(item => item.field === "event.type") ? "Anlass offen" : formatEventTypeLabel(spec.event.type) ?? "Veranstaltung"} · {spec.event.date ? spec.event.date.split("-").reverse().join(".") : "Datum offen"} · {spec.attendees.expected ?? "offene"} Gäste · {spec.uncertainties?.some(item => item.field === "event.serviceForm") ? "Serviceform offen" : formatServiceFormLabel(spec.event.serviceForm ?? spec.servicePlan.serviceForm)}</p>
       {spec.event.schedule?.map((slot, index) => <p key={index}>{slot.label}: {slot.start ?? "offen"}–{slot.end ?? "offen"}{matchedSlotIndexes.has(index) ? <span className="helper-text"> · im Zeitplan, wie in der Anfrage</span> : null}</p>)}
       {!spec.event.schedule?.length ? <p className="helper-text">Zeitplan: noch keine bestätigten Uhrzeiten.</p> : null}
       <UnverifiedTimeHints hints={timeHints} />
