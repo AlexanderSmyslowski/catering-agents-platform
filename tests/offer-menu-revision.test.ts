@@ -11,18 +11,36 @@ const expected = [55, 25, 20];
 const secret = "synthetic-menu-test-secret";
 const headers = { "x-catering-trusted-secret": secret, "x-catering-actor-name": "Angebots-Mitarbeiter", "x-catering-business-id": "alpha" };
 
-async function harness() {
+async function harness(requestText = text) {
   const rootDir = mkdtempSync(path.join(tmpdir(), "catering-menu-revision-"));
   const store = new OfferStore({ rootDir });
   const app = buildOfferApp({ rootDir, store, trustedActorSecret: secret, env: { CATERING_DEV_AUTH: "1", CATERING_DEFAULT_BUSINESS_ID: "alpha", CATERING_TRUSTED_ACTOR_SECRET: secret } });
   const c = await app.inject({ method: "POST", url: "/v1/offers/cases", headers, payload: {} });
   const caseId = c.json().case.caseId;
-  const response = await app.inject({ method: "POST", url: "/v1/offers/from-text", headers, payload: { caseId, text } });
+  const response = await app.inject({ method: "POST", url: "/v1/offers/from-text", headers, payload: { caseId, text: requestText } });
   expect(response.statusCode, response.body).toBe(201);
   return { app, store, caseId, draft: response.json() };
 }
 
 describe("explicit offer menu and persisted continuation", () => {
+  it("can supply a missing date without specifying or replacing any dish portions", async () => {
+    const { app, draft } = await harness("Angebot für 80 Gäste von 18 bis 21 Uhr mit Kürbissuppe, Hähnchenragout, Quiche und Mousse.");
+    try {
+      const response = await app.inject({ method: "POST", url: `/v1/offers/drafts/${draft.draftId}/menu`, headers,
+        payload: { revision: draft.revision, eventDetails: { eventDate: "2026-11-20" } } });
+      expect(response.statusCode, response.body).toBe(201);
+      const revised = response.json();
+      expect(revised.proposedEventSpec.event.date).toBe("2026-11-20");
+      expect(revised.proposedEventSpec.menuPlan).toEqual(draft.proposedEventSpec.menuPlan);
+      for (const [index, variant] of revised.variantSet.entries()) {
+        expect(variant.proposedEventSpec.menuPlan).toEqual(draft.variantSet[index].proposedEventSpec.menuPlan);
+      }
+      expect(revised.eventSummary).toContain("Anlass offen");
+      expect(revised.customerFacingText).not.toContain("undefined");
+      expect(revised.proposedEventSpec.menuPlan.every((item: {servings?: number}) => item.servings === undefined)).toBe(true);
+    } finally { await app.close(); }
+  });
+
   it("extracts dish portions without treating staff, grams or dietary subgroups as extra meals", () => {
     const spec = normalizeEventRequestToSpec(createEventRequestFromText({ requestId: "synthetic-100", channel: "text", rawText: text }));
     expect(spec.menuPlan.map(x => x.servings)).toEqual(expected);

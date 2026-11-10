@@ -1399,7 +1399,7 @@ export type OfferMenuEditItem = {
   dietaryTags?: string[];
 };
 
-export async function reviseOfferMenu(draftId: string, revision: number, menuPlan: OfferMenuEditItem[], eventDetails?: import("../../offer-service/src/offer-event-revision.js").OfferEventDetails) {
+export async function reviseOfferMenu(draftId: string, revision: number, menuPlan: OfferMenuEditItem[] | undefined, eventDetails?: import("../../offer-service/src/offer-event-revision.js").OfferEventDetails) {
   return fetchJson<OfferDraft>(`/api/offers/v1/offers/drafts/${encodeURIComponent(draftId)}/menu`, {
     method: "POST",
     body: JSON.stringify({ revision, menuPlan, ...(eventDetails ? { eventDetails } : {}) })

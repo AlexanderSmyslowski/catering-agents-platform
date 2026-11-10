@@ -368,7 +368,8 @@ export function registerOfferDraftRoutes(
       if (!body || typeof body !== "object" || Array.isArray(body)
         || Object.keys(body).some((key) => !["revision", "menuPlan", "eventDetails"].includes(key))
         || !Number.isInteger(body.revision) || body.revision !== source.revision
-        || !Array.isArray(body.menuPlan) || body.menuPlan.length < 1 || body.menuPlan.length > 100) {
+        || (body.menuPlan === undefined ? body.eventDetails === undefined :
+          !Array.isArray(body.menuPlan) || body.menuPlan.length < 1 || body.menuPlan.length > 100)) {
         return reply.code(422).send({ message: "Aktuelle Revision und 1–100 Menüpositionen erforderlich." });
       }
       const caseId = await store.findCaseIdForDraft(actor, source.draftId, source.revision);
@@ -377,8 +378,10 @@ export function registerOfferDraftRoutes(
       try {
         const details = validateOfferEventDetails(body.eventDetails);
         const eventSpec = amendOfferEvent(source.proposedEventSpec, details);
-        const eventSummary = details ? (eventSpec.event.type ?? "Veranstaltung") + " für " + (eventSpec.attendees.expected ?? "offene") + " Gäste am " + (eventSpec.event.date ?? "offenen Termin") + "." : source.eventSummary;
-        const menuPlan = body.menuPlan.map((raw, index) => {
+        const eventLabel = eventSpec.uncertainties?.some(item => item.field === "event.type") ? "Anlass offen" : eventSpec.event.type ?? "Veranstaltung";
+        const eventSummary = details ? eventLabel + " für " + (eventSpec.attendees.expected ?? "offene") + " Gäste am " + (eventSpec.event.date ?? "offenen Termin") + "." : source.eventSummary;
+        // Event-only edits keep the saved menu, including any unknown portions.
+        const menuPlan = !Array.isArray(body.menuPlan) ? eventSpec.menuPlan : body.menuPlan.map((raw, index) => {
           if (!raw || typeof raw !== "object" || Array.isArray(raw)
             || Object.keys(raw).some((key) => !["componentId", "label", "servings", "menuCategory", "dietaryTags"].includes(key))) throw new Error("Ungültige Menüposition.");
           const item = raw as Record<string, unknown>;
@@ -422,23 +425,29 @@ export function registerOfferDraftRoutes(
             openQuestions.push(uncertainty.suggestedQuestion);
           }
         }
-        const serviceModules = [
+        const serviceModules = body.menuPlan === undefined ? source.serviceModules : [
           ...menuPlan.map((item) => ({ moduleId: item.componentId, label: item.label, category: "food", quantity: item.servings })),
           ...source.serviceModules.filter((item) => item.category !== "food")
         ];
         revised = validateOfferDraft({
           ...source, draftId, revision: 1, eventSummary, proposedEventSpec, serviceModules, pricingSummary, openQuestions,
-          variantSet: source.variantSet.map((variant) => ({
-            ...variant,
-            moduleIds: serviceModules.map((item) => item.moduleId),
-            proposedEventSpec: { ...amendOfferEvent(variant.proposedEventSpec, details), menuPlan, servicePlan: { ...amendOfferEvent(variant.proposedEventSpec, details).servicePlan, modules: serviceModules },
-              budgetContext: { ...variant.proposedEventSpec.budgetContext, pricingSummary: withoutCalculation(variant.proposedEventSpec.budgetContext?.pricingSummary ?? source.pricingSummary) } }
-          })),
+          variantSet: source.variantSet.map((variant) => {
+            const amended = amendOfferEvent(variant.proposedEventSpec, details);
+            return {
+              ...variant,
+              ...(body.menuPlan === undefined ? {} : { moduleIds: serviceModules.map(item => item.moduleId) }),
+              proposedEventSpec: {
+                ...amended,
+                ...(body.menuPlan === undefined ? {} : { menuPlan, servicePlan: { ...amended.servicePlan, modules: serviceModules } }),
+                budgetContext: { ...amended.budgetContext, pricingSummary: withoutCalculation(amended.budgetContext?.pricingSummary ?? source.pricingSummary) }
+              }
+            };
+          }),
           customerFacingText: [
             eventSummary, "Menü und Portionszahlen:",
-            ...menuPlan.map((item) => `- ${item.label}: ${item.servings} Portionen`),
+            ...menuPlan.map((item) => item.servings === undefined ? `- ${item.label}: Portionszahl offen` : `- ${item.label}: ${item.servings} Portionen`),
             "Weitere Leistungen:", ...serviceModules.filter((item) => item.category !== "food").map((item) => `- ${item.label}`),
-            `Vorläufige Gesamtschätzung: ${source.pricingSummary.subtotal.amount.toFixed(2)} EUR. Preis, Steuern und Leistungsumfang weiterhin prüfen.`
+            menuPlan.some(item => item.servings === undefined) ? "Preis und Portionszahlen sind noch zu klären." : `Vorläufige Gesamtschätzung: ${source.pricingSummary.subtotal.amount.toFixed(2)} EUR. Preis, Steuern und Leistungsumfang weiterhin prüfen.`
           ].join("\n"),
           internalWorkingText: `Menü-/Veranstaltungsdatenbearbeitung aus ${source.draftId} / Revision ${source.revision}. Neue fachliche Prüfung erforderlich.\n${source.internalWorkingText}`,
           reviewStatus: source.reviewStatus ? { ...source.reviewStatus, priceReviewStatus: "review_required", taxReviewStatus: "review_required", allergenReviewStatus: "review_required", hygieneTemperatureReviewStatus: "review_required", publishApproved: false } : undefined

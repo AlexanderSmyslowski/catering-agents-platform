@@ -86,10 +86,7 @@ export function OfferEventEditor({ draftId, revision, spec, disabled, onSaved, o
     inFlight.current = true; setSaving(true);
     let postedDraftId: string | undefined;
     try {
-      const draft = await reviseOfferMenu(draftId, revision, spec.menuPlan.map(({ componentId, label, servings, menuCategory, dietaryTags }) => {
-        if (!servings) throw new Error("Bitte zuerst die Portionszahlen im Menü ergänzen.");
-        return { componentId, label, servings, menuCategory, dietaryTags };
-      }), { ...event, attendeeCount: Number(event.attendeeCount),
+      const draft = await reviseOfferMenu(draftId, revision, undefined, { ...event, attendeeCount: Number(event.attendeeCount),
         ...((confirmedGuests || confirmedSchedule) ? { confirmedFields: [...(confirmedGuests ? ["attendeeCount" as const] : []), ...(confirmedSchedule ? ["eventSchedule" as const] : [])] } : {}),
         eventType: event.eventType === formatEventTypeLabel(spec.event.type) ? spec.event.type : Object.entries(eventTypeLabels).find(([, label]) => label === event.eventType.trim())?.[0] ?? event.eventType });
       if (!live.current) return;
