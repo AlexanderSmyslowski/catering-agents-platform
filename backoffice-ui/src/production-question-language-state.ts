@@ -32,7 +32,7 @@ function questionForMissingField(field: string): string | undefined {
   const questions: Record<string, string> = {
     "event.date": "Welches Veranstaltungsdatum gilt verbindlich für die Produktion?",
     "event.date_or_schedule": "Welches Veranstaltungsdatum gilt verbindlich für die Produktion?",
-    "event.type": "Welcher Veranstaltungstyp trifft fachlich zu?",
+    "event.type": "Welcher Anlass gilt?",
     "attendees.expected": "Mit welcher verbindlichen Teilnehmerzahl soll kalkuliert und produziert werden?",
     menuPlan: "Welche Gerichte oder Komponenten sollen konkret produziert werden?",
     "servicePlan.serviceForm": "Welche Serviceform gilt: Buffet, Menü, Flying oder Ausgabe?"
