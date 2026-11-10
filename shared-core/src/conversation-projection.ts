@@ -103,7 +103,11 @@ function dedupeStructuredQuestions(
 ): Array<{ text: string; clarificationQuestion?: ProductionClarificationQuestion }> {
   const seen = new Set<string>();
   return questions.filter((question) => {
-    const key = normalizedQuestionText(question.text);
+    const text = normalizedQuestionText(question.text);
+    const reason = question.clarificationQuestion?.reasonCode ?? "";
+    const dateQuestion = /^(?:event\.date|event\.date_or_schedule)$/.test(reason) ||
+      /(?:veranstaltungsdatum|an welchem datum findet (?:das event|die veranstaltung) statt|fehlende oder unvollständige angabe: event\.date)/i.test(question.text);
+    const key = dateQuestion ? "event-date" : text;
     if (!key || seen.has(key)) {
       return false;
     }

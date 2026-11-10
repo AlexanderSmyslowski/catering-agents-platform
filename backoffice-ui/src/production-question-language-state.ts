@@ -18,20 +18,20 @@ function stringListFromUnknown(input: unknown): string[] {
 function translateFieldLabel(field?: string): string {
   const labels: Record<string, string> = {
     "event.date": "Veranstaltungsdatum",
-    "event.date_or_schedule": "Veranstaltungsdatum oder Servicefenster",
+    "event.date_or_schedule": "Veranstaltungsdatum",
     "event.type": "Veranstaltungstyp",
     "attendees.expected": "verbindliche Teilnehmerzahl",
     menuPlan: "Gerichte und Komponenten",
     "servicePlan.serviceForm": "Serviceform"
   };
 
-  return field ? labels[field] ?? field : "Angabe";
+  return field ? labels[field] ?? (/^[a-z][\w]*(?:\.[\w]+)+$/i.test(field) ? "weitere Angabe" : field) : "Angabe";
 }
 
 function questionForMissingField(field: string): string | undefined {
   const questions: Record<string, string> = {
     "event.date": "Welches Veranstaltungsdatum gilt verbindlich für die Produktion?",
-    "event.date_or_schedule": "Welches Veranstaltungsdatum oder Servicefenster gilt verbindlich für die Produktion?",
+    "event.date_or_schedule": "Welches Veranstaltungsdatum gilt verbindlich für die Produktion?",
     "event.type": "Welcher Veranstaltungstyp trifft fachlich zu?",
     "attendees.expected": "Mit welcher verbindlichen Teilnehmerzahl soll kalkuliert und produziert werden?",
     menuPlan: "Welche Gerichte oder Komponenten sollen konkret produziert werden?",
@@ -184,12 +184,10 @@ export function buildProductionQuestions(spec?: Record<string, unknown>): string
     questions.push(question);
   };
 
-  const hasSchedule = Array.isArray(event?.schedule)
-    ? event.schedule.some((slot) => Boolean(asRecord(slot)?.start))
-    : false;
-
-  if (!event?.date && !hasSchedule) {
-    addFieldQuestion("event.date_or_schedule");
+  const hasDatedSchedule = Array.isArray(event?.schedule) && event.schedule.some((slot) => /^\d{4}-\d{2}-\d{2}(?:T|$)/.test(String(asRecord(slot)?.start ?? "")));
+  if (!event?.date && !hasDatedSchedule) {
+    addFieldQuestion("event.date");
+    coveredFields.add("event.date_or_schedule");
   }
   if (!attendees?.expected) {
     addFieldQuestion("attendees.expected");

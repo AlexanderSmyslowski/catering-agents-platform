@@ -209,6 +209,9 @@ type ProductionClarificationQuestionDraft = ProductionClarificationQuestion & {
 const fieldLabels: Record<string, string> = {
   "attendees.expected": "erwartete Personenzahl",
   "event.date": "Veranstaltungsdatum",
+  "event.date_or_schedule": "Veranstaltungsdatum",
+  menuPlan: "Speisen",
+  "servicePlan.serviceForm": "Serviceform",
   extractedText: "Extrahierter Dokumenttext"
 };
 
@@ -292,7 +295,7 @@ function safeAnchor(sourceInput: ProductionClarificationSourceInput): Production
 }
 
 function labelForField(field: string): string {
-  return fieldLabels[field] ?? field;
+  return fieldLabels[field] ?? (/^[a-z][\w]*(?:\.[\w]+)+$/i.test(field) ? "weitere Angabe" : field);
 }
 
 function reasonCodeForField(field: string): string {
@@ -300,6 +303,8 @@ function reasonCodeForField(field: string): string {
 }
 
 function labelForReason(reason: string): string {
+  const missing = /^Fehlende oder unvollständige Angabe: (.+)$/.exec(reason);
+  if (missing) return `Fehlende oder unvollständige Angabe: ${labelForField(missing[1])}`;
   return reasonLabels[reason] ?? reason;
 }
 

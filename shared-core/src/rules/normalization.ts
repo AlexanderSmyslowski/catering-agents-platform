@@ -1,3 +1,4 @@
+import { extractEventTimeWindow } from "../event-time-window.js";
 import { analyzeIntakeText, parseCountedDishLine } from "../intake-signals.js";
 import { eventTypeDefaults, eventTypeKeywords, infrastructureCatalog, serviceFormKeywords } from "../taxonomies/defaults.js";
 import { formatEventTypeLabel, formatServiceFormLabel } from "../taxonomies/labels.js";
@@ -507,12 +508,7 @@ export function normalizeEventRequestToSpec(
       severity: "high",
       suggestedQuestion: "An welchem Datum findet das Event statt?"
     });
-    uncertainties.push({
-      field: "event.date_or_schedule",
-      message: "No event date or schedule was found.",
-      severity: "high",
-      suggestedQuestion: "An welchem Datum oder in welchem Zeitfenster findet das Event statt?"
-    });
+
   }
 
   const menuPlan: MenuComponent[] = menuItems.map((item, index) => ({
@@ -553,7 +549,7 @@ export function normalizeEventRequestToSpec(
       type: eventType,
       date: eventDate,
       durationHours: request.event?.durationHours ?? defaults.durationHours,
-      schedule: request.event?.schedule,
+      schedule: request.event?.schedule ?? extractEventTimeWindow(rawText),
       style: request.event?.style,
       atmosphere: request.event?.atmosphere,
       locale: request.event?.locale ?? "de-DE",

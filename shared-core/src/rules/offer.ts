@@ -229,12 +229,28 @@ function createOfferDraftFromSpec(baseSpec: AcceptedEventSpec, draftId: string):
     }
   ];
 
-  const openQuestions = [
-    ...(proposedEventSpec.missingFields ?? []),
-    ...(proposedEventSpec.uncertainties ?? []).map(
-      (uncertainty) => uncertainty.suggestedQuestion ?? uncertainty.message
-    )
-  ];
+  const fieldQuestions: Record<string, string> = {
+    "event.date": "An welchem Datum findet die Veranstaltung statt?",
+    "event.date_or_schedule": "An welchem Datum findet die Veranstaltung statt?",
+    "attendees.expected": "Wie viele Gäste werden erwartet?",
+    menuPlan: "Welche Speisen sind gewünscht?",
+    "servicePlan.serviceForm": "Welche Serviceform ist gewünscht?"
+  };
+  const openQuestions: string[] = [];
+  const covered = new Set<string>();
+  for (const field of proposedEventSpec.missingFields ?? []) {
+    const key = field === "event.date_or_schedule" ? "event.date" : field;
+    if (covered.has(key)) continue;
+    covered.add(key);
+    openQuestions.push(fieldQuestions[field] ?? "Welche weiteren Angaben fehlen noch?");
+  }
+  for (const uncertainty of proposedEventSpec.uncertainties ?? []) {
+    const field = uncertainty.field === "event.date_or_schedule" ? "event.date" : uncertainty.field;
+    if ((field === "event.date" || field === "attendees.expected") && covered.has(field)) continue;
+    if (field === "event.date") covered.add(field);
+    const question = field === "event.date" ? fieldQuestions["event.date"] : uncertainty.suggestedQuestion ?? uncertainty.message;
+    if (!openQuestions.includes(question)) openQuestions.push(question);
+  }
 
   const eventTypeLabel = proposedEventSpec.uncertainties?.some(item => item.field === "event.type") ? "Anlass offen" : formatEventTypeLabel(proposedEventSpec.servicePlan.eventType) ?? "Veranstaltung";
   const serviceFormLabel = proposedEventSpec.uncertainties?.some(item => item.field === "event.serviceForm") ? "Serviceform offen" :

@@ -122,7 +122,15 @@ function visibleOpenQuestions(draft?: Record<string, unknown>): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
   for (const entry of draft.openQuestions) {
-    const question = String(entry);
+    const raw = String(entry).trim();
+    const labels: Record<string, string> = {
+      "event.date": "An welchem Datum findet die Veranstaltung statt?",
+      "event.date_or_schedule": "An welchem Datum findet die Veranstaltung statt?",
+      "attendees.expected": "Wie viele Gäste werden erwartet?",
+      menuPlan: "Welche Speisen sind gewünscht?",
+      "servicePlan.serviceForm": "Welche Serviceform ist gewünscht?"
+    };
+    const question = labels[raw] ?? (/^[a-z][\w]*(?:\.[\w]+)+$/i.test(raw) ? "Welche weiteren Angaben fehlen noch?" : raw);
     const key = question.replace(/\s+/g, " ").trim().toLowerCase();
     if (!key || seen.has(key)) continue;
     seen.add(key);

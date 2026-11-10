@@ -1,3 +1,4 @@
+import { extractEventTimeWindow } from "./event-time-window.js";
 import type { Uncertainty } from "./types.js";
 
 export interface IntakeSignals {
@@ -325,6 +326,7 @@ export function analyzeIntakeText(text: string): IntakeSignals {
     });
   }
 
+  const parsedTimeWindow = extractEventTimeWindow(text);
   for (const segment of segments) {
     const attendee = extractAttendeeObservation(segment);
     if (attendee) {
@@ -364,7 +366,7 @@ export function analyzeIntakeText(text: string): IntakeSignals {
     const timeHint = extractTimeHint(segment);
     if (timeHint) {
       addUniqueString(extractedFacts, `event.time=${timeHint}`);
-      addUniqueUncertainty(uncertainties, {
+      if (!parsedTimeWindow || !extractEventTimeWindow(segment)) addUniqueUncertainty(uncertainties, {
         field: "event.schedule",
         message: `Zeitangabe in "${segment}" ist nicht als vollständiger Termin belastbar.`,
         severity: "low",

@@ -178,7 +178,7 @@ describe("PA16 production clarification model slice 1", () => {
     expect(JSON.stringify(questions)).not.toContain("Rohtext darf nicht gespiegelt werden");
   });
 
-  it("uses neutral human-readable labels for known keys and safe technical fallback for unknown keys", () => {
+  it("uses neutral human-readable labels for known keys and neutral fallback for unknown keys", () => {
     const questions = buildProductionClarificationQuestions({
       spec: {
         specId: "spec-pa17-labels",
@@ -204,7 +204,7 @@ describe("PA16 production clarification model slice 1", () => {
       "Bitte Dokumentprüfung prüfen: Textextraktion unsicher."
     );
     expect(questions.find((question) => question.reasonCode === "custom.unknown_field")?.prompt).toBe(
-      "Bitte klären: custom.unknown_field."
+      "Bitte klären: weitere Angabe."
     );
     expect(questions.find((question) => question.reasonCode === "unknown_warning_key")?.prompt).toBe(
       "Bitte Dokumentprüfung prüfen: unknown_warning_key."

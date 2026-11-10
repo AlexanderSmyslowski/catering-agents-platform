@@ -420,6 +420,12 @@ export function registerOfferDraftRoutes(
         const answeredQuestions = new Set(source.proposedEventSpec.uncertainties?.filter(item =>
           !proposedEventSpec.uncertainties?.some(next => areJsonValuesEqual(item, next))).map(item => item.suggestedQuestion).filter(Boolean));
         const openQuestions = source.openQuestions.filter(question => !answeredQuestions.has(question) || remainingQuestions.has(question));
+        if (!source.proposedEventSpec.event.date && proposedEventSpec.event.date) {
+          const dateQuestion = "An welchem Datum findet die Veranstaltung statt?";
+          for (let i = openQuestions.length - 1; i >= 0; i -= 1) {
+            if (openQuestions[i] === dateQuestion) openQuestions.splice(i, 1);
+          }
+        }
         for (const uncertainty of proposedEventSpec.uncertainties ?? []) {
           if (uncertainty.suggestedQuestion && !source.proposedEventSpec.uncertainties?.some(previous => areJsonValuesEqual(previous, uncertainty)) && !openQuestions.includes(uncertainty.suggestedQuestion)) {
             openQuestions.push(uncertainty.suggestedQuestion);
