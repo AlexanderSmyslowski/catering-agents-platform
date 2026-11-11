@@ -1,6 +1,19 @@
 import { useState } from "react";
 import type { ArticleMapping, Preview } from "./price-source-api.js";
 const units = ["kg", "g", "l", "ml", "Stück"];
+function skippedReason(reason: string) {
+  switch (reason) {
+    case "unidentified price-bearing row":
+      return "Artikelnummer fehlt oder ist unlesbar.";
+    case "incomplete or unsupported mapped cell":
+      return "Mindestens eine Pflichtangabe fehlt oder ist unlesbar.";
+    case "invalid or ambiguous price":
+      return "Der Nettopreis ist ungültig oder nicht eindeutig.";
+    default:
+      return "Die Angaben konnten nicht gelesen werden.";
+  }
+}
+
 function complete(mapping: ArticleMapping) {
   return (
     mapping.ingredientKey.trim() &&
@@ -51,6 +64,7 @@ export function PriceSourceReview({
   );
   const [search, setSearch] = useState("");
   const [limit, setLimit] = useState(15);
+  const [skippedLimit, setSkippedLimit] = useState(15);
   const found = openRows.filter((row) =>
     (row.article + " " + row.description)
       .toLocaleLowerCase("de")
@@ -83,9 +97,27 @@ export function PriceSourceReview({
         </p>
       )}
       {!!preview.skipped?.length && (
-        <p role="status">
-          {preview.skipped.length} Zeilen konnten nicht übernommen werden.
-        </p>
+        <details>
+          <summary>
+            {preview.skipped.length === 1
+              ? "1 ausgelassene Excel-Zeile"
+              : `${preview.skipped.length} ausgelassene Excel-Zeilen`}
+          </summary>
+          <p>Prüfe diese Zeilen in der Originalpreisliste.</p>
+          <ul className="item-list">
+            {preview.skipped.slice(0, skippedLimit).map((item) => (
+              <li key={item.row}>
+                Zeile {item.row}{item.article && ` · Artikel ${item.article}`}
+                {" – "}{skippedReason(item.reason)}
+              </li>
+            ))}
+          </ul>
+          {preview.skipped.length > skippedLimit && (
+            <button type="button" className="secondary-button" onClick={() => setSkippedLimit(skippedLimit + 15)}>
+              Weitere ausgelassene Zeilen anzeigen
+            </button>
+          )}
+        </details>
       )}
       <label>
         Artikel suchen

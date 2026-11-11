@@ -53,6 +53,7 @@ export function IngredientCostHelper({ existingCost, onApply, onInvalidate }: {
 }) {
   const [rows, setRows] = useState<IngredientCostRow[]>([emptyRow(1)]);
   const [confirmed, setConfirmed] = useState(false);
+  const [sumOnly, setSumOnly] = useState(false);
   const [prices, setPrices] = useState<SupplierPriceCandidate[]>([]);
   const [invoiceCandidates, setInvoiceCandidates] = useState<SupplierInvoicePreviewCandidate[]>([]);
   const [invoiceMessage, setInvoiceMessage] = useState("");
@@ -67,11 +68,21 @@ export function IngredientCostHelper({ existingCost, onApply, onInvalidate }: {
   const complete = totals.every((value): value is bigint => value !== undefined);
   const total = complete ? totals.reduce((sum, value) => sum + value, 0n) : undefined;
   const sources = [...new Set(rows.map(row => row.source.trim() + (row.supplierOriginalSource && row.source.trim() !== row.supplierOriginalSource ? `; ${row.supplierOriginalSource}` : "") + (row.supplierOriginalName ? `; Listenartikel ${row.supplierOriginalName}` : "") + (row.invoiceOriginal ? `; ${row.invoiceOriginal.supplier}, ${row.invoiceOriginal.invoiceId}, ${row.invoiceOriginal.invoiceDate}, Pos. ${row.invoiceOriginal.lineId}, ${row.invoiceOriginal.article}: ${row.invoiceOriginal.reference} ${row.invoiceOriginal.unit}, ${row.invoiceOriginal.price} EUR netto, ungeprüft` : "") + (supplierPriceChanged(row) ? "; Preis manuell geändert" : "") + (supplierNameChanged(row) ? "; Listenartikel manuell geändert" : "") + (row.catalogBasis && (!sameDecimal(row.reference, row.catalogBasis.quantity) || row.unit !== row.catalogBasis.unit) ? "; Listenpreisbezug manuell geändert" : "") + (invoiceBasisChanged(row) ? "; Rechnungsartikel, Bezug, Einheit oder Preis manuell geändert" : "")))].join("; ");
-  const source = ingredientCostSourcePrefix + sources;
-  const ready = complete && total !== undefined && total <= maximumCents && source.length <= 500;
+  const baseSource = ingredientCostSourcePrefix + sources;
+  const calculations = rows.map((row, index) => {
+    const cents = totals[index];
+    const amount = cents === undefined ? "offen" : `${cents / 100n},${String(cents % 100n).padStart(2, "0")} EUR netto`;
+    const number = (value: string) => value.trim().replace(".", ",");
+    return `${row.name.trim()}: ${number(row.used)} ${row.unit} / ${number(row.reference)} ${row.unit} × ${number(row.price)} EUR = ${amount}`;
+  }).join("; ");
+  const detailedSource = `${baseSource}; Rechenwege: ${calculations}`;
+  const detailsTooLong = complete && baseSource.length <= 500 && detailedSource.length > 500;
+  const source = detailsTooLong && sumOnly ? baseSource : detailedSource;
+  const ready = complete && total !== undefined && total <= maximumCents && baseSource.length <= 500 && (!detailsTooLong || sumOnly);
   const existingCents = editorCents(existingCost);
   function changed() {
     setConfirmed(false);
+    setSumOnly(false);
     if (appliedCents.current !== undefined) {
       if (editorCents(existingCost) === appliedCents.current) onInvalidate();
       appliedCents.current = undefined;
@@ -84,7 +95,7 @@ export function IngredientCostHelper({ existingCost, onApply, onInvalidate }: {
   return <details className="offer-pricing__ingredient-helper">
     <summary>Zutatenkosten berechnen</summary>
     <p className="helper-text">Mengen und Nettopreise eingeben. Beispiel: 5 kg benötigt, 1 kg kostet 2,20 €. Beide Mengen brauchen dieselbe Einheit. Preise dürfen bis zu vier Nachkommastellen haben. Die Rechnung zeigt Verbrauchskosten, nicht den Kauf ganzer Gebinde.</p>
-    <p className="helper-text">Einzelne Ansätze werden nicht gespeichert. Bitte Rechenweg und Belege separat festhalten; gespeichert werden nur Gesamtsumme und Quellenhinweis.</p>
+    <p className="helper-text">Nach dem Speichern findest du die Summe und ihre Quellen im Angebot. Wenn der Rechenweg dort keinen Platz hat, kannst du ihn separat aufbewahren.</p>
     <details>
       <summary>Schwan-Preisliste verwenden</summary>
       <p className="helper-text">Excel-Preisliste aus der E-Mail auswählen und den Preisstand prüfen. Wenn die Datei „gültig ab“ nennt, wird dieses Datum vorgeschlagen. Die Datei wird nur in diesem Browser gelesen. Preisvorschläge sind ungeprüft und bleiben nicht gespeichert. Bereits ausgewählte Ansätze behalten ihren eingetragenen Preisstand.</p>
@@ -176,9 +187,11 @@ export function IngredientCostHelper({ existingCost, onApply, onInvalidate }: {
       {rows.length > 1 ? <button type="button" className="secondary-button" onClick={() => { changed(); setRows(current => current.filter(item => item.id !== row.id)); }}>Ansatz {index + 1} entfernen</button> : null}
     </fieldset>)}
     <button type="button" className="secondary-button" disabled={rows.length >= 100} onClick={() => { changed(); setRows(current => [...current, emptyRow(nextId.current++)]); }}>Weiteren Ansatz hinzufügen</button>
-    <p aria-live="polite">{ready ? "Summe der Ansätze: " + (Number(total) / 100).toLocaleString("de-DE", { style: "currency", currency: "EUR" }) : "Summe offen – alle Ansätze und Quellen vollständig ausfüllen."}</p>
+    <p aria-live="polite">{complete && total !== undefined && total <= maximumCents ? "Summe der Ansätze: " + (Number(total) / 100).toLocaleString("de-DE", { style: "currency", currency: "EUR" }) : "Summe offen – alle Ansätze und Quellen vollständig ausfüllen."}</p>
     {complete && total !== undefined && total > maximumCents ? <p role="status">Die Summe überschreitet den zulässigen Betrag.</p> : null}
-    {complete && source.length > 500 ? <p role="status">Quellenhinweise sind zu lang. Bitte kürzen und die vollständigen Belege separat festhalten.</p> : null}
+    {complete && baseSource.length > 500 ? <p role="status">Quellenhinweise sind zu lang. Bitte kürzen und die vollständigen Belege separat festhalten.</p> : null}
+    {detailsTooLong ? <div><p role="status">Der Rechenweg passt nicht vollständig in den Quellenhinweis. Bei dieser Wahl werden benötigte Mengen, Preisbezüge und Teilbeträge nicht gespeichert. Bitte den Rechenweg separat aufbewahren.</p>
+      <label><input type="checkbox" checked={sumOnly} onChange={event => { setSumOnly(event.target.checked); setConfirmed(false); }} />Nur Summe und Quellen übernehmen</label></div> : null}
     <label className="offer-pricing__ingredient-confirm"><input type="checkbox" checked={confirmed} onChange={event => { if (!event.target.checked) changed(); else setConfirmed(true); }} />Alle direkten Kosten dieser Position sind in den Ansätzen enthalten.</label>
     {existingCost?.trim() ? <p className="helper-text">{appliedCents.current !== undefined && existingCents === appliedCents.current
       ? "Die Schätzung wurde in die Kosten übernommen."

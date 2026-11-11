@@ -50,7 +50,7 @@ export type Preview = {
   createdAt: string;
   validFrom?: string;
   senderAuthenticated?: boolean;
-  skipped?: unknown[];
+  skipped?: Array<{ row: number; reason: string; article?: string }>;
 };
 export type SourcePrice = PriceRow & {
   sourceId: string;

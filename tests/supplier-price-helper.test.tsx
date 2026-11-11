@@ -131,3 +131,35 @@ it("does not replace a newer list when an older successful read finishes late", 
   expect(document.body.textContent).not.toContain("Alter Reis");
   await act(async () => root.unmount());
 });
+
+it("offers explicit source-only transfer when repeated-source calculations exceed the limit", async () => {
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  const apply = vi.fn();
+  await act(async () => root.render(createElement(IngredientCostHelper, { onApply: apply, onInvalidate: vi.fn() })));
+  const source = "Gemeinsame Quelle " + "x".repeat(220);
+  for (let index = 0; index < 2; index++) {
+    if (index) await act(async () => Array.from(document.querySelectorAll("button")).find(b => b.textContent === "Weiteren Ansatz hinzufügen")!.click());
+    const row = Array.from(document.querySelectorAll("fieldset")).find(f => f.querySelector("legend")?.textContent === `Ansatz ${index + 1}`)!;
+    const field = (title: string) => Array.from(row.querySelectorAll("label")).find(l => l.textContent?.startsWith(title))!;
+    await setInput(field("Zutat oder Kostenbestandteil").querySelector("input")!, "Ware " + "z".repeat(105) + index);
+    await setInput(field("Benötigte Menge").querySelector("input")!, "1");
+    await setInput(field("Menge im Preisbezug").querySelector("input")!, "1");
+    await setInput(field("Preis des Preisbezugs netto").querySelector("input")!, "1");
+    await setInput(field("Quelle oder Schätzgrund").querySelector("input")!, source);
+    const unit = field("Einheit für beide Mengen").querySelector("select")!;
+    await act(async () => { unit.value = "kg"; unit.dispatchEvent(new Event("change", { bubbles: true })); });
+  }
+  const transfer = Array.from(document.querySelectorAll("button")).find(b => b.textContent === "Kostensumme als Schätzung übernehmen")!;
+  expect(document.body.textContent).toContain("benötigte Mengen, Preisbezüge und Teilbeträge nicht gespeichert");
+  expect(document.body.textContent).toContain("Summe der Ansätze: 2,00");
+  await act(async () => label("Alle direkten Kosten").querySelector("input")!.click());
+  expect(transfer.disabled).toBe(true);
+  await act(async () => label("Nur Summe und Quellen übernehmen").querySelector("input")!.click());
+  await act(async () => label("Alle direkten Kosten").querySelector("input")!.click());
+  await act(async () => transfer.click());
+  expect(apply).toHaveBeenCalledWith("2.00", "Zutaten- und Kostenansätze: " + source);
+  await setInput(label("Quelle oder Schätzgrund").querySelector("input")!, "x".repeat(500));
+  expect(document.body.textContent).toContain("Quellenhinweise sind zu lang");
+  expect(transfer.disabled).toBe(true);
+  await act(async () => root.unmount());
+});
