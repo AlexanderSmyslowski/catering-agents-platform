@@ -1,0 +1,252 @@
+name: Catering smoke bootstrap rehearsal
+
+on:
+  push:
+    branches:
+      - ops/catering-smoke-bootstrap-rehearsal-20260924
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-bootstrap-rehearsal:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      SOURCE_COMMIT: 5b2c77089e7fd9051b4a55e38240cd69d6e9ed99
+      SYNTHETIC_PIN: "482731"
+      SYNTHETIC_LOGIN_CODE: release-smoke-ci
+      SYNTHETIC_BUSINESS_ID: the-one
+      SYNTHETIC_POSTGRES_PASSWORD: synthetic-bootstrap-only
+
+    steps:
+      - name: Checkout exact product source
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ env.SOURCE_COMMIT }}
+          path: source
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify exact source binding
+        run: |
+          set -euo pipefail
+          test "$(git -C source rev-parse HEAD)" = "$SOURCE_COMMIT"
+          test -z "$(git -C source status --porcelain)"
+          remote_main="$(git -C source ls-remote origin refs/heads/main | awk 'NR == 1 {print $1}')"
+          test "$remote_main" = "$SOURCE_COMMIT"
+          test -x source/scripts/manage-catering-user
+          grep -F 'exec "${tsx_runner}" "${repository_root}/scripts/manage-catering-user.ts" "$@"' source/scripts/manage-catering-user
+
+      - name: Build exact runtime image
+        run: |
+          set -euo pipefail
+          docker build             --tag "catering-bootstrap-rehearsal:$SOURCE_COMMIT"             --file source/platform-infra/docker/Dockerfile.runtime             source
+          test -z "$(git -C source status --porcelain --untracked-files=all)"
+
+      - name: Start isolated PostgreSQL 17
+        run: |
+          set -euo pipefail
+          network="catering-bootstrap-rehearsal-${GITHUB_RUN_ID}"
+          postgres="catering-bootstrap-postgres-${GITHUB_RUN_ID}"
+          printf '%s\n' "$network" > "$RUNNER_TEMP/bootstrap-network"
+          printf '%s\n' "$postgres" > "$RUNNER_TEMP/bootstrap-postgres"
+
+          docker network create "$network" >/dev/null
+          docker run -d --rm             --name "$postgres"             --network "$network"             --network-alias postgres             -e POSTGRES_DB=catering_agents             -e POSTGRES_USER=catering             -e POSTGRES_PASSWORD="$SYNTHETIC_POSTGRES_PASSWORD"             postgres:17.9-alpine >/dev/null
+
+          for attempt in $(seq 1 60); do
+            if docker exec "$postgres" pg_isready -U catering -d catering_agents >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "PostgreSQL rehearsal did not become ready" >&2
+          exit 1
+
+      - name: Inspect runtime TTY prerequisites
+        run: |
+          set -euo pipefail
+          image="catering-bootstrap-rehearsal:$SOURCE_COMMIT"
+          docker run --rm --pull never "$image" /bin/sh -eu -c '
+            test -x ./node_modules/.bin/tsx
+            test -x /bin/busybox
+            if command -v stty >/dev/null 2>&1; then
+              printf "RUNTIME_TTY_PREREQ stty=command tsx=present\n"
+            elif /bin/busybox --list | grep -qx stty; then
+              printf "RUNTIME_TTY_PREREQ stty=busybox tsx=present\n"
+            else
+              printf "RUNTIME_TTY_PREREQ stty=missing tsx=present\n"
+            fi
+          '
+
+      - name: Run real TTY admin create against PostgreSQL
+        run: |
+          set -euo pipefail
+          network="$(cat "$RUNNER_TEMP/bootstrap-network")"
+          image="catering-bootstrap-rehearsal:$SOURCE_COMMIT"
+
+          python3 - "$network" "$image" "$SYNTHETIC_LOGIN_CODE" "$SYNTHETIC_BUSINESS_ID" "$SYNTHETIC_POSTGRES_PASSWORD" "$SYNTHETIC_PIN" <<'PY'
+          import os
+          import pty
+          import select
+          import sys
+          import termios
+          import time
+          import urllib.parse
+
+          network, image, login_code, business_id, postgres_password, pin = sys.argv[1:]
+          database_url = (
+              "postgresql://catering:"
+              + urllib.parse.quote(postgres_password, safe="")
+              + "@postgres:5432/catering_agents"
+          )
+          shell = r'''
+          set -eu
+          stty -echo
+          printf '%s\n' BOOTSTRAP_PIN_READY
+          exec ./node_modules/.bin/tsx scripts/manage-catering-user.ts "$@"
+          '''
+          argv = [
+              "docker", "run", "--rm", "-it", "--pull", "never",
+              "--network", network,
+              "-e", f"CATERING_DATABASE_URL={database_url}",
+              "-e", f"CATERING_DEFAULT_BUSINESS_ID={business_id}",
+              image,
+              "/bin/sh", "-eu", "-c", shell, "bootstrap",
+              "create",
+              "--login-code", login_code,
+              "--display-name", "Release Smoke",
+              "--role", "read_only_operator",
+          ]
+
+          pid, fd = pty.fork()
+          if pid == 0:
+              os.execvp(argv[0], argv)
+
+          attrs = termios.tcgetattr(fd)
+          attrs[3] &= ~termios.ECHO
+          termios.tcsetattr(fd, termios.TCSANOW, attrs)
+
+          captured = bytearray()
+          marker = b"BOOTSTRAP_PIN_READY"
+          marker_seen = False
+          pin_sent = False
+          child_status = None
+          deadline = time.monotonic() + 60
+
+          try:
+              while time.monotonic() < deadline:
+                  readable, _, _ = select.select([fd], [], [], 0.1)
+                  if fd in readable:
+                      try:
+                          chunk = os.read(fd, 4096)
+                      except OSError:
+                          chunk = b""
+                      if chunk:
+                          captured.extend(chunk)
+                          if not marker_seen and marker in captured:
+                              marker_seen = True
+                              os.write(fd, pin.encode("ascii") + b"\n")
+                              pin_sent = True
+                      else:
+                          waited, status = os.waitpid(pid, os.WNOHANG)
+                          if waited == pid:
+                              child_status = status
+                          else:
+                              _, child_status = os.waitpid(pid, 0)
+                          break
+
+                  waited, status = os.waitpid(pid, os.WNOHANG)
+                  if waited == pid:
+                      child_status = status
+                      break
+
+              if child_status is None:
+                  os.kill(pid, 9)
+                  _, child_status = os.waitpid(pid, 0)
+                  raise SystemExit("secure PTY rehearsal timed out")
+          finally:
+              try:
+                  os.close(fd)
+              except OSError:
+                  pass
+
+          data = bytes(captured)
+          pin_echo = pin.encode("ascii") in data
+          success_marker = b'"status":"success"' in data
+          display_marker = b'"displayName":"Release Smoke"' in data
+          role_marker = b'"role":"read_only_operator"' in data
+          active_marker = b'"active":true' in data
+          error_marker = b'"status":"error"' in data
+          rc = os.WEXITSTATUS(child_status) if os.WIFEXITED(child_status) else 255
+
+          print(
+              "BOOTSTRAP_SECURE_PTY_DIAG "
+              f"rc={rc} marker_seen={str(marker_seen).lower()} pin_sent={str(pin_sent).lower()} "
+              f"pin_echo={str(pin_echo).lower()} success_marker={str(success_marker).lower()} "
+              f"display_marker={str(display_marker).lower()} role_marker={str(role_marker).lower()} "
+              f"active_marker={str(active_marker).lower()} error_marker={str(error_marker).lower()}",
+              flush=True,
+          )
+
+          if rc != 0 or not marker_seen or not pin_sent:
+              raise SystemExit(1)
+          if pin_echo or error_marker:
+              raise SystemExit(1)
+          if not all((success_marker, display_marker, role_marker, active_marker)):
+              raise SystemExit(1)
+          PY
+
+      - name: Verify PostgreSQL record and schema
+        run: |
+          set -euo pipefail
+          postgres="$(cat "$RUNNER_TEMP/bootstrap-postgres")"
+
+          schema_version="$(docker exec "$postgres"             psql --no-psqlrc --no-password -U catering -d catering_agents             --tuples-only --no-align             --command="SELECT version_number FROM catering_schema_migrations WHERE unit_name='catering_business_records'"             | tr -d '[:space:]')"
+          printf 'REHEARSAL_DB schema_version=%s\n' "$schema_version"
+          test "$schema_version" = "3"
+
+          count="$(docker exec "$postgres"             psql --no-psqlrc --no-password -U catering -d catering_agents             --tuples-only --no-align             --command="SELECT count(*) FROM catering_business_records WHERE collection_name='auth/users'"             | tr -d '[:space:]')"
+          printf 'REHEARSAL_DB auth_users=%s\n' "$count"
+          test "$count" = "1"
+
+          verdict="$(
+            docker exec -i "$postgres"               psql --no-psqlrc --no-password -U catering -d catering_agents               --tuples-only --no-align <<'SQL'             | tr -d '[:space:]'
+          SELECT CASE
+            WHEN count(*) = 1
+             AND bool_and(payload->>'schemaVersion' = '1.0')
+             AND bool_and(payload->>'displayName' = 'Release Smoke')
+             AND bool_and(payload->>'role' = 'read_only_operator')
+             AND bool_and(payload->>'active' = 'true')
+             AND bool_and(payload->>'businessId' = business_id)
+             AND bool_and(payload->>'authEpoch' = '0')
+             AND bool_and(payload->>'failedLoginCount' = '0')
+             AND bool_and(payload->>'version' = '0')
+             AND bool_and(payload->>'loginCodeCanonical' = 'release-smoke-ci')
+             AND bool_and((payload->>'pinHash') ~ '^scrypt\$16384\$8\$1\$[0-9a-f]{32}\$[0-9a-f]{64}$')
+            THEN 'ok'
+            ELSE 'fail'
+          END
+          FROM catering_business_records
+          WHERE collection_name = 'auth/users';
+          SQL
+          )"
+          printf 'REHEARSAL_DB verdict=%s\n' "$verdict"
+          test "$verdict" = "ok"
+
+          printf 'CATERING_SMOKE_BOOTSTRAP_REHEARSAL_OK source_commit=%s schema_version=3 auth_users=1 role=read_only_operator tty=true postgres=true\n' "$SOURCE_COMMIT"
+
+      - name: Cleanup rehearsal
+        if: always()
+        run: |
+          set +e
+          if [[ -f "$RUNNER_TEMP/bootstrap-postgres" ]]; then
+            docker rm -f "$(cat "$RUNNER_TEMP/bootstrap-postgres")" >/dev/null 2>&1
+          fi
+          if [[ -f "$RUNNER_TEMP/bootstrap-network" ]]; then
+            docker network rm "$(cat "$RUNNER_TEMP/bootstrap-network")" >/dev/null 2>&1
+          fi
